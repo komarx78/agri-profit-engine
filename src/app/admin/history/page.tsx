@@ -1,13 +1,18 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { History, Search, Download, FileText, CheckCircle2, Clock } from 'lucide-react';
+import { History, Search, Download, CheckCircle2, Clock, Filter, User, MapPin, Sprout } from 'lucide-react';
 import Papa from 'papaparse';
 
 export default function HistoryPage() {
   const [workLogs, setWorkLogs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // フィルター用ステート
+  const [filterWorker, setFilterWorker] = useState<string>('all');
+  const [filterField, setFilterField] = useState<string>('all');
+  const [filterCrop, setFilterCrop] = useState<string>('all');
 
   useEffect(() => {
     async function fetchHistory() {
@@ -42,14 +47,40 @@ export default function HistoryPage() {
     fetchHistory();
   }, []);
 
+  // フィルターの選択肢を抽出（重複排除）
+  const uniqueWorkers = useMemo(() => {
+    const names = workLogs.map(log => log.workers?.name).filter(Boolean);
+    return Array.from(new Set(names)).sort();
+  }, [workLogs]);
+
+  const uniqueFields = useMemo(() => {
+    const names = workLogs.map(log => log.fields?.name).filter(Boolean);
+    return Array.from(new Set(names)).sort();
+  }, [workLogs]);
+
+  const uniqueCrops = useMemo(() => {
+    const names = workLogs.map(log => log.crops?.name).filter(Boolean);
+    return Array.from(new Set(names)).sort();
+  }, [workLogs]);
+
+  // 表示するログをフィルタリング
+  const filteredLogs = useMemo(() => {
+    return workLogs.filter(log => {
+      const matchWorker = filterWorker === 'all' || log.workers?.name === filterWorker;
+      const matchField = filterField === 'all' || log.fields?.name === filterField;
+      const matchCrop = filterCrop === 'all' || log.crops?.name === filterCrop;
+      return matchWorker && matchField && matchCrop;
+    });
+  }, [workLogs, filterWorker, filterField, filterCrop]);
+
   const handleExportCSV = () => {
-    if (workLogs.length === 0) return;
+    if (filteredLogs.length === 0) return;
     
-    const exportData = workLogs.map(log => {
+    const exportData = filteredLogs.map(log => {
       const formatDate = (dateStr: string) => {
         if (!dateStr) return '';
         const d = new Date(dateStr);
-        return `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+        return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
       };
 
       return {
@@ -100,10 +131,71 @@ export default function HistoryPage() {
           className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm"
         >
           <Download className="w-4 h-4" />
-          CSVでダウンロード
+          表示中データをCSV出力
         </button>
       </div>
 
+      {/* フィルターUI */}
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 items-center">
+        <div className="flex items-center gap-2 text-slate-500 font-bold shrink-0">
+          <Filter className="w-5 h-5" /> 絞り込み:
+        </div>
+        
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 w-full">
+          {/* 人別フィルター */}
+          <div className="relative">
+            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+              <User className="w-4 h-4 text-slate-400" />
+            </div>
+            <select 
+              value={filterWorker}
+              onChange={(e) => setFilterWorker(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-emerald-500 appearance-none"
+            >
+              <option value="all">すべての人</option>
+              {uniqueWorkers.map(w => (
+                <option key={w as string} value={w as string}>{w}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 作業場別フィルター */}
+          <div className="relative">
+            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+              <MapPin className="w-4 h-4 text-slate-400" />
+            </div>
+            <select 
+              value={filterField}
+              onChange={(e) => setFilterField(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-emerald-500 appearance-none"
+            >
+              <option value="all">すべての作業場(圃場)</option>
+              {uniqueFields.map(f => (
+                <option key={f as string} value={f as string}>{f}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 作目別フィルター */}
+          <div className="relative">
+            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+              <Sprout className="w-4 h-4 text-slate-400" />
+            </div>
+            <select 
+              value={filterCrop}
+              onChange={(e) => setFilterCrop(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-emerald-500 appearance-none"
+            >
+              <option value="all">すべての作目</option>
+              {uniqueCrops.map(c => (
+                <option key={c as string} value={c as string}>{c}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* 履歴テーブル */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[800px]">
@@ -120,14 +212,16 @@ export default function HistoryPage() {
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-400">読み込み中...</td>
+                  <td colSpan={6} className="p-12 text-center">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+                  </td>
                 </tr>
-              ) : workLogs.length === 0 ? (
+              ) : filteredLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-400">作業記録がありません</td>
+                  <td colSpan={6} className="p-12 text-center text-slate-400">条件に一致する作業記録がありません</td>
                 </tr>
               ) : (
-                workLogs.map((log) => (
+                filteredLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="p-4">
                       <div className="font-bold text-slate-700">{log.work_date}</div>
