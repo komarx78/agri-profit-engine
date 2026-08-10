@@ -50,8 +50,10 @@ export default function LoginPage() {
         
       if (error) throw error;
       
-      // パスワード照合 (0000がデフォルト)
-      if (data && data.pin_code === pinCode) {
+      // パスワード照合 (DBに値がない場合はデフォルトで0000とする)
+      const expectedPin = data.pin_code || '0000';
+      
+      if (data && expectedPin === pinCode) {
         // ログイン成功: ローカルストレージに保存
         localStorage.setItem('agri_user', JSON.stringify({
           id: data.id,
