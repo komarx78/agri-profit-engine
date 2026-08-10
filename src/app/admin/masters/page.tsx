@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2 } from 'lucide-react';
+import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download } from 'lucide-react';
 import Papa from 'papaparse';
 
 export default function MastersPage() {
@@ -86,13 +86,48 @@ export default function MastersPage() {
           setUploadStatus({ type: 'error', message: `エラーが発生しました: ${error.message}` });
         }
         
-        // inputリセット
         event.target.value = '';
       },
       error: (error) => {
         setUploadStatus({ type: 'error', message: `CSVの読み込みに失敗しました: ${error.message}` });
       }
     });
+  };
+
+  // --- CSVダウンロード・エクスポート処理 ---
+  const handleDownloadTemplate = (type: 'materials' | 'sales_prices') => {
+    const content = type === 'materials' 
+      ? "資材名,単位,単価\n苦土石灰,袋,1500\n化成肥料(8-8-8),kg,200\n液肥アミノ酸,L,800" 
+      : "作目名,販路名,単価\n伏見唐辛子,JA,500\n伏見唐辛子,直売所,650\n米（キヌヒカリ）,JA,12000";
+    
+    // Excelで文字化けしないようにBOM (Byte Order Mark) を付与
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `template_${type}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportData = (type: 'materials' | 'sales_prices') => {
+    const data: Record<string, any>[] = type === 'materials' 
+      ? materials.map(m => ({ '資材名': m.name, '単位': m.unit, '単価': m.default_price }))
+      : salesPrices.map(s => ({ '作目名': s.crop_name, '販路名': s.channel_name, '単価': s.price_per_unit }));
+      
+    if (data.length === 0) {
+      alert("エクスポートするデータがありません。");
+      return;
+    }
+    
+    const csv = Papa.unparse(data);
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `export_current_${type}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const CardHeader = ({ icon: Icon, title, count }: { icon: any, title: string, count: number }) => (
@@ -181,11 +216,14 @@ export default function MastersPage() {
           </div>
 
           {/* 新規マスタセクション */}
-          <h2 className="text-xl font-bold text-slate-700 mt-12 mb-4 border-b-2 border-slate-200 inline-block pb-1">単価・計算用マスタ（CSVインポート）</h2>
+          <div className="flex items-center justify-between mt-12 mb-4">
+            <h2 className="text-xl font-bold text-slate-700 border-b-2 border-slate-200 pb-1">単価・計算用マスタ（CSVインポート/エクスポート）</h2>
+          </div>
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
             {/* 資材マスタ */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[400px]">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[450px]">
               <CardHeader icon={Package} title="資材・農薬マスタ" count={materials.length} />
               
               <div className="space-y-2 overflow-y-auto flex-1 mb-4">
@@ -206,7 +244,24 @@ export default function MastersPage() {
                 ))}
               </div>
 
-              <div className="pt-4 border-t border-slate-100">
+              <div className="pt-4 border-t border-slate-100 space-y-3">
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => handleDownloadTemplate('materials')}
+                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg text-sm flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    雛形DL
+                  </button>
+                  <button 
+                    onClick={() => handleExportData('materials')}
+                    className="flex-1 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg text-sm flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    現在データDL
+                  </button>
+                </div>
+                
                 <input 
                   type="file" 
                   accept=".csv" 
@@ -225,7 +280,7 @@ export default function MastersPage() {
             </div>
 
             {/* 販売価格マスタ */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[400px]">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[450px]">
               <CardHeader icon={Banknote} title="販売価格マスタ" count={salesPrices.length} />
               
               <div className="space-y-2 overflow-y-auto flex-1 mb-4">
@@ -246,7 +301,24 @@ export default function MastersPage() {
                 ))}
               </div>
 
-              <div className="pt-4 border-t border-slate-100">
+              <div className="pt-4 border-t border-slate-100 space-y-3">
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => handleDownloadTemplate('sales_prices')}
+                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg text-sm flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    雛形DL
+                  </button>
+                  <button 
+                    onClick={() => handleExportData('sales_prices')}
+                    className="flex-1 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg text-sm flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    現在データDL
+                  </button>
+                </div>
+
                 <input 
                   type="file" 
                   accept=".csv" 
