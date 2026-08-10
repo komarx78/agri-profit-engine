@@ -114,7 +114,7 @@ export default function WorkEntryPage() {
   };
 
   return (
-    <main className="min-h-screen bg-emerald-950 text-slate-100 font-sans pb-28">
+    <main className="min-h-screen bg-emerald-950 text-slate-100 font-sans pb-32">
       {/* ヒーローヘッダー */}
       <header className="sticky top-0 z-10 backdrop-blur-md bg-emerald-950/80 border-b border-emerald-800/50 px-4 py-4 shadow-lg">
         <div className="max-w-md mx-auto flex items-center justify-between">
