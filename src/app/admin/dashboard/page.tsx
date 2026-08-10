@@ -15,11 +15,8 @@ const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6'];
 export default function DashboardPage() {
   const [cropData, setCropData] = useState<any[]>([]);
   const [workerData, setWorkerData] = useState<any[]>([]);
-  
-  // 新規追加する採算性データ
   const [profitabilityData, setProfitabilityData] = useState<any[]>([]);
   const [channelSalesData, setChannelSalesData] = useState<any[]>([]);
-  
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -30,8 +27,10 @@ export default function DashboardPage() {
         const [workRes, salesRes] = await Promise.all([
           supabase.from('work_logs').select(`
             duration_minutes,
+            material_quantity,
             crops(name),
-            workers(name, hourly_wage)
+            workers(name, hourly_wage),
+            materials(name, default_price)
           `),
           supabase.from('sales_logs').select(`
             total_sales,
@@ -43,25 +42,31 @@ export default function DashboardPage() {
         const workLogs = workRes.data || [];
         const salesLogs = salesRes.data || [];
 
-        // --- 1. 既存の集計ロジック（作業時間） ---
+        // --- 1. 既存の集計ロジック（作業時間とコスト） ---
         const cropMap: Record<string, number> = {};
         const workerMap: Record<string, number> = {};
-        const cropWageMap: Record<string, number> = {}; // 作目ごとの推定人件費総額
+        const cropWageMap: Record<string, number> = {}; // 人件費
+        const cropMaterialCostMap: Record<string, number> = {}; // 資材費
 
         workLogs.forEach((log: any) => {
           const cName = log.crops?.name || '不明';
           const wName = log.workers?.name || '不明';
           const dur = log.duration_minutes || 0;
-          const wage = log.workers?.hourly_wage || 1000; // デフォルト1000円
+          const wage = log.workers?.hourly_wage || 1000;
+          const matQty = log.material_quantity || 0;
+          const matPrice = log.materials?.default_price || 0;
 
           cropMap[cName] = (cropMap[cName] || 0) + dur;
           workerMap[wName] = (workerMap[wName] || 0) + dur;
           
-          // 推定人件費 = (作業時間(分) / 60) * 時給
+          // 人件費 = (作業時間(分) / 60) * 時給
           cropWageMap[cName] = (cropWageMap[cName] || 0) + ((dur / 60) * wage);
+          
+          // 資材費 = 使用量 * マスタ単価
+          cropMaterialCostMap[cName] = (cropMaterialCostMap[cName] || 0) + (matQty * matPrice);
         });
 
-        // --- 2. 新規の集計ロジック（売上・採算性） ---
+        // --- 2. 売上・販路ロジック ---
         const cropSalesMap: Record<string, number> = {};
         const channelSalesMap: Record<string, number> = {};
 
@@ -74,27 +79,12 @@ export default function DashboardPage() {
           channelSalesMap[chName] = (channelSalesMap[chName] || 0) + sales;
         });
 
-        // --- データが空の場合のモックデータ（プロトタイプ用） ---
+        // モックフォールバック
         if (workLogs.length === 0 && salesLogs.length === 0) {
-          setCropData([
-            { name: '伏見唐辛子', value: 320 },
-            { name: '米（キヌヒカリ）', value: 150 },
-            { name: '九条ネギ', value: 90 },
-          ]);
-          setWorkerData([
-            { name: '京都 太郎', 時間: 400 },
-            { name: '農場 花子', 時間: 160 },
-          ]);
-          setProfitabilityData([
-            { name: '伏見唐辛子', 時給換算: 2500, 売上: 150000, 人件費: 40000 },
-            { name: '米（キヌヒカリ）', 時給換算: -500, 売上: 30000, 人件費: 50000 },
-            { name: '九条ネギ', 時給換算: 1200, 売上: 40000, 人件費: 15000 },
-          ]);
-          setChannelSalesData([
-            { name: 'JA', 売上: 100000 },
-            { name: '直売所', 売上: 70000 },
-            { name: 'ECサイト', 売上: 50000 },
-          ]);
+          setCropData([{ name: '伏見唐辛子', value: 320 }]);
+          setWorkerData([{ name: '京都 太郎', 時間: 400 }]);
+          setProfitabilityData([{ name: '伏見唐辛子', 時給換算: 2500, 売上: 150000, 人件費: 40000, 資材費: 10000 }]);
+          setChannelSalesData([{ name: 'JA', 売上: 100000 }]);
           setIsLoading(false);
           return;
         }
@@ -103,22 +93,25 @@ export default function DashboardPage() {
         const cData = Object.keys(cropMap).map(k => ({ name: k, value: cropMap[k] }));
         const wData = Object.keys(workerMap).map(k => ({ name: k, 時間: workerMap[k] }));
         
-        // 採算性データ: (総売上 - 人件費(※資材費0)) / 総作業時間(時間)
+        // 採算性データ: (総売上 - 人件費 - 資材費) / 総作業時間(時間)
         const pData = Object.keys(cropMap).map(k => {
           const hours = cropMap[k] / 60;
           const sales = cropSalesMap[k] || 0;
           const laborCost = cropWageMap[k] || 0;
+          const materialCost = cropMaterialCostMap[k] || 0;
           
-          // 時給換算（0時間の場合は0）
-          const hourlyProfit = hours > 0 ? Math.round((sales - laborCost) / hours) : 0;
+          // 完全版 時給換算
+          const netProfit = sales - laborCost - materialCost;
+          const hourlyProfit = hours > 0 ? Math.round(netProfit / hours) : 0;
           
           return {
             name: k,
             時給換算: hourlyProfit,
             売上: sales,
-            人件費: Math.round(laborCost)
+            人件費: Math.round(laborCost),
+            資材費: Math.round(materialCost)
           };
-        }).sort((a, b) => b.時給換算 - a.時給換算); // 採算性が高い順
+        }).sort((a, b) => b.時給換算 - a.時給換算);
 
         const chData = Object.keys(channelSalesMap).map(k => ({ 
           name: k, 
@@ -143,10 +136,9 @@ export default function DashboardPage() {
     <div className="max-w-5xl mx-auto space-y-12 pb-12">
       <div>
         <h1 className="text-3xl font-black text-slate-800 tracking-tight">経営・採算性ダッシュボード</h1>
-        <p className="text-slate-500 mt-2 font-medium">作業時間と売上データから、自動的に利益を計算して可視化します。</p>
+        <p className="text-slate-500 mt-2 font-medium">作業時間、資材費、売上データから自動計算。真の利益を可視化します。</p>
       </div>
 
-      {/* --- Section 1: 経営・採算性 (新規追加) --- */}
       <section>
         <h2 className="text-2xl font-bold text-slate-800 border-b-2 border-emerald-500 pb-2 mb-6 inline-block">
           💰 採算性分析（時給換算）
@@ -161,7 +153,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h3 className="text-xl font-bold text-slate-700">作目別 時給換算チャート</h3>
-                <p className="text-sm text-slate-400">1時間作業したらいくら儲かるか？（赤字は要注意）</p>
+                <p className="text-sm text-slate-400">売上から人件費・資材費を引いた真の時給です</p>
               </div>
             </div>
             
@@ -170,33 +162,18 @@ export default function DashboardPage() {
                 <div className="w-full h-full flex items-center justify-center text-slate-400">読み込み中...</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={profitabilityData}
-                    margin={{ top: 10, right: 10, left: -20, bottom: 25 }}
-                  >
+                  <BarChart data={profitabilityData} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis 
-                      dataKey="name" 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fill: '#64748b', fontSize: 12, fontWeight: 'bold' }} 
-                      angle={-45}
-                      textAnchor="end"
-                    />
-                    <YAxis 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fill: '#64748b', fontSize: 12 }} 
-                      tickFormatter={(value) => `¥${value.toLocaleString()}`}
-                    />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 'bold' }} angle={-45} textAnchor="end" />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(val) => `¥${val.toLocaleString()}`} />
                     <Tooltip 
-                      formatter={(value: any) => [`¥${value.toLocaleString()}`, '時給換算']}
+                      formatter={(val: any, name: any) => [`¥${val.toLocaleString()}`, String(name || '')]}
                       cursor={{fill: '#f1f5f9'}}
                       contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                     />
                     <Bar dataKey="時給換算" radius={[6, 6, 0, 0]} maxBarSize={60}>
-                      {profitabilityData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.時給換算 >= 0 ? '#10b981' : '#ef4444'} />
+                      {profitabilityData.map((entry, idx) => (
+                        <Cell key={`cell-${idx}`} fill={entry.時給換算 >= 0 ? '#10b981' : '#ef4444'} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -222,22 +199,18 @@ export default function DashboardPage() {
                 <div className="w-full h-full flex items-center justify-center text-slate-400">読み込み中...</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={channelSalesData}
-                    layout="vertical"
-                    margin={{ top: 10, right: 30, left: 10, bottom: 5 }}
-                  >
+                  <BarChart data={channelSalesData} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
                     <XAxis type="number" hide />
                     <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} fontWeight="bold" width={80} />
                     <Tooltip 
-                      formatter={(value: any) => [`¥${value.toLocaleString()}`, '総売上']}
+                      formatter={(val: any) => [`¥${val.toLocaleString()}`, '総売上']}
                       cursor={{fill: '#f8fafc'}}
                       contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                     />
                     <Bar dataKey="売上" fill="#3b82f6" radius={[0, 6, 6, 0]} barSize={32}>
-                      {channelSalesData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      {channelSalesData.map((entry, idx) => (
+                        <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -248,79 +221,41 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* --- Section 2: 作業時間 (既存) --- */}
+      {/* --- Section 2: 作業時間 --- */}
       <section className="pt-8 border-t border-slate-200">
-        <h2 className="text-xl font-bold text-slate-500 mb-6 inline-block">
-          ⏱️ 作業時間の内訳
-        </h2>
-        
+        <h2 className="text-xl font-bold text-slate-500 mb-6 inline-block">⏱️ 作業時間の内訳</h2>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 opacity-80 hover:opacity-100 transition-opacity">
-          {/* 1. 作目別 作業時間の割合 */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-80">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600">
-                <Sprout className="w-5 h-5" />
-              </div>
+              <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600"><Sprout className="w-5 h-5" /></div>
               <h3 className="text-lg font-bold text-slate-700">一番手がかかっている作目は？</h3>
             </div>
-            
             <div className="flex-1 w-full">
-              {isLoading ? (
-                <div className="w-full h-full flex items-center justify-center text-slate-400">読み込み中...</div>
-              ) : (
+              {!isLoading && (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie
-                      data={cropData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-                      labelLine={false}
-                    >
-                      {cropData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
+                    <Pie data={cropData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`} labelLine={false}>
+                      {cropData.map((e, idx) => <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />)}
                     </Pie>
-                    <Tooltip 
-                      formatter={(value: any) => [`${value} 分`, '作業時間']}
-                      contentStyle={{ borderRadius: '12px', border: 'none' }}
-                    />
+                    <Tooltip formatter={(val: any) => [`${val} 分`, '作業時間']} contentStyle={{ borderRadius: '12px', border: 'none' }} />
                   </PieChart>
                 </ResponsiveContainer>
               )}
             </div>
           </div>
 
-          {/* 2. 作業者別 稼働時間 */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-80">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-slate-100 rounded-lg text-slate-600">
-                <Activity className="w-5 h-5" />
-              </div>
+              <div className="p-2 bg-slate-100 rounded-lg text-slate-600"><Activity className="w-5 h-5" /></div>
               <h3 className="text-lg font-bold text-slate-700">誰が一番長く作業したか？</h3>
             </div>
-
             <div className="flex-1 w-full">
-              {isLoading ? (
-                <div className="w-full h-full flex items-center justify-center text-slate-400">読み込み中...</div>
-              ) : (
+              {!isLoading && (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={workerData}
-                    layout="vertical"
-                    margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
-                  >
+                  <BarChart data={workerData} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                     <XAxis type="number" hide />
                     <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} fontWeight="bold" width={80} />
-                    <Tooltip 
-                      formatter={(value: any) => [`${value} 分`, '作業時間']}
-                      cursor={{fill: '#f8fafc'}}
-                      contentStyle={{ borderRadius: '12px', border: 'none' }}
-                    />
+                    <Tooltip formatter={(val: any) => [`${val} 分`, '作業時間']} cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '12px', border: 'none' }} />
                     <Bar dataKey="時間" fill="#94a3b8" radius={[0, 4, 4, 0]} barSize={24} />
                   </BarChart>
                 </ResponsiveContainer>
