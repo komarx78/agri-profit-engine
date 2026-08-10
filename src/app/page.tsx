@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Clock, MapPin, Sprout, CheckCircle2, User, AlertCircle, Sparkles, Play, Square, Package, History } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface MasterItem {
@@ -10,13 +11,14 @@ interface MasterItem {
 }
 
 export default function WorkEntryPage() {
+  const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<{id: string, name: string, role: string} | null>(null);
+
   const [crops, setCrops] = useState<MasterItem[]>([]);
   const [fields, setFields] = useState<MasterItem[]>([]);
-  const [workers, setWorkers] = useState<MasterItem[]>([]);
   const [materials, setMaterials] = useState<MasterItem[]>([]);
 
   // フォーム状態
-  const [selectedWorker, setSelectedWorker] = useState<string>('');
   const [selectedCrop, setSelectedCrop] = useState<string>('');
   const [selectedField, setSelectedField] = useState<string>('');
   const [workType, setWorkType] = useState<string>('');
@@ -37,26 +39,34 @@ export default function WorkEntryPage() {
   const workTypes = ['収穫', '定植・播種', '水やり', '肥料・農薬', '草刈り', '片付け・メンテ'];
 
   useEffect(() => {
+    // ログインチェック
+    const savedUser = localStorage.getItem('agri_user');
+    if (!savedUser) {
+      router.push('/login');
+      return;
+    }
+    const parsedUser = JSON.parse(savedUser);
+    setCurrentUser(parsedUser);
+
     async function fetchData() {
       try {
-        const [cRes, fRes, wRes, mRes] = await Promise.all([
+        const [cRes, fRes, mRes] = await Promise.all([
           supabase.from('crops').select('id, name'),
           supabase.from('fields').select('id, name'),
-          supabase.from('workers').select('id, name'),
           supabase.from('materials').select('id, name')
         ]);
 
         if (cRes.data) setCrops(cRes.data);
         if (fRes.data) setFields(fRes.data);
-        if (wRes.data) setWorkers(wRes.data);
         if (mRes.data) setMaterials(mRes.data);
         if (!cRes.error) setIsConnected(true);
 
-        // アクティブな作業がないかチェック（直近1件）
-        if (!cRes.error) {
+        // アクティブな作業がないかチェック（自分の直近1件のみ）
+        if (!cRes.error && parsedUser) {
           const { data: activeLogs } = await supabase
             .from('work_logs')
             .select('*')
+            .eq('worker_id', parsedUser.id)
             .eq('status', 'running')
             .order('created_at', { ascending: false })
             .limit(1);
@@ -70,7 +80,7 @@ export default function WorkEntryPage() {
       }
     }
     fetchData();
-  }, []);
+  }, [router]);
 
   // 経過時間の計算タイマー
   useEffect(() => {
@@ -97,13 +107,20 @@ export default function WorkEntryPage() {
     setMaterialQuantity('');
   };
 
+  const handleLogout = () => {
+    if(confirm('ログアウトしますか？')) {
+      localStorage.removeItem('agri_user');
+      router.push('/login');
+    }
+  };
+
   const handleStartWork = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentUser) return;
     setIsSubmitting(true);
 
     try {
       if (isConnected) {
-        const workerId = workers.find(w => w.name === selectedWorker)?.id;
         const cropId = crops.find(c => c.name === selectedCrop)?.id;
         const fieldId = fields.find(f => f.name === selectedField)?.id;
         const matId = materials.find(m => m.name === selectedMaterial)?.id;
@@ -112,7 +129,7 @@ export default function WorkEntryPage() {
 
         const { data, error } = await supabase.from('work_logs').insert([
           {
-            worker_id: workerId || null,
+            worker_id: currentUser.id,
             crop_id: cropId || null,
             field_id: fieldId || null,
             work_type: workType,
@@ -172,18 +189,18 @@ export default function WorkEntryPage() {
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentUser) return;
     setIsSubmitting(true);
 
     try {
       if (isConnected) {
-        const workerId = workers.find(w => w.name === selectedWorker)?.id;
         const cropId = crops.find(c => c.name === selectedCrop)?.id;
         const fieldId = fields.find(f => f.name === selectedField)?.id;
         const matId = materials.find(m => m.name === selectedMaterial)?.id;
 
         const { error } = await supabase.from('work_logs').insert([
           {
-            worker_id: workerId || null,
+            worker_id: currentUser.id,
             crop_id: cropId || null,
             field_id: fieldId || null,
             work_type: workType,
@@ -212,6 +229,8 @@ export default function WorkEntryPage() {
     }
   };
 
+  if (!currentUser) return null; // ログイン前は何も表示しない
+
   // --- アクティブな作業がある場合（作業中画面） ---
   if (activeWorkLog) {
     return (
@@ -230,7 +249,9 @@ export default function WorkEntryPage() {
           </div>
           <div className="mt-8 p-6 w-full max-w-sm bg-emerald-900/40 border border-emerald-800/60 rounded-3xl backdrop-blur-sm text-center">
             <div className="text-emerald-200 font-bold text-lg mb-1">{activeWorkLog.work_type || '作業'}</div>
-            <div className="text-slate-400 text-sm">{activeWorkLog.memo || 'がんばってください！'}</div>
+            <div className="text-emerald-500 font-medium text-sm flex items-center justify-center gap-1 mt-2">
+              <User className="w-4 h-4" /> {currentUser.name} さん
+            </div>
           </div>
         </div>
 
@@ -255,23 +276,29 @@ export default function WorkEntryPage() {
   // --- 通常の入力画面 ---
   return (
     <main className="min-h-screen bg-emerald-950 text-slate-100 font-sans pb-32">
-      <header className="sticky top-0 z-10 backdrop-blur-md bg-emerald-950/80 border-b border-emerald-800/50 px-4 pt-4 pb-2 shadow-lg">
-        <div className="max-w-md mx-auto flex items-center justify-between mb-4">
+      <header className="sticky top-0 z-10 backdrop-blur-md bg-emerald-950/80 border-b border-emerald-800/50 px-4 pt-4 pb-2 shadow-lg flex flex-col gap-4">
+        <div className="max-w-md w-full mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-xl shadow-md text-emerald-950">
               <Clock className="w-6 h-6 stroke-[2.5]" />
             </div>
             <div>
               <h1 className="text-xl font-black tracking-tight text-white">作業記録</h1>
-              <p className="text-xs font-medium text-emerald-300/80">
-                {isConnected ? 'Supabase連動中' : 'デモモード'}
+              <p className="text-xs font-medium text-emerald-400">
+                お疲れ様です、{currentUser.name}さん！
               </p>
             </div>
           </div>
+          <button 
+            onClick={handleLogout}
+            className="p-2 bg-emerald-900 text-emerald-400 rounded-full hover:bg-emerald-800 transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
         </div>
 
         {/* タブ切り替え */}
-        <div className="max-w-md mx-auto flex bg-emerald-900/50 p-1 rounded-xl">
+        <div className="max-w-md w-full mx-auto flex bg-emerald-900/50 p-1 rounded-xl">
           <button
             onClick={() => setInputMode('timer')}
             className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
@@ -305,30 +332,7 @@ export default function WorkEntryPage() {
         ) : (
           <form onSubmit={inputMode === 'timer' ? handleStartWork : handleManualSubmit} className="space-y-6">
             
-            {/* 1. 作業者 */}
-            <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
-                <User className="w-4 h-4" />作業者 (必須)
-              </h2>
-              <div className="flex flex-wrap gap-2">
-                {workers.map(w => (
-                  <button
-                    key={w.id}
-                    type="button"
-                    onClick={() => setSelectedWorker(w.name)}
-                    className={`flex-1 py-3 px-3 rounded-xl font-bold text-sm transition-all border ${
-                      selectedWorker === w.name
-                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-emerald-950 border-emerald-300 shadow-md scale-[1.02]'
-                        : 'bg-emerald-950/60 text-slate-300 border-emerald-800/60'
-                    }`}
-                  >
-                    {w.name}
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {/* 2. 作目と圃場（シンプルにまとめる） */}
+            {/* 作業者選択はログインで固定されたため廃止し、作目と圃場からスタート */}
             <div className="grid grid-cols-2 gap-4">
               <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
@@ -375,7 +379,7 @@ export default function WorkEntryPage() {
               </section>
             </div>
 
-            {/* 3. 作業内容 */}
+            {/* 作業内容 */}
             <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
               <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 mb-2.5 flex items-center gap-2">
                 <Sparkles className="w-4 h-4" />作業内容 (必須)
@@ -398,7 +402,7 @@ export default function WorkEntryPage() {
               </div>
             </section>
 
-            {/* 資材の使用 (新規追加・任意) */}
+            {/* 資材の使用 */}
             <section className="bg-purple-900/30 p-4 rounded-2xl border border-purple-800/40 shadow-sm">
               <h2 className="text-xs font-bold uppercase tracking-wider text-purple-400 mb-2.5 flex items-center gap-2">
                 <Package className="w-4 h-4" />使った資材 (任意)
@@ -449,9 +453,9 @@ export default function WorkEntryPage() {
 
             <button
               type="submit"
-              disabled={!selectedWorker || !selectedCrop || !selectedField || !workType || (inputMode === 'manual' && !duration) || isSubmitting}
+              disabled={!selectedCrop || !selectedField || !workType || (inputMode === 'manual' && !duration) || isSubmitting}
               className={`w-full py-5 rounded-2xl font-black text-xl shadow-xl transition-all duration-200 flex items-center justify-center gap-3 ${
-                (!selectedWorker || !selectedCrop || !selectedField || !workType || (inputMode === 'manual' && !duration) || isSubmitting)
+                (!selectedCrop || !selectedField || !workType || (inputMode === 'manual' && !duration) || isSubmitting)
                   ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
                   : 'bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 text-emerald-950 hover:brightness-110 active:scale-[0.98] shadow-emerald-500/20'
               }`}

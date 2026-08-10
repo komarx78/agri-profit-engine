@@ -7,7 +7,7 @@ import {
   Legend, CartesianGrid
 } from 'recharts';
 import { supabase } from '@/lib/supabase';
-import { Activity, Clock, Sprout, TrendingUp, Banknote } from 'lucide-react';
+import { Activity, Clock, Sprout, TrendingUp, Banknote, UserCheck } from 'lucide-react';
 
 // --- 直感的なグラフ用の色設定 ---
 const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6'];
@@ -17,6 +17,7 @@ export default function DashboardPage() {
   const [workerData, setWorkerData] = useState<any[]>([]);
   const [profitabilityData, setProfitabilityData] = useState<any[]>([]);
   const [channelSalesData, setChannelSalesData] = useState<any[]>([]);
+  const [workerProductivityData, setWorkerProductivityData] = useState<any[]>([]); // 個人別生産性
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -42,11 +43,16 @@ export default function DashboardPage() {
         const workLogs = workRes.data || [];
         const salesLogs = salesRes.data || [];
 
-        // --- 1. 既存の集計ロジック（作業時間とコスト） ---
-        const cropMap: Record<string, number> = {};
-        const workerMap: Record<string, number> = {};
-        const cropWageMap: Record<string, number> = {}; // 人件費
-        const cropMaterialCostMap: Record<string, number> = {}; // 資材費
+        // 1. 基本集計
+        const cropHours: Record<string, number> = {}; // 作目別総時間(分)
+        const workerHours: Record<string, number> = {}; // 作業者別総時間(分)
+        const cropWageMap: Record<string, number> = {}; // 作目別総人件費
+        const cropMaterialCostMap: Record<string, number> = {}; // 作目別総資材費
+        
+        // 個人別集計用
+        const workerCropHours: Record<string, Record<string, number>> = {}; // worker -> crop -> minutes
+        const workerWages: Record<string, number> = {}; // worker -> hourly_wage
+        const workerTotalCost: Record<string, number> = {}; // worker -> 総人件費
 
         workLogs.forEach((log: any) => {
           const cName = log.crops?.name || '不明';
@@ -56,17 +62,20 @@ export default function DashboardPage() {
           const matQty = log.material_quantity || 0;
           const matPrice = log.materials?.default_price || 0;
 
-          cropMap[cName] = (cropMap[cName] || 0) + dur;
-          workerMap[wName] = (workerMap[wName] || 0) + dur;
+          cropHours[cName] = (cropHours[cName] || 0) + dur;
+          workerHours[wName] = (workerHours[wName] || 0) + dur;
           
-          // 人件費 = (作業時間(分) / 60) * 時給
-          cropWageMap[cName] = (cropWageMap[cName] || 0) + ((dur / 60) * wage);
-          
-          // 資材費 = 使用量 * マスタ単価
+          const laborCost = (dur / 60) * wage;
+          cropWageMap[cName] = (cropWageMap[cName] || 0) + laborCost;
           cropMaterialCostMap[cName] = (cropMaterialCostMap[cName] || 0) + (matQty * matPrice);
+
+          if (!workerCropHours[wName]) workerCropHours[wName] = {};
+          workerCropHours[wName][cName] = (workerCropHours[wName][cName] || 0) + dur;
+          workerWages[wName] = wage;
+          workerTotalCost[wName] = (workerTotalCost[wName] || 0) + laborCost;
         });
 
-        // --- 2. 売上・販路ロジック ---
+        // 2. 売上集計
         const cropSalesMap: Record<string, number> = {};
         const channelSalesMap: Record<string, number> = {};
 
@@ -85,23 +94,27 @@ export default function DashboardPage() {
           setWorkerData([{ name: '京都 太郎', 時間: 400 }]);
           setProfitabilityData([{ name: '伏見唐辛子', 時給換算: 2500, 売上: 150000, 人件費: 40000, 資材費: 10000 }]);
           setChannelSalesData([{ name: 'JA', 売上: 100000 }]);
+          setWorkerProductivityData([{ name: '京都 太郎', 生産性: 1500, 設定時給: 1000 }]);
           setIsLoading(false);
           return;
         }
 
-        // --- 3. グラフ用配列の生成 ---
-        const cData = Object.keys(cropMap).map(k => ({ name: k, value: cropMap[k] }));
-        const wData = Object.keys(workerMap).map(k => ({ name: k, 時間: workerMap[k] }));
+        // 3. グラフデータ生成
+        const cData = Object.keys(cropHours).map(k => ({ name: k, value: cropHours[k] }));
+        const wData = Object.keys(workerHours).map(k => ({ name: k, 時間: workerHours[k] }));
         
-        // 採算性データ: (総売上 - 人件費 - 資材費) / 総作業時間(時間)
-        const pData = Object.keys(cropMap).map(k => {
-          const hours = cropMap[k] / 60;
+        // 作目別 採算性
+        const cropNetProfits: Record<string, number> = {}; // 作目別の純利益
+        
+        const pData = Object.keys(cropHours).map(k => {
+          const hours = cropHours[k] / 60;
           const sales = cropSalesMap[k] || 0;
           const laborCost = cropWageMap[k] || 0;
           const materialCost = cropMaterialCostMap[k] || 0;
           
-          // 完全版 時給換算
           const netProfit = sales - laborCost - materialCost;
+          cropNetProfits[k] = netProfit; // 保存
+          
           const hourlyProfit = hours > 0 ? Math.round(netProfit / hours) : 0;
           
           return {
@@ -118,10 +131,38 @@ export default function DashboardPage() {
           売上: channelSalesMap[k] 
         })).sort((a, b) => b.売上 - a.売上);
 
+        // --- 4. 個人別 生産性分析 ---
+        // 労働者の生み出した価値 = Σ (作目の純利益 × (労働者がその作目に費やした時間 / 作目の総時間))
+        const wpData = Object.keys(workerHours).map(wName => {
+          let createdValue = 0;
+          const wCrops = workerCropHours[wName];
+          
+          Object.keys(wCrops).forEach(cName => {
+            const myHours = wCrops[cName];
+            const totalHours = cropHours[cName];
+            if (totalHours > 0) {
+              const myContributionRatio = myHours / totalHours;
+              const cropProfit = cropNetProfits[cName] || 0;
+              createdValue += cropProfit * myContributionRatio;
+            }
+          });
+          
+          const totalMyHours = workerHours[wName] / 60;
+          // 生産性 = (生み出した価値 - その人の人件費) / 労働時間
+          const productivity = totalMyHours > 0 ? Math.round((createdValue - workerTotalCost[wName]) / totalMyHours) : 0;
+          
+          return {
+            name: wName,
+            生産性: productivity,
+            設定時給: workerWages[wName] || 1000
+          };
+        }).sort((a, b) => b.生産性 - a.生産性);
+
         setCropData(cData);
         setWorkerData(wData);
         setProfitabilityData(pData);
         setChannelSalesData(chData);
+        setWorkerProductivityData(wpData);
 
       } catch (err) {
         console.error(err);
@@ -182,15 +223,15 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* ② 販路別 売上比較 */}
+          {/* ② 個人別 生産性分析 */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[420px]">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
-                <Banknote className="w-6 h-6" />
+              <div className="p-2 bg-purple-100 rounded-lg text-purple-600">
+                <UserCheck className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-slate-700">販路別 売上比較チャート</h3>
-                <p className="text-sm text-slate-400">どの販路が一番売上を上げているか？</p>
+                <h3 className="text-xl font-bold text-slate-700">個人別 生産性（利益貢献度）</h3>
+                <p className="text-sm text-slate-400">1時間あたりいくらの利益を生み出しているか？</p>
               </div>
             </div>
             
@@ -199,18 +240,18 @@ export default function DashboardPage() {
                 <div className="w-full h-full flex items-center justify-center text-slate-400">読み込み中...</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={channelSalesData} layout="vertical" margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                    <XAxis type="number" hide />
-                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} fontWeight="bold" width={80} />
+                  <BarChart data={workerProductivityData} margin={{ top: 10, right: 10, left: -20, bottom: 25 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 'bold' }} angle={-45} textAnchor="end" />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(val) => `¥${val.toLocaleString()}`} />
                     <Tooltip 
-                      formatter={(val: any) => [`¥${val.toLocaleString()}`, '総売上']}
-                      cursor={{fill: '#f8fafc'}}
+                      formatter={(val: any, name: any) => [`¥${val.toLocaleString()}`, String(name || '')]}
+                      cursor={{fill: '#f1f5f9'}}
                       contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                     />
-                    <Bar dataKey="売上" fill="#3b82f6" radius={[0, 6, 6, 0]} barSize={32}>
-                      {channelSalesData.map((entry, idx) => (
-                        <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} />
+                    <Bar dataKey="生産性" radius={[6, 6, 0, 0]} maxBarSize={60}>
+                      {workerProductivityData.map((entry, idx) => (
+                        <Cell key={`cell-${idx}`} fill={entry.生産性 >= 0 ? '#8b5cf6' : '#ef4444'} />
                       ))}
                     </Bar>
                   </BarChart>
