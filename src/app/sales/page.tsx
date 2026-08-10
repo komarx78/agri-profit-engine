@@ -141,29 +141,41 @@ export default function SalesEntryPage() {
               </div>
             </section>
 
-            {/* 2. 出荷先・販路 */}
-            <section className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/60 shadow-sm">
+            {/* 2. 出荷先・販路 (選んだ作目に登録されている販路だけを表示) */}
+            <section className={`p-4 rounded-2xl border shadow-sm transition-all duration-300 ${
+              selectedCrop ? 'bg-slate-900/60 border-slate-800/60' : 'bg-slate-950/30 border-slate-900/30 opacity-50'
+            }`}>
               <h2 className="text-xs font-bold uppercase tracking-wider text-blue-400 mb-2.5 flex items-center gap-2">
                 <Store className="w-4 h-4 text-blue-400" />出荷先
               </h2>
-              <div className="grid grid-cols-2 gap-2.5">
-                {channels.length > 0 ? channels.map(ch => (
-                  <button
-                    key={ch.id}
-                    type="button"
-                    onClick={() => setSelectedChannel(ch.name)}
-                    className={`py-3.5 px-3 rounded-xl font-bold text-base transition-all border text-center ${
-                      selectedChannel === ch.name
-                        ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-slate-950 border-blue-300 shadow-md'
-                        : 'bg-slate-950/60 text-slate-300 border-slate-800/80'
-                    }`}
-                  >
-                    {ch.name}
-                  </button>
-                )) : (
-                  <div className="col-span-2 text-sm text-slate-500 p-2 text-center">データ取得中...</div>
-                )}
-              </div>
+              
+              {!selectedCrop ? (
+                <div className="text-sm text-slate-500 p-2 text-center font-bold">先に作目を選択してください</div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2.5">
+                  {/* salesPricesの中から、選んだ作目に紐づく販路だけを抽出 */}
+                  {salesPrices.filter(sp => sp.crop_name === selectedCrop).map(sp => (
+                    <button
+                      key={sp.id}
+                      type="button"
+                      onClick={() => setSelectedChannel(sp.channel_name)}
+                      className={`py-3.5 px-3 rounded-xl font-bold text-base transition-all border text-center ${
+                        selectedChannel === sp.channel_name
+                          ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-slate-950 border-blue-300 shadow-md'
+                          : 'bg-slate-950/60 text-slate-300 border-slate-800/80 hover:bg-slate-800/60'
+                      }`}
+                    >
+                      {sp.channel_name}
+                      <div className="text-[10px] font-medium opacity-80 mt-1">¥{sp.price_per_unit}</div>
+                    </button>
+                  ))}
+                  {salesPrices.filter(sp => sp.crop_name === selectedCrop).length === 0 && (
+                    <div className="col-span-2 text-xs text-rose-400 p-2 text-center bg-rose-950/30 rounded-lg">
+                      この作目の販売価格マスタが登録されていません。<br/>管理画面から登録してください。
+                    </div>
+                  )}
+                </div>
+              )}
             </section>
 
             {/* 3. 数量 */}
