@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2 } from 'lucide-react';
+import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft } from 'lucide-react';
 import Papa from 'papaparse';
 
 type MasterType = 'materials' | 'sales_prices' | 'crops' | 'fields' | 'workers';
@@ -21,6 +21,9 @@ export default function MastersPage() {
   const [editingItem, setEditingItem] = useState<any>(null); // null = 新規作成
   const [formData, setFormData] = useState<any>({});
   const [isSaving, setIsSaving] = useState(false);
+
+  // 販売価格マスタの表示モード ('byCrop' | 'byChannel')
+  const [priceViewMode, setPriceViewMode] = useState<'byCrop' | 'byChannel'>('byCrop');
 
   const fileInputRefMats = useRef<HTMLInputElement>(null);
   const fileInputRefPrices = useRef<HTMLInputElement>(null);
@@ -56,17 +59,34 @@ export default function MastersPage() {
   }, []);
 
   // --- CRUD (モーダル) 処理 ---
-  const handleOpenModal = (type: MasterType, item: any = null) => {
+  // defaultValues: 新規作成時にあらかじめセットしておきたい値
+  const handleOpenModal = (type: MasterType, item: any = null, defaultValues: any = {}) => {
     setModalType(type);
     setEditingItem(item);
     if (item) {
       setFormData({ ...item });
     } else {
-      // 新規作成時の初期値
-      if (type === 'workers') setFormData({ name: '', hourly_wage: 1000, pin_code: '0000' });
-      else if (type === 'materials') setFormData({ name: '', unit: '', default_price: 0 });
-      else if (type === 'sales_prices') setFormData({ crop_name: '', channel_name: '', price_per_unit: 0 });
-      else setFormData({ name: '' });
+      // 新規作成時の初期値 ＋ 渡されたdefaultValuesをマージ
+      const initial: any = { ...defaultValues };
+      if (type === 'workers') {
+        initial.name = initial.name || '';
+        initial.hourly_wage = initial.hourly_wage || 1000;
+        initial.pin_code = initial.pin_code || '0000';
+      }
+      else if (type === 'materials') {
+        initial.name = initial.name || '';
+        initial.unit = initial.unit || '';
+        initial.default_price = initial.default_price || 0;
+      }
+      else if (type === 'sales_prices') {
+        initial.crop_name = initial.crop_name || '';
+        initial.channel_name = initial.channel_name || '';
+        initial.price_per_unit = initial.price_per_unit || 0;
+      }
+      else {
+        initial.name = initial.name || '';
+      }
+      setFormData(initial);
     }
   };
 
@@ -93,11 +113,8 @@ export default function MastersPage() {
 
       let query;
       if (editingItem) {
-        // 更新
         query = supabase.from(table).update(formData).eq('id', editingItem.id);
       } else {
-        // 新規作成
-        // IDは自動生成されるためformDataから削除(念のため)
         const { id, created_at, ...insertData } = formData;
         query = supabase.from(table).insert([insertData]);
       }
@@ -288,6 +305,22 @@ export default function MastersPage() {
     </div>
   );
 
+  // 販売価格マスタのグルーピング処理
+  const getGroupedSalesPrices = () => {
+    const groups: { [key: string]: any[] } = {};
+    
+    salesPrices.forEach(sp => {
+      const groupKey = priceViewMode === 'byCrop' ? sp.crop_name : sp.channel_name;
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+      }
+      groups[groupKey].push(sp);
+    });
+    
+    return groups;
+  };
+  const groupedSalesPrices = getGroupedSalesPrices();
+
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-12 relative">
       <div>
@@ -399,7 +432,7 @@ export default function MastersPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
             {/* 資材マスタ */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[450px]">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
               <CardHeader icon={Package} title={`資材・農薬 (${materials.length})`} type="materials" />
               
               <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
@@ -427,32 +460,89 @@ export default function MastersPage() {
               <CsvActionButtons type="materials" inputRef={fileInputRefMats} />
             </div>
 
-            {/* 販売価格マスタ */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[450px]">
-              <CardHeader icon={Banknote} title={`販売価格 (${salesPrices.length})`} type="sales_prices" />
-              
-              <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
-                {salesPrices.length === 0 ? <p className="text-slate-400 text-sm">データなし</p> : null}
-                {salesPrices.map(s => (
-                  <div key={s.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
-                    <div>
-                      <div className="font-bold text-slate-700">{s.crop_name}</div>
-                      <div className="text-xs text-slate-400">販路: {s.channel_name}</div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="font-bold text-blue-600">¥{s.price_per_unit}</div>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => handleOpenModal('sales_prices', s)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => handleDelete('sales_prices', s.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+            {/* 販売価格マスタ (ツリー表示対応) */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
+              <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2 text-slate-800 font-bold text-lg">
+                  <Banknote className="w-5 h-5 text-emerald-600" />
+                  {`販売価格 (${salesPrices.length})`}
+                </div>
+                
+                {/* 状態切り替えトグル */}
+                <div className="flex bg-slate-100 p-1 rounded-lg">
+                  <button 
+                    onClick={() => setPriceViewMode('byCrop')}
+                    className={`px-3 py-1 text-xs font-bold rounded-md flex items-center gap-1 transition-all ${priceViewMode === 'byCrop' ? 'bg-white shadow-sm text-emerald-700' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    <ListTree className="w-3 h-3" />作目別
+                  </button>
+                  <button 
+                    onClick={() => setPriceViewMode('byChannel')}
+                    className={`px-3 py-1 text-xs font-bold rounded-md flex items-center gap-1 transition-all ${priceViewMode === 'byChannel' ? 'bg-white shadow-sm text-emerald-700' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    <AlignLeft className="w-3 h-3" />販路別
+                  </button>
+                </div>
               </div>
+
+              <div className="overflow-y-auto flex-1 mb-4 pr-1 space-y-4">
+                {Object.keys(groupedSalesPrices).length === 0 ? (
+                  <p className="text-slate-400 text-sm text-center pt-8">販売価格データがありません</p>
+                ) : (
+                  Object.keys(groupedSalesPrices).map(groupKey => (
+                    <div key={groupKey} className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+                      <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 font-black text-slate-700 flex items-center gap-2">
+                        {priceViewMode === 'byCrop' ? '📦' : '🚚'} {groupKey}
+                      </div>
+                      <div className="divide-y divide-slate-100">
+                        {groupedSalesPrices[groupKey].map(s => (
+                          <div key={s.id} className="p-3 pl-6 flex justify-between items-center group hover:bg-slate-100 transition-colors">
+                            <div className="text-sm font-bold text-slate-600 flex items-center gap-2">
+                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
+                              {priceViewMode === 'byCrop' ? s.channel_name : s.crop_name}
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="font-black text-blue-600">¥{s.price_per_unit}</div>
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => handleOpenModal('sales_prices', s)} className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md">
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={() => handleDelete('sales_prices', s.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* 子要素としての追加ボタン */}
+                      <button 
+                        onClick={() => handleOpenModal(
+                          'sales_prices', 
+                          null, 
+                          priceViewMode === 'byCrop' ? { crop_name: groupKey } : { channel_name: groupKey }
+                        )}
+                        className="w-full py-2 px-4 text-xs font-bold text-emerald-600 bg-emerald-50/50 hover:bg-emerald-100 flex items-center gap-1 transition-colors"
+                      >
+                        <Plus className="w-3 h-3" /> 
+                        {priceViewMode === 'byCrop' ? 'この作目の販路を追加' : 'この販路の商品を追加'}
+                      </button>
+                    </div>
+                  ))
+                )}
+                
+                {/* 完全に新しいカテゴリの追加 */}
+                <div className="pt-2">
+                  <button 
+                    onClick={() => handleOpenModal('sales_prices')}
+                    className="w-full py-2.5 border-2 border-dashed border-emerald-200 hover:border-emerald-400 bg-emerald-50/30 text-emerald-700 font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all"
+                  >
+                    <Plus className="w-4 h-4" />新しい販売価格を追加
+                  </button>
+                </div>
+              </div>
+              
               <CsvActionButtons type="sales_prices" inputRef={fileInputRefPrices} />
             </div>
 
