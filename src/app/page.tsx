@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2 } from 'lucide-react';
+import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface MasterItem {
@@ -31,6 +31,7 @@ export default function WorkEntryPage() {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string>(''); // エラー表示用
 
   // 打刻関連の状態
   const [activeWorkLog, setActiveWorkLog] = useState<any>(null);
@@ -106,7 +107,7 @@ export default function WorkEntryPage() {
         setElapsedMinutes(Math.floor((now - start) / 1000 / 60));
       };
       calcElapsed(); // 初回実行
-      interval = setInterval(calcElapsed, 10000); // 10秒ごとに更新(見た目の反応を良くするため)
+      interval = setInterval(calcElapsed, 10000); // 10秒ごとに更新
     }
     return () => clearInterval(interval);
   }, [activeWorkLog]);
@@ -119,6 +120,7 @@ export default function WorkEntryPage() {
     setMemo('');
     setSelectedMaterial('');
     setMaterialQuantity('');
+    setErrorMsg('');
   };
 
   const handleLogout = () => {
@@ -132,6 +134,7 @@ export default function WorkEntryPage() {
     e.preventDefault();
     if (!currentUser) return;
     setIsSubmitting(true);
+    setErrorMsg('');
 
     try {
       if (isConnected) {
@@ -161,16 +164,20 @@ export default function WorkEntryPage() {
           materials(name)
         `);
         
-        if (error) throw error;
+        if (error) {
+          console.error('Supabase Insert Error:', error);
+          throw new Error(`データベース保存エラー: ${error.message} (おそらくSQLの実行忘れが原因です)`);
+        }
+        
         if (data && data.length > 0) setActiveWorkLog(data[0]);
       } else {
         await new Promise((resolve) => setTimeout(resolve, 800));
         setActiveWorkLog({ start_time: new Date().toISOString(), work_type: workType });
       }
       setIsSubmitting(false);
-      // フォームはリセットしない（作業中の表示を維持するため）
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setErrorMsg(err.message || '通信エラーが発生しました');
       setIsSubmitting(false);
     }
   };
@@ -178,6 +185,7 @@ export default function WorkEntryPage() {
   const handleStopWork = async () => {
     if (!activeWorkLog) return;
     setIsSubmitting(true);
+    setErrorMsg('');
 
     try {
       if (isConnected && activeWorkLog.id) {
@@ -191,7 +199,10 @@ export default function WorkEntryPage() {
           status: 'completed'
         }).eq('id', activeWorkLog.id);
         
-        if (error) throw error;
+        if (error) {
+          console.error('Supabase Update Error:', error);
+          throw new Error(`データベース更新エラー: ${error.message}`);
+        }
       } else {
         await new Promise((resolve) => setTimeout(resolve, 800));
       }
@@ -203,8 +214,9 @@ export default function WorkEntryPage() {
         setIsSuccess(false);
         resetForm(); // 終了時に初めてリセット
       }, 2500);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setErrorMsg(err.message || '通信エラーが発生しました');
       setIsSubmitting(false);
     }
   };
@@ -213,6 +225,7 @@ export default function WorkEntryPage() {
     e.preventDefault();
     if (!currentUser) return;
     setIsSubmitting(true);
+    setErrorMsg('');
 
     try {
       if (isConnected) {
@@ -234,7 +247,10 @@ export default function WorkEntryPage() {
             memo: memo || null,
           },
         ]);
-        if (error) throw error;
+        if (error) {
+          console.error('Supabase Insert Error:', error);
+          throw new Error(`データベース保存エラー: ${error.message}`);
+        }
       } else {
         await new Promise((resolve) => setTimeout(resolve, 800));
       }
@@ -245,8 +261,9 @@ export default function WorkEntryPage() {
         setIsSuccess(false);
         resetForm();
       }, 2500);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setErrorMsg(err.message || '通信エラーが発生しました');
       setIsSubmitting(false);
     }
   };
@@ -315,6 +332,14 @@ export default function WorkEntryPage() {
         ) : (
           <form onSubmit={inputMode === 'timer' ? handleStartWork : handleManualSubmit} className="space-y-6">
             
+            {/* エラーメッセージの表示エリア */}
+            {errorMsg && (
+              <div className="p-4 bg-rose-500/20 border border-rose-500/50 text-rose-400 rounded-xl text-sm font-bold flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
             {/* ▼ フォーム入力部分（作業中は操作不可にする） */}
             <div className={`space-y-6 transition-all duration-300 ${activeWorkLog ? 'opacity-60 pointer-events-none grayscale-[30%]' : ''}`}>
               <div className="grid grid-cols-2 gap-4">
