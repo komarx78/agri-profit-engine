@@ -153,6 +153,7 @@ export default function WorkEntryPage() {
             start_time: startTime,
             status: 'running',
             work_date: startTime.split('T')[0],
+            duration_minutes: 0, // 作業開始時点では時間を0として保存（DBのNOT NULL制約対策）
             material_id: matId || null,
             material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,
             memo: memo || null,
