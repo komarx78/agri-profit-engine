@@ -9,54 +9,35 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
   
-  const [isLoginMode, setIsLoginMode] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
-    setSuccessMsg('');
     setIsSubmitting(true);
 
     try {
-      if (isLoginMode) {
-        // ログイン処理
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        
-        if (error) throw error;
-        
-        // ログイン成功時は管理ダッシュボードへ
-        router.push('/admin/dashboard');
-        router.refresh();
-      } else {
-        // 新規登録処理
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-        
-        if (error) throw error;
-        
-        setSuccessMsg('アカウントを作成しました！そのままログインできます。');
-        setIsLoginMode(true);
-        setPassword('');
-      }
+      // ログイン処理
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) throw error;
+      
+      // ログイン成功時は管理ダッシュボードへ
+      router.push('/admin/dashboard');
+      router.refresh();
     } catch (err: any) {
       console.error(err);
       if (err.message.includes('Invalid login credentials')) {
         setErrorMsg('メールアドレスまたはパスワードが間違っています。');
-      } else if (err.message.includes('User already registered')) {
-        setErrorMsg('このメールアドレスは既に登録されています。');
       } else {
-        setErrorMsg(isLoginMode ? 'ログインに失敗しました。' : 'アカウント作成に失敗しました。');
+        setErrorMsg('ログインに失敗しました。');
       }
     } finally {
       setIsSubmitting(false);
@@ -71,22 +52,16 @@ export default function LoginPage() {
             <User className="w-8 h-8 text-emerald-400" />
           </div>
           <h1 className="text-2xl font-black text-white">
-            {isLoginMode ? 'ログイン' : 'アカウント作成'}
+            ログイン
           </h1>
           <p className="text-sm text-slate-400 mt-2">
-            {isLoginMode ? 'メールアドレスとパスワードを入力してください' : '新しくシステムを利用する農家さんの登録'}
+            システム管理者から発行されたメールアドレスとパスワードを入力してください
           </p>
         </div>
 
         {errorMsg && (
           <div className="mb-6 p-3 bg-rose-500/20 border border-rose-500/50 text-rose-400 rounded-lg text-sm text-center font-bold">
             {errorMsg}
-          </div>
-        )}
-        
-        {successMsg && (
-          <div className="mb-6 p-3 bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 rounded-lg text-sm text-center font-bold">
-            {successMsg}
           </div>
         )}
 
@@ -129,26 +104,12 @@ export default function LoginPage() {
           >
             {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : (
               <>
-                {isLoginMode ? 'ログインして作業開始' : 'アカウントを作成'}
+                ログインして作業開始
                 <ArrowRight className="w-5 h-5" />
               </>
             )}
           </button>
         </form>
-
-        <div className="mt-6 text-center">
-          <button
-            type="button"
-            onClick={() => {
-              setIsLoginMode(!isLoginMode);
-              setErrorMsg('');
-              setSuccessMsg('');
-            }}
-            className="text-sm font-bold text-slate-400 hover:text-emerald-400 transition-colors"
-          >
-            {isLoginMode ? '新しくアカウントを作成する' : '既にアカウントをお持ちの方はこちら'}
-          </button>
-        </div>
       </div>
     </main>
   );
