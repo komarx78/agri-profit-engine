@@ -2,8 +2,9 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { LayoutDashboard, Database, LogOut, Sprout, History, Menu, FileSpreadsheet, Truck, FileText, Settings, Store } from 'lucide-react';
+import { createClient } from '@/utils/supabase/client';
 
 export default function AdminLayout({
   children,
@@ -11,7 +12,16 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const supabase = createClient();
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    // 現場のワーカーログイン情報もついでに消去
+    localStorage.removeItem('agri_user');
+    router.push('/login');
+  };
 
   const navGroups = [
     {
@@ -103,6 +113,13 @@ export default function AdminLayout({
               <LogOut className="w-5 h-5" />
               現場入力画面へ戻る
             </Link>
+            <button 
+              onClick={handleSignOut}
+              className="w-full mt-2 flex items-center gap-3 px-4 py-3 rounded-xl text-rose-500 font-medium hover:bg-rose-50 transition-colors text-left"
+            >
+              <LogOut className="w-5 h-5" />
+              ログアウト
+            </button>
           </div>
         </div>
       )}
@@ -128,6 +145,13 @@ export default function AdminLayout({
             <LogOut className="w-5 h-5" />
             現場入力画面へ戻る
           </Link>
+          <button 
+            onClick={handleSignOut}
+            className="w-full mt-2 flex items-center gap-3 px-4 py-3 rounded-xl text-rose-500 font-medium hover:bg-rose-50 transition-colors text-left"
+          >
+            <LogOut className="w-5 h-5" />
+            ログアウト
+          </button>
         </div>
       </aside>
 

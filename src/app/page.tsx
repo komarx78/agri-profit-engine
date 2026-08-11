@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { WorkerGate } from '@/components/WorkerGate';
 
 interface MasterItem {
   id: string;
@@ -40,10 +41,10 @@ export default function WorkEntryPage() {
   const workTypes = ['収穫', '定植・播種', '水やり', '肥料・農薬', '草刈り', '片付け・メンテ'];
 
   useEffect(() => {
-    // ログインチェック
+    // ワーカーログインチェック（SaaSオーナーではなく、現場のワーカー）
     const savedUser = localStorage.getItem('agri_user');
     if (!savedUser) {
-      router.push('/login');
+      // ログインしていなければ WorkerGate が表示されるようにする
       return;
     }
     const parsedUser = JSON.parse(savedUser);
@@ -274,6 +275,10 @@ export default function WorkEntryPage() {
       <Loader2 className="w-8 h-8 animate-spin" />
     </div>
   );
+
+  if (!currentUser) {
+    return <WorkerGate onLogin={(user) => setCurrentUser(user)} />;
+  }
 
   return (
     <main className="min-h-screen bg-emerald-950 text-slate-100 font-sans pb-32">
