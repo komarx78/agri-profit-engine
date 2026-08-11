@@ -20,15 +20,12 @@ export default function AccountingPage() {
     salesCredit: '売上高',
     materialDebit: '消耗品費',
     materialCredit: '現金',
-    laborDebit: '給料手当',
-    laborCredit: '未払金',
   });
 
   // MF税区分の初期値（インポートエラーを防ぐため設定）
   const taxCategories = {
     sales: '課税売上 10%', // 軽減税率の場合は「課税売上 8%（軽）」などに変更可能にするなどの拡張余地
-    material: '対象外',
-    labor: '対象外'
+    material: '対象外'
   };
 
   const handleAccountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -178,40 +175,6 @@ export default function AccountingPage() {
             });
           }
         }
-        
-        // 人件費の仕訳
-        if (log.duration_minutes && log.workers?.hourly_wage) {
-          const laborCost = (log.duration_minutes / 60) * log.workers.hourly_wage;
-          if (laborCost > 0) {
-            journalEntries.push({
-              'No': index++,
-              '日付': dateStr,
-              '借方勘定科目': accounts.laborDebit,
-              '借方補助科目': '',
-              '借方部門': '',
-              '借方税区分': taxCategories.labor,
-              '借方インボイス': '',
-              '借方金額(円)': Math.round(laborCost),
-              '借方税額': 0,
-              '貸方勘定科目': accounts.laborCredit,
-              '貸方補助科目': '',
-              '貸方部門': '',
-              '貸方税区分': '対象外',
-              '貸方インボイス': '',
-              '貸方金額(円)': Math.round(laborCost),
-              '貸方税額': 0,
-              '摘要': `${log.workers.name} 作業代 (${cropName})`,
-              '仕訳メモ': '',
-              'タグ': '',
-              'MF仕訳タイプ': '',
-              '決算整理仕訳': '',
-              '作成日時': '',
-              '作成者': '',
-              '最終更新日時': '',
-              '最終更新者': ''
-            });
-          }
-        }
       });
 
       if (journalEntries.length === 0) {
@@ -257,7 +220,7 @@ export default function AccountingPage() {
           会計データ出力（仕訳CSV生成）
         </h1>
         <p className="text-slate-500 mt-2 font-medium">
-          売上と作業記録（人件費・資材費）から、マネーフォワードクラウドの「仕訳帳」へ直接インポートできる全25項目のCSVを生成します。
+          売上と作業記録（資材費）から、マネーフォワードクラウドの「仕訳帳」へ直接インポートできる全25項目のCSVを生成します。
         </p>
       </div>
 
@@ -358,21 +321,6 @@ export default function AccountingPage() {
                   <div>
                     <label className="block text-xs font-bold text-slate-400 mb-1">貸方科目 (例: 現金, 買掛金)</label>
                     <input type="text" name="materialCredit" value={accounts.materialCredit} onChange={handleAccountChange} className="w-full p-2 border border-slate-200 rounded-lg text-sm font-bold focus:border-blue-500 outline-none" />
-                  </div>
-                </div>
-              </div>
-
-              {/* 人件費仕訳 */}
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                <h3 className="font-bold text-slate-700 mb-3 border-b-2 border-purple-500 inline-block pb-1">作業発生時の仕訳 (人件費)</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-1">借方科目 (例: 給料手当, 雑給)</label>
-                    <input type="text" name="laborDebit" value={accounts.laborDebit} onChange={handleAccountChange} className="w-full p-2 border border-slate-200 rounded-lg text-sm font-bold focus:border-blue-500 outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-1">貸方科目 (例: 未払金, 現金)</label>
-                    <input type="text" name="laborCredit" value={accounts.laborCredit} onChange={handleAccountChange} className="w-full p-2 border border-slate-200 rounded-lg text-sm font-bold focus:border-blue-500 outline-none" />
                   </div>
                 </div>
               </div>
