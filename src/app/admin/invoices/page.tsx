@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { FileText, Printer, Calculator, AlertCircle, RefreshCw, Mail, Users, Loader2 } from 'lucide-react';
+import { FileText, Printer, Calculator, AlertCircle, RefreshCw, Mail, Users, Loader2, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 
 interface CompanySettings {
@@ -35,9 +35,21 @@ export default function InvoicesPage() {
 
   // 請求書のタブ切り替え用
   const [activeChannelId, setActiveChannelId] = useState<number | null>(null);
-  const [activeChannel, setActiveChannel] = useState<string | null>(null);
   
   const [isCreatingLink, setIsCreatingLink] = useState(false);
+
+  // 一括送信アシスト用のState
+  const [isBatchAssistOpen, setIsBatchAssistOpen] = useState(false);
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const [batchSendList, setBatchSendList] = useState<{
+    channelId: number;
+    channelName: string;
+    email: string | null;
+    shareUrl: string;
+    mailSubject: string;
+    mailBody: string;
+  }[]>([]);
+  const [sentChannelIds, setSentChannelIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     async function init() {
@@ -59,6 +71,7 @@ export default function InvoicesPage() {
     setIsLoading(true);
     setIsFetched(false);
     setActiveChannelId(null);
+    setIsBatchAssistOpen(false);
     
     try {
       // 指定月（YYYY-MM）の最初の日と最後の日
@@ -142,12 +155,14 @@ export default function InvoicesPage() {
       group.subtotal += log.total_sales;
     });
     
-    return Array.from(map.values()).sort((a, b) => a.channelName.localeCompare(b.channelName));
+    return Array.from(map.entries()).sort((a, b) => a[1].channelName.localeCompare(b[1].channelName));
   }, [salesLogs]);
 
   const activeInvoice = useMemo(() => {
-    return invoicesByChannel.find(inv => salesLogs.find(l => l.sales_channels.id === activeChannelId)?.sales_channels.name === inv.channelName);
-  }, [invoicesByChannel, activeChannelId, salesLogs]);
+    if (!activeChannelId) return null;
+    const item = invoicesByChannel.find(([id]) => id === activeChannelId);
+    return item ? { ...item[1], id: item[0] } : null;
+  }, [invoicesByChannel, activeChannelId]);
 
   const handlePrint = () => {
     window.print();
@@ -171,8 +186,8 @@ export default function InvoicesPage() {
       const { data, error } = await supabase
         .from('issued_invoices')
         .insert([{
-          channel_name: activeInvoice.channelName,
-          billing_month: selectedMonth,
+          channel_id: activeInvoice.id,
+          billing_month: selectedMonth + '-01',
           total_amount: activeInvoice.subtotal,
           invoice_data: invoiceData
         }])
@@ -218,9 +233,87 @@ export default function InvoicesPage() {
     }
   };
 
+  const handleBatchCreateLinks = async () => {
+    if (!settings) {
+      alert('先に「設定」画面から自社情報（農園名など）を登録してください。');
+      return;
+    }
+    
+    if (invoicesByChannel.length === 0) return;
+    
+    setIsBatchProcessing(true);
+    const newList: typeof batchSendList = [];
+
+    try {
+      const [year, month] = selectedMonth.split('-');
+      const invoiceMonthStr = `${selectedMonth}-01`;
+
+      for (const [chId, data] of invoicesByChannel) {
+        const invoiceData = {
+          logs: data.logs,
+          settings: settings,
+          subtotal: data.subtotal
+        };
+
+        const { data: inserted, error } = await supabase
+          .from('issued_invoices')
+          .insert({
+            channel_id: chId,
+            billing_month: invoiceMonthStr,
+            total_amount: data.subtotal,
+            invoice_data: invoiceData
+          })
+          .select('id')
+          .single();
+
+        if (error) {
+          console.error(`チャネル ${data.channelName} の発行エラー:`, error);
+          continue;
+        }
+
+        const shareUrl = `${window.location.origin}/share/invoice/${inserted.id}`;
+        const totalWithTax = data.subtotal + Math.floor(data.subtotal * 0.10);
+        const mailSubject = `【ご請求書】${year}年${month}月分 (${settings?.company_name || '当農園'})`;
+        const mailBody = `${data.channelName} 御中\n\nいつもお世話になっております。\n${settings?.company_name || '当農園'}です。\n\n${year}年${month}月分のご請求書をお送りいたします。\n\nご請求金額： ¥${totalWithTax.toLocaleString()} (税込)\n\n※以下のURLをクリックして、請求書をご確認・ダウンロードいただけます。\n\n▼ 請求書の確認・ダウンロードはこちら\n${shareUrl}\n\n何卒よろしくお願い申し上げます。\n\n${settings?.company_name || '当農園'}`;
+
+        newList.push({
+          channelId: chId,
+          channelName: data.channelName,
+          email: data.email,
+          shareUrl,
+          mailSubject,
+          mailBody
+        });
+      }
+
+      setBatchSendList(newList);
+      setSentChannelIds(new Set());
+      setIsBatchAssistOpen(true);
+    } catch (err) {
+      console.error(err);
+      alert('一括発行中にエラーが発生しました。');
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
+  const handleOpenMail = (item: typeof batchSendList[0], type: 'gmail' | 'standard') => {
+    if (type === 'gmail') {
+      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${item.email || ''}&su=${encodeURIComponent(item.mailSubject)}&body=${encodeURIComponent(item.mailBody)}`;
+      window.open(gmailUrl, '_blank');
+    } else {
+      const mailtoUrl = `mailto:${item.email || ''}?subject=${encodeURIComponent(item.mailSubject)}&body=${encodeURIComponent(item.mailBody)}`;
+      window.location.href = mailtoUrl;
+    }
+    setSentChannelIds(prev => {
+      const next = new Set(prev);
+      next.add(item.channelId);
+      return next;
+    });
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
-      {/* --- コントロールパネル (印刷時に非表示) --- */}
       <div className="print:hidden space-y-6">
         <div>
           <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
@@ -264,7 +357,46 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      {/* --- 結果ビュー --- */}
+      {isBatchAssistOpen && batchSendList.length > 0 && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 shadow-sm mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-black text-emerald-800 flex items-center gap-2">
+              <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+              送信アシスト（{sentChannelIds.size} / {batchSendList.length} 件 完了）
+            </h2>
+            <button onClick={() => setIsBatchAssistOpen(false)} className="text-emerald-700 hover:bg-emerald-100 px-3 py-1 rounded-lg text-sm font-bold transition-colors">
+              閉じる
+            </button>
+          </div>
+          <p className="text-sm text-emerald-700 mb-4">全員分の請求書の自動発行が完了しました！以下のボタンを上から順番に押して、メールを送信してください。</p>
+          
+          <div className="space-y-3">
+            {batchSendList.map((item) => {
+              const isSent = sentChannelIds.has(item.channelId);
+              return (
+                <div key={item.channelId} className={`flex items-center justify-between p-4 rounded-xl border transition-colors ${isSent ? 'bg-white border-emerald-200 opacity-60' : 'bg-white border-slate-200 shadow-sm'}`}>
+                  <div className="flex items-center gap-3">
+                    {isSent ? <CheckCircle2 className="w-6 h-6 text-emerald-500" /> : <div className="w-6 h-6 rounded-full border-2 border-slate-300" />}
+                    <div>
+                      <div className="font-bold text-slate-800">{item.channelName}</div>
+                      <div className="text-xs text-slate-500">{item.email || 'メールアドレス未登録'}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => handleOpenMail(item, 'gmail')} className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-1">
+                      <Mail className="w-4 h-4" /> Gmail
+                    </button>
+                    <button onClick={() => handleOpenMail(item, 'standard')} className="bg-slate-600 hover:bg-slate-700 text-white px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-1">
+                      <Mail className="w-4 h-4" /> 標準
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {isFetched && (
         <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
           
@@ -279,16 +411,23 @@ export default function InvoicesPage() {
           ) : (
             <div className="flex flex-col lg:flex-row gap-6">
               
-              {/* 左側：取引先リスト（タブ） print:hidden */}
               <div className="lg:w-64 shrink-0 print:hidden space-y-4">
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sticky top-24">
-                  <h3 className="text-sm font-black text-slate-500 mb-4 flex items-center gap-2">
-                    <Users className="w-4 h-4" /> 請求先一覧 ({invoicesByChannel.length}件)
+                  <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
+                    <Users className="w-5 h-5 text-slate-400" /> 請求先一覧 ({invoicesByChannel.length}件)
                   </h3>
+
+                  <button
+                    onClick={handleBatchCreateLinks}
+                    disabled={isBatchProcessing}
+                    className="w-full mb-4 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors shadow-sm disabled:opacity-50"
+                  >
+                    {isBatchProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
+                    全件発行＆送信アシスト
+                  </button>
+
                   <div className="space-y-2">
-                    {invoicesByChannel.map((inv) => {
-                      // salesLogsからchIdを逆引き
-                      const chId = salesLogs.find(l => l.sales_channels.name === inv.channelName)?.sales_channels.id;
+                    {invoicesByChannel.map(([chId, inv]) => {
                       const isActive = activeChannelId === chId;
                       
                       return (
