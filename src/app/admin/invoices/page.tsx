@@ -267,8 +267,6 @@ export default function InvoicesPage() {
                         {/* A案: 簡易メール作成ボタン */}
                         <a
                           href={`mailto:${activeInvoice.email || ''}?subject=${encodeURIComponent(`【ご請求書】${selectedMonth.split('-')[1]}月分 - ${settings?.company_name || '農園'}`)}&body=${encodeURIComponent(`${activeInvoice.channelName} 御中\n\nいつもお世話になっております。\n${settings?.company_name || '当農園'}です。\n\n${selectedMonth.split('-')[0]}年${selectedMonth.split('-')[1]}月分のご請求書をお送りいたします。\n\nご請求金額： ¥${activeInvoice.subtotal.toLocaleString()} (税込)\n\n※本メールに請求書のPDFファイルを添付しておりますので、ご確認くださいませ。\n\n何卒よろしくお願い申し上げます。\n\n----------------------------\n${settings?.company_name || ''}\n${settings?.phone ? `TEL: ${settings.phone}` : ''}\n----------------------------`)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
                           className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-md shadow-indigo-600/20"
                           onClick={(e) => {
                             if (!activeInvoice.email) {
