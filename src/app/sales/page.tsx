@@ -53,8 +53,20 @@ export default function SalesEntryPage() {
 
     try {
       if (isConnected) {
-        const cropId = crops.find(c => c.name === selectedCrop)?.id;
-        const channelId = channels.find(c => c.name === selectedChannel)?.id;
+        let cropId = crops.find(c => c.name === selectedCrop)?.id;
+        let channelId = channels.find(c => c.name === selectedChannel)?.id;
+
+        // 作目マスタに存在しない場合は自動登録
+        if (!cropId && selectedCrop) {
+          const { data: newCrop, error: cropErr } = await supabase.from('crops').insert([{ name: selectedCrop }]).select('id').single();
+          if (!cropErr && newCrop) cropId = newCrop.id;
+        }
+
+        // 出荷先マスタに存在しない場合は自動登録
+        if (!channelId && selectedChannel) {
+          const { data: newChannel, error: channelErr } = await supabase.from('sales_channels').insert([{ name: selectedChannel }]).select('id').single();
+          if (!channelErr && newChannel) channelId = newChannel.id;
+        }
 
         const { error } = await supabase.from('sales_logs').insert([
           {
