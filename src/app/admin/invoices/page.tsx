@@ -268,6 +268,7 @@ export default function InvoicesPage() {
 
         if (error) {
           console.error(`チャネル ${data.channelName} の発行エラー:`, error);
+          alert(`エラー: ${data.channelName} の発行に失敗しました。\n詳細: ${error.message}`);
           continue;
         }
 
@@ -286,9 +287,15 @@ export default function InvoicesPage() {
         });
       }
 
-      setBatchSendList(newList);
-      setSentChannelIds(new Set());
-      setIsBatchAssistOpen(true);
+      console.log('Batch generation complete. newList:', newList);
+
+      if (newList.length === 0) {
+        alert('エラー：1件も請求書を発行できませんでした。F12を押してコンソールログのエラー詳細を確認してください。');
+      } else {
+        setBatchSendList(newList);
+        setSentChannelIds(new Set());
+        setIsBatchAssistOpen(true);
+      }
     } catch (err) {
       console.error(err);
       alert('一括発行中にエラーが発生しました。');
