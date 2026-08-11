@@ -13,39 +13,68 @@ export default function AdminLayout({
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
-  const navItems = [
-    { name: 'ダッシュボード', path: '/admin/dashboard', icon: LayoutDashboard },
-    { name: '出荷記録一覧', path: '/admin/sales-history', icon: Truck },
-    { name: '請求書発行', path: '/admin/invoices', icon: FileText },
-    { name: '出荷先マスタ', path: '/admin/channels', icon: Store },
-    { name: '作業記録一覧', path: '/admin/history', icon: History },
-    { name: '会計データ出力', path: '/admin/accounting', icon: FileSpreadsheet },
-    { name: 'マスタ管理', path: '/admin/masters', icon: Database },
-    { name: '自社設定', path: '/admin/settings', icon: Settings },
+  const navGroups = [
+    {
+      title: 'メイン',
+      items: [
+        { name: 'ダッシュボード', path: '/admin/dashboard', icon: LayoutDashboard },
+      ]
+    },
+    {
+      title: '売上・請求管理',
+      items: [
+        { name: '出荷記録一覧', path: '/admin/sales-history', icon: Truck },
+        { name: '請求書一括発行', path: '/admin/invoices', icon: FileText },
+        { name: '会計データ出力', path: '/admin/accounting', icon: FileSpreadsheet },
+      ]
+    },
+    {
+      title: '作業管理',
+      items: [
+        { name: '作業記録一覧', path: '/admin/history', icon: History },
+      ]
+    },
+    {
+      title: '設定・マスタ',
+      items: [
+        { name: 'マスタ管理全般', path: '/admin/masters', icon: Database },
+        { name: '出荷先・メール設定', path: '/admin/channels', icon: Store },
+        { name: '自社情報設定', path: '/admin/settings', icon: Settings },
+      ]
+    }
   ];
 
   const NavLinks = () => (
-    <>
-      {navItems.map((item) => {
-        const isActive = pathname === item.path;
-        const Icon = item.icon;
-        return (
-          <Link
-            key={item.path}
-            href={item.path}
-            onClick={() => setIsMobileMenuOpen(false)}
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-bold ${
-              isActive 
-                ? 'bg-emerald-50 text-emerald-700' 
-                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-            }`}
-          >
-            <Icon className="w-5 h-5" />
-            {item.name}
-          </Link>
-        );
-      })}
-    </>
+    <div className="space-y-6">
+      {navGroups.map((group) => (
+        <div key={group.title}>
+          <h3 className="px-4 text-xs font-black text-slate-400 tracking-wider mb-2 uppercase">
+            {group.title}
+          </h3>
+          <div className="space-y-1">
+            {group.items.map((item) => {
+              const isActive = pathname === item.path;
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.path}
+                  href={item.path}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-colors font-bold ${
+                    isActive 
+                      ? 'bg-emerald-50 text-emerald-700' 
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <Icon className="w-5 h-5" />
+                  {item.name}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 
   return (
