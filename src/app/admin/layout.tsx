@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Database, LogOut, Sprout, History, Menu, FileSpreadsheet, Truck, FileText, Settings } from 'lucide-react';
+import { LayoutDashboard, Database, LogOut, Sprout, History, Menu, FileSpreadsheet, Truck, FileText, Settings, Store } from 'lucide-react';
 
 export default function AdminLayout({
   children,
@@ -17,6 +17,7 @@ export default function AdminLayout({
     { name: 'ダッシュボード', path: '/admin/dashboard', icon: LayoutDashboard },
     { name: '出荷記録一覧', path: '/admin/sales-history', icon: Truck },
     { name: '請求書発行', path: '/admin/invoices', icon: FileText },
+    { name: '出荷先マスタ', path: '/admin/channels', icon: Store },
     { name: '作業記録一覧', path: '/admin/history', icon: History },
     { name: '会計データ出力', path: '/admin/accounting', icon: FileSpreadsheet },
     { name: 'マスタ管理', path: '/admin/masters', icon: Database },
