@@ -49,7 +49,7 @@ export default function InvoicesPage() {
     mailSubject: string;
     mailBody: string;
   }[]>([]);
-  const [sentChannelIds, setSentChannelIds] = useState<Set<number>>(new Set());
+  const [sentChannels, setSentChannels] = useState<Map<number, string>>(new Map());
 
   useEffect(() => {
     async function init() {
@@ -305,7 +305,7 @@ export default function InvoicesPage() {
         alert('エラー：1件も請求書を発行できませんでした。F12を押してコンソールログのエラー詳細を確認してください。');
       } else {
         setBatchSendList(newList);
-        setSentChannelIds(new Set());
+        setSentChannels(new Map());
         setIsBatchAssistOpen(true);
       }
     } catch (err) {
@@ -325,23 +325,22 @@ export default function InvoicesPage() {
       window.location.href = mailtoUrl;
     }
     
+    const now = new Date().toISOString();
+    
     // UIをすぐに更新
-    setSentChannelIds(prev => {
-      const next = new Set(prev);
-      next.add(item.channelId);
+    setSentChannels(prev => {
+      const next = new Map(prev);
+      next.set(item.channelId, now);
       return next;
     });
 
     // DBに送信状態を保存する
-    // バッチ送信リストに入っている item は、先ほど insert したばかりの URL (shareUrl) を持っている。
-    // UUID を shareUrl から取り出すか、item に invoiceId を持たせるのがスマートですが、
-    // ここでは DB 上の channel_name と billing_month で update します。
     try {
       await supabase
         .from('issued_invoices')
         .update({ 
           is_sent: true, 
-          sent_at: new Date().toISOString() 
+          sent_at: now
         })
         .match({ 
           channel_name: item.channelName, 
@@ -402,7 +401,7 @@ export default function InvoicesPage() {
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-black text-emerald-800 flex items-center gap-2">
               <CheckCircle2 className="w-6 h-6 text-emerald-500" />
-              送信アシスト（{sentChannelIds.size} / {batchSendList.length} 件 完了）
+              送信アシスト（{sentChannels.size} / {batchSendList.length} 件 完了）
             </h2>
             <button onClick={() => setIsBatchAssistOpen(false)} className="text-emerald-700 hover:bg-emerald-100 px-3 py-1 rounded-lg text-sm font-bold transition-colors">
               閉じる
@@ -413,7 +412,7 @@ export default function InvoicesPage() {
           <div className="space-y-3">
             {batchSendList.map((item) => {
               const inv = invoicesByChannel.find(([_, d]) => d.channelName === item.channelName)?.[1];
-              const isSent = sentChannelIds.has(item.channelId) || inv?.invoiceHistory?.is_sent;
+              const isSent = sentChannels.has(item.channelId) || inv?.invoiceHistory?.is_sent;
               return (
                 <div key={item.channelId} className={`flex items-center justify-between p-4 rounded-xl border transition-colors ${isSent ? 'bg-white border-emerald-200 opacity-60' : 'bg-white border-slate-200 shadow-sm'}`}>
                   <div className="flex items-center gap-3">
@@ -485,10 +484,15 @@ export default function InvoicesPage() {
                             <div className={`font-bold truncate ${isActive ? 'text-indigo-900' : 'text-slate-700'}`}>
                               {inv.channelName}
                             </div>
-                            {(sentChannelIds.has(chId) || inv.invoiceHistory?.is_sent) && (
+                            {(sentChannels.has(chId) || inv.invoiceHistory?.is_sent) && (
                               <span className="shrink-0 bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1">
                                 <CheckCircle2 className="w-3 h-3" />
-                                {inv.invoiceHistory?.sent_at ? new Date(inv.invoiceHistory.sent_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '送信済'}
+                                {(() => {
+                                  const dateStr = sentChannels.get(chId) || inv.invoiceHistory?.sent_at;
+                                  return dateStr 
+                                    ? new Date(dateStr).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) 
+                                    : '送信済';
+                                })()}
                               </span>
                             )}
                           </div>
