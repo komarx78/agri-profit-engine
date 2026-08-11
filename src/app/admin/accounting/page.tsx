@@ -39,14 +39,14 @@ export default function AccountingPage() {
     
     try {
       // 指定期間のデータを取得
-      const [salesRes, workRes] = await Promise.all([
+      const [salesRes, workRes, cropsRes, channelsRes] = await Promise.all([
         supabase
           .from('sales_logs')
           .select(`
             sales_date,
             total_sales,
-            crops(name),
-            sales_channels(name)
+            crop_id,
+            channel_id
           `)
           .gte('sales_date', startDate)
           .lte('sales_date', endDate),
@@ -63,10 +63,22 @@ export default function AccountingPage() {
             materials(name, default_price)
           `)
           .gte('work_date', startDate)
-          .lte('work_date', endDate)
+          .lte('work_date', endDate),
+          
+        supabase.from('crops').select('id, name'),
+        supabase.from('sales_channels').select('id, name')
       ]);
 
-      const salesLogs = salesRes.data || [];
+      const crops = cropsRes.data || [];
+      const channels = channelsRes.data || [];
+
+      // JS側でマッピングしてSupabaseのリレーション解決不具合を回避
+      const salesLogs = (salesRes.data || []).map(log => ({
+        ...log,
+        crops: { name: crops.find(c => c.id === log.crop_id)?.name || '不明な作目' },
+        sales_channels: { name: channels.find(c => c.id === log.channel_id)?.name || '不明な請求先' }
+      }));
+      
       const workLogs = workRes.data || [];
       const journalEntries: any[] = [];
 

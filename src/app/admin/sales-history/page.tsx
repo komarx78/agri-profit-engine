@@ -20,22 +20,37 @@ export default function SalesHistoryPage() {
   async function fetchSalesLogs() {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
-        .from('sales_logs')
-        .select(`
-          id,
-          sales_date,
-          quantity,
-          unit,
-          total_sales,
-          crops(name),
-          sales_channels(name)
-        `)
-        .order('sales_date', { ascending: false })
-        .order('id', { ascending: false });
+      const [logsRes, channelsRes, cropsRes] = await Promise.all([
+        supabase
+          .from('sales_logs')
+          .select(`
+            id,
+            sales_date,
+            quantity,
+            unit,
+            total_sales,
+            channel_id,
+            crop_id
+          `)
+          .order('sales_date', { ascending: false })
+          .order('id', { ascending: false }),
+        supabase.from('sales_channels').select('id, name'),
+        supabase.from('crops').select('id, name')
+      ]);
 
-      if (error) throw error;
-      if (data) setSalesLogs(data);
+      if (logsRes.error) throw logsRes.error;
+      
+      const channels = channelsRes.data || [];
+      const crops = cropsRes.data || [];
+
+      // JS側でマッピングしてSupabaseのリレーション解決不具合を回避
+      const mappedLogs = (logsRes.data || []).map(log => ({
+        ...log,
+        crops: { name: crops.find(c => c.id === log.crop_id)?.name || '不明' },
+        sales_channels: { name: channels.find(c => c.id === log.channel_id)?.name || '不明' }
+      }));
+
+      setSalesLogs(mappedLogs);
     } catch (err) {
       console.error(err);
       alert('売上データの取得に失敗しました');

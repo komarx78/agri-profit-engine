@@ -65,25 +65,36 @@ export default function InvoicesPage() {
       const date = new Date(selectedMonth + '-01');
       const endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
 
-      const { data, error } = await supabase
-        .from('sales_logs')
-        .select(`
-          id,
-          quantity,
-          unit,
-          total_sales,
-          crops(name),
-          sales_channels(name)
-        `)
-        .gte('sales_date', startDate)
-        .lte('sales_date', endDate)
-        .eq('sales_channels.name', selectedChannel);
-        // Supabase のリレーション制約上、直接 filterできない場合はJSでフィルタリングする
+      const [logsRes, cropsRes, channelsRes] = await Promise.all([
+        supabase
+          .from('sales_logs')
+          .select(`
+            id,
+            quantity,
+            unit,
+            total_sales,
+            crop_id,
+            channel_id
+          `)
+          .gte('sales_date', startDate)
+          .lte('sales_date', endDate),
+        supabase.from('crops').select('id, name'),
+        supabase.from('sales_channels').select('id, name')
+      ]);
       
-      if (error) throw error;
+      if (logsRes.error) throw logsRes.error;
       
-      // selectにリレーションを張っているが、親テーブルのフィルタではないので JS側でフィルタリングが必要な場合がある
-      const filtered = (data || []).filter(log => (log.sales_channels as any)?.name === selectedChannel);
+      const crops = cropsRes.data || [];
+      const allChannels = channelsRes.data || [];
+
+      // JS側でマッピングとフィルタリングを行う
+      const mappedLogs = (logsRes.data || []).map(log => ({
+        ...log,
+        crops: { name: crops.find(c => c.id === log.crop_id)?.name || '不明な作目' },
+        sales_channels: { name: allChannels.find(c => c.id === log.channel_id)?.name || '不明な請求先' }
+      }));
+
+      const filtered = mappedLogs.filter(log => log.sales_channels.name === selectedChannel);
       setSalesLogs(filtered);
       setIsFetched(true);
       
