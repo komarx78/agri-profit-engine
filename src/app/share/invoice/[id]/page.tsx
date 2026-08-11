@@ -146,20 +146,24 @@ export default function SharedInvoicePage() {
               </tr>
             </thead>
             <tbody>
-              {logs.map((log: any, idx: number) => (
-                <tr key={idx} className="border-b border-slate-200 text-slate-700">
-                  <td className="py-3 text-left font-medium">{log.work_date.substring(5).replace('-', '/')}</td>
-                  <td className="py-3 text-left font-bold">{log.crops.name}</td>
-                  <td className="py-3 text-right">{log.yield_amount}</td>
-                  <td className="py-3 text-left px-2 text-slate-500">{log.crops.unit}</td>
-                  <td className="py-3 text-right text-slate-500">
-                    <span className="text-xs mr-1">@</span>¥{log.unit_price?.toLocaleString() || '0'}
-                  </td>
-                  <td className="py-3 text-right font-bold text-slate-800">
-                    ¥{log.total_sales?.toLocaleString() || '0'}
-                  </td>
-                </tr>
-              ))}
+              {logs.map((log: any, idx: number) => {
+                const dateStr = log.sales_date ? log.sales_date.substring(5).replace('-', '/') : '';
+                const price = log.quantity > 0 ? Math.round(log.total_sales / log.quantity) : 0;
+                return (
+                  <tr key={idx} className="border-b border-slate-200 text-slate-700">
+                    <td className="py-3 text-left font-medium">{dateStr}</td>
+                    <td className="py-3 text-left font-bold">{log.crops?.name}</td>
+                    <td className="py-3 text-right">{log.quantity}</td>
+                    <td className="py-3 text-left px-2 text-slate-500">{log.unit}</td>
+                    <td className="py-3 text-right text-slate-500">
+                      <span className="text-xs mr-1">@</span>¥{price.toLocaleString()}
+                    </td>
+                    <td className="py-3 text-right font-bold text-slate-800">
+                      ¥{log.total_sales?.toLocaleString() || '0'}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 
