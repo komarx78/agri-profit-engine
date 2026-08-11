@@ -408,7 +408,7 @@ export default function InvoicesPage() {
                             <th className="py-3 px-4">品名</th>
                             <th className="py-3 px-4 text-right">数量</th>
                             <th className="py-3 px-4 text-center">単位</th>
-                            <th className="py-3 px-4 text-right">単価(推計)</th>
+                            <th className="py-3 px-4 text-right">単価</th>
                             <th className="py-3 px-4 text-right">金額</th>
                           </tr>
                         </thead>

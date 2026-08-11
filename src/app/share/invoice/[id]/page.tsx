@@ -141,7 +141,7 @@ export default function SharedInvoicePage() {
                 <th className="py-3 text-left font-bold">品名</th>
                 <th className="py-3 text-right font-bold w-20">数量</th>
                 <th className="py-3 text-left font-bold px-2 w-16">単位</th>
-                <th className="py-3 text-right font-bold w-24">単価(推計)</th>
+                <th className="py-3 text-right font-bold w-24">単価</th>
                 <th className="py-3 text-right font-bold w-28">金額</th>
               </tr>
             </thead>
