@@ -264,20 +264,38 @@ export default function InvoicesPage() {
                           印刷 / PDF保存
                         </button>
                         
-                        {/* A案: 簡易メール作成ボタン */}
-                        <a
-                          href={`mailto:${activeInvoice.email || ''}?subject=${encodeURIComponent(`【ご請求書】${selectedMonth.split('-')[1]}月分 - ${settings?.company_name || '農園'}`)}&body=${encodeURIComponent(`${activeInvoice.channelName} 御中\n\nいつもお世話になっております。\n${settings?.company_name || '当農園'}です。\n\n${selectedMonth.split('-')[0]}年${selectedMonth.split('-')[1]}月分のご請求書をお送りいたします。\n\nご請求金額： ¥${activeInvoice.subtotal.toLocaleString()} (税込)\n\n※本メールに請求書のPDFファイルを添付しておりますので、ご確認くださいませ。\n\n何卒よろしくお願い申し上げます。\n\n----------------------------\n${settings?.company_name || ''}\n${settings?.phone ? `TEL: ${settings.phone}` : ''}\n----------------------------`)}`}
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-md shadow-indigo-600/20"
-                          onClick={(e) => {
-                            if (!activeInvoice.email) {
-                              const proceed = confirm('この出荷先にはメールアドレスが登録されていません。\n宛先が空の状態でメールソフトを立ち上げますか？\n（アドレスは出荷先マスタ画面で登録できます）');
-                              if (!proceed) e.preventDefault();
-                            }
-                          }}
-                        >
-                          <Mail className="w-4 h-4" />
-                          メールを作成
-                        </a>
+                        {/* メール作成ボタン群 */}
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`https://mail.google.com/mail/?view=cm&fs=1&to=${activeInvoice.email || ''}&su=${encodeURIComponent(`【ご請求書】${selectedMonth.split('-')[1]}月分 - ${settings?.company_name || '農園'}`)}&body=${encodeURIComponent(`${activeInvoice.channelName} 御中\n\nいつもお世話になっております。\n${settings?.company_name || '当農園'}です。\n\n${selectedMonth.split('-')[0]}年${selectedMonth.split('-')[1]}月分のご請求書をお送りいたします。\n\nご請求金額： ¥${activeInvoice.subtotal.toLocaleString()} (税込)\n\n※本メールに請求書のPDFファイルを添付しておりますので、ご確認くださいませ。\n\n何卒よろしくお願い申し上げます。\n\n----------------------------\n${settings?.company_name || ''}\n${settings?.phone ? `TEL: ${settings.phone}` : ''}\n----------------------------`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm text-sm"
+                            onClick={(e) => {
+                              if (!activeInvoice.email) {
+                                const proceed = confirm('この出荷先にはメールアドレスが登録されていません。\n宛先が空の状態でGmailを立ち上げますか？');
+                                if (!proceed) e.preventDefault();
+                              }
+                            }}
+                          >
+                            <Mail className="w-4 h-4" />
+                            Gmailで作成
+                          </a>
+
+                          <a
+                            href={`mailto:${activeInvoice.email || ''}?subject=${encodeURIComponent(`【ご請求書】${selectedMonth.split('-')[1]}月分 - ${settings?.company_name || '農園'}`)}&body=${encodeURIComponent(`${activeInvoice.channelName} 御中\n\nいつもお世話になっております。\n${settings?.company_name || '当農園'}です。\n\n${selectedMonth.split('-')[0]}年${selectedMonth.split('-')[1]}月分のご請求書をお送りいたします。\n\nご請求金額： ¥${activeInvoice.subtotal.toLocaleString()} (税込)\n\n※本メールに請求書のPDFファイルを添付しておりますので、ご確認くださいませ。\n\n何卒よろしくお願い申し上げます。\n\n----------------------------\n${settings?.company_name || ''}\n${settings?.phone ? `TEL: ${settings.phone}` : ''}\n----------------------------`)}`}
+                            className="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm text-sm"
+                            onClick={(e) => {
+                              if (!activeInvoice.email) {
+                                const proceed = confirm('この出荷先にはメールアドレスが登録されていません。\n宛先が空の状態でメールソフトを立ち上げますか？\n（アドレスは出荷先マスタ画面で登録できます）');
+                                if (!proceed) e.preventDefault();
+                              }
+                            }}
+                          >
+                            <Mail className="w-4 h-4" />
+                            標準メール
+                          </a>
+                        </div>
                       </div>
                     </div>
 
