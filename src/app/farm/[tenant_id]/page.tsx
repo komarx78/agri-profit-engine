@@ -50,6 +50,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   // 打刻関連の状態 (簡易実装：今回は開始と同時に保存せず、完了時に一括保存する方式にします)
   const [activeWorkStartTime, setActiveWorkStartTime] = useState<string | null>(null);
   const [elapsedMinutes, setElapsedMinutes] = useState<number>(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
 
   const workTypes = ['収穫', '定植・播種', '水やり', '肥料・農薬', '草刈り', '片付け・メンテ'];
 
@@ -102,10 +103,12 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
       const calcElapsed = () => {
         const start = new Date(activeWorkStartTime).getTime();
         const now = new Date().getTime();
-        setElapsedMinutes(Math.floor((now - start) / 1000 / 60));
+        const diffSecs = Math.floor((now - start) / 1000);
+        setElapsedMinutes(Math.floor(diffSecs / 60));
+        setElapsedSeconds(diffSecs % 60);
       };
       calcElapsed(); // 初回実行
-      interval = setInterval(calcElapsed, 10000); // 10秒ごとに更新
+      interval = setInterval(calcElapsed, 1000); // 1秒ごとに更新
     }
     return () => clearInterval(interval);
   }, [activeWorkStartTime]);
@@ -493,8 +496,9 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                   <Clock className="w-5 h-5 animate-spin-slow" style={{ animationDuration: '3s' }} />
                   現在作業中...
                 </div>
-                <div className="text-6xl font-black text-white tracking-tighter tabular-nums mb-4 drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]">
-                  {elapsedMinutes}<span className="text-2xl text-emerald-400 ml-1">分</span>
+                <div className="text-6xl font-black text-white tracking-tighter tabular-nums mb-4 drop-shadow-[0_0_10px_rgba(16,185,129,0.5)] flex items-baseline justify-center">
+                  {elapsedMinutes}<span className="text-2xl text-emerald-400 ml-1 mr-2">分</span>
+                  <span className="text-5xl">{elapsedSeconds.toString().padStart(2, '0')}</span><span className="text-xl text-emerald-400 ml-1">秒</span>
                 </div>
                 
                 <button
