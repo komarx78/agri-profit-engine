@@ -257,12 +257,12 @@ export default function InvoicesPage() {
 
         const { data: inserted, error } = await supabase
           .from('issued_invoices')
-          .insert({
+          .insert([{
             channel_id: chId,
             billing_month: invoiceMonthStr,
             total_amount: data.subtotal,
             invoice_data: invoiceData
-          })
+          }])
           .select('id')
           .single();
 
