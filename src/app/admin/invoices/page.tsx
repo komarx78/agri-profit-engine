@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { FileText, Printer, Calculator, AlertCircle, RefreshCw, Mail, Users } from 'lucide-react';
+import { FileText, Printer, Calculator, AlertCircle, RefreshCw, Mail, Users, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 interface CompanySettings {
@@ -35,6 +35,9 @@ export default function InvoicesPage() {
 
   // 請求書のタブ切り替え用
   const [activeChannelId, setActiveChannelId] = useState<number | null>(null);
+  const [activeChannel, setActiveChannel] = useState<string | null>(null);
+  
+  const [isCreatingLink, setIsCreatingLink] = useState(false);
 
   useEffect(() => {
     async function init() {
@@ -150,30 +153,70 @@ export default function InvoicesPage() {
     window.print();
   };
 
-  // --- メール本文の生成 ---
-  const generateEmailBody = () => {
-    if (!activeInvoice) return '';
-    const [year, month] = selectedMonth.split('-');
-    
-    // しっかりとしたビジネス署名の作成
-    const signature = [
-      '=========================================',
-      settings?.company_name || '農園名未設定',
-      settings?.postal_code ? `〒${settings.postal_code}` : '',
-      settings?.address || '',
-      settings?.phone ? `TEL: ${settings.phone}` : '',
-      settings?.email ? `Email: ${settings.email}` : '',
-      settings?.invoice_number ? `適格請求書発行事業者登録番号: ${settings.invoice_number}` : '',
-      '========================================='
-    ].filter(Boolean).join('\n');
+  const handleCreateShareLink = async (mailerType: 'gmail' | 'standard') => {
+    if (!activeInvoice) return;
+    if (!activeInvoice.email) {
+      if (!confirm('この出荷先にはメールアドレスが登録されていません。\n宛先が空の状態でメールを立ち上げますか？')) return;
+    }
 
-    return `${activeInvoice.channelName} 御中\n\nいつもお世話になっております。\n${settings?.company_name || '当農園'}です。\n\n${year}年${month}月分のご請求書をお送りいたします。\n\nご請求金額： ¥${activeInvoice.subtotal.toLocaleString()} (税込)\n\n※お手数ですが、事前にダウンロード保存していただいた「請求書のPDFファイル」を、このメールに添付（ドラッグ＆ドロップ）してご送信ください。\n\n何卒よろしくお願い申し上げます。\n\n${signature}`;
+    setIsCreatingLink(true);
+    try {
+      // DBにスナップショットを保存
+      const invoiceData = {
+        logs: activeInvoice.logs,
+        settings: settings,
+        subtotal: activeInvoice.subtotal
+      };
+
+      const { data, error } = await supabase
+        .from('issued_invoices')
+        .insert([{
+          channel_name: activeInvoice.channelName,
+          billing_month: selectedMonth,
+          total_amount: activeInvoice.subtotal,
+          invoice_data: invoiceData
+        }])
+        .select('id')
+        .single();
+
+      if (error) throw error;
+
+      // 共有リンクの作成
+      const shareUrl = `${window.location.origin}/share/invoice/${data.id}`;
+      
+      const [year, month] = selectedMonth.split('-');
+      const mailSubject = `【ご請求書】${month}月分 - ${settings?.company_name || '農園'}`;
+      
+      const signature = [
+        '=========================================',
+        settings?.company_name || '農園名未設定',
+        settings?.postal_code ? `〒${settings.postal_code}` : '',
+        settings?.address || '',
+        settings?.phone ? `TEL: ${settings.phone}` : '',
+        settings?.email ? `Email: ${settings.email}` : '',
+        settings?.invoice_number ? `適格請求書発行事業者登録番号: ${settings.invoice_number}` : '',
+        '========================================='
+      ].filter(Boolean).join('\n');
+
+      const totalWithTax = activeInvoice.subtotal + Math.floor(activeInvoice.subtotal * 0.10);
+
+      const mailBody = `${activeInvoice.channelName} 御中\n\nいつもお世話になっております。\n${settings?.company_name || '当農園'}です。\n\n${year}年${month}月分のご請求書をお送りいたします。\n\nご請求金額： ¥${totalWithTax.toLocaleString()} (税込)\n\n※以下のURLをクリックして、請求書をご確認・ダウンロードいただけます。\n\n▼ 請求書の確認・ダウンロードはこちら\n${shareUrl}\n\n何卒よろしくお願い申し上げます。\n\n${signature}`;
+
+      if (mailerType === 'gmail') {
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${activeInvoice.email || ''}&su=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`;
+        window.open(gmailUrl, '_blank');
+      } else {
+        const mailtoUrl = `mailto:${activeInvoice.email || ''}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`;
+        window.location.href = mailtoUrl;
+      }
+
+    } catch (err) {
+      console.error(err);
+      alert('共有リンクの生成に失敗しました。');
+    } finally {
+      setIsCreatingLink(false);
+    }
   };
-
-  const mailSubject = `【ご請求書】${selectedMonth.split('-')[1]}月分 - ${settings?.company_name || '農園'}`;
-  const mailBody = generateEmailBody();
-  const gmailUrl = activeInvoice ? `https://mail.google.com/mail/?view=cm&fs=1&to=${activeInvoice.email || ''}&su=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}` : '#';
-  const mailtoUrl = activeInvoice ? `mailto:${activeInvoice.email || ''}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}` : '#';
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
@@ -292,35 +335,23 @@ export default function InvoicesPage() {
                         
                         {/* メール作成ボタン群 */}
                         <div className="flex items-center gap-2">
-                          <a
-                            href={gmailUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm text-sm"
-                            onClick={(e) => {
-                              if (!activeInvoice.email) {
-                                const proceed = confirm('この出荷先にはメールアドレスが登録されていません。\n宛先が空の状態でGmailを立ち上げますか？');
-                                if (!proceed) e.preventDefault();
-                              }
-                            }}
+                          <button
+                            onClick={() => handleCreateShareLink('gmail')}
+                            disabled={isCreatingLink}
+                            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm text-sm disabled:opacity-50"
                           >
-                            <Mail className="w-4 h-4" />
-                            Gmailで作成
-                          </a>
+                            {isCreatingLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                            リンクを発行してGmail
+                          </button>
 
-                          <a
-                            href={mailtoUrl}
-                            className="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm text-sm"
-                            onClick={(e) => {
-                              if (!activeInvoice.email) {
-                                const proceed = confirm('この出荷先にはメールアドレスが登録されていません。\n宛先が空の状態でメールソフトを立ち上げますか？\n（アドレスは出荷先マスタ画面で登録できます）');
-                                if (!proceed) e.preventDefault();
-                              }
-                            }}
+                          <button
+                            onClick={() => handleCreateShareLink('standard')}
+                            disabled={isCreatingLink}
+                            className="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm text-sm disabled:opacity-50"
                           >
-                            <Mail className="w-4 h-4" />
+                            {isCreatingLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
                             標準メール
-                          </a>
+                          </button>
                         </div>
                       </div>
                     </div>
