@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { Store, Plus, Save, Trash2, Mail, Loader2, AlertCircle } from 'lucide-react';
 
 interface Channel {
-  id: number;
+  id: string;
   name: string;
   email: string | null;
 }
@@ -26,13 +26,12 @@ export default function ChannelsMasterPage() {
       const { data, error } = await supabase
         .from('sales_channels')
         .select('id, name, email')
-        .order('id', { ascending: true });
+        .order('name'); // UUIDの場合は名前順などでソート
 
       if (error) throw error;
       setChannels(data || []);
     } catch (err: any) {
       console.error(err);
-      // email カラムが存在しないエラーの場合は分かりやすいメッセージを出す
       if (err.message?.includes('email')) {
         setMessage({ text: 'データベースに email カラムがありません。Supabaseでカラムを追加してください。', type: 'error' });
       } else {
@@ -44,17 +43,17 @@ export default function ChannelsMasterPage() {
   }
 
   const handleAddRow = () => {
-    // 仮のIDとして負の数を持たせ、新規行と判別する
-    const tempId = -Date.now();
+    // 仮のIDとして 'new-' をプレフィックスに持つ文字列にする
+    const tempId = `new-${Date.now()}`;
     setChannels([...channels, { id: tempId, name: '', email: '' }]);
   };
 
-  const handleChange = (id: number, field: keyof Channel, value: string) => {
+  const handleChange = (id: string, field: keyof Channel, value: string) => {
     setChannels(prev => prev.map(ch => ch.id === id ? { ...ch, [field]: value } : ch));
   };
 
-  const handleDelete = async (id: number) => {
-    if (id < 0) {
+  const handleDelete = async (id: string) => {
+    if (id.startsWith('new-')) {
       // 未保存の新規行
       setChannels(prev => prev.filter(ch => ch.id !== id));
       return;
@@ -83,8 +82,8 @@ export default function ChannelsMasterPage() {
       // 名前が空の行は弾く
       const validChannels = channels.filter(ch => ch.name.trim() !== '');
       
-      const newRows = validChannels.filter(ch => ch.id < 0).map(ch => ({ name: ch.name, email: ch.email || null }));
-      const existingRows = validChannels.filter(ch => ch.id > 0);
+      const newRows = validChannels.filter(ch => ch.id.startsWith('new-')).map(ch => ({ name: ch.name, email: ch.email || null }));
+      const existingRows = validChannels.filter(ch => !ch.id.startsWith('new-'));
 
       if (newRows.length > 0) {
         const { error } = await supabase.from('sales_channels').insert(newRows);
