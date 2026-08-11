@@ -299,7 +299,7 @@ export default function InvoicesPage() {
                         
                         <div className="text-right text-sm text-slate-700 space-y-1">
                           <div className="mb-4 font-bold text-slate-500">
-                            発行日: {new Date().toLocaleDateString('ja-JP')}
+                            発行日: {new Date(new Date(selectedMonth + '-01').getFullYear(), new Date(selectedMonth + '-01').getMonth() + 1, 0).toLocaleDateString('ja-JP')}
                           </div>
                           {settings ? (
                             <>

@@ -86,17 +86,15 @@ export default function ChannelsMasterPage() {
       const newRows = validChannels.filter(ch => ch.id < 0).map(ch => ({ name: ch.name, email: ch.email || null }));
       const existingRows = validChannels.filter(ch => ch.id > 0);
 
-      const promises = [];
-      
       if (newRows.length > 0) {
-        promises.push(supabase.from('sales_channels').insert(newRows));
+        const { error } = await supabase.from('sales_channels').insert(newRows);
+        if (error) throw error;
       }
       
       for (const row of existingRows) {
-        promises.push(supabase.from('sales_channels').update({ name: row.name, email: row.email || null }).eq('id', row.id));
+        const { error } = await supabase.from('sales_channels').update({ name: row.name, email: row.email || null }).eq('id', row.id);
+        if (error) throw error;
       }
-
-      await Promise.all(promises);
       
       setMessage({ text: '保存が完了しました。', type: 'success' });
       fetchChannels(); // IDの振り直しなどを反映するため再取得
