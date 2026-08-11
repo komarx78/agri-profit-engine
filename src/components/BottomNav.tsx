@@ -14,7 +14,7 @@ export default function BottomNav() {
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-emerald-950/95 backdrop-blur-lg border-t border-emerald-800/60 pb-safe shadow-[0_-8px_30px_rgb(0,0,0,0.12)]">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-emerald-950/95 backdrop-blur-lg border-t border-emerald-800/60 pb-safe shadow-[0_-8px_30px_rgb(0,0,0,0.12)] print:hidden">
       <div className="max-w-md mx-auto px-6 h-20 flex items-center justify-between">
         
         <Link 
