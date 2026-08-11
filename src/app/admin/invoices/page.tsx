@@ -10,6 +10,7 @@ interface CompanySettings {
   postal_code: string;
   address: string;
   phone: string;
+  email?: string;
   invoice_number: string;
   bank_info: string;
 }
@@ -149,6 +150,31 @@ export default function InvoicesPage() {
     window.print();
   };
 
+  // --- メール本文の生成 ---
+  const generateEmailBody = () => {
+    if (!activeInvoice) return '';
+    const [year, month] = selectedMonth.split('-');
+    
+    // しっかりとしたビジネス署名の作成
+    const signature = [
+      '=========================================',
+      settings?.company_name || '農園名未設定',
+      settings?.postal_code ? `〒${settings.postal_code}` : '',
+      settings?.address || '',
+      settings?.phone ? `TEL: ${settings.phone}` : '',
+      settings?.email ? `Email: ${settings.email}` : '',
+      settings?.invoice_number ? `適格請求書発行事業者登録番号: ${settings.invoice_number}` : '',
+      '========================================='
+    ].filter(Boolean).join('\n');
+
+    return `${activeInvoice.channelName} 御中\n\nいつもお世話になっております。\n${settings?.company_name || '当農園'}です。\n\n${year}年${month}月分のご請求書をお送りいたします。\n\nご請求金額： ¥${activeInvoice.subtotal.toLocaleString()} (税込)\n\n※お手数ですが、事前にダウンロード保存していただいた「請求書のPDFファイル」を、このメールに添付（ドラッグ＆ドロップ）してご送信ください。\n\n何卒よろしくお願い申し上げます。\n\n${signature}`;
+  };
+
+  const mailSubject = `【ご請求書】${selectedMonth.split('-')[1]}月分 - ${settings?.company_name || '農園'}`;
+  const mailBody = generateEmailBody();
+  const gmailUrl = activeInvoice ? `https://mail.google.com/mail/?view=cm&fs=1&to=${activeInvoice.email || ''}&su=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}` : '#';
+  const mailtoUrl = activeInvoice ? `mailto:${activeInvoice.email || ''}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}` : '#';
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
       {/* --- コントロールパネル (印刷時に非表示) --- */}
@@ -267,7 +293,7 @@ export default function InvoicesPage() {
                         {/* メール作成ボタン群 */}
                         <div className="flex items-center gap-2">
                           <a
-                            href={`https://mail.google.com/mail/?view=cm&fs=1&to=${activeInvoice.email || ''}&su=${encodeURIComponent(`【ご請求書】${selectedMonth.split('-')[1]}月分 - ${settings?.company_name || '農園'}`)}&body=${encodeURIComponent(`${activeInvoice.channelName} 御中\n\nいつもお世話になっております。\n${settings?.company_name || '当農園'}です。\n\n${selectedMonth.split('-')[0]}年${selectedMonth.split('-')[1]}月分のご請求書をお送りいたします。\n\nご請求金額： ¥${activeInvoice.subtotal.toLocaleString()} (税込)\n\n※本メールに請求書のPDFファイルを添付しておりますので、ご確認くださいませ。\n\n何卒よろしくお願い申し上げます。\n\n----------------------------\n${settings?.company_name || ''}\n${settings?.phone ? `TEL: ${settings.phone}` : ''}\n----------------------------`)}`}
+                            href={gmailUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="bg-red-500 hover:bg-red-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm text-sm"
@@ -283,7 +309,7 @@ export default function InvoicesPage() {
                           </a>
 
                           <a
-                            href={`mailto:${activeInvoice.email || ''}?subject=${encodeURIComponent(`【ご請求書】${selectedMonth.split('-')[1]}月分 - ${settings?.company_name || '農園'}`)}&body=${encodeURIComponent(`${activeInvoice.channelName} 御中\n\nいつもお世話になっております。\n${settings?.company_name || '当農園'}です。\n\n${selectedMonth.split('-')[0]}年${selectedMonth.split('-')[1]}月分のご請求書をお送りいたします。\n\nご請求金額： ¥${activeInvoice.subtotal.toLocaleString()} (税込)\n\n※本メールに請求書のPDFファイルを添付しておりますので、ご確認くださいませ。\n\n何卒よろしくお願い申し上げます。\n\n----------------------------\n${settings?.company_name || ''}\n${settings?.phone ? `TEL: ${settings.phone}` : ''}\n----------------------------`)}`}
+                            href={mailtoUrl}
                             className="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm text-sm"
                             onClick={(e) => {
                               if (!activeInvoice.email) {
