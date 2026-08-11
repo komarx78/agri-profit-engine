@@ -14,6 +14,7 @@ interface MasterItem {
 export default function WorkEntryPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<{id: string, name: string, role: string} | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   const [crops, setCrops] = useState<MasterItem[]>([]);
   const [fields, setFields] = useState<MasterItem[]>([]);
@@ -41,6 +42,8 @@ export default function WorkEntryPage() {
   const workTypes = ['収穫', '定植・播種', '水やり', '肥料・農薬', '草刈り', '片付け・メンテ'];
 
   useEffect(() => {
+    setIsMounted(true);
+    
     // ワーカーログインチェック（SaaSオーナーではなく、現場のワーカー）
     const savedUser = localStorage.getItem('agri_user');
     if (!savedUser) {
@@ -270,7 +273,7 @@ export default function WorkEntryPage() {
     }
   };
 
-  if (!currentUser) return (
+  if (!isMounted) return (
     <div className="min-h-screen bg-emerald-950 flex items-center justify-center text-emerald-500">
       <Loader2 className="w-8 h-8 animate-spin" />
     </div>
