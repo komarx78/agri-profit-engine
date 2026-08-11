@@ -22,6 +22,12 @@ export default function MastersPage() {
   const [formData, setFormData] = useState<any>({});
   const [isSaving, setIsSaving] = useState(false);
 
+  // コピー機能用ステート
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
+  const [copySource, setCopySource] = useState("");
+  const [copyTarget, setCopyTarget] = useState("");
+  const [isCopying, setIsCopying] = useState(false);
+
   // 販売価格マスタの表示モード ('byCrop' | 'byChannel')
   const [priceViewMode, setPriceViewMode] = useState<'byCrop' | 'byChannel'>('byCrop');
 
@@ -150,6 +156,43 @@ export default function MastersPage() {
     }
   };
 
+  const handleCopyChannel = async () => {
+    if (!copySource || !copyTarget) {
+      alert('コピー元と新しい販路名の両方を入力してください');
+      return;
+    }
+    
+    setIsCopying(true);
+    try {
+      // コピー元のデータを取得
+      const sourceData = salesPrices.filter(sp => sp.channel_name === copySource);
+      if (sourceData.length === 0) {
+        throw new Error('指定されたコピー元のデータが見つかりません');
+      }
+
+      // コピー先のデータを作成
+      const insertData = sourceData.map(sp => ({
+        crop_name: sp.crop_name,
+        channel_name: copyTarget,
+        price_per_unit: sp.price_per_unit
+      }));
+
+      // 一括追加
+      const { error } = await supabase.from('sales_prices').insert(insertData);
+      if (error) throw error;
+
+      setUploadStatus({ type: 'success', message: `${copyTarget} として一括追加しました！` });
+      setTimeout(() => setUploadStatus(null), 3000);
+      setIsCopyModalOpen(false);
+      setCopySource("");
+      setCopyTarget("");
+      fetchMasters();
+    } catch (err: any) {
+      alert(`コピーエラー: ${err.message}`);
+    } finally {
+      setIsCopying(false);
+    }
+  };
 
   // --- CSVアップロード処理 ---
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, type: MasterType) => {
@@ -533,12 +576,18 @@ export default function MastersPage() {
                 )}
                 
                 {/* 完全に新しいカテゴリの追加 */}
-                <div className="pt-2">
+                <div className="pt-2 space-y-2">
                   <button 
                     onClick={() => handleOpenModal('sales_prices')}
                     className="w-full py-2.5 border-2 border-dashed border-emerald-200 hover:border-emerald-400 bg-emerald-50/30 text-emerald-700 font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all"
                   >
                     <Plus className="w-4 h-4" />新しい販売価格を追加
+                  </button>
+                  <button 
+                    onClick={() => setIsCopyModalOpen(true)}
+                    className="w-full py-2.5 border-2 border-dashed border-blue-200 hover:border-blue-400 bg-blue-50/30 text-blue-700 font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all"
+                  >
+                    <AlignLeft className="w-4 h-4" />既存の販路から価格設定を一括コピー追加
                   </button>
                 </div>
               </div>
@@ -681,6 +730,71 @@ export default function MastersPage() {
                 className="flex-1 py-3 text-white font-bold bg-emerald-600 rounded-xl hover:bg-emerald-700 shadow-sm transition-colors flex items-center justify-center gap-2"
               >
                 {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : '保存する'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- コピー用モーダル --- */}
+      {isCopyModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-blue-50/50">
+              <h3 className="text-lg font-black text-blue-800 flex items-center gap-2">
+                <AlignLeft className="w-5 h-5" />
+                販売価格の一括コピー
+              </h3>
+              <button onClick={() => setIsCopyModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="text-sm font-medium text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
+                既存の販路（例: スーパーA）のすべての作目の価格設定を丸ごとコピーして、新しい販路（例: スーパーB）として一気に登録します。
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">コピー元 (既存の販路名)</label>
+                <select
+                  value={copySource}
+                  onChange={e => setCopySource(e.target.value)}
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold"
+                >
+                  <option value="">選択してください</option>
+                  {Array.from(new Set(salesPrices.map(sp => sp.channel_name))).sort().map(ch => (
+                    <option key={ch} value={ch}>{ch}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">コピー先 (新しい販路名)</label>
+                <input 
+                  type="text" 
+                  value={copyTarget} 
+                  onChange={e => setCopyTarget(e.target.value)}
+                  className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold"
+                  placeholder="例: スーパーB"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 flex gap-3">
+              <button 
+                onClick={() => setIsCopyModalOpen(false)}
+                disabled={isCopying}
+                className="flex-1 py-3 text-slate-500 font-bold bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                キャンセル
+              </button>
+              <button 
+                onClick={handleCopyChannel}
+                disabled={isCopying || !copySource || !copyTarget}
+                className="flex-1 py-3 text-white font-bold bg-blue-600 rounded-xl hover:bg-blue-700 shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isCopying ? <Loader2 className="w-5 h-5 animate-spin" /> : 'コピーして追加'}
               </button>
             </div>
           </div>
