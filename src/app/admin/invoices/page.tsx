@@ -80,7 +80,7 @@ export default function InvoicesPage() {
       const endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
 
       // 指定月の「すべて」の売上ログを取得
-      const [logsRes, cropsRes] = await Promise.all([
+      const [logsRes, cropsRes, invoicesRes] = await Promise.all([
         supabase
           .from('sales_logs')
           .select(`
@@ -95,23 +95,34 @@ export default function InvoicesPage() {
           .gte('sales_date', startDate)
           .lte('sales_date', endDate)
           .order('sales_date', { ascending: true }), // 日付順
-        supabase.from('crops').select('id, name')
+        supabase.from('crops').select('id, name'),
+        supabase
+          .from('issued_invoices')
+          .select('id, channel_name, is_sent, sent_at')
+          .eq('billing_month', selectedMonth)
       ]);
       
       if (logsRes.error) throw logsRes.error;
       
       const crops = cropsRes.data || [];
+      const issuedInvoices = invoicesRes.data || [];
 
       // JS側でマッピング
       const mappedLogs = (logsRes.data || []).map(log => {
         const ch = channels.find(c => c.id === log.channel_id);
+        const channelName = ch?.name || '不明な請求先';
+        
+        // そのチャネルの発行履歴を探す
+        const invoiceHistory = issuedInvoices.find(inv => inv.channel_name === channelName);
+
         return {
           ...log,
           crops: { name: crops.find(c => c.id === log.crop_id)?.name || '不明な作目' },
           sales_channels: { 
             id: ch?.id || -1,
-            name: ch?.name || '不明な請求先',
-            email: ch?.email || null
+            name: channelName,
+            email: ch?.email || null,
+            invoiceHistory: invoiceHistory || null
           }
         };
       });
@@ -135,7 +146,7 @@ export default function InvoicesPage() {
 
   // 出荷先（請求先）ごとにログをグループ化
   const invoicesByChannel = useMemo(() => {
-    const map = new Map<number, { channelName: string; email: string | null; logs: any[]; subtotal: number }>();
+    const map = new Map<number, { channelName: string; email: string | null; logs: any[]; subtotal: number; invoiceHistory: any }>();
     
     salesLogs.forEach(log => {
       if (!log.total_sales || log.total_sales <= 0) return;
@@ -146,7 +157,8 @@ export default function InvoicesPage() {
           channelName: log.sales_channels.name,
           email: log.sales_channels.email,
           logs: [],
-          subtotal: 0
+          subtotal: 0,
+          invoiceHistory: log.sales_channels.invoiceHistory
         });
       }
       
@@ -304,7 +316,7 @@ export default function InvoicesPage() {
     }
   };
 
-  const handleOpenMail = (item: typeof batchSendList[0], type: 'gmail' | 'standard') => {
+  const handleOpenMail = async (item: typeof batchSendList[0], type: 'gmail' | 'standard') => {
     if (type === 'gmail') {
       const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${item.email || ''}&su=${encodeURIComponent(item.mailSubject)}&body=${encodeURIComponent(item.mailBody)}`;
       window.open(gmailUrl, '_blank');
@@ -312,11 +324,32 @@ export default function InvoicesPage() {
       const mailtoUrl = `mailto:${item.email || ''}?subject=${encodeURIComponent(item.mailSubject)}&body=${encodeURIComponent(item.mailBody)}`;
       window.location.href = mailtoUrl;
     }
+    
+    // UIをすぐに更新
     setSentChannelIds(prev => {
       const next = new Set(prev);
       next.add(item.channelId);
       return next;
     });
+
+    // DBに送信状態を保存する
+    // バッチ送信リストに入っている item は、先ほど insert したばかりの URL (shareUrl) を持っている。
+    // UUID を shareUrl から取り出すか、item に invoiceId を持たせるのがスマートですが、
+    // ここでは DB 上の channel_name と billing_month で update します。
+    try {
+      await supabase
+        .from('issued_invoices')
+        .update({ 
+          is_sent: true, 
+          sent_at: new Date().toISOString() 
+        })
+        .match({ 
+          channel_name: item.channelName, 
+          billing_month: selectedMonth 
+        });
+    } catch (e) {
+      console.error('送信状態の保存に失敗しました:', e);
+    }
   };
 
   return (
@@ -379,7 +412,8 @@ export default function InvoicesPage() {
           
           <div className="space-y-3">
             {batchSendList.map((item) => {
-              const isSent = sentChannelIds.has(item.channelId);
+              const inv = invoicesByChannel.find(([_, d]) => d.channelName === item.channelName)?.[1];
+              const isSent = sentChannelIds.has(item.channelId) || inv?.invoiceHistory?.is_sent;
               return (
                 <div key={item.channelId} className={`flex items-center justify-between p-4 rounded-xl border transition-colors ${isSent ? 'bg-white border-emerald-200 opacity-60' : 'bg-white border-slate-200 shadow-sm'}`}>
                   <div className="flex items-center gap-3">
@@ -447,8 +481,16 @@ export default function InvoicesPage() {
                               : 'bg-white border border-transparent hover:bg-slate-50'
                           }`}
                         >
-                          <div className={`font-bold truncate ${isActive ? 'text-indigo-900' : 'text-slate-700'}`}>
-                            {inv.channelName}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className={`font-bold truncate ${isActive ? 'text-indigo-900' : 'text-slate-700'}`}>
+                              {inv.channelName}
+                            </div>
+                            {(sentChannelIds.has(chId) || inv.invoiceHistory?.is_sent) && (
+                              <span className="shrink-0 bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" />
+                                {inv.invoiceHistory?.sent_at ? new Date(inv.invoiceHistory.sent_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '送信済'}
+                              </span>
+                            )}
                           </div>
                           <div className="text-xs font-bold text-slate-400 mt-1">
                             ¥{inv.subtotal.toLocaleString()}
