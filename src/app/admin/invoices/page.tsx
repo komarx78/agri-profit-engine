@@ -186,8 +186,8 @@ export default function InvoicesPage() {
       const { data, error } = await supabase
         .from('issued_invoices')
         .insert([{
-          channel_id: activeInvoice.id,
-          billing_month: selectedMonth + '-01',
+          channel_name: activeInvoice.channelName,
+          billing_month: selectedMonth,
           total_amount: activeInvoice.subtotal,
           invoice_data: invoiceData
         }])
@@ -258,8 +258,8 @@ export default function InvoicesPage() {
         const { data: inserted, error } = await supabase
           .from('issued_invoices')
           .insert([{
-            channel_id: chId,
-            billing_month: invoiceMonthStr,
+            channel_name: data.channelName,
+            billing_month: selectedMonth,
             total_amount: data.subtotal,
             invoice_data: invoiceData
           }])
