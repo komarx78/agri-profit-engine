@@ -350,7 +350,7 @@ export default function InvoicesPage() {
                             className="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-sm text-sm disabled:opacity-50"
                           >
                             {isCreatingLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-                            標準メール
+                            リンクを発行して標準メール
                           </button>
                         </div>
                       </div>
