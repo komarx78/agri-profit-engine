@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Database, LogOut, Sprout, History, Menu, FileSpreadsheet, Truck, FileText, Settings, Store } from 'lucide-react';
+import { LayoutDashboard, Database, LogOut, Sprout, History, Menu, FileSpreadsheet, Truck, FileText, Settings, Store, Copy, Check } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 
 export default function AdminLayout({
@@ -14,12 +14,30 @@ export default function AdminLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const [tenantId, setTenantId] = React.useState<string | null>(null);
+  const [copied, setCopied] = React.useState(false);
   const supabase = createClient();
+
+  React.useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setTenantId(user.id);
+    };
+    getUser();
+  }, [supabase]);
+
+  const handleCopyUrl = () => {
+    if (!tenantId) return;
+    const url = `${window.location.origin}/farm/${tenantId}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     // 現場のワーカーログイン情報もついでに消去
-    localStorage.removeItem('agri_user');
+    if (tenantId) localStorage.removeItem(`agri_worker_${tenantId}`);
     router.push('/login');
   };
 
@@ -106,13 +124,24 @@ export default function AdminLayout({
         <div className="md:hidden bg-white border-b border-slate-200 p-4 space-y-2 shadow-lg absolute w-full z-40">
           <NavLinks />
           <div className="pt-2 mt-2 border-t border-slate-100">
-            <Link 
-              href="/" 
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 font-medium hover:bg-slate-100"
-            >
-              <LogOut className="w-5 h-5" />
-              現場入力画面へ戻る
-            </Link>
+            {tenantId && (
+              <>
+                <Link 
+                  href={`/farm/${tenantId}`} 
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 font-medium hover:bg-slate-100"
+                >
+                  <Sprout className="w-5 h-5" />
+                  現場画面へ行く
+                </Link>
+                <button 
+                  onClick={handleCopyUrl}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-emerald-600 font-bold bg-emerald-50 hover:bg-emerald-100 transition-colors text-left mt-2"
+                >
+                  {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                  従業員用URLをコピー
+                </button>
+              </>
+            )}
             <button 
               onClick={handleSignOut}
               className="w-full mt-2 flex items-center gap-3 px-4 py-3 rounded-xl text-rose-500 font-medium hover:bg-rose-50 transition-colors text-left"
@@ -138,13 +167,24 @@ export default function AdminLayout({
         </nav>
         
         <div className="p-4 border-t border-slate-100">
-          <Link 
-            href="/" 
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 font-medium hover:bg-slate-100 transition-colors"
-          >
-            <LogOut className="w-5 h-5" />
-            現場入力画面へ戻る
-          </Link>
+          {tenantId && (
+            <>
+              <Link 
+                href={`/farm/${tenantId}`} 
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 font-medium hover:bg-slate-100 transition-colors"
+              >
+                <Sprout className="w-5 h-5" />
+                現場画面へ行く
+              </Link>
+              <button 
+                onClick={handleCopyUrl}
+                className="w-full mt-2 flex items-center gap-3 px-4 py-3 rounded-xl text-emerald-600 font-bold bg-emerald-50 hover:bg-emerald-100 transition-colors text-left shadow-sm"
+              >
+                {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                従業員URLコピー
+              </button>
+            </>
+          )}
           <button 
             onClick={handleSignOut}
             className="w-full mt-2 flex items-center gap-3 px-4 py-3 rounded-xl text-rose-500 font-medium hover:bg-rose-50 transition-colors text-left"

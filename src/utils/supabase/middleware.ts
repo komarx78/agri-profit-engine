@@ -31,10 +31,12 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // ログインしていない場合で、ログイン画面以外の保護されたルートにアクセスした場合
+  // ログインしていない場合で、保護されたルートにアクセスした場合
+  // （/login と /farm は未ログインでもアクセス可能）
   if (
     !user &&
-    !request.nextUrl.pathname.startsWith('/login')
+    !request.nextUrl.pathname.startsWith('/login') &&
+    !request.nextUrl.pathname.startsWith('/farm')
   ) {
     // '/login' にリダイレクト
     const url = request.nextUrl.clone()
