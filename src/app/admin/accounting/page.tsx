@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { FileSpreadsheet, Download, Calendar, Settings, Info } from 'lucide-react';
+import { FileSpreadsheet, Download, Calendar, Settings, Info, AlertTriangle } from 'lucide-react';
 import Papa from 'papaparse';
 
 export default function AccountingPage() {
@@ -23,6 +23,13 @@ export default function AccountingPage() {
     laborDebit: '給料手当',
     laborCredit: '未払金',
   });
+
+  // MF税区分の初期値（インポートエラーを防ぐため設定）
+  const taxCategories = {
+    sales: '課税売上 10%', // 軽減税率の場合は「課税売上 8%（軽）」などに変更可能にするなどの拡張余地
+    material: '対象外',
+    labor: '対象外'
+  };
 
   const handleAccountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -66,27 +73,74 @@ export default function AccountingPage() {
       const workLogs = workRes.data || [];
       const journalEntries: any[] = [];
 
-      // 1. 売上データの仕訳作成
+      // -------------------------------------------------------------
+      // 1. 売上データの「月次・請求先単位」での集計処理（掛売上方式）
+      // -------------------------------------------------------------
+      const monthlySalesMap = new Map<string, { total: number; channelName: string; lastDate: string }>();
+
       salesLogs.forEach((log: any) => {
         if (!log.total_sales || log.total_sales <= 0) return;
         
-        const cropName = log.crops?.name || '';
-        const channelName = log.sales_channels?.name || '';
-        const dateStr = log.sales_date.replace(/-/g, '/'); // MF形式 YYYY/MM/DD に寄せる
+        // 該当月のYYYY-MMを取得
+        const monthKey = log.sales_date.substring(0, 7); // "2026-08"
+        const channelName = log.sales_channels?.name || '不明な請求先';
+        const mapKey = `${monthKey}_${channelName}`;
+
+        if (monthlySalesMap.has(mapKey)) {
+          const existing = monthlySalesMap.get(mapKey)!;
+          existing.total += log.total_sales;
+          // その月の一番最後の日付（計上日）を更新するなら比較するが、ここでは簡易的に末日を計算する
+        } else {
+          monthlySalesMap.set(mapKey, {
+            total: log.total_sales,
+            channelName: channelName,
+            lastDate: log.sales_date
+          });
+        }
+      });
+
+      // 集計した売上マップからMF形式の仕訳レコードを作成
+      let index = 1;
+      monthlySalesMap.forEach((value, key) => {
+        const [yearStr, monthStr] = key.split('_')[0].split('-');
+        
+        // 計上日はその月の末日とする（掛売上の原則）
+        // ※ただし抽出期間が月の中途半端な場合は、指定されたendDateを上限とするなど適宜調整
+        let accDate = new Date(parseInt(yearStr), parseInt(monthStr), 0); // 月末日
+        let dateStr = `${accDate.getFullYear()}/${String(accDate.getMonth()+1).padStart(2, '0')}/${String(accDate.getDate()).padStart(2, '0')}`;
         
         journalEntries.push({
-          '取引日': dateStr,
+          'No': index++,
+          '日付': dateStr,
           '借方勘定科目': accounts.salesDebit,
-          '借方金額': Math.round(log.total_sales),
-          '借方税区分': '',
+          '借方補助科目': '',
+          '借方部門': '',
+          '借方税区分': '対象外', // 売掛金は対象外
+          '借方インボイス': '',
+          '借方金額(円)': Math.round(value.total),
+          '借方税額': 0,
           '貸方勘定科目': accounts.salesCredit,
-          '貸方金額': Math.round(log.total_sales),
-          '貸方税区分': '',
-          '摘要': `${cropName} ${channelName} 出荷分`
+          '貸方補助科目': '',
+          '貸方部門': '',
+          '貸方税区分': taxCategories.sales,
+          '貸方インボイス': '',
+          '貸方金額(円)': Math.round(value.total),
+          '貸方税額': 0,
+          '摘要': `【${parseInt(monthStr)}月分ご請求】${value.channelName}`,
+          '仕訳メモ': '',
+          'タグ': '',
+          'MF仕訳タイプ': '',
+          '決算整理仕訳': '',
+          '作成日時': '',
+          '作成者': '',
+          '最終更新日時': '',
+          '最終更新者': ''
         });
       });
 
-      // 2. コストデータの仕訳作成
+      // -------------------------------------------------------------
+      // 2. コスト（資材費・人件費）データは日々の発生ベースで仕訳化
+      // -------------------------------------------------------------
       workLogs.forEach((log: any) => {
         const dateStr = log.work_date?.replace(/-/g, '/') || '';
         const cropName = log.crops?.name || '';
@@ -96,14 +150,31 @@ export default function AccountingPage() {
           const matCost = log.material_quantity * log.materials.default_price;
           if (matCost > 0) {
             journalEntries.push({
-              '取引日': dateStr,
+              'No': index++,
+              '日付': dateStr,
               '借方勘定科目': accounts.materialDebit,
-              '借方金額': Math.round(matCost),
-              '借方税区分': '',
+              '借方補助科目': '',
+              '借方部門': '',
+              '借方税区分': taxCategories.material,
+              '借方インボイス': '',
+              '借方金額(円)': Math.round(matCost),
+              '借方税額': 0,
               '貸方勘定科目': accounts.materialCredit,
-              '貸方金額': Math.round(matCost),
-              '貸方税区分': '',
-              '摘要': `${log.materials.name} 使用 (${cropName})`
+              '貸方補助科目': '',
+              '貸方部門': '',
+              '貸方税区分': '対象外', // 現金などは対象外
+              '貸方インボイス': '',
+              '貸方金額(円)': Math.round(matCost),
+              '貸方税額': 0,
+              '摘要': `${log.materials.name} 使用 (${cropName})`,
+              '仕訳メモ': '',
+              'タグ': '',
+              'MF仕訳タイプ': '',
+              '決算整理仕訳': '',
+              '作成日時': '',
+              '作成者': '',
+              '最終更新日時': '',
+              '最終更新者': ''
             });
           }
         }
@@ -113,14 +184,31 @@ export default function AccountingPage() {
           const laborCost = (log.duration_minutes / 60) * log.workers.hourly_wage;
           if (laborCost > 0) {
             journalEntries.push({
-              '取引日': dateStr,
+              'No': index++,
+              '日付': dateStr,
               '借方勘定科目': accounts.laborDebit,
-              '借方金額': Math.round(laborCost),
-              '借方税区分': '',
+              '借方補助科目': '',
+              '借方部門': '',
+              '借方税区分': taxCategories.labor,
+              '借方インボイス': '',
+              '借方金額(円)': Math.round(laborCost),
+              '借方税額': 0,
               '貸方勘定科目': accounts.laborCredit,
-              '貸方金額': Math.round(laborCost),
-              '貸方税区分': '',
-              '摘要': `${log.workers.name} 作業代 (${cropName})`
+              '貸方補助科目': '',
+              '貸方部門': '',
+              '貸方税区分': '対象外',
+              '貸方インボイス': '',
+              '貸方金額(円)': Math.round(laborCost),
+              '貸方税額': 0,
+              '摘要': `${log.workers.name} 作業代 (${cropName})`,
+              '仕訳メモ': '',
+              'タグ': '',
+              'MF仕訳タイプ': '',
+              '決算整理仕訳': '',
+              '作成日時': '',
+              '作成者': '',
+              '最終更新日時': '',
+              '最終更新者': ''
             });
           }
         }
@@ -133,19 +221,25 @@ export default function AccountingPage() {
       }
 
       // 日付順に並び替え
-      journalEntries.sort((a, b) => new Date(a.取引日).getTime() - new Date(b.取引日).getTime());
+      journalEntries.sort((a, b) => new Date(a.日付).getTime() - new Date(b.日付).getTime());
+      
+      // Noの振り直し
+      journalEntries.forEach((entry, i) => {
+        entry['No'] = i + 1;
+      });
 
-      // CSVエクスポート処理 (マネーフォワード形式)
+      // CSVエクスポート処理 (MF完全互換形式、Shift-JISまたはBOM付きUTF-8)
+      // MFクラウドはBOM付きUTF-8を自動判別するためBOMを付与する
       const csv = Papa.unparse(journalEntries);
-      const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' }); // BOM付きUTF-8でExcelでも文字化けさせない
+      const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `MF仕訳_${startDate}_${endDate}.csv`;
+      a.download = `MF仕訳帳_一括DL_${startDate}_${endDate}.csv`;
       a.click();
       URL.revokeObjectURL(url);
       
-      setMessage(`${journalEntries.length}件の仕訳データをエクスポートしました！`);
+      setMessage(`${journalEntries.length}件の仕訳データ（マネーフォワード完全互換形式）をエクスポートしました！`);
 
     } catch (err) {
       console.error(err);
@@ -163,12 +257,20 @@ export default function AccountingPage() {
           会計データ出力（仕訳CSV生成）
         </h1>
         <p className="text-slate-500 mt-2 font-medium">
-          売上と作業記録（人件費・資材費）から、マネーフォワード等の会計ソフトへ直接インポートできる複式簿記形式のCSVを生成します。
+          売上と作業記録（人件費・資材費）から、マネーフォワードクラウドの「仕訳帳」へ直接インポートできる全25項目のCSVを生成します。
+        </p>
+      </div>
+
+      <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex items-start gap-3 animate-in fade-in">
+        <Info className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+        <p className="text-sm text-emerald-800 font-bold leading-relaxed">
+          【お知らせ】売上の計上方法が「請求書発行ベース（掛売上）」にアップグレードされました！<br />
+          <span className="font-normal text-emerald-700">これまでの「出荷ごと」の仕訳ではなく、自動的に「対象月・出荷先ごとの請求書単位」に合算され、月末日付で1本だけ売上仕訳が作成されます。</span>
         </p>
       </div>
 
       {message && (
-        <div className={`p-4 rounded-xl font-bold text-center ${message.includes('エラー') || message.includes('ありません') ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+        <div className={`p-4 rounded-xl font-bold text-center ${message.includes('エラー') || message.includes('ありません') ? 'bg-rose-100 text-rose-700' : 'bg-blue-100 text-blue-700'}`}>
           {message}
         </div>
       )}
@@ -211,17 +313,11 @@ export default function AccountingPage() {
             {isLoading ? '生成中...' : (
               <>
                 <Download className="w-5 h-5" />
-                仕訳CSVをダウンロード
+                MF互換CSVをダウンロード
               </>
             )}
           </button>
 
-          <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start gap-3">
-            <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-            <p className="text-xs text-blue-800 font-medium leading-relaxed">
-              ダウンロードしたCSVファイルは、マネーフォワードクラウドの「仕訳帳」からインポートすることができます。freee等へインポートする場合は、ソフト側のインポート設定で列を合わせてください。
-            </p>
-          </div>
         </div>
 
         {/* 右側: 勘定科目の設定 */}
@@ -232,16 +328,16 @@ export default function AccountingPage() {
             </h2>
             
             <p className="text-sm text-slate-500 mb-6">
-              ご自身の農園の会計ルール（科目マスタ）に合わせて、摘要される勘定科目を書き換えてからダウンロードしてください。
+              ご自身の農園の会計ルールに合わせて、摘要される勘定科目を書き換えてからダウンロードしてください。
             </p>
 
             <div className="space-y-6">
               {/* 売上仕訳 */}
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                <h3 className="font-bold text-slate-700 mb-3 border-b-2 border-blue-500 inline-block pb-1">売上発生時の仕訳</h3>
+                <h3 className="font-bold text-slate-700 mb-3 border-b-2 border-blue-500 inline-block pb-1">売上 (請求書発行ベース) の仕訳</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-1">借方科目 (例: 売掛金, 現金)</label>
+                    <label className="block text-xs font-bold text-slate-400 mb-1">借方科目 (例: 売掛金)</label>
                     <input type="text" name="salesDebit" value={accounts.salesDebit} onChange={handleAccountChange} className="w-full p-2 border border-slate-200 rounded-lg text-sm font-bold focus:border-blue-500 outline-none" />
                   </div>
                   <div>
