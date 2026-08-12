@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Receipt, Plus, Search, Calendar, Store, Tag, Download, Camera, Check, AlertCircle, FileText, History } from 'lucide-react';
+import { Receipt, Plus, Search, Calendar, Store, Tag, Download, Camera, Check, AlertCircle, FileText, History, Image as ImageIcon, ExternalLink } from 'lucide-react';
 
 export default function PurchasesPage() {
   const [purchases, setPurchases] = useState<any[]>([]);
@@ -24,7 +24,8 @@ export default function PurchasesPage() {
     unit_price: 0,
     quantity: 1,
     total_price: 0,
-    notes: ''
+    notes: '',
+    receipt_image_url: '' // 画像保存先のパス
   });
 
   // 初期データ取得
@@ -92,7 +93,8 @@ export default function PurchasesPage() {
         unit_price: formData.unit_price,
         quantity: formData.quantity,
         total_price: formData.total_price,
-        notes: formData.notes
+        notes: formData.notes,
+        receipt_image_url: formData.receipt_image_url
       }]);
 
       if (error) throw error;
@@ -108,7 +110,8 @@ export default function PurchasesPage() {
         unit_price: 0,
         quantity: 1,
         total_price: 0,
-        notes: ''
+        notes: '',
+        receipt_image_url: ''
       }));
 
       // リスト再取得
@@ -141,12 +144,47 @@ export default function PurchasesPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // ファイルサイズが大きい場合はリサイズする等の処理が必要になる場合がありますが、
-    // 今回は簡易的にFileReaderでBase64エンコードします
+    // ファイルサイズが大きい場合（スマホのカメラ等）はVercelのペイロード制限(4MB)に引っかかるため
+    // Canvasを使ってブラウザ側でリサイズ・圧縮してから送信する
     const reader = new FileReader();
-    reader.onload = async (event) => {
-      const base64Str = event.target?.result as string;
-      await analyzeReceipt(base64Str);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        // 電子帳簿保存法（スキャナ保存）の解像度要件(200dpi以上)を安全にクリアするため
+        // A4サイズ換算でも十分な解像度となる 長辺 2400px を上限に設定
+        const MAX_WIDTH = 2400;
+        const MAX_HEIGHT = 2400;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        // JPEG形式で圧縮。視認性を損なわず電帳法の要件を満たす品質 0.85 を設定
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+        
+        // CanvasからBlob（ファイルデータ）を作成してStorageアップロード用にする
+        canvas.toBlob(async (blob) => {
+          if (!blob) return;
+          await processReceiptImage(compressedBase64, blob);
+        }, 'image/jpeg', 0.85);
+      };
+      img.src = event.target?.result as string;
     };
     reader.readAsDataURL(file);
     
@@ -154,40 +192,73 @@ export default function PurchasesPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const analyzeReceipt = async (imageBase64: string) => {
+  const processReceiptImage = async (imageBase64: string, fileBlob: Blob) => {
     setIsAnalyzing(true);
     setOcrError('');
     
     try {
-      const response = await fetch('/api/ocr', {
+      // 1. AIによるOCR解析（並行してStorage保存も行うと速いが、エラーハンドリングをわかりやすくするため直列で）
+      const aiResponse = await fetch('/api/ocr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageBase64 })
       });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || '解析に失敗しました');
+      const data = await aiResponse.json();
+      if (!aiResponse.ok) throw new Error(data.error || '解析に失敗しました');
+
+      // 2. ユーザー情報の取得（テナント分離用）
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('認証情報が取得できません。再度ログインしてください。');
+
+      // 3. Supabase Storageへのアップロード
+      // ファイル名はランダム＋タイムスタンプ
+      const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+      const { error: uploadError } = await supabase.storage
+        .from('receipts')
+        .upload(fileName, fileBlob, {
+          cacheControl: '31536000',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError);
+        throw new Error('画像の保存(Storage)に失敗しました。SQLでのStorage開設が済んでいるか確認してください。');
       }
 
-      // 解析結果をフォームに反映
+      // 解析結果と保存先URLをフォームに反映
       setFormData(prev => ({
         ...prev,
         purchase_date: data.date || prev.purchase_date,
         supplier: data.supplier || prev.supplier,
-        // AIが判別した金額をそのまま合計金額に入れる（単価・数量は自動計算と競合するため注意）
-        // 簡易的に単価に全額を入れ、数量1として扱うことで自動計算を活用する
         unit_price: data.total_amount ? Number(data.total_amount) : prev.unit_price,
         quantity: 1,
+        receipt_image_url: fileName // 保存されたパスを記録
       }));
       
-      alert('レシートの読み取りが完了しました！');
+      alert('レシートの読み取りとクラウド保存に成功しました！');
     } catch (error: any) {
       console.error(error);
-      setOcrError(error.message || 'レシートの解析に失敗しました');
+      setOcrError(error.message || 'レシートの解析・保存に失敗しました');
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  // 画像プレビューを開く
+  const handleViewReceipt = async (path: string) => {
+    try {
+      // セキュアな署名付きURLを発行 (60秒間有効)
+      const { data, error } = await supabase.storage
+        .from('receipts')
+        .createSignedUrl(path, 60);
+      
+      if (error) throw error;
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank');
+      }
+    } catch (error) {
+      console.error('Error generating signed URL:', error);
+      alert('画像の取得に失敗しました。');
     }
   };
 
@@ -445,12 +516,26 @@ export default function PurchasesPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right">
-                          <button 
-                            onClick={() => handleDelete(purchase.id)}
-                            className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-                          >
-                            削除
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            {purchase.receipt_image_url && (
+                              <button 
+                                onClick={() => handleViewReceipt(purchase.receipt_image_url)}
+                                className="text-emerald-600 hover:bg-emerald-50 p-2 rounded-lg transition-colors group/btn relative"
+                                title="レシート画像を見る"
+                              >
+                                <ImageIcon className="w-4 h-4" />
+                                <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover/btn:opacity-100 transition-opacity whitespace-nowrap">
+                                  証憑を見る
+                                </span>
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => handleDelete(purchase.id)}
+                              className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                            >
+                              削除
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
