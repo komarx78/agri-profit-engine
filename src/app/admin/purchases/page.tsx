@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Receipt, Plus, Search, Calendar, Store, Tag, Download, Camera, Check, AlertCircle, FileText } from 'lucide-react';
+import { Receipt, Plus, Search, Calendar, Store, Tag, Download, Camera, Check, AlertCircle, FileText, History } from 'lucide-react';
 
 export default function PurchasesPage() {
   const [purchases, setPurchases] = useState<any[]>([]);
