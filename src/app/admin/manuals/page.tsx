@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Youtube, Lock, Play, Loader2, Sparkles, Plus, X, CheckCircle2 } from 'lucide-react';
+import { Video, Lock, Play, Loader2, Sparkles, Plus, X, CheckCircle2 } from 'lucide-react';
 
 export default function ManualsPage() {
   const [planType, setPlanType] = useState<'standard' | 'premium' | null>(null);
@@ -172,7 +172,7 @@ export default function ManualsPage() {
             </span>
           </div>
           <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-            <Youtube className="w-8 h-8 text-rose-500" />
+            <Video className="w-8 h-8 text-rose-500" />
             動画マニュアル集
           </h1>
           <p className="text-slate-500 mt-2 font-medium">ここで登録したマニュアルは、従業員のスマホアプリからいつでも閲覧できます。</p>
@@ -189,7 +189,7 @@ export default function ManualsPage() {
       {/* 動画グリッド */}
       {manuals.length === 0 ? (
         <div className="bg-white rounded-2xl p-12 text-center border-2 border-dashed border-slate-200">
-          <Youtube className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+          <Video className="w-16 h-16 text-slate-300 mx-auto mb-4" />
           <h3 className="text-xl font-bold text-slate-700 mb-2">まだマニュアルがありません</h3>
           <p className="text-slate-500 mb-6">
             右上のボタンから、新人教育用のお手本動画をアップロードしてください。

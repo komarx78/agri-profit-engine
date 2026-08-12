@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, use } from 'react';
-import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle, Building2, Youtube, Lock, X } from 'lucide-react';
+import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle, Building2, Video, Lock, X } from 'lucide-react';
 import { getFarmInfo, getFarmWorkers, verifyWorkerPin, getFarmMasters, submitWorkLog, TenantInfo } from '@/app/actions/farm';
 import { supabase } from '@/lib/supabase';
 import imageCompression from 'browser-image-compression';
@@ -98,25 +98,26 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
 
   const fetchMasters = async () => {
     const res = await getFarmMasters(tenantId);
-      if (res.success && res.data) {
-        setCrops(res.data.crops);
-        setFields(res.data.fields);
-        setMaterials(res.data.materials);
-      }
-    };
+    if (res.success && res.data) {
+      setCrops(res.data.crops);
+      setFields(res.data.fields);
+      setMaterials(res.data.materials);
+    }
+  };
 
-    const fetchManuals = async () => {
-      const { data, error } = await supabase
-        .from('video_manuals')
-        .select('*')
-        .eq('user_id', tenantId)
-        .order('created_at', { ascending: false });
+  const fetchManuals = async () => {
+    const { data, error } = await supabase
+      .from('video_manuals')
+      .select('*')
+      .eq('user_id', tenantId)
+      .order('created_at', { ascending: false });
         
-      if (!error && data) setManuals(data);
-    };
+    if (!error && data) setManuals(data);
+  };
 
-    fetchMasters();
-    fetchManuals();
+  // マニュアルは初期ロード時にも取得しておく
+  useEffect(() => {
+    if (tenantId) fetchManuals();
   }, [tenantId]);
 
   // 経過時間の計算タイマー
@@ -455,7 +456,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
               inputMode === 'manual' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70'
             }`}
           >
-            <History className="w-4 h-4" />
+            <Video className="w-4 h-4" />
             手入力(事後)
           </button>
         </div>
@@ -734,7 +735,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
         ) : (
           <div className="px-4 py-6 space-y-4 animate-in fade-in slide-in-from-bottom-4">
             <h2 className="text-lg font-black text-white flex items-center gap-2 mb-4">
-              <Youtube className="w-5 h-5 text-rose-500" /> 動画マニュアル集
+              <Video className="w-5 h-5 text-rose-500" /> 動画マニュアル集
             </h2>
             
             {farmInfo?.plan_type !== 'premium' ? (
