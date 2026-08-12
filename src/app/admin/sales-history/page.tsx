@@ -32,6 +32,7 @@ export default function SalesHistoryPage() {
             channel_id,
             crop_id
           `)
+          .neq('status', 'planned')
           .order('sales_date', { ascending: false })
           .order('id', { ascending: false }),
         supabase.from('sales_channels').select('id, name'),

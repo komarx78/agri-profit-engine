@@ -142,6 +142,21 @@ export default function PlansPage() {
       return;
     }
 
+    if (!selectedCrop) {
+      setMessage({ text: '作目を選択してください', type: 'error' });
+      return;
+    }
+
+    if (activeTab === 'work' && !selectedWorkType) {
+      setMessage({ text: '作業内容を選択してください', type: 'error' });
+      return;
+    }
+
+    if (activeTab === 'sales' && !selectedChannel) {
+      setMessage({ text: '出荷予定先を選択してください', type: 'error' });
+      return;
+    }
+
     setIsSubmitting(true);
     setMessage(null);
 
@@ -207,9 +222,9 @@ export default function PlansPage() {
         setMessage(null);
         setIsModalOpen(false);
       }, 1500);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setMessage({ text: 'エラーが発生しました。', type: 'error' });
+      setMessage({ text: 'エラー: ' + (err.message || '不明なエラーが発生しました'), type: 'error' });
     } finally {
       setIsSubmitting(false);
     }
