@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+export const dynamic = 'force-dynamic'; // Vercelのキャッシュを無効化し、毎回動的に実行する
+
 export async function POST(req: Request) {
   try {
     // APIルートの実行時に環境変数を読み込む（Vercelの静的最適化によるエラーを防ぐため）
