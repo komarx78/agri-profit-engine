@@ -75,7 +75,7 @@ export default function WorkLedgerPage() {
   }
 
   // クロス集計データの生成
-  const { tableData, salesData, materialData, cropsList, workTypesList, totals } = useMemo(() => {
+  const { tableData, salesData, materialData, materialDetailsData, cropsList, workTypesList, totals } = useMemo(() => {
     const cropsSet = new Set<string>();
     const workTypesSet = new Set<string>();
     
