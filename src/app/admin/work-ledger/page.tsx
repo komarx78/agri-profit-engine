@@ -13,8 +13,8 @@ export default function WorkLedgerPage() {
   const currentMonth = new Date().toISOString().substring(0, 7);
   const [targetMonth, setTargetMonth] = useState<string>(currentMonth);
   
-  // 表示モード (時間 or 人件費)
-  const [viewMode, setViewMode] = useState<'hours' | 'cost'>('hours');
+  // 表示モード (時間 or 人件費 or 資材費 or 総コスト)
+  const [viewMode, setViewMode] = useState<'hours' | 'cost' | 'materialCost' | 'totalCost'>('hours');
 
   useEffect(() => {
     fetchLogs();
@@ -36,7 +36,9 @@ export default function WorkLedgerPage() {
           duration_minutes,
           work_type,
           crops(name),
-          workers(name, hourly_wage)
+          workers(name, hourly_wage),
+          material_quantity,
+          materials(name, default_price)
         `)
         .gte('work_date', startOfMonth)
         .lte('work_date', endOfMonth)
@@ -67,14 +69,22 @@ export default function WorkLedgerPage() {
       const workType = log.work_type || '未指定';
       const durationHours = (log.duration_minutes || 0) / 60;
       const wage = log.workers?.hourly_wage || 1000;
-      const cost = durationHours * wage;
+      const laborCost = durationHours * wage;
+      
+      const materialQty = log.material_quantity || 0;
+      const materialPrice = log.materials?.default_price || 0;
+      const materialCost = materialQty * materialPrice;
 
       cropsSet.add(cropName);
       workTypesSet.add(workType);
 
       if (!pivotMap[cropName]) pivotMap[cropName] = {};
       
-      const value = viewMode === 'hours' ? durationHours : cost;
+      let value = 0;
+      if (viewMode === 'hours') value = durationHours;
+      else if (viewMode === 'cost') value = laborCost;
+      else if (viewMode === 'materialCost') value = materialCost;
+      else if (viewMode === 'totalCost') value = laborCost + materialCost;
 
       pivotMap[cropName][workType] = (pivotMap[cropName][workType] || 0) + value;
       grandTotal += value;
@@ -155,19 +165,35 @@ export default function WorkLedgerPage() {
           <div className="flex bg-slate-100 p-1 rounded-xl">
             <button
               onClick={() => setViewMode('hours')}
-              className={`px-4 py-1.5 rounded-lg font-bold text-sm transition-all ${
+              className={`px-3 py-1.5 rounded-lg font-bold text-sm transition-all ${
                 viewMode === 'hours' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'
               }`}
             >
-              作業時間 (h)
+              作業時間(h)
             </button>
             <button
               onClick={() => setViewMode('cost')}
-              className={`px-4 py-1.5 rounded-lg font-bold text-sm transition-all ${
+              className={`px-3 py-1.5 rounded-lg font-bold text-sm transition-all ${
                 viewMode === 'cost' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'
               }`}
             >
-              概算人件費 (円)
+              人件費(円)
+            </button>
+            <button
+              onClick={() => setViewMode('materialCost')}
+              className={`px-3 py-1.5 rounded-lg font-bold text-sm transition-all ${
+                viewMode === 'materialCost' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              資材費(円)
+            </button>
+            <button
+              onClick={() => setViewMode('totalCost')}
+              className={`px-3 py-1.5 rounded-lg font-bold text-sm transition-all ${
+                viewMode === 'totalCost' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              総コスト(円)
             </button>
           </div>
         </div>

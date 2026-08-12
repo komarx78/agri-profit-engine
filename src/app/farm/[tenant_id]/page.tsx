@@ -552,6 +552,42 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                 </div>
               </section>
 
+              {/* 資材・農薬セクション (任意) */}
+              <section className={`bg-violet-900/30 p-4 rounded-2xl border border-violet-800/40 shadow-sm ${activeWorkStartTime ? 'opacity-60 pointer-events-none grayscale-[30%]' : ''}`}>
+                <h2 className="text-xs font-bold uppercase tracking-wider text-violet-400 mb-2.5 flex items-center gap-2">
+                  <Package className="w-4 h-4" />使用資材・農薬 (任意)
+                </h2>
+                <div className="space-y-3">
+                  <div>
+                    <select
+                      value={selectedMaterial}
+                      onChange={(e) => setSelectedMaterial(e.target.value)}
+                      className="w-full px-3 py-3 bg-slate-950 border border-slate-700 text-white rounded-xl font-bold focus:border-violet-500 focus:outline-none"
+                    >
+                      <option value="">資材を使用しない</option>
+                      {materials.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                    </select>
+                  </div>
+                  
+                  {selectedMaterial && (
+                    <div className="flex items-center gap-3 animate-in slide-in-from-top-2">
+                      <div className="flex-1">
+                        <input
+                          type="number"
+                          value={materialQuantity}
+                          onChange={(e) => setMaterialQuantity(e.target.value)}
+                          placeholder="使用量"
+                          className="w-full px-3 py-3 bg-slate-950 border border-slate-700 text-white rounded-xl font-bold focus:border-violet-500 focus:outline-none"
+                        />
+                      </div>
+                      <div className="text-sm font-bold text-slate-400">
+                        {materials.find(m => m.name === selectedMaterial)?.unit || '単位'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+
               {inputMode === 'manual' && (
                 <section className="bg-sky-900/30 p-4 rounded-2xl border border-sky-800/40 shadow-sm">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-sky-400 mb-2.5 flex items-center gap-2">

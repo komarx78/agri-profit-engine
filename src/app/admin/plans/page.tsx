@@ -17,9 +17,12 @@ export default function PlansPage() {
   const [salesPrices, setSalesPrices] = useState<any[]>([]);
   const workTypes = ['収穫', '定植・播種', '水やり', '肥料・農薬', '草刈り', '片付け・メンテ'];
 
-  // データ (予定と実績をすべて含む)
   const [allWorkLogs, setAllWorkLogs] = useState<any[]>([]);
   const [allSalesLogs, setAllSalesLogs] = useState<any[]>([]);
+
+  // 表示モード
+  const [ganttViewMode, setGanttViewMode] = useState<'byCrop' | 'byField'>('byCrop');
+  const [ganttFilter, setGanttFilter] = useState<'all' | 'workOnly' | 'salesOnly'>('all');
 
   // モーダルステート
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -70,7 +73,7 @@ export default function PlansPage() {
     try {
       const [workRes, salesRes] = await Promise.all([
         supabase.from('work_logs')
-          .select('*, crops(name)')
+          .select('*, crops(name), fields(name)')
           .gte('work_date', startOfMonth)
           .lte('work_date', endOfMonth),
         supabase.from('sales_logs')
@@ -213,9 +216,18 @@ export default function PlansPage() {
   };
 
   // セルに表示するデータを抽出（予定と実績を分類）
-  const getCellData = (cropName: string, dateStr: string) => {
-    const works = allWorkLogs.filter(w => w.crops?.name === cropName && w.work_date === dateStr);
-    const sales = allSalesLogs.filter(s => s.crops?.name === cropName && s.sales_date === dateStr);
+  const getCellData = (itemId: string, dateStr: string) => {
+    let works = [];
+    let sales = [];
+    
+    if (ganttViewMode === 'byCrop') {
+      works = allWorkLogs.filter(w => w.crop_id === itemId && w.work_date === dateStr);
+      sales = allSalesLogs.filter(s => s.crop_id === itemId && s.sales_date === dateStr);
+    } else {
+      // 圃場別ビューの場合、売上は作目に紐づくため表示しない
+      works = allWorkLogs.filter(w => w.field_id === itemId && w.work_date === dateStr);
+      sales = []; 
+    }
     
     return {
       plannedWorks: works.filter(w => w.status === 'planned'),
@@ -224,6 +236,8 @@ export default function PlansPage() {
       actualSales: sales.filter(s => s.status !== 'planned'),
     };
   };
+
+  const rowItems = ganttViewMode === 'byCrop' ? crops : fields;
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-6 pb-12">
@@ -242,6 +256,57 @@ export default function PlansPage() {
           <Plus className="w-5 h-5" />
           予定を追加
         </button>
+      </div>
+
+      {/* コントロールパネル */}
+      <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+        <div className="flex bg-slate-100 p-1 rounded-xl">
+          <button
+            onClick={() => setGanttViewMode('byCrop')}
+            className={`px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2 ${
+              ganttViewMode === 'byCrop' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Sprout className="w-4 h-4" /> 作目別
+          </button>
+          <button
+            onClick={() => setGanttViewMode('byField')}
+            className={`px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2 ${
+              ganttViewMode === 'byField' ? 'bg-white text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <MapPin className="w-4 h-4" /> 圃場別
+          </button>
+        </div>
+        
+        {ganttViewMode === 'byCrop' && (
+          <div className="flex bg-slate-100 p-1 rounded-xl sm:ml-auto">
+            <button
+              onClick={() => setGanttFilter('all')}
+              className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${
+                ganttFilter === 'all' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              すべて表示
+            </button>
+            <button
+              onClick={() => setGanttFilter('workOnly')}
+              className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${
+                ganttFilter === 'workOnly' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              作業のみ
+            </button>
+            <button
+              onClick={() => setGanttFilter('salesOnly')}
+              className={`px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-1 ${
+                ganttFilter === 'salesOnly' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Truck className="w-4 h-4" /> 売上予測マップ
+            </button>
+          </div>
+        )}
       </div>
 
       {/* カレンダーヘッダー */}
@@ -272,7 +337,7 @@ export default function PlansPage() {
             >
               {/* ヘッダー行 */}
               <div className="sticky left-0 z-10 bg-slate-100 border-r border-b border-slate-200 p-3 font-bold text-slate-600 text-sm flex items-center justify-center">
-                作目
+                {ganttViewMode === 'byCrop' ? '作目' : '圃場'}
               </div>
               {daysInMonth.map((d, i) => {
                 const isWeekend = d.getDay() === 0 || d.getDay() === 6;
@@ -284,48 +349,48 @@ export default function PlansPage() {
                 );
               })}
 
-              {/* 作目ごとの行 */}
-              {crops.map((crop) => (
-                <React.Fragment key={crop.id}>
-                  {/* 作目名 (左固定) */}
+              {/* 行ループ */}
+              {rowItems.map((item) => (
+                <React.Fragment key={item.id}>
+                  {/* ヘッダー (左固定) */}
                   <div className="sticky left-0 z-10 bg-white border-r border-b border-slate-100 p-3 flex items-center shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                    <span className="font-bold text-slate-700 text-sm">{crop.name}</span>
+                    <span className="font-bold text-slate-700 text-sm">{item.name}</span>
                   </div>
                   
                   {/* 日付セル */}
                   {daysInMonth.map((d, i) => {
                     const dateStr = d.toISOString().split('T')[0];
-                    const { plannedWorks, actualWorks, plannedSales, actualSales } = getCellData(crop.name, dateStr);
+                    const { plannedWorks, actualWorks, plannedSales, actualSales } = getCellData(item.id, dateStr);
                     const isToday = dateStr === new Date().toISOString().split('T')[0];
                     
                     return (
                       <div 
                         key={i} 
-                        onClick={() => openModal(dateStr, crop.name)}
+                        onClick={() => openModal(dateStr, ganttViewMode === 'byCrop' ? item.name : '')}
                         className={`border-b border-r border-slate-100 p-1 min-h-[70px] relative hover:bg-slate-50 cursor-pointer transition-colors group ${isToday ? 'bg-amber-50/20' : ''}`}
                       >
                         <div className="flex flex-col gap-1 w-full relative z-0">
                           {/* 作業：予定 (薄い枠線) */}
-                          {plannedWorks.map((w, idx) => (
-                            <div key={`pw-${idx}`} className="bg-emerald-50 border border-emerald-300 border-dashed text-emerald-600 text-[10px] font-bold px-1 py-0.5 rounded truncate" title={`[予定] ${w.work_type} ${w.duration_minutes ? `(${w.duration_minutes}分)` : ''}`}>
-                              予:{w.work_type.substring(0, 2)}
+                          {(ganttFilter === 'all' || ganttFilter === 'workOnly') && plannedWorks.map((w, idx) => (
+                            <div key={`pw-${idx}`} className="bg-emerald-50 border border-emerald-300 border-dashed text-emerald-600 text-[10px] font-bold px-1 py-0.5 rounded truncate" title={`[予定] ${w.crops?.name || '不明'} - ${w.work_type} ${w.duration_minutes ? `(${w.duration_minutes}分)` : ''}`}>
+                              予:{ganttViewMode === 'byField' ? `${w.crops?.name || '?'}/` : ''}{w.work_type.substring(0, 2)}
                             </div>
                           ))}
                           {/* 作業：実績 (濃いベタ塗り) */}
-                          {actualWorks.map((w, idx) => (
-                            <div key={`aw-${idx}`} className="bg-emerald-500 border border-emerald-600 text-white shadow-sm text-[10px] font-bold px-1 py-0.5 rounded truncate" title={`[実績] ${w.work_type} (${w.duration_minutes || 0}分)`}>
-                              実:{w.work_type.substring(0, 2)}
+                          {(ganttFilter === 'all' || ganttFilter === 'workOnly') && actualWorks.map((w, idx) => (
+                            <div key={`aw-${idx}`} className="bg-emerald-500 border border-emerald-600 text-white shadow-sm text-[10px] font-bold px-1 py-0.5 rounded truncate" title={`[実績] ${w.crops?.name || '不明'} - ${w.work_type} (${w.duration_minutes || 0}分)`}>
+                              実:{ganttViewMode === 'byField' ? `${w.crops?.name || '?'}/` : ''}{w.work_type.substring(0, 2)}
                             </div>
                           ))}
 
                           {/* 売上：予定 (薄い枠線) */}
-                          {plannedSales.map((s, idx) => (
+                          {(ganttFilter === 'all' || ganttFilter === 'salesOnly') && plannedSales.map((s, idx) => (
                             <div key={`ps-${idx}`} className="bg-amber-50 border border-amber-300 border-dashed text-amber-600 text-[10px] font-bold px-1 py-0.5 rounded truncate" title={`[目標] 売上予測: ¥${s.total_sales?.toLocaleString() || '-'}`}>
                               目:¥{(s.total_sales / 1000).toFixed(0)}k
                             </div>
                           ))}
                           {/* 売上：実績 (濃いベタ塗り) */}
-                          {actualSales.map((s, idx) => (
+                          {(ganttFilter === 'all' || ganttFilter === 'salesOnly') && actualSales.map((s, idx) => (
                             <div key={`as-${idx}`} className="bg-amber-500 border border-amber-600 text-white shadow-sm text-[10px] font-bold px-1 py-0.5 rounded truncate" title={`[実績] 売上: ¥${s.total_sales?.toLocaleString() || '-'}`}>
                               実:¥{(s.total_sales / 1000).toFixed(0)}k
                             </div>
