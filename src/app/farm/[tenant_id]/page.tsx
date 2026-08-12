@@ -3,6 +3,8 @@
 import React, { useState, useEffect, use } from 'react';
 import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle, Building2 } from 'lucide-react';
 import { getFarmInfo, getFarmWorkers, verifyWorkerPin, getFarmMasters, submitWorkLog, TenantInfo } from '@/app/actions/farm';
+import { supabase } from '@/lib/supabase';
+import imageCompression from 'browser-image-compression';
 
 interface MasterItem {
   id: string;
@@ -42,6 +44,8 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   const [memo, setMemo] = useState<string>('');
   const [selectedMaterial, setSelectedMaterial] = useState<string>('');
   const [materialQuantity, setMaterialQuantity] = useState<string>('');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   const [inputMode, setInputMode] = useState<'timer' | 'manual'>('timer');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -121,6 +125,8 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     setMemo('');
     setSelectedMaterial('');
     setMaterialQuantity('');
+    setPhotoFile(null);
+    setPhotoPreview(null);
     setErrorMsg('');
   };
 
@@ -166,6 +172,43 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     setErrorMsg('');
 
     try {
+      // 1. 写真がある場合は圧縮してSupabase Storageにアップロード
+      let photoUrl = null;
+      if (photoFile) {
+        try {
+          // 画像の圧縮
+          const options = {
+            maxSizeMB: 1, // 最大1MB
+            maxWidthOrHeight: 1280, // 最大1280px
+            useWebWorker: true
+          };
+          const compressedFile = await imageCompression(photoFile, options);
+          
+          // 一意のファイル名を生成 (tenantId/workerId/timestamp.jpg)
+          const fileExt = compressedFile.name.split('.').pop() || 'jpg';
+          const fileName = `${tenantId}/${currentUser.id}/${Date.now()}.${fileExt}`;
+          
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('work_photos')
+            .upload(fileName, compressedFile, {
+              cacheControl: '3600',
+              upsert: false
+            });
+            
+          if (uploadError) throw uploadError;
+          
+          // 公開URLを取得
+          const { data: publicUrlData } = supabase.storage
+            .from('work_photos')
+            .getPublicUrl(fileName);
+            
+          photoUrl = publicUrlData.publicUrl;
+        } catch (photoErr) {
+          console.error('Photo upload failed:', photoErr);
+          throw new Error('写真のアップロードに失敗しました。');
+        }
+      }
+
       const endTime = new Date();
       const startTime = new Date(activeWorkStartTime);
       const diffMins = Math.floor((endTime.getTime() - startTime.getTime()) / 1000 / 60);
@@ -186,6 +229,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
         material_id: matId || null,
         material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,
         memo: memo || null,
+        photo_url: photoUrl,
       };
 
       const res = await submitWorkLog(tenantId, currentUser.id, logData);
@@ -215,6 +259,27 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     setErrorMsg('');
 
     try {
+      // 1. 写真のアップロード処理
+      let photoUrl = null;
+      if (photoFile) {
+        try {
+          const options = { maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true };
+          const compressedFile = await imageCompression(photoFile, options);
+          const fileExt = compressedFile.name.split('.').pop() || 'jpg';
+          const fileName = `${tenantId}/${currentUser.id}/${Date.now()}.${fileExt}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from('work_photos')
+            .upload(fileName, compressedFile);
+            
+          if (uploadError) throw uploadError;
+          const { data: publicUrlData } = supabase.storage.from('work_photos').getPublicUrl(fileName);
+          photoUrl = publicUrlData.publicUrl;
+        } catch (photoErr) {
+          throw new Error('写真のアップロードに失敗しました。');
+        }
+      }
+
       const cropId = crops.find(c => c.name === selectedCrop)?.id;
       const fieldId = fields.find(f => f.name === selectedField)?.id;
       const matId = materials.find(m => m.name === selectedMaterial)?.id;
@@ -248,6 +313,21 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
       setErrorMsg(err.message || '通信エラーが発生しました');
       setIsSubmitting(false);
     }
+  };
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setPhotoFile(file);
+      // プレビュー用のURL生成
+      const previewUrl = URL.createObjectURL(file);
+      setPhotoPreview(previewUrl);
+    }
+  };
+
+  const clearPhoto = () => {
+    setPhotoFile(null);
+    setPhotoPreview(null);
   };
 
   if (!isMounted || isLoading) return (
@@ -487,6 +567,49 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                   />
                 </section>
               )}
+
+              {/* 写真＆メモセクション */}
+              <section className="bg-slate-900/40 p-4 rounded-2xl border border-slate-700/50 shadow-sm space-y-4">
+                <div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
+                    <span className="text-lg">📸</span> 写真を添付
+                  </h2>
+                  
+                  {!photoPreview ? (
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-700 border-dashed rounded-xl cursor-pointer bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6 text-slate-400">
+                        <span className="text-3xl mb-2">📷</span>
+                        <p className="text-sm font-bold">タップして写真を撮影・選択</p>
+                      </div>
+                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoChange} disabled={!!activeWorkStartTime} />
+                    </label>
+                  ) : (
+                    <div className="relative w-full rounded-xl overflow-hidden border-2 border-emerald-500/50">
+                      <img src={photoPreview} alt="Preview" className="w-full h-48 object-cover" />
+                      <button
+                        type="button"
+                        onClick={clearPhoto}
+                        disabled={!!activeWorkStartTime}
+                        className="absolute top-2 right-2 bg-black/70 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold hover:bg-rose-500 transition-colors"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
+                    <span className="text-lg">📝</span> 作業メモ・内容
+                  </h2>
+                  <textarea
+                    value={memo}
+                    onChange={(e) => setMemo(e.target.value)}
+                    placeholder="今日の気づきや特記事項を入力..."
+                    className="w-full h-24 p-3 bg-slate-950 border border-slate-700 text-white rounded-xl placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
+                  />
+                </div>
+              </section>
             </div>
 
             {activeWorkStartTime ? (
