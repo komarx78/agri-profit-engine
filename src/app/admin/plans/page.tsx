@@ -15,6 +15,7 @@ export default function PlansPage() {
   const [fields, setFields] = useState<any[]>([]);
   const [channels, setChannels] = useState<any[]>([]);
   const [salesPrices, setSalesPrices] = useState<any[]>([]);
+  const [materials, setMaterials] = useState<any[]>([]);
   const workTypes = ['収穫', '定植・播種', '水やり', '肥料・農薬', '草刈り', '片付け・メンテ'];
 
   const [allWorkLogs, setAllWorkLogs] = useState<any[]>([]);
@@ -23,6 +24,10 @@ export default function PlansPage() {
   // 表示モード
   const [ganttViewMode, setGanttViewMode] = useState<'byCrop' | 'byField'>('byCrop');
   const [ganttFilter, setGanttFilter] = useState<'all' | 'workOnly' | 'salesOnly'>('all');
+  
+  // 資材コスト算出モード
+  const [costCalculationMode, setCostCalculationMode] = useState<'detailed' | 'estimate'>('detailed');
+  const [estimatedMaterialCost, setEstimatedMaterialCost] = useState<number>(50000); // 概算資材費用の手入力
   
   // 基準時給 (ダッシュボード・シミュレーション用)
   const [baseHourlyWage, setBaseHourlyWage] = useState<number>(1000);
@@ -37,6 +42,8 @@ export default function PlansPage() {
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [selectedWorkType, setSelectedWorkType] = useState<string>('');
   const [plannedDuration, setPlannedDuration] = useState<string>('');
+  const [selectedMaterial, setSelectedMaterial] = useState<string>('');
+  const [plannedMaterialQuantity, setPlannedMaterialQuantity] = useState<string>('');
   const [selectedChannel, setSelectedChannel] = useState<string>('');
   const [plannedQuantity, setPlannedQuantity] = useState<string>('');
   const [manualPrice, setManualPrice] = useState<string>('');
@@ -60,17 +67,19 @@ export default function PlansPage() {
 
   async function fetchMasters() {
     try {
-      const [cRes, fRes, chRes, spRes] = await Promise.all([
+      const [cRes, fRes, chRes, spRes, mRes] = await Promise.all([
         supabase.from('crops').select('id, name'),
         supabase.from('fields').select('id, name'),
         supabase.from('sales_channels').select('id, name'),
-        supabase.from('sales_prices').select('*')
+        supabase.from('sales_prices').select('*'),
+        supabase.from('materials').select('id, name, default_price')
       ]);
 
       if (cRes.data) setCrops(cRes.data);
       if (fRes.data) setFields(fRes.data);
       if (chRes.data) setChannels(chRes.data);
       if (spRes.data) setSalesPrices(spRes.data);
+      if (mRes.data) setMaterials(mRes.data);
     } catch (err) {
       console.error(err);
     }
@@ -87,7 +96,7 @@ export default function PlansPage() {
     try {
       const [workRes, salesRes] = await Promise.all([
         supabase.from('work_logs')
-          .select('*, crops(name), fields(name), workers(name)')
+          .select('*, crops(name), fields(name), workers(name), materials(name, default_price)')
           .gte('work_date', startOfMonth)
           .lte('work_date', endOfMonth),
         supabase.from('sales_logs')
@@ -128,6 +137,7 @@ export default function PlansPage() {
   const monthlySummary = useMemo(() => {
     let plannedSales = 0;
     let plannedWorkHours = 0;
+    let detailedMaterialCost = 0;
     
     allSalesLogs.forEach(s => {
       if (s.status === 'planned') {
@@ -138,18 +148,25 @@ export default function PlansPage() {
     allWorkLogs.forEach(w => {
       if (w.status === 'planned') {
         plannedWorkHours += (w.duration_minutes || 0) / 60;
+        const qty = w.material_quantity || 0;
+        const price = w.materials?.default_price || 0;
+        detailedMaterialCost += (qty * price);
       }
     });
 
-    const plannedCost = plannedWorkHours * baseHourlyWage;
+    const plannedLaborCost = plannedWorkHours * baseHourlyWage;
+    const finalMaterialCost = costCalculationMode === 'detailed' ? detailedMaterialCost : estimatedMaterialCost;
+    const plannedCost = plannedLaborCost + finalMaterialCost;
 
     return {
       plannedSales,
       plannedCost,
+      plannedLaborCost,
+      finalMaterialCost,
       plannedProfit: plannedSales - plannedCost,
       plannedWorkHours
     };
-  }, [allSalesLogs, allWorkLogs, baseHourlyWage]);
+  }, [allSalesLogs, allWorkLogs, baseHourlyWage, costCalculationMode, estimatedMaterialCost]);
 
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
@@ -161,6 +178,8 @@ export default function PlansPage() {
     setSelectedFields([]);
     setSelectedWorkType('');
     setPlannedDuration('');
+    setSelectedMaterial('');
+    setPlannedMaterialQuantity('');
     setSelectedChannel('');
     setPlannedQuantity('');
     setManualPrice('');
@@ -213,6 +232,8 @@ export default function PlansPage() {
 
       if (activeTab === 'work') {
         const duration = plannedDuration ? parseInt(plannedDuration, 10) : null;
+        const materialId = materials.find(m => m.name === selectedMaterial)?.id || null;
+        const matQty = plannedMaterialQuantity ? parseFloat(plannedMaterialQuantity) : null;
         
         // 複数日分 × 複数圃場分 を一括作成
         const inserts: any[] = [];
@@ -226,6 +247,8 @@ export default function PlansPage() {
                 work_type: selectedWorkType,
                 work_date: dateStr,
                 duration_minutes: duration,
+                material_id: materialId,
+                material_quantity: matQty,
                 status: 'planned'
               });
             });
@@ -236,6 +259,8 @@ export default function PlansPage() {
               work_type: selectedWorkType,
               work_date: dateStr,
               duration_minutes: duration,
+              material_id: materialId,
+              material_quantity: matQty,
               status: 'planned'
             });
           }
@@ -354,22 +379,59 @@ export default function PlansPage() {
         <div className="absolute bottom-0 right-1/4 w-48 h-48 bg-rose-500/10 rounded-full blur-2xl translate-y-1/2"></div>
         
         <div className="relative z-10">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between mb-6 gap-4">
             <h2 className="text-xl font-black tracking-wider flex items-center gap-2">
               <Calculator className="w-5 h-5 text-amber-400" />
               {currentDate.getMonth() + 1}月の 予測サマリー
             </h2>
-            <div className="flex items-center gap-3 bg-slate-700/50 p-2 pr-4 rounded-xl backdrop-blur-sm border border-slate-600">
-              <span className="text-sm font-bold text-slate-300 pl-2">基準時給</span>
-              <div className="flex items-center gap-1 bg-slate-800 rounded-lg px-3 py-1.5 focus-within:ring-2 focus-within:ring-amber-400 transition-shadow">
-                <span className="text-slate-400 text-sm">¥</span>
-                <input 
-                  type="number" 
-                  value={baseHourlyWage}
-                  onChange={(e) => setBaseHourlyWage(Number(e.target.value) || 0)}
-                  className="bg-transparent w-20 font-black text-white text-right outline-none"
-                />
-                <span className="text-slate-400 text-sm">/h</span>
+            <div className="flex flex-wrap items-center gap-3">
+              {/* コスト算出モード切替 */}
+              <div className="flex items-center gap-1 bg-slate-700/50 p-1 rounded-xl backdrop-blur-sm border border-slate-600">
+                <button
+                  onClick={() => setCostCalculationMode('detailed')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    costCalculationMode === 'detailed' ? 'bg-slate-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-300'
+                  }`}
+                >
+                  詳細入力で計算
+                </button>
+                <button
+                  onClick={() => setCostCalculationMode('estimate')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    costCalculationMode === 'estimate' ? 'bg-slate-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-300'
+                  }`}
+                >
+                  概算金額(手入力)
+                </button>
+              </div>
+              
+              {costCalculationMode === 'estimate' && (
+                <div className="flex items-center gap-2 bg-slate-700/50 px-3 py-1.5 rounded-xl backdrop-blur-sm border border-slate-600">
+                  <span className="text-xs font-bold text-slate-300">概算資材費:</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-400 text-sm">¥</span>
+                    <input 
+                      type="number" 
+                      value={estimatedMaterialCost}
+                      onChange={(e) => setEstimatedMaterialCost(Number(e.target.value) || 0)}
+                      className="bg-slate-800 rounded w-20 px-1 font-black text-white text-right outline-none focus:ring-1 focus:ring-amber-400"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 bg-slate-700/50 px-3 py-1.5 rounded-xl backdrop-blur-sm border border-slate-600">
+                <span className="text-xs font-bold text-slate-300">基準時給:</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-slate-400 text-sm">¥</span>
+                  <input 
+                    type="number" 
+                    value={baseHourlyWage}
+                    onChange={(e) => setBaseHourlyWage(Number(e.target.value) || 0)}
+                    className="bg-slate-800 rounded w-16 px-1 font-black text-white text-right outline-none focus:ring-1 focus:ring-amber-400"
+                  />
+                  <span className="text-slate-400 text-xs">/h</span>
+                </div>
               </div>
             </div>
           </div>
@@ -380,12 +442,24 @@ export default function PlansPage() {
               <div className="text-3xl font-black text-white">¥{monthlySummary.plannedSales.toLocaleString()}</div>
             </div>
             
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10">
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10 relative group">
               <div className="text-sm font-bold text-slate-400 mb-1 flex items-center justify-between">
-                <span>作業コスト予測</span>
-                <span className="text-xs bg-slate-700/50 px-2 py-0.5 rounded text-slate-300">{monthlySummary.plannedWorkHours.toFixed(1)}h</span>
+                <span>総コスト予測</span>
+                <span className="text-[10px] bg-slate-700/50 px-2 py-0.5 rounded text-slate-300">人件費 + 資材費</span>
               </div>
               <div className="text-3xl font-black text-rose-300">¥{monthlySummary.plannedCost.toLocaleString()}</div>
+              
+              {/* コスト内訳ツールチップ */}
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 bg-slate-900 text-white text-xs rounded-xl p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-slate-400">人件費 ({monthlySummary.plannedWorkHours.toFixed(1)}h)</span>
+                  <span className="font-bold">¥{monthlySummary.plannedLaborCost.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center border-t border-slate-700 pt-1">
+                  <span className="text-slate-400">資材費 ({costCalculationMode === 'detailed' ? '詳細' : '概算'})</span>
+                  <span className="font-bold text-purple-300">¥{monthlySummary.finalMaterialCost.toLocaleString()}</span>
+                </div>
+              </div>
             </div>
             
             <div className="bg-gradient-to-br from-amber-500/20 to-orange-500/20 backdrop-blur-md rounded-2xl p-5 border border-amber-500/30 relative overflow-hidden">
@@ -658,6 +732,20 @@ export default function PlansPage() {
                         <div>
                           <label className="block text-xs font-bold text-slate-500 mb-1">予定時間 (分) <span className="text-slate-400 font-normal ml-1">※任意</span></label>
                           <input type="number" value={plannedDuration} onChange={e => setPlannedDuration(e.target.value)} placeholder="空欄でもOK" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg focus:border-emerald-500 focus:outline-none placeholder:font-normal placeholder:text-sm" />
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">使用資材 <span className="text-slate-400 font-normal ml-1">※任意</span></label>
+                          <select value={selectedMaterial} onChange={e => setSelectedMaterial(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:border-emerald-500 focus:outline-none">
+                            <option value="">資材を選択 (空欄可)</option>
+                            {materials.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">予定数量</label>
+                          <input type="number" value={plannedMaterialQuantity} onChange={e => setPlannedMaterialQuantity(e.target.value)} disabled={!selectedMaterial} placeholder={selectedMaterial ? "数量" : "資材を選択"} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg focus:border-emerald-500 focus:outline-none placeholder:font-normal placeholder:text-sm disabled:opacity-50" />
                         </div>
                       </div>
                     </div>
