@@ -323,29 +323,30 @@ export default function WorkLedgerPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {cropsList.map(crop => (
-                  <tr key={crop} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="p-4 text-left font-bold text-slate-800 bg-white sticky left-0 z-10 shadow-[1px_0_0_0_#f1f5f9] whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-indigo-400"></div>
-                        {crop}
-                      </div>
-                    </td>
-                    {workTypesList.map(wt => (
-                      <td key={wt} className="p-4 border-l border-slate-100 font-medium text-slate-600">
-                        {formatValue(tableData[crop]?.[wt] || 0)}
+                {cropsList.map(crop => {
+                  const laborTotal = workTypesList.reduce((sum, wt) => sum + (tableData[crop]?.[wt] || 0), 0);
+                  const materialTotal = materialData[crop] || 0;
+                  const totalCost = laborTotal + materialTotal;
+                  const sales = salesData[crop] || 0;
+                  const profit = sales - totalCost;
+                  
+                  return (
+                    <tr key={crop} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="p-4 text-left font-bold text-slate-800 bg-white sticky left-0 z-10 shadow-[1px_0_0_0_#f1f5f9] whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-indigo-400"></div>
+                          {crop}
+                        </div>
                       </td>
-                    ))}
-                    <td className="p-4 border-l-2 border-indigo-100 font-black text-indigo-600 bg-indigo-50/20">
-                      {formatValue(workTypesList.reduce((sum, wt) => sum + (tableData[crop]?.[wt] || 0), 0))}
-                    </td>
-                    {viewMode === 'totalCost' && (() => {
-                      const laborTotal = workTypesList.reduce((sum, wt) => sum + (tableData[crop]?.[wt] || 0), 0);
-                      const materialTotal = materialData[crop] || 0;
-                      const totalCost = laborTotal + materialTotal;
-                      const sales = salesData[crop] || 0;
-                      const profit = sales - totalCost;
-                      return (
+                      {workTypesList.map(wt => (
+                        <td key={wt} className="p-4 border-l border-slate-100 font-medium text-slate-600">
+                          {formatValue(tableData[crop]?.[wt] || 0)}
+                        </td>
+                      ))}
+                      <td className="p-4 border-l-2 border-indigo-100 font-black text-indigo-600 bg-indigo-50/20">
+                        {formatValue(laborTotal)}
+                      </td>
+                      {viewMode === 'totalCost' && (
                         <>
                           <td className="p-4 border-l border-purple-100 font-black text-purple-600 bg-purple-50/20 relative group cursor-help">
                             <div className="flex items-center justify-end gap-1">
@@ -383,45 +384,47 @@ export default function WorkLedgerPage() {
                             ¥{profit.toLocaleString()}
                           </td>
                         </>
-                      );
-                    })()}
-                  </tr>
-                ))}
+                      )}
+                    </tr>
+                  );
+                })}
                 
                 {/* 総合計行 */}
-                <tr className="bg-slate-100/50 border-t-2 border-slate-200">
-                  <td className="p-4 text-left font-black text-slate-700 sticky left-0 z-10 bg-slate-100 shadow-[1px_0_0_0_#e2e8f0]">
-                    全体 合計
-                  </td>
-                  {workTypesList.map(wt => (
-                    <td key={wt} className="p-4 border-l border-slate-200 font-black text-slate-700">
-                      {formatValue(cropsList.reduce((sum, crop) => sum + (tableData[crop]?.[wt] || 0), 0))}
-                    </td>
-                  ))}
-                  <td className="p-4 border-l-2 border-indigo-200 font-black text-indigo-700 text-lg bg-indigo-100/50">
-                    {formatValue(totals.cost)}
-                  </td>
-                  {viewMode === 'totalCost' && (() => {
-                    const totalCostAll = totals.cost + totals.material;
-                    const profitAll = totals.sales - totalCostAll;
-                    return (
-                      <>
-                        <td className="p-4 border-l border-purple-200 font-black text-purple-700 text-lg bg-purple-100/50">
-                          ¥{totals.material.toLocaleString()}
+                {(() => {
+                  const totalCostAll = totals.cost + totals.material;
+                  const profitAll = totals.sales - totalCostAll;
+                  return (
+                    <tr className="bg-slate-100/50 border-t-2 border-slate-200">
+                      <td className="p-4 text-left font-black text-slate-700 sticky left-0 z-10 bg-slate-100 shadow-[1px_0_0_0_#e2e8f0]">
+                        全体 合計
+                      </td>
+                      {workTypesList.map(wt => (
+                        <td key={wt} className="p-4 border-l border-slate-200 font-black text-slate-700">
+                          {formatValue(cropsList.reduce((sum, crop) => sum + (tableData[crop]?.[wt] || 0), 0))}
                         </td>
-                        <td className="p-4 border-l-2 border-slate-300 font-black text-slate-800 text-lg bg-slate-200/60">
-                          ¥{totalCostAll.toLocaleString()}
-                        </td>
-                        <td className="p-4 border-l border-emerald-200 font-black text-emerald-700 text-lg bg-emerald-100/50">
-                          ¥{totals.sales.toLocaleString()}
-                        </td>
-                        <td className={`p-4 border-l-2 border-amber-300 font-black text-xl bg-amber-100/50 ${profitAll < 0 ? 'text-rose-600' : 'text-amber-700'}`}>
-                          ¥{profitAll.toLocaleString()}
-                        </td>
-                      </>
-                    );
-                  })()}
-                </tr>
+                      ))}
+                      <td className="p-4 border-l-2 border-indigo-200 font-black text-indigo-700 text-lg bg-indigo-100/50">
+                        {formatValue(totals.cost)}
+                      </td>
+                      {viewMode === 'totalCost' && (
+                        <>
+                          <td className="p-4 border-l border-purple-200 font-black text-purple-700 text-lg bg-purple-100/50">
+                            ¥{totals.material.toLocaleString()}
+                          </td>
+                          <td className="p-4 border-l-2 border-slate-300 font-black text-slate-800 text-lg bg-slate-200/60">
+                            ¥{totalCostAll.toLocaleString()}
+                          </td>
+                          <td className="p-4 border-l border-emerald-200 font-black text-emerald-700 text-lg bg-emerald-100/50">
+                            ¥{totals.sales.toLocaleString()}
+                          </td>
+                          <td className={`p-4 border-l-2 border-amber-300 font-black text-xl bg-amber-100/50 ${profitAll < 0 ? 'text-rose-600' : 'text-amber-700'}`}>
+                            ¥{profitAll.toLocaleString()}
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })()}
               </tbody>
             </table>
           </div>

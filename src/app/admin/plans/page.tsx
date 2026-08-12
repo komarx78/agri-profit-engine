@@ -87,7 +87,7 @@ export default function PlansPage() {
     try {
       const [workRes, salesRes] = await Promise.all([
         supabase.from('work_logs')
-          .select('*, crops(name), fields(name)')
+          .select('*, crops(name), fields(name), workers(name)')
           .gte('work_date', startOfMonth)
           .lte('work_date', endOfMonth),
         supabase.from('sales_logs')
