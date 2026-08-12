@@ -16,9 +16,7 @@ const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6', '#14b8a6'
 export default function DashboardPage() {
   // 表示モード (実績のみ or 予定込み)
   const [dataViewMode, setDataViewMode] = useState<'actualOnly' | 'includePlanned'>('actualOnly');
-  // コスト計算モード (詳細 or 概算)
-  const [costMode, setCostMode] = useState<'detailed' | 'estimate'>('estimate');
-  // 概算資材費の割合(%)
+  // 概算資材費の割合(%) - ダッシュボードでは全体のシミュレーションとして概算をベースとする
   const [estimateRate, setEstimateRate] = useState<number>(20);
 
   const [cropData, setCropData] = useState<any[]>([]);
@@ -161,15 +159,12 @@ export default function DashboardPage() {
           }
         });
 
-        // 4. モードに基づく資材費の計算適用
-        const calcMaterialCost = (salesAmt: number, detailedCost: number) => {
-          if (costMode === 'estimate') {
-            return salesAmt * (estimateRate / 100);
-          }
-          return detailedCost;
+        // 4. 資材費の計算適用（ダッシュボードでは全体の経費率として概算を適用）
+        const calcMaterialCost = (salesAmt: number) => {
+          return salesAmt * (estimateRate / 100);
         };
 
-        const finalTotalMaterialCost = calcMaterialCost(totalSales, totalDetailedMaterialCost);
+        const finalTotalMaterialCost = calcMaterialCost(totalSales);
 
         // サマリー設定
         const totalProfit = totalSales - (totalLaborCost + finalTotalMaterialCost);
@@ -188,7 +183,7 @@ export default function DashboardPage() {
           const hours = cropHours[k] / 60;
           const sales = cropSalesMap[k] || 0;
           const laborCost = cropWageMap[k] || 0;
-          const matCost = calcMaterialCost(sales, cropDetailedMaterialMap[k] || 0);
+          const matCost = calcMaterialCost(sales);
           const totalCost = laborCost + matCost;
           const netProfit = sales - totalCost;
           cropNetProfits[k] = netProfit; 
@@ -207,7 +202,7 @@ export default function DashboardPage() {
         const fData = Object.keys(fieldHours).map(k => {
           const sales = fieldSalesMap[k] || 0;
           const laborCost = fieldWageMap[k] || 0;
-          const matCost = calcMaterialCost(sales, fieldDetailedMaterialMap[k] || 0);
+          const matCost = calcMaterialCost(sales);
           const totalCost = laborCost + matCost;
           const netProfit = sales - totalCost;
           return {
@@ -249,7 +244,7 @@ export default function DashboardPage() {
         const mTrendData = Object.keys(monthlyMap).sort().map(monthStr => {
           const sales = monthlyMap[monthStr].売上;
           const labor = monthlyMap[monthStr].人件費;
-          const mat = calcMaterialCost(sales, monthlyMap[monthStr].詳細資材費);
+          const mat = calcMaterialCost(sales);
           const cost = labor + mat;
           const profit = sales - cost;
           
@@ -279,7 +274,7 @@ export default function DashboardPage() {
       }
     }
     fetchData();
-  }, [dataViewMode, costMode, estimateRate]); // 設定が変わったら再フェッチ・再計算
+  }, [dataViewMode, estimateRate]); // 設定が変わったら再フェッチ・再計算
 
   const CustomProfitTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -306,61 +301,70 @@ export default function DashboardPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-16">
       
-      {/* ページヘッダー＆コントロールパネル */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b-2 border-slate-200 pb-6">
-        <div>
-          <h1 className="text-4xl font-black text-slate-800 tracking-tight mb-2">経営ダッシュボード</h1>
-          <p className="text-slate-500 font-medium">作業・売上データから農園の健康状態（P&L）をリアルタイムに可視化します。</p>
-        </div>
-        
-        {/* 設定パネル */}
-        <div className="bg-slate-800 p-3 rounded-2xl shadow-lg border border-slate-700 flex flex-col sm:flex-row items-center gap-4 text-white">
-          <div className="flex items-center gap-2 px-2 border-b sm:border-b-0 sm:border-r border-slate-700 pb-2 sm:pb-0">
-            <Settings2 className="w-5 h-5 text-amber-400" />
-            <span className="text-sm font-bold text-slate-300">集計設定:</span>
+      {/* ページヘッダー＆直感的なコントロールパネル */}
+      <div className="flex flex-col gap-6 border-b-2 border-slate-200 pb-8">
+        <div className="flex justify-between items-end">
+          <div>
+            <h1 className="text-4xl font-black text-slate-800 tracking-tight mb-2">経営ダッシュボード</h1>
+            <p className="text-slate-500 font-medium">作業・売上データから農園の健康状態（P&L）をリアルタイムに可視化します。</p>
           </div>
           
-          <div className="flex items-center gap-2 bg-slate-900/50 p-1 rounded-xl">
+          {/* シンプルな経費率設定 */}
+          <div className="hidden md:flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200">
+            <span className="text-sm font-bold text-slate-600">経費率(資材等)設定:</span>
+            <div className="flex items-center gap-1">
+              <span className="text-slate-400 text-sm">売上の</span>
+              <input 
+                type="number" 
+                value={estimateRate}
+                onChange={(e) => setEstimateRate(Number(e.target.value) || 0)}
+                className="bg-slate-100 rounded-lg w-14 px-2 py-1 text-center font-black text-amber-600 outline-none focus:ring-2 focus:ring-amber-400 transition-shadow"
+              />
+              <span className="text-slate-400 text-sm">%</span>
+            </div>
+          </div>
+        </div>
+        
+        {/* 大きく直感的な「予実切り替え」タブ */}
+        <div className="flex justify-center w-full">
+          <div className="bg-slate-100/80 p-1.5 rounded-2xl flex items-center shadow-inner border border-slate-200/60 max-w-md w-full">
             <button
               onClick={() => setDataViewMode('actualOnly')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${dataViewMode === 'actualOnly' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+              className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all duration-300 flex items-center justify-center gap-2 ${
+                dataViewMode === 'actualOnly' 
+                  ? 'bg-white text-emerald-600 shadow-[0_2px_10px_rgba(0,0,0,0.08)] scale-100' 
+                  : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 scale-95'
+              }`}
             >
-              実績のみ
-            </button>
-            <button
-              onClick={() => setDataViewMode('includePlanned')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${dataViewMode === 'includePlanned' ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              予定＋実績 (着地予想)
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2 bg-slate-900/50 p-1 rounded-xl relative group">
-            <button
-              onClick={() => setCostMode('detailed')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${costMode === 'detailed' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              詳細資材費
-            </button>
-            <button
-              onClick={() => setCostMode('estimate')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${costMode === 'estimate' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              概算資材費
+              <div className={`w-2 h-2 rounded-full ${dataViewMode === 'actualOnly' ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
+              確定した【実績】のみ
             </button>
             
-            {costMode === 'estimate' && (
-              <div className="flex items-center gap-1 ml-1 px-2 py-1 bg-slate-800 rounded-lg border border-slate-700">
-                <span className="text-[10px] text-slate-400">売上の</span>
-                <input 
-                  type="number" 
-                  value={estimateRate}
-                  onChange={(e) => setEstimateRate(Number(e.target.value) || 0)}
-                  className="bg-slate-900 rounded w-10 px-1 py-0.5 text-xs font-black text-amber-400 text-right outline-none focus:ring-1 focus:ring-amber-400"
-                />
-                <span className="text-[10px] text-slate-400">%</span>
-              </div>
-            )}
+            <button
+              onClick={() => setDataViewMode('includePlanned')}
+              className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all duration-300 flex items-center justify-center gap-2 ${
+                dataViewMode === 'includePlanned' 
+                  ? 'bg-white text-amber-600 shadow-[0_2px_10px_rgba(0,0,0,0.08)] scale-100' 
+                  : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 scale-95'
+              }`}
+            >
+              <div className={`w-2 h-2 rounded-full ${dataViewMode === 'includePlanned' ? 'bg-amber-500' : 'bg-slate-300'}`}></div>
+              予定＋実績【予想】
+            </button>
+          </div>
+        </div>
+        
+        {/* モバイル用の経費率設定 (画面が小さい時だけ表示) */}
+        <div className="md:hidden flex items-center justify-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200 w-fit mx-auto">
+          <span className="text-sm font-bold text-slate-600">経費率:</span>
+          <div className="flex items-center gap-1">
+            <input 
+              type="number" 
+              value={estimateRate}
+              onChange={(e) => setEstimateRate(Number(e.target.value) || 0)}
+              className="bg-slate-100 rounded-lg w-14 px-2 py-1 text-center font-black text-amber-600 outline-none"
+            />
+            <span className="text-slate-400 text-sm">%</span>
           </div>
         </div>
       </div>
