@@ -9,26 +9,29 @@ export default function WorkLedgerPage() {
   const [workLogs, setWorkLogs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  // 表示月フィルター (デフォルトは今月)
-  const currentMonth = new Date().toISOString().substring(0, 7);
-  const [targetMonth, setTargetMonth] = useState<string>(currentMonth);
+  // 期間指定フィルター (デフォルトは今月1日〜月末)
+  const today = new Date();
+  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().substring(0, 10);
+  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().substring(0, 10);
+  
+  const [startDate, setStartDate] = useState<string>(firstDay);
+  const [endDate, setEndDate] = useState<string>(lastDay);
   
   // 表示モード (時間 or 人件費 or 資材費 or 総コスト)
   const [viewMode, setViewMode] = useState<'hours' | 'cost' | 'materialCost' | 'totalCost'>('hours');
 
+  const [salesLogs, setSalesLogs] = useState<any[]>([]);
+
   useEffect(() => {
     fetchLogs();
-  }, [targetMonth]);
+  }, [startDate, endDate]);
 
   async function fetchLogs() {
+    if (!startDate || !endDate) return;
     setIsLoading(true);
     try {
-        const startOfMonth = `${targetMonth}-01`;
-        // 簡単のため31日を月末とする（PostgreSQLのdate型なら、存在しない日でもその月の範囲まで検索可能）
-        const endOfMonth = `${targetMonth}-31`;
-
-      // 指定月のデータを取得
-      const { data, error } = await supabase
+      // 作業実績の取得
+      const { data: workData, error: workError } = await supabase
         .from('work_logs')
         .select(`
           id,
@@ -40,12 +43,29 @@ export default function WorkLedgerPage() {
           material_quantity,
           materials(name, default_price)
         `)
-        .gte('work_date', startOfMonth)
-        .lte('work_date', endOfMonth)
-        .eq('status', 'completed'); // 実績のみ
+        .gte('work_date', startDate)
+        .lte('work_date', endDate)
+        .eq('status', 'completed');
 
-      if (error) throw error;
-      setWorkLogs(data || []);
+      if (workError) throw workError;
+      
+      // 売上実績の取得
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales_logs')
+        .select(`
+          id,
+          sales_date,
+          total_sales,
+          crops(name)
+        `)
+        .gte('sales_date', startDate)
+        .lte('sales_date', endDate)
+        .eq('status', 'completed');
+
+      if (salesError) throw salesError;
+      
+      setWorkLogs(workData || []);
+      setSalesLogs(salesData || []);
     } catch (err) {
       console.error(err);
       alert('データの取得に失敗しました');
@@ -55,14 +75,14 @@ export default function WorkLedgerPage() {
   }
 
   // クロス集計データの生成
-  const { tableData, cropsList, workTypesList } = useMemo(() => {
-    // 存在する作目と作業内容のユニークリストを抽出
+  const { tableData, salesData, cropsList, workTypesList, totals } = useMemo(() => {
     const cropsSet = new Set<string>();
     const workTypesSet = new Set<string>();
     
-    // 集計用マップ: crop -> workType -> value(時間 or 金額)
     const pivotMap: Record<string, Record<string, number>> = {};
-    let grandTotal = 0;
+    const salesMap: Record<string, number> = {};
+    let grandTotalCost = 0;
+    let grandTotalSales = 0;
 
     workLogs.forEach(log => {
       const cropName = log.crops?.name || '作目未指定';
@@ -87,19 +107,28 @@ export default function WorkLedgerPage() {
       else if (viewMode === 'totalCost') value = laborCost + materialCost;
 
       pivotMap[cropName][workType] = (pivotMap[cropName][workType] || 0) + value;
-      grandTotal += value;
+      grandTotalCost += value;
+    });
+
+    salesLogs.forEach(log => {
+      const cropName = log.crops?.name || '作目未指定';
+      cropsSet.add(cropName);
+      const salesAmount = log.total_sales || 0;
+      salesMap[cropName] = (salesMap[cropName] || 0) + salesAmount;
+      grandTotalSales += salesAmount;
     });
 
     const cropsArray = Array.from(cropsSet).sort();
     const workTypesArray = Array.from(workTypesSet).sort();
 
     return { 
-      tableData: pivotMap, 
+      tableData: pivotMap,
+      salesData: salesMap,
       cropsList: cropsArray, 
       workTypesList: workTypesArray,
-      grandTotal
+      totals: { cost: grandTotalCost, sales: grandTotalSales }
     };
-  }, [workLogs, viewMode]);
+  }, [workLogs, salesLogs, viewMode]);
 
   const handleExportCSV = () => {
     if (cropsList.length === 0) return;
@@ -109,7 +138,13 @@ export default function WorkLedgerPage() {
       workTypesList.forEach(wt => {
         row[wt] = Math.round(tableData[crop]?.[wt] || 0);
       });
-      row['合計'] = Math.round(workTypesList.reduce((sum, wt) => sum + (tableData[crop]?.[wt] || 0), 0));
+      const rowCost = workTypesList.reduce((sum, wt) => sum + (tableData[crop]?.[wt] || 0), 0);
+      row['費用合計'] = Math.round(rowCost);
+      if (viewMode === 'totalCost') {
+        const sales = salesData[crop] || 0;
+        row['売上実績'] = sales;
+        row['粗利'] = sales - rowCost;
+      }
       return row;
     });
 
@@ -118,7 +153,7 @@ export default function WorkLedgerPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `作業台帳_${targetMonth}_${viewMode === 'hours' ? '時間' : '人件費'}.csv`;
+    a.download = `経営分析_${startDate}_${endDate}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -138,9 +173,9 @@ export default function WorkLedgerPage() {
         <div>
           <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
             <Table className="w-8 h-8 text-indigo-500" />
-            作業内容台帳 (クロス集計)
+            経営分析 (作目別 期間集計)
           </h1>
-          <p className="text-slate-500 mt-2 font-medium">作目と作業内容の掛け合わせで、何にどれくらいコスト（時間・人件費）がかかっているかを分析します。</p>
+          <p className="text-slate-500 mt-2 font-medium">任意の期間を指定して、作目ごとのトータルコストと最終的な売上・粗利を分析します。</p>
         </div>
       </div>
 
@@ -148,13 +183,20 @@ export default function WorkLedgerPage() {
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-6">
         <div className="flex items-center gap-3">
           <label className="text-slate-500 font-bold flex items-center gap-2">
-            <CalendarIcon className="w-5 h-5" /> 対象月:
+            <CalendarIcon className="w-5 h-5" /> 対象期間:
           </label>
           <input
-            type="month"
-            value={targetMonth}
-            onChange={(e) => setTargetMonth(e.target.value)}
-            className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-indigo-500"
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-indigo-500"
+          />
+          <span className="text-slate-400 font-bold">〜</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-indigo-500"
           />
         </div>
 
@@ -215,7 +257,7 @@ export default function WorkLedgerPage() {
           </div>
         ) : cropsList.length === 0 ? (
           <div className="p-12 text-center text-slate-400 font-bold">
-            指定した月の実績データがありません。
+            指定した期間の実績データがありません。
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -231,8 +273,18 @@ export default function WorkLedgerPage() {
                     </th>
                   ))}
                   <th className="bg-indigo-50/50 p-4 border-b border-l-2 border-indigo-200 font-black text-indigo-800 whitespace-nowrap">
-                    作目別 合計
+                    作目別 費用計
                   </th>
+                  {viewMode === 'totalCost' && (
+                    <>
+                      <th className="bg-emerald-50/50 p-4 border-b border-l border-emerald-200 font-black text-emerald-800 whitespace-nowrap">
+                        売上実績
+                      </th>
+                      <th className="bg-amber-50/50 p-4 border-b border-l-2 border-amber-200 font-black text-amber-800 whitespace-nowrap">
+                        粗利 (売上 - 費用)
+                      </th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -252,13 +304,23 @@ export default function WorkLedgerPage() {
                     <td className="p-4 border-l-2 border-indigo-100 font-black text-indigo-600 bg-indigo-50/20">
                       {formatValue(workTypesList.reduce((sum, wt) => sum + (tableData[crop]?.[wt] || 0), 0))}
                     </td>
+                    {viewMode === 'totalCost' && (
+                      <>
+                        <td className="p-4 border-l border-emerald-100 font-black text-emerald-600 bg-emerald-50/20">
+                          ¥{(salesData[crop] || 0).toLocaleString()}
+                        </td>
+                        <td className={`p-4 border-l-2 border-amber-200 font-black text-lg bg-amber-50/20 ${(salesData[crop] || 0) - workTypesList.reduce((sum, wt) => sum + (tableData[crop]?.[wt] || 0), 0) < 0 ? 'text-rose-600' : 'text-amber-600'}`}>
+                          ¥{((salesData[crop] || 0) - workTypesList.reduce((sum, wt) => sum + (tableData[crop]?.[wt] || 0), 0)).toLocaleString()}
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
                 
                 {/* 総合計行 */}
                 <tr className="bg-slate-100/50 border-t-2 border-slate-200">
                   <td className="p-4 text-left font-black text-slate-700 sticky left-0 z-10 bg-slate-100 shadow-[1px_0_0_0_#e2e8f0]">
-                    作業別 合計
+                    全体 合計
                   </td>
                   {workTypesList.map(wt => (
                     <td key={wt} className="p-4 border-l border-slate-200 font-black text-slate-700">
@@ -266,12 +328,18 @@ export default function WorkLedgerPage() {
                     </td>
                   ))}
                   <td className="p-4 border-l-2 border-indigo-200 font-black text-indigo-700 text-lg bg-indigo-100/50">
-                    {formatValue(
-                      cropsList.reduce((total, crop) => 
-                        total + workTypesList.reduce((sum, wt) => sum + (tableData[crop]?.[wt] || 0), 0), 
-                      0)
-                    )}
+                    {formatValue(totals.cost)}
                   </td>
+                  {viewMode === 'totalCost' && (
+                    <>
+                      <td className="p-4 border-l border-emerald-200 font-black text-emerald-700 text-lg bg-emerald-100/50">
+                        ¥{totals.sales.toLocaleString()}
+                      </td>
+                      <td className={`p-4 border-l-2 border-amber-300 font-black text-xl bg-amber-100/50 ${totals.sales - totals.cost < 0 ? 'text-rose-600' : 'text-amber-700'}`}>
+                        ¥{(totals.sales - totals.cost).toLocaleString()}
+                      </td>
+                    </>
+                  )}
                 </tr>
               </tbody>
             </table>

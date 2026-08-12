@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Calendar, Sprout, Store, Calculator, CheckCircle2, Clock, Truck, MapPin, Loader2, Target, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react';
+import { Calendar, Sprout, Store, Calculator, CheckCircle2, Clock, Truck, MapPin, Loader2, Target, ChevronLeft, ChevronRight, Plus, X, User, FileText, Image as ImageIcon } from 'lucide-react';
 
 export default function PlansPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -30,6 +30,7 @@ export default function PlansPage() {
   // モーダルステート
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'work' | 'sales'>('work');
+  const [selectedLogDetail, setSelectedLogDetail] = useState<any | null>(null);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [selectedCrop, setSelectedCrop] = useState<string>('');
@@ -106,6 +107,12 @@ export default function PlansPage() {
     }
     return days;
   }, [currentDate]);
+
+  const formatTime = (dateString: string) => {
+    if (!dateString) return '-';
+    const d = new Date(dateString);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
 
   // 月間サマリーの計算
   const monthlySummary = useMemo(() => {
@@ -476,13 +483,13 @@ export default function PlansPage() {
                         <div className="flex flex-col gap-1 w-full relative z-0">
                           {/* 作業：予定 (薄い枠線) */}
                           {(ganttFilter === 'all' || ganttFilter === 'workOnly') && plannedWorks.map((w, idx) => (
-                            <div key={`pw-${idx}`} className="bg-emerald-50 border border-emerald-300 border-dashed text-emerald-600 text-[10px] font-bold px-1 py-0.5 rounded truncate" title={`[予定] ${w.crops?.name || '不明'} - ${w.work_type} ${w.duration_minutes ? `(${w.duration_minutes}分)` : ''}`}>
+                            <div key={`pw-${idx}`} onClick={(e) => { e.stopPropagation(); setSelectedLogDetail(w); }} className="bg-emerald-50 border border-emerald-300 border-dashed text-emerald-600 text-[10px] font-bold px-1 py-0.5 rounded truncate cursor-pointer hover:bg-emerald-100" title={`[予定] ${w.crops?.name || '不明'} - ${w.work_type} ${w.duration_minutes ? `(${w.duration_minutes}分)` : ''}`}>
                               予:{ganttViewMode === 'byField' ? `${w.crops?.name || '?'}/` : ''}{w.work_type.substring(0, 2)}
                             </div>
                           ))}
                           {/* 作業：実績 (濃いベタ塗り) */}
                           {(ganttFilter === 'all' || ganttFilter === 'workOnly') && actualWorks.map((w, idx) => (
-                            <div key={`aw-${idx}`} className="bg-emerald-500 border border-emerald-600 text-white shadow-sm text-[10px] font-bold px-1 py-0.5 rounded truncate" title={`[実績] ${w.crops?.name || '不明'} - ${w.work_type} (${w.duration_minutes || 0}分)`}>
+                            <div key={`aw-${idx}`} onClick={(e) => { e.stopPropagation(); setSelectedLogDetail(w); }} className="bg-emerald-500 border border-emerald-600 text-white shadow-sm text-[10px] font-bold px-1 py-0.5 rounded truncate cursor-pointer hover:bg-emerald-400" title={`[実績] ${w.crops?.name || '不明'} - ${w.work_type} (${w.duration_minutes || 0}分)`}>
                               実:{ganttViewMode === 'byField' ? `${w.crops?.name || '?'}/` : ''}{w.work_type.substring(0, 2)}
                             </div>
                           ))}
@@ -651,6 +658,89 @@ export default function PlansPage() {
                   {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : '登録する'}
                 </button>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 詳細確認モーダル */}
+      {selectedLogDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setSelectedLogDetail(null)}>
+          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white/80 backdrop-blur-md px-6 py-4 border-b border-slate-100 flex items-center justify-between z-10">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-lg ${selectedLogDetail.status === 'planned' ? 'bg-emerald-50 border border-emerald-200 text-emerald-500' : 'bg-emerald-100 text-emerald-700'}`}>
+                  {(selectedLogDetail.workers?.name || '?').slice(0, 1)}
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
+                    {selectedLogDetail.workers?.name || '担当者未定'} の作業{selectedLogDetail.status === 'planned' ? '予定' : '記録'}
+                    {selectedLogDetail.status === 'planned' && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-bold">予定</span>}
+                  </h3>
+                  <p className="text-sm font-bold text-slate-500">
+                    {selectedLogDetail.work_date} 
+                    {selectedLogDetail.start_time && ` ${formatTime(selectedLogDetail.start_time)} ~ ${formatTime(selectedLogDetail.end_time)}`}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedLogDetail(null)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-full transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-8">
+              {/* 基本情報 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-50 p-4 rounded-2xl">
+                  <span className="text-xs font-bold text-slate-400 block mb-1">作目 / 圃場</span>
+                  <div className="font-black text-slate-700 text-lg">{selectedLogDetail.crops?.name || '不明'}</div>
+                  <div className="text-sm font-medium text-slate-500">{selectedLogDetail.fields?.name || '-'}</div>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-2xl">
+                  <span className="text-xs font-bold text-slate-400 block mb-1">作業内容</span>
+                  <div className="font-black text-slate-700 text-lg">{selectedLogDetail.work_type}</div>
+                  <div className="text-sm font-bold text-emerald-600">
+                    {selectedLogDetail.duration_minutes ? `${selectedLogDetail.duration_minutes} 分` : '-'}
+                  </div>
+                </div>
+              </div>
+              
+              {/* 資材 */}
+              {selectedLogDetail.material_quantity && (
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <Sprout className="w-4 h-4 text-purple-500" /> 使用資材・農薬等
+                  </h4>
+                  <div className="p-5 bg-purple-50 border border-purple-100 rounded-2xl">
+                    <div className="font-bold text-purple-700">{selectedLogDetail.materials?.name || '不明'}</div>
+                    <div className="text-sm text-purple-600 mt-1">使用量: {selectedLogDetail.material_quantity}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* 写真 */}
+              {selectedLogDetail.photo_url && (
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-emerald-500" /> 添付写真
+                  </h4>
+                  <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-100">
+                    <img src={selectedLogDetail.photo_url} alt="作業写真" className="w-full h-auto object-contain max-h-96" />
+                  </div>
+                </div>
+              )}
+
+              {/* メモ */}
+              {selectedLogDetail.memo && (
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-emerald-500" /> 作業メモ
+                  </h4>
+                  <div className="p-5 bg-emerald-50/50 border border-emerald-100 rounded-2xl text-slate-700 whitespace-pre-wrap leading-relaxed">
+                    {selectedLogDetail.memo}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
