@@ -47,6 +47,11 @@ export default function PlansPage() {
   const [selectedChannel, setSelectedChannel] = useState<string>('');
   const [plannedQuantity, setPlannedQuantity] = useState<string>('');
   const [manualPrice, setManualPrice] = useState<string>('');
+  
+  // 動画マニュアル・プレミアムプラン用ステート
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [userPlanType, setUserPlanType] = useState<'standard' | 'premium'>('standard');
 
   useEffect(() => {
     fetchMasters();
@@ -67,12 +72,13 @@ export default function PlansPage() {
 
   async function fetchMasters() {
     try {
-      const [cRes, fRes, chRes, spRes, mRes] = await Promise.all([
+      const [cRes, fRes, chRes, spRes, mRes, settingsRes] = await Promise.all([
         supabase.from('crops').select('id, name'),
         supabase.from('fields').select('id, name'),
         supabase.from('sales_channels').select('id, name'),
         supabase.from('sales_prices').select('*'),
-        supabase.from('materials').select('id, name, default_price')
+        supabase.from('materials').select('id, name, default_price'),
+        supabase.from('company_settings').select('plan_type').limit(1).single()
       ]);
 
       if (cRes.data) setCrops(cRes.data);
@@ -80,6 +86,7 @@ export default function PlansPage() {
       if (chRes.data) setChannels(chRes.data);
       if (spRes.data) setSalesPrices(spRes.data);
       if (mRes.data) setMaterials(mRes.data);
+      if (settingsRes.data?.plan_type) setUserPlanType(settingsRes.data.plan_type as 'standard'|'premium');
     } catch (err) {
       console.error(err);
     }
@@ -185,6 +192,7 @@ export default function PlansPage() {
     setSelectedChannel('');
     setPlannedQuantity('');
     setManualPrice('');
+    setVideoFile(null);
     setIsModalOpen(true);
   };
 
@@ -237,6 +245,25 @@ export default function PlansPage() {
         const materialId = materials.find(m => m.name === selectedMaterial)?.id || null;
         const matQty = plannedMaterialQuantity ? parseFloat(plannedMaterialQuantity) : null;
         
+        // 動画のアップロード処理
+        let uploadedVideoUrl = null;
+        if (videoFile && userPlanType === 'premium') {
+          setIsUploadingVideo(true);
+          const { data: userData } = await supabase.auth.getUser();
+          if (!userData.user) throw new Error("認証エラー");
+          
+          const fileExt = videoFile.name.split('.').pop();
+          const fileName = `${userData.user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from('work_videos')
+            .upload(fileName, videoFile, { cacheControl: '31536000', upsert: false });
+            
+          if (uploadError) throw new Error('動画のアップロードに失敗しました。');
+          uploadedVideoUrl = fileName;
+          setIsUploadingVideo(false);
+        }
+        
         // 複数日分 × 複数圃場分 を一括作成
         const inserts: any[] = [];
         datesToInsert.forEach(dateStr => {
@@ -251,7 +278,8 @@ export default function PlansPage() {
                 duration_minutes: duration,
                 material_id: materialId,
                 material_quantity: matQty,
-                status: 'planned'
+                status: 'planned',
+                video_url: uploadedVideoUrl
               });
             });
           } else {
@@ -263,7 +291,8 @@ export default function PlansPage() {
               duration_minutes: duration,
               material_id: materialId,
               material_quantity: matQty,
-              status: 'planned'
+              status: 'planned',
+              video_url: uploadedVideoUrl
             });
           }
         });
@@ -290,15 +319,16 @@ export default function PlansPage() {
         if (error) throw error;
       }
 
-      setMessage({ text: '予定を登録しました！', type: 'success' });
+      setMessage({ text: '保存に成功しました！', type: 'success' });
       fetchPlans();
       setTimeout(() => {
-        setMessage(null);
         setIsModalOpen(false);
+        setVideoFile(null);
       }, 1500);
     } catch (err: any) {
       console.error(err);
-      setMessage({ text: 'エラー: ' + (err.message || '不明なエラーが発生しました'), type: 'error' });
+      setMessage({ text: err.message || '保存に失敗しました。', type: 'error' });
+      setIsUploadingVideo(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -814,6 +844,42 @@ export default function PlansPage() {
                           <label className="block text-xs font-bold text-slate-500 mb-1">予定数量</label>
                           <input type="number" value={plannedMaterialQuantity} onChange={e => setPlannedMaterialQuantity(e.target.value)} disabled={!selectedMaterial} placeholder={selectedMaterial ? "数量" : "資材を選択"} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg focus:border-emerald-500 focus:outline-none placeholder:font-normal placeholder:text-sm disabled:opacity-50" />
                         </div>
+                      </div>
+
+                      {/* 動画アップロード (Premium限定) */}
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <label className="block text-xs font-bold text-slate-500 mb-2">📹 マニュアル動画を添付 (Premium限定)</label>
+                        {userPlanType === 'premium' ? (
+                          <div className="flex flex-col gap-2">
+                            <input 
+                              type="file" 
+                              accept="video/mp4,video/quicktime,video/webm" 
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file && file.size > 50 * 1024 * 1024) {
+                                  alert('動画のサイズは50MB以下にしてください。');
+                                  e.target.value = '';
+                                  setVideoFile(null);
+                                } else {
+                                  setVideoFile(file || null);
+                                }
+                              }}
+                              className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+                            />
+                            <p className="text-[10px] text-slate-400">※最大50MBまで。記録と同時に「動画マニュアル集」に追加されます。</p>
+                            {isUploadingVideo && <p className="text-xs text-emerald-600 font-bold animate-pulse">動画をアップロード中...</p>}
+                          </div>
+                        ) : (
+                          <div className="bg-slate-200/50 rounded-lg p-4 text-center border border-slate-200 relative overflow-hidden">
+                            <div className="flex items-center justify-center gap-2 text-slate-500 font-bold text-sm mb-1">
+                              <Lock className="w-4 h-4" />
+                              プレミアムプラン限定機能
+                            </div>
+                            <p className="text-xs text-slate-400">新人教育用の動画マニュアルを添付・共有できます</p>
+                            {/* モック用: クリックで強制的にPremiumにする裏技（本番では消す） */}
+                            <button type="button" onClick={() => setUserPlanType('premium')} className="absolute inset-0 w-full h-full opacity-0 cursor-help" title="クリックでテスト用にPremiumに切り替え"></button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </>

@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Database, LogOut, Sprout, History, Menu, FileSpreadsheet, Truck, FileText, Settings, Store, Copy, Check, Table, Target, Receipt } from 'lucide-react';
+import { LayoutDashboard, Database, LogOut, Sprout, History, Menu, FileSpreadsheet, Truck, FileText, Settings, Store, Copy, Check, Table, Target, Receipt, Youtube } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 
 export default function AdminLayout({
@@ -63,6 +63,7 @@ export default function AdminLayout({
       items: [
         { name: '作業記録一覧', path: '/admin/history', icon: History },
         { name: '作業内容台帳 (集計)', path: '/admin/work-ledger', icon: Table },
+        { name: '動画マニュアル集', path: '/admin/manuals', icon: Youtube }, // lucide-reactのYoutubeまたはPlayCircleを使うがインポートを確認
       ]
     },
     {
