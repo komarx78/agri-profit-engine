@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Database, LogOut, Sprout, History, Menu, FileSpreadsheet, Truck, FileText, Settings, Store, Copy, Check, Table, Target } from 'lucide-react';
+import { LayoutDashboard, Database, LogOut, Sprout, History, Menu, FileSpreadsheet, Truck, FileText, Settings, Store, Copy, Check, Table, Target, Receipt } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 
 export default function AdminLayout({
@@ -50,10 +50,11 @@ export default function AdminLayout({
       ]
     },
     {
-      title: '売上・請求管理',
+      title: '売上・経費管理',
       items: [
         { name: '出荷記録一覧', path: '/admin/sales-history', icon: Truck },
         { name: '請求書一括発行', path: '/admin/invoices', icon: FileText },
+        { name: '資材・経費管理', path: '/admin/purchases', icon: Receipt },
         { name: '会計データ出力', path: '/admin/accounting', icon: FileSpreadsheet },
       ]
     },
