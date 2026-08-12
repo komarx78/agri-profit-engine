@@ -471,7 +471,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
             <h2 className="text-2xl font-black text-white">記録完了！</h2>
             <p className="text-sm text-emerald-200">お疲れ様でした！🌱</p>
           </div>
-        ) : (
+        ) : inputMode !== 'manuals' ? (
           <form onSubmit={inputMode === 'timer' ? handleStartWork : handleManualSubmit} className="space-y-6">
             
             {errorMsg && (
