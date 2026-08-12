@@ -46,7 +46,7 @@ export default function AdminLayout({
       title: 'メイン',
       items: [
         { name: 'ダッシュボード', path: '/admin/dashboard', icon: LayoutDashboard },
-        { name: '作業予定と実績 (予実)', path: '/admin/plans', icon: Target },
+        { name: '予実管理', path: '/admin/plans', icon: Target },
       ]
     },
     {
@@ -97,8 +97,8 @@ export default function AdminLayout({
                       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                   }`}
                 >
-                  <Icon className="w-5 h-5" />
-                  {item.name}
+                  <Icon className="w-5 h-5 flex-shrink-0" />
+                  <span className="truncate">{item.name}</span>
                 </Link>
               );
             })}
