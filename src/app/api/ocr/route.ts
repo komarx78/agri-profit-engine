@@ -29,8 +29,8 @@ export async function POST(req: Request) {
     // Base64プレフィックス（data:image/jpeg;base64, など）を削除
     const base64Data = imageBase64.replace(/^data:image\/(png|jpeg|jpg);base64,/, '');
 
-    // ユーザー様ご指定の最新モデル（Gemini 2.5 Flash）を使用
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    // 2026年の最新モデル（Gemini 3.5 Flash）を使用
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
     const prompt = `
 あなたは優秀な経理アシスタントです。添付されたレシートまたは領収書の画像を読み取り、以下の情報を抽出してJSON形式のみで出力してください。
