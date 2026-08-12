@@ -82,6 +82,7 @@ export default function WorkLedgerPage() {
     const pivotMap: Record<string, Record<string, number>> = {};
     const salesMap: Record<string, number> = {};
     const materialMap: Record<string, number> = {};
+    const materialDetailsMap: Record<string, { name: string, qty: number, cost: number }[]> = {};
     
     let grandTotalCost = 0; // 作業費（人件費など）
     let grandTotalMaterial = 0; // 資材費
@@ -111,8 +112,24 @@ export default function WorkLedgerPage() {
       pivotMap[cropName][workType] = (pivotMap[cropName][workType] || 0) + value;
       grandTotalCost += value;
       
-      materialMap[cropName] = (materialMap[cropName] || 0) + materialCost;
-      grandTotalMaterial += materialCost;
+      if (materialCost > 0) {
+        materialMap[cropName] = (materialMap[cropName] || 0) + materialCost;
+        grandTotalMaterial += materialCost;
+
+        if (!materialDetailsMap[cropName]) materialDetailsMap[cropName] = [];
+        // 同じ資材があればまとめる
+        const existingMaterial = materialDetailsMap[cropName].find(m => m.name === log.materials?.name);
+        if (existingMaterial) {
+          existingMaterial.qty += materialQty;
+          existingMaterial.cost += materialCost;
+        } else {
+          materialDetailsMap[cropName].push({
+            name: log.materials?.name || '不明',
+            qty: materialQty,
+            cost: materialCost
+          });
+        }
+      }
     });
 
     salesLogs.forEach(log => {
@@ -130,6 +147,7 @@ export default function WorkLedgerPage() {
       tableData: pivotMap,
       salesData: salesMap,
       materialData: materialMap,
+      materialDetailsData: materialDetailsMap,
       cropsList: cropsArray, 
       workTypesList: workTypesArray,
       totals: { cost: grandTotalCost, material: grandTotalMaterial, sales: grandTotalSales }
@@ -307,7 +325,7 @@ export default function WorkLedgerPage() {
               <tbody className="divide-y divide-slate-100">
                 {cropsList.map(crop => (
                   <tr key={crop} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="p-4 text-left font-bold text-slate-800 bg-white sticky left-0 z-10 shadow-[1px_0_0_0_#f1f5f9]">
+                    <td className="p-4 text-left font-bold text-slate-800 bg-white sticky left-0 z-10 shadow-[1px_0_0_0_#f1f5f9] whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-indigo-400"></div>
                         {crop}
@@ -329,8 +347,31 @@ export default function WorkLedgerPage() {
                       const profit = sales - totalCost;
                       return (
                         <>
-                          <td className="p-4 border-l border-purple-100 font-black text-purple-600 bg-purple-50/20">
-                            ¥{materialTotal.toLocaleString()}
+                          <td className="p-4 border-l border-purple-100 font-black text-purple-600 bg-purple-50/20 relative group cursor-help">
+                            <div className="flex items-center justify-end gap-1">
+                              ¥{materialTotal.toLocaleString()}
+                              {materialDetailsData[crop]?.length > 0 && (
+                                <div className="w-4 h-4 rounded-full bg-purple-200 text-purple-700 flex items-center justify-center text-[10px] opacity-70 group-hover:opacity-100">i</div>
+                              )}
+                            </div>
+                            
+                            {/* 内訳ツールチップ */}
+                            {materialDetailsData[crop]?.length > 0 && (
+                              <div className="absolute z-50 bottom-full right-0 mb-2 w-56 bg-slate-800 text-white text-xs rounded-xl p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+                                <div className="font-bold border-b border-slate-600 pb-2 mb-2 text-center flex items-center justify-center gap-1">
+                                  資材費の内訳
+                                </div>
+                                <div className="space-y-1.5">
+                                  {materialDetailsData[crop].map((m, idx) => (
+                                    <div key={idx} className="flex justify-between items-center bg-slate-700/50 rounded px-2 py-1">
+                                      <span className="truncate pr-2 font-medium text-slate-200">{m.name} <span className="text-[10px] text-slate-400">({m.qty})</span></span>
+                                      <span className="font-black text-purple-300">¥{m.cost.toLocaleString()}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="absolute -bottom-1.5 right-6 border-4 border-transparent border-t-slate-800"></div>
+                              </div>
+                            )}
                           </td>
                           <td className="p-4 border-l-2 border-slate-200 font-black text-slate-700 bg-slate-100/80">
                             ¥{totalCost.toLocaleString()}
