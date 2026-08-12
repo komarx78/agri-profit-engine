@@ -26,8 +26,8 @@ export default function PlansPage() {
   const [ganttFilter, setGanttFilter] = useState<'all' | 'workOnly' | 'salesOnly'>('all');
   
   // 資材コスト算出モード
-  const [costCalculationMode, setCostCalculationMode] = useState<'detailed' | 'estimate'>('detailed');
-  const [estimatedMaterialCost, setEstimatedMaterialCost] = useState<number>(50000); // 概算資材費用の手入力
+  const [costCalculationMode, setCostCalculationMode] = useState<'detailed' | 'estimate'>('estimate');
+  const [estimateCostRate, setEstimateCostRate] = useState<number>(20); // 概算資材費の割合(%) 初期値20%
   
   // 基準時給 (ダッシュボード・シミュレーション用)
   const [baseHourlyWage, setBaseHourlyWage] = useState<number>(1000);
@@ -155,6 +155,7 @@ export default function PlansPage() {
     });
 
     const plannedLaborCost = plannedWorkHours * baseHourlyWage;
+    const estimatedMaterialCost = Math.round(plannedSales * (estimateCostRate / 100));
     const finalMaterialCost = costCalculationMode === 'detailed' ? detailedMaterialCost : estimatedMaterialCost;
     const plannedCost = plannedLaborCost + finalMaterialCost;
 
@@ -163,10 +164,11 @@ export default function PlansPage() {
       plannedCost,
       plannedLaborCost,
       finalMaterialCost,
+      estimatedMaterialCost,
       plannedProfit: plannedSales - plannedCost,
       plannedWorkHours
     };
-  }, [allSalesLogs, allWorkLogs, baseHourlyWage, costCalculationMode, estimatedMaterialCost]);
+  }, [allSalesLogs, allWorkLogs, baseHourlyWage, costCalculationMode, estimateCostRate]);
 
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
@@ -351,6 +353,20 @@ export default function PlansPage() {
     };
   };
 
+  // 行（作目または圃場）ごとの月間売上合計を計算
+  const getRowSalesTotals = (itemId: string) => {
+    let sales: any[] = [];
+    if (ganttViewMode === 'byCrop') {
+      sales = allSalesLogs.filter(s => s.crop_id === itemId);
+    } else {
+      const cropIdsInField = Array.from(new Set(allWorkLogs.filter(w => w.field_id === itemId).map(w => w.crop_id).filter(Boolean)));
+      sales = allSalesLogs.filter(s => cropIdsInField.includes(s.crop_id));
+    }
+    const plannedSalesTotal = sales.filter(s => s.status === 'planned').reduce((sum, s) => sum + (s.total_sales || 0), 0);
+    const actualSalesTotal = sales.filter(s => s.status === 'completed').reduce((sum, s) => sum + (s.total_sales || 0), 0);
+    return { plannedSalesTotal, actualSalesTotal };
+  };
+
   const rowItems = ganttViewMode === 'byCrop' ? crops : fields;
 
   return (
@@ -407,16 +423,17 @@ export default function PlansPage() {
               
               {costCalculationMode === 'estimate' && (
                 <div className="flex items-center gap-2 bg-slate-700/50 px-3 py-1.5 rounded-xl backdrop-blur-sm border border-slate-600">
-                  <span className="text-xs font-bold text-slate-300">概算資材費:</span>
+                  <span className="text-xs font-bold text-slate-300">売上の</span>
                   <div className="flex items-center gap-1">
-                    <span className="text-slate-400 text-sm">¥</span>
                     <input 
                       type="number" 
-                      value={estimatedMaterialCost}
-                      onChange={(e) => setEstimatedMaterialCost(Number(e.target.value) || 0)}
-                      className="bg-slate-800 rounded w-20 px-1 font-black text-white text-right outline-none focus:ring-1 focus:ring-amber-400"
+                      value={estimateCostRate}
+                      onChange={(e) => setEstimateCostRate(Number(e.target.value) || 0)}
+                      className="bg-slate-800 rounded w-12 px-1 font-black text-amber-400 text-right outline-none focus:ring-1 focus:ring-amber-400"
                     />
+                    <span className="text-slate-400 text-sm">%</span>
                   </div>
+                  <span className="text-[10px] text-slate-400 ml-1">(¥{monthlySummary.estimatedMaterialCost.toLocaleString()})</span>
                 </div>
               )}
 
@@ -545,13 +562,13 @@ export default function PlansPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            {/* 動的グリッドカラム: 120px(作目) + (日数分 x 55px) */}
+            {/* 動的グリッドカラム: 120px(作目) + (日数分 x 55px) + 160px(合計) */}
             <div 
               className="min-w-max"
-              style={{ display: 'grid', gridTemplateColumns: `120px repeat(${daysInMonth.length}, minmax(55px, 1fr))` }}
+              style={{ display: 'grid', gridTemplateColumns: `120px repeat(${daysInMonth.length}, minmax(55px, 1fr)) 160px` }}
             >
               {/* ヘッダー行 */}
-              <div className="sticky left-0 z-10 bg-slate-100 border-r border-b border-slate-200 p-3 font-bold text-slate-600 text-sm flex items-center justify-center">
+              <div className="sticky left-0 z-20 bg-slate-100 border-r border-b border-slate-200 p-3 font-bold text-slate-600 text-sm flex items-center justify-center">
                 {ganttViewMode === 'byCrop' ? '作目' : '圃場'}
               </div>
               {daysInMonth.map((d, i) => {
@@ -563,6 +580,10 @@ export default function PlansPage() {
                   </div>
                 );
               })}
+              {/* 合計カラムヘッダー */}
+              <div className="sticky right-0 z-20 bg-amber-50/90 backdrop-blur border-l border-b border-amber-200 p-2 text-center font-black text-amber-800 text-xs shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)] flex flex-col justify-center">
+                当月売上合計
+              </div>
 
               {/* 行ループ */}
               {rowItems.map((item) => (
@@ -623,6 +644,43 @@ export default function PlansPage() {
                       </div>
                     );
                   })}
+
+                  {/* 行の右端：月間売上合計カラム */}
+                  {(() => {
+                    const { plannedSalesTotal, actualSalesTotal } = getRowSalesTotals(item.id);
+                    const progress = plannedSalesTotal > 0 ? Math.min(100, Math.round((actualSalesTotal / plannedSalesTotal) * 100)) : 0;
+                    
+                    return (
+                      <div className="sticky right-0 z-10 bg-white border-l border-b border-slate-100 p-2 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                        {ganttFilter !== 'workOnly' ? (
+                          <div className="flex flex-col h-full justify-center gap-1.5">
+                            <div className="flex justify-between items-center text-[10px] font-bold">
+                              <span className="text-amber-500">目標:</span>
+                              <span className="text-slate-700">¥{plannedSalesTotal.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-[10px] font-black">
+                              <span className="text-amber-600">実績:</span>
+                              <span className="text-amber-600">¥{actualSalesTotal.toLocaleString()}</span>
+                            </div>
+                            
+                            {/* プログレスバー */}
+                            {plannedSalesTotal > 0 && (
+                              <div className="w-full bg-slate-100 rounded-full h-1.5 mt-1 overflow-hidden">
+                                <div 
+                                  className={`h-full ${progress >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}`} 
+                                  style={{ width: `${progress}%` }}
+                                ></div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-slate-300 text-xs font-bold bg-slate-50 rounded">
+                            非表示
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </React.Fragment>
               ))}
             </div>
