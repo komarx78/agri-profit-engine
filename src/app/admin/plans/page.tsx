@@ -39,6 +39,7 @@ export default function PlansPage() {
   const [plannedDuration, setPlannedDuration] = useState<string>('');
   const [selectedChannel, setSelectedChannel] = useState<string>('');
   const [plannedQuantity, setPlannedQuantity] = useState<string>('');
+  const [manualPrice, setManualPrice] = useState<string>('');
 
   useEffect(() => {
     fetchMasters();
@@ -47,6 +48,15 @@ export default function PlansPage() {
   useEffect(() => {
     fetchPlans();
   }, [currentDate]);
+
+  useEffect(() => {
+    const currentPriceObj = salesPrices.find(sp => sp.crop_name === selectedCrop && sp.channel_name === selectedChannel);
+    if (currentPriceObj) {
+      setManualPrice(String(currentPriceObj.price_per_unit));
+    } else {
+      setManualPrice('');
+    }
+  }, [selectedCrop, selectedChannel, salesPrices]);
 
   async function fetchMasters() {
     try {
@@ -153,12 +163,12 @@ export default function PlansPage() {
     setPlannedDuration('');
     setSelectedChannel('');
     setPlannedQuantity('');
+    setManualPrice('');
     setIsModalOpen(true);
   };
 
-  const currentPriceObj = salesPrices.find(sp => sp.crop_name === selectedCrop && sp.channel_name === selectedChannel);
-  const currentPrice = currentPriceObj ? currentPriceObj.price_per_unit : 0;
-  const calculatedTotal = plannedQuantity && currentPrice ? parseFloat(plannedQuantity) * currentPrice : 0;
+  const parsedPrice = parseFloat(manualPrice) || 0;
+  const calculatedTotal = plannedQuantity && parsedPrice ? parseFloat(plannedQuantity) * parsedPrice : 0;
 
   // 開始日〜終了日までの日付配列を生成する関数
   const generateDateRange = (start: string, end: string) => {
@@ -659,13 +669,19 @@ export default function PlansPage() {
                       <select value={selectedChannel} onChange={e => setSelectedChannel(e.target.value)} required disabled={!selectedCrop} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:border-amber-500 focus:outline-none">
                         <option value="">{selectedCrop ? "選択してください" : "先に作目を選択"}</option>
                         {salesPrices.filter(sp => sp.crop_name === selectedCrop).map(sp => (
-                          <option key={sp.id} value={sp.channel_name}>{sp.channel_name} (¥{sp.price_per_unit})</option>
+                          <option key={sp.id} value={sp.channel_name}>{sp.channel_name} (基準: ¥{sp.price_per_unit})</option>
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">予定数量 <span className="text-slate-400 font-normal ml-1">※任意</span></label>
-                      <input type="number" value={plannedQuantity} onChange={e => setPlannedQuantity(e.target.value)} placeholder="空欄でもOKです" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg focus:border-amber-500 focus:outline-none placeholder:font-normal placeholder:text-sm" />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">予定単価 (¥) <span className="text-slate-400 font-normal ml-1">※変更可</span></label>
+                        <input type="number" value={manualPrice} onChange={e => setManualPrice(e.target.value)} placeholder="0" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg focus:border-amber-500 focus:outline-none placeholder:font-normal placeholder:text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">予定数量 <span className="text-slate-400 font-normal ml-1">※任意</span></label>
+                        <input type="number" value={plannedQuantity} onChange={e => setPlannedQuantity(e.target.value)} placeholder="空欄でもOKです" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg focus:border-amber-500 focus:outline-none placeholder:font-normal placeholder:text-sm" />
+                      </div>
                     </div>
                     {calculatedTotal > 0 && (
                       <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 flex justify-between items-center">

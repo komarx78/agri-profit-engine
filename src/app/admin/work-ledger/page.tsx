@@ -350,13 +350,13 @@ export default function WorkLedgerPage() {
                           <td className="p-4 border-l border-purple-100 font-black text-purple-600 bg-purple-50/20 relative group cursor-help">
                             <div className="flex items-center justify-end gap-1">
                               ¥{materialTotal.toLocaleString()}
-                              {materialDetailsData[crop]?.length > 0 && (
+                              {materialDetailsData[crop] && materialDetailsData[crop].length > 0 && (
                                 <div className="w-4 h-4 rounded-full bg-purple-200 text-purple-700 flex items-center justify-center text-[10px] opacity-70 group-hover:opacity-100">i</div>
                               )}
                             </div>
                             
                             {/* 内訳ツールチップ */}
-                            {materialDetailsData[crop]?.length > 0 && (
+                            {materialDetailsData[crop] && materialDetailsData[crop].length > 0 && (
                               <div className="absolute z-50 bottom-full right-0 mb-2 w-56 bg-slate-800 text-white text-xs rounded-xl p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
                                 <div className="font-bold border-b border-slate-600 pb-2 mb-2 text-center flex items-center justify-center gap-1">
                                   資材費の内訳
