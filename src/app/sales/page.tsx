@@ -12,6 +12,7 @@ export default function SalesEntryPage() {
   const [selectedCrop, setSelectedCrop] = useState<string>('');
   const [selectedChannel, setSelectedChannel] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('');
+  const [manualPrice, setManualPrice] = useState<string>('');
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
@@ -38,14 +39,20 @@ export default function SalesEntryPage() {
     fetchData();
   }, []);
 
-  // 選択された作目・販路に基づき、単価を取得
-  const currentPriceObj = salesPrices.find(
-    sp => sp.crop_name === selectedCrop && sp.channel_name === selectedChannel
-  );
-  const currentPrice = currentPriceObj ? currentPriceObj.price_per_unit : 0;
-  
-  // 自動計算された総売上
-  const calculatedTotal = quantity && currentPrice ? parseFloat(quantity) * currentPrice : 0;
+  useEffect(() => {
+    const currentPriceObj = salesPrices.find(
+      sp => sp.crop_name === selectedCrop && sp.channel_name === selectedChannel
+    );
+    if (currentPriceObj) {
+      setManualPrice(String(currentPriceObj.price_per_unit));
+    } else {
+      setManualPrice('');
+    }
+  }, [selectedCrop, selectedChannel, salesPrices]);
+
+  // 手動入力された単価で計算
+  const parsedPrice = parseFloat(manualPrice) || 0;
+  const calculatedTotal = quantity && parsedPrice ? parseFloat(quantity) * parsedPrice : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,6 +98,7 @@ export default function SalesEntryPage() {
         setSelectedCrop('');
         setSelectedChannel('');
         setQuantity('');
+        setManualPrice('');
       }, 2500);
     } catch (err) {
       console.error(err);
@@ -210,20 +218,28 @@ export default function SalesEntryPage() {
               </div>
             </section>
 
-            {/* 4. 自動計算プレビュー */}
+            {/* 4. 売上計算 */}
             {selectedCrop && selectedChannel && (
-              <section className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50 flex flex-col gap-2">
+              <section className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50 flex flex-col gap-4">
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-slate-400 flex items-center gap-1"><Calculator className="w-4 h-4" /> 適用単価</span>
-                  {currentPrice > 0 ? (
-                    <span className="text-slate-200 font-bold">¥{currentPrice.toLocaleString()} / 単位</span>
-                  ) : (
-                    <span className="text-red-400 font-medium text-xs">※単価マスタ未登録</span>
-                  )}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-slate-400 flex items-center gap-1"><Calculator className="w-4 h-4" /> 適用単価 <span className="text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded ml-1">手動変更可</span></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-400">¥</span>
+                    <input
+                      type="number"
+                      value={manualPrice}
+                      onChange={(e) => setManualPrice(e.target.value)}
+                      placeholder="0"
+                      className="w-24 px-2 py-1.5 bg-slate-900 border border-slate-700 rounded text-right font-bold text-white focus:outline-none focus:border-amber-500"
+                    />
+                    <span className="text-slate-400">/ 単位</span>
+                  </div>
                 </div>
-                <div className="flex justify-between items-end border-t border-slate-700/50 pt-2 mt-1">
-                  <span className="text-emerald-400 font-bold text-sm">売上予定額</span>
-                  <span className="text-2xl font-black text-white">
+                <div className="flex justify-between items-end border-t border-slate-700/50 pt-3 mt-1">
+                  <span className="text-emerald-400 font-bold text-sm">売上実績 (自動計算)</span>
+                  <span className="text-3xl font-black text-white">
                     ¥{calculatedTotal.toLocaleString()}
                   </span>
                 </div>

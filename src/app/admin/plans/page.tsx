@@ -541,7 +541,7 @@ export default function PlansPage() {
                         </div>
                         
                         {/* ホバー時の＋アイコン */}
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                           <div className="bg-rose-500 text-white rounded-full p-1 shadow-lg">
                             <Plus className="w-4 h-4" />
                           </div>
