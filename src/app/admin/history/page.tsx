@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { History, Search, Download, CheckCircle2, Clock, Filter, User, MapPin, Sprout, Image as ImageIcon, FileText, X } from 'lucide-react';
+import { History, Search, Download, CheckCircle2, Clock, Filter, User, MapPin, Sprout, Image as ImageIcon, FileText, X, Video, Play } from 'lucide-react';
 import Papa from 'papaparse';
 
 export default function HistoryPage() {
@@ -32,6 +32,7 @@ export default function HistoryPage() {
             status,
             memo,
             photo_url,
+            video_url,
             crops(name),
             fields(name),
             workers(name),
@@ -277,6 +278,14 @@ export default function HistoryPage() {
                             <ImageIcon className="w-5 h-5 opacity-50" />
                           </div>
                         )}
+                        {log.video_url && (
+                          <button onClick={() => setSelectedLog(log)} className="relative w-12 h-12 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center hover:ring-2 hover:ring-emerald-500 transition-all cursor-pointer">
+                            <Video className="w-5 h-5 text-white" />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                              <Play className="w-4 h-4 text-white fill-current opacity-80" />
+                            </div>
+                          </button>
+                        )}
                         {log.memo && (
                           <button onClick={() => setSelectedLog(log)} className="flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors">
                             <FileText className="w-4 h-4 text-emerald-600" />
@@ -346,6 +355,23 @@ export default function HistoryPage() {
                   </h4>
                   <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-100">
                     <img src={selectedLog.photo_url} alt="作業写真" className="w-full h-auto object-contain max-h-96" />
+                  </div>
+                </div>
+              )}
+
+              {/* 動画 */}
+              {selectedLog.video_url && (
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <Video className="w-4 h-4 text-emerald-500" /> 添付動画
+                  </h4>
+                  <div className="rounded-2xl overflow-hidden border border-slate-200 bg-black">
+                    <video 
+                      src={selectedLog.video_url} 
+                      controls 
+                      playsInline
+                      className="w-full h-auto max-h-96 object-contain" 
+                    />
                   </div>
                 </div>
               )}

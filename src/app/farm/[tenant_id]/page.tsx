@@ -205,7 +205,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
           uploadedPhotoUrl = supabase.storage.from('work_photos').getPublicUrl(fileName).data.publicUrl;
       }
       
-      if (videoFile && currentUser.role === 'admin') {
+      if (videoFile) {
           const fileName = `${tenantId}/${currentUser.id}/${Date.now()}_video.mp4`;
           const { error: uploadError } = await supabase.storage.from('work_videos').upload(fileName, videoFile);
           if (uploadError) throw uploadError;
@@ -275,7 +275,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
           uploadedPhotoUrl = supabase.storage.from('work_photos').getPublicUrl(fileName).data.publicUrl;
       }
 
-      if (videoFile && currentUser.role === 'admin') {
+      if (videoFile) {
           const fileName = `${tenantId}/${currentUser.id}/${Date.now()}_video.mp4`;
           const { error: uploadError } = await supabase.storage.from('work_videos').upload(fileName, videoFile);
           if (uploadError) throw uploadError;
