@@ -209,7 +209,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
           const fileName = `${tenantId}/${currentUser.id}/${Date.now()}_video.mp4`;
           const { error: uploadError } = await supabase.storage.from('work_videos').upload(fileName, videoFile);
           if (uploadError) throw uploadError;
-          uploadedVideoUrl = supabase.storage.from('work_videos').getPublicUrl(fileName).data.publicUrl;
+          uploadedVideoUrl = fileName;
       }
 
       const endTime = new Date();
@@ -279,7 +279,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
           const fileName = `${tenantId}/${currentUser.id}/${Date.now()}_video.mp4`;
           const { error: uploadError } = await supabase.storage.from('work_videos').upload(fileName, videoFile);
           if (uploadError) throw uploadError;
-          uploadedVideoUrl = supabase.storage.from('work_videos').getPublicUrl(fileName).data.publicUrl;
+          uploadedVideoUrl = fileName;
       }
 
       const cropId = crops.find(c => c.name === selectedCrop)?.id;

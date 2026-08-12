@@ -16,6 +16,7 @@ export default function HistoryPage() {
 
   // モーダル用ステート
   const [selectedLog, setSelectedLog] = useState<any | null>(null);
+  const [signedVideoUrl, setSignedVideoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchHistory() {
@@ -315,7 +316,7 @@ export default function HistoryPage() {
 
       {/* 詳細確認モーダル */}
       {selectedLog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setSelectedLog(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => { setSelectedLog(null); setSignedVideoUrl(null); }}>
           <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white/80 backdrop-blur-md px-6 py-4 border-b border-slate-100 flex items-center justify-between z-10">
               <div className="flex items-center gap-3">
@@ -327,7 +328,7 @@ export default function HistoryPage() {
                   <p className="text-sm font-bold text-slate-500">{selectedLog.work_date} {formatTime(selectedLog.start_time)} ~ {formatTime(selectedLog.end_time)}</p>
                 </div>
               </div>
-              <button onClick={() => setSelectedLog(null)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-full transition-colors">
+              <button onClick={() => { setSelectedLog(null); setSignedVideoUrl(null); }} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-full transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -365,13 +366,42 @@ export default function HistoryPage() {
                   <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
                     <Video className="w-4 h-4 text-emerald-500" /> 添付動画
                   </h4>
-                  <div className="rounded-2xl overflow-hidden border border-slate-200 bg-black">
-                    <video 
-                      src={selectedLog.video_url} 
-                      controls 
-                      playsInline
-                      className="w-full h-auto max-h-96 object-contain" 
-                    />
+                  <div className="rounded-2xl overflow-hidden border border-slate-200 bg-black relative">
+                    {!signedVideoUrl ? (
+                      <div className="w-full h-64 flex flex-col items-center justify-center text-slate-400 gap-3">
+                        <button 
+                          onClick={async () => {
+                            try {
+                              let path = selectedLog.video_url;
+                              // 過去データ対応: もしURL全体が保存されていたらパス部分だけを抽出する
+                              if (path.startsWith('http')) {
+                                const urlObj = new URL(path);
+                                const parts = urlObj.pathname.split('/work_videos/');
+                                if (parts.length > 1) path = parts[1];
+                              }
+                              const { data, error } = await supabase.storage.from('work_videos').createSignedUrl(path, 3600);
+                              if (error) throw error;
+                              if (data?.signedUrl) setSignedVideoUrl(data.signedUrl);
+                            } catch(err) {
+                              alert('動画の読み込みに失敗しました。');
+                            }
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-colors"
+                        >
+                          <Play className="w-5 h-5 fill-current" />
+                          動画を読み込む
+                        </button>
+                        <p className="text-xs">※セキュリティのため、再生時に読み込みを行います</p>
+                      </div>
+                    ) : (
+                      <video 
+                        src={signedVideoUrl} 
+                        controls 
+                        autoPlay
+                        playsInline
+                        className="w-full h-auto max-h-96 object-contain" 
+                      />
+                    )}
                   </div>
                 </div>
               )}
