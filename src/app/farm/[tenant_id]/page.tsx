@@ -483,8 +483,8 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
               </div>
             )}
 
-            <div className={`space-y-6 transition-all duration-300 ${activeWorkStartTime ? 'opacity-60 pointer-events-none grayscale-[30%]' : ''}`}>
-              <div className="grid grid-cols-2 gap-4">
+            <div className={`space-y-6 transition-all duration-300`}>
+              <div className={`grid grid-cols-2 gap-4 ${activeWorkStartTime ? 'opacity-60 pointer-events-none grayscale-[30%]' : ''}`}>
                 <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
                     <Sprout className="w-4 h-4" />作目 (必須)
@@ -530,7 +530,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                 </section>
               </div>
 
-              <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
+              <section className={`bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm ${activeWorkStartTime ? 'opacity-60 pointer-events-none grayscale-[30%]' : ''}`}>
                 <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 mb-2.5 flex items-center gap-2">
                   <Sparkles className="w-4 h-4" />作業内容 (必須)
                 </h2>
@@ -581,7 +581,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                         <span className="text-3xl mb-2">📷</span>
                         <p className="text-sm font-bold">タップして写真を撮影・選択</p>
                       </div>
-                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoChange} disabled={!!activeWorkStartTime} />
+                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoChange} />
                     </label>
                   ) : (
                     <div className="relative w-full rounded-xl overflow-hidden border-2 border-emerald-500/50">
@@ -589,7 +589,6 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                       <button
                         type="button"
                         onClick={clearPhoto}
-                        disabled={!!activeWorkStartTime}
                         className="absolute top-2 right-2 bg-black/70 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold hover:bg-rose-500 transition-colors"
                       >
                         ×

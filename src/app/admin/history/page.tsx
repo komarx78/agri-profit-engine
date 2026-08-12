@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { History, Search, Download, CheckCircle2, Clock, Filter, User, MapPin, Sprout } from 'lucide-react';
+import { History, Search, Download, CheckCircle2, Clock, Filter, User, MapPin, Sprout, Image as ImageIcon, FileText, X } from 'lucide-react';
 import Papa from 'papaparse';
 
 export default function HistoryPage() {
@@ -13,6 +13,9 @@ export default function HistoryPage() {
   const [filterWorker, setFilterWorker] = useState<string>('all');
   const [filterField, setFilterField] = useState<string>('all');
   const [filterCrop, setFilterCrop] = useState<string>('all');
+
+  // モーダル用ステート
+  const [selectedLog, setSelectedLog] = useState<any | null>(null);
 
   useEffect(() => {
     async function fetchHistory() {
@@ -28,6 +31,7 @@ export default function HistoryPage() {
             work_type,
             status,
             memo,
+            photo_url,
             crops(name),
             fields(name),
             workers(name),
@@ -206,6 +210,7 @@ export default function HistoryPage() {
                 <th className="p-4 font-bold">作業詳細</th>
                 <th className="p-4 font-bold">時間</th>
                 <th className="p-4 font-bold">資材</th>
+                <th className="p-4 font-bold">記録内容 (写真・メモ)</th>
                 <th className="p-4 font-bold">状態</th>
               </tr>
             </thead>
@@ -261,6 +266,25 @@ export default function HistoryPage() {
                       )}
                     </td>
                     <td className="p-4">
+                      <div className="flex items-center gap-3">
+                        {log.photo_url ? (
+                          <button onClick={() => setSelectedLog(log)} className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200 hover:ring-2 hover:ring-emerald-500 transition-all cursor-pointer">
+                            <img src={log.photo_url} alt="写真" className="w-full h-full object-cover" />
+                          </button>
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-300">
+                            <ImageIcon className="w-5 h-5 opacity-50" />
+                          </div>
+                        )}
+                        {log.memo && (
+                          <button onClick={() => setSelectedLog(log)} className="flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors">
+                            <FileText className="w-4 h-4 text-emerald-600" />
+                            メモあり
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-4">
                       {log.status === 'running' ? (
                         <span className="inline-flex items-center gap-1.5 bg-rose-100 text-rose-700 px-3 py-1 rounded-full text-xs font-bold">
                           <Clock className="w-3 h-3 animate-spin-slow" /> 作業中
@@ -278,6 +302,68 @@ export default function HistoryPage() {
           </table>
         </div>
       </div>
+
+      {/* 詳細確認モーダル */}
+      {selectedLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setSelectedLog(null)}>
+          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white/80 backdrop-blur-md px-6 py-4 border-b border-slate-100 flex items-center justify-between z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center font-black text-lg">
+                  {(selectedLog.workers?.name || '?').slice(0, 1)}
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 text-lg">{selectedLog.workers?.name} の作業記録</h3>
+                  <p className="text-sm font-bold text-slate-500">{selectedLog.work_date} {formatTime(selectedLog.start_time)} ~ {formatTime(selectedLog.end_time)}</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedLog(null)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-full transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-8">
+              {/* 基本情報 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-50 p-4 rounded-2xl">
+                  <span className="text-xs font-bold text-slate-400 block mb-1">作目 / 圃場</span>
+                  <div className="font-black text-slate-700 text-lg">{selectedLog.crops?.name}</div>
+                  <div className="text-sm font-medium text-slate-500">{selectedLog.fields?.name}</div>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-2xl">
+                  <span className="text-xs font-bold text-slate-400 block mb-1">作業内容</span>
+                  <div className="font-black text-slate-700 text-lg">{selectedLog.work_type}</div>
+                  <div className="text-sm font-bold text-emerald-600">{selectedLog.duration_minutes} 分</div>
+                </div>
+              </div>
+
+              {/* 写真 */}
+              {selectedLog.photo_url && (
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-emerald-500" /> 添付写真
+                  </h4>
+                  <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-100">
+                    <img src={selectedLog.photo_url} alt="作業写真" className="w-full h-auto object-contain max-h-96" />
+                  </div>
+                </div>
+              )}
+
+              {/* メモ */}
+              {selectedLog.memo && (
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-emerald-500" /> 作業メモ
+                  </h4>
+                  <div className="p-5 bg-emerald-50/50 border border-emerald-100 rounded-2xl text-slate-700 whitespace-pre-wrap leading-relaxed">
+                    {selectedLog.memo}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
