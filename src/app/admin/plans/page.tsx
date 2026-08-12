@@ -402,7 +402,7 @@ export default function PlansPage() {
             </h2>
             <div className="flex flex-wrap items-center gap-3">
               {/* コスト算出モード切替 */}
-              <div className="flex items-center gap-1 bg-slate-700/50 p-1 rounded-xl backdrop-blur-sm border border-slate-600">
+              <div className="flex items-center gap-1 bg-slate-700/50 p-1 rounded-xl backdrop-blur-sm border border-slate-600 relative group">
                 <button
                   onClick={() => setCostCalculationMode('detailed')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
@@ -411,14 +411,23 @@ export default function PlansPage() {
                 >
                   詳細入力で計算
                 </button>
-                <button
-                  onClick={() => setCostCalculationMode('estimate')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    costCalculationMode === 'estimate' ? 'bg-slate-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-300'
-                  }`}
-                >
-                  概算金額(手入力)
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setCostCalculationMode('estimate')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                      costCalculationMode === 'estimate' ? 'bg-slate-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-300'
+                    }`}
+                  >
+                    概算金額(手入力)
+                    <div className="w-3 h-3 rounded-full bg-slate-500 text-white flex items-center justify-center text-[8px] opacity-70">?</div>
+                  </button>
+                  {/* 説明ツールチップ */}
+                  <div className="absolute z-50 top-full left-1/2 -translate-x-1/2 mt-2 w-64 bg-slate-900 text-slate-200 text-xs rounded-xl p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all font-medium leading-relaxed">
+                    <span className="font-bold text-amber-400 block mb-1">概算入力とは？</span>
+                    作付ごとの細かな資材入力が難しい場合に、「売上の〇〇%を資材経費とする」というざっくりとした割合を指定して、総コストや粗利の目安をシミュレーションするための機能です。
+                    <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 border-4 border-transparent border-b-slate-900"></div>
+                  </div>
+                </div>
               </div>
               
               {costCalculationMode === 'estimate' && (
