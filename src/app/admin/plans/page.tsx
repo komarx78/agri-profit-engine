@@ -23,6 +23,9 @@ export default function PlansPage() {
   // 表示モード
   const [ganttViewMode, setGanttViewMode] = useState<'byCrop' | 'byField'>('byCrop');
   const [ganttFilter, setGanttFilter] = useState<'all' | 'workOnly' | 'salesOnly'>('all');
+  
+  // 基準時給 (ダッシュボード・シミュレーション用)
+  const [baseHourlyWage, setBaseHourlyWage] = useState<number>(1000);
 
   // モーダルステート
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -103,6 +106,33 @@ export default function PlansPage() {
     }
     return days;
   }, [currentDate]);
+
+  // 月間サマリーの計算
+  const monthlySummary = useMemo(() => {
+    let plannedSales = 0;
+    let plannedWorkHours = 0;
+    
+    allSalesLogs.forEach(s => {
+      if (s.status === 'planned') {
+        plannedSales += (s.total_sales || 0);
+      }
+    });
+    
+    allWorkLogs.forEach(w => {
+      if (w.status === 'planned') {
+        plannedWorkHours += (w.duration_minutes || 0) / 60;
+      }
+    });
+
+    const plannedCost = plannedWorkHours * baseHourlyWage;
+
+    return {
+      plannedSales,
+      plannedCost,
+      plannedProfit: plannedSales - plannedCost,
+      plannedWorkHours
+    };
+  }, [allSalesLogs, allWorkLogs, baseHourlyWage]);
 
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
@@ -232,16 +262,23 @@ export default function PlansPage() {
 
   // セルに表示するデータを抽出（予定と実績を分類）
   const getCellData = (itemId: string, dateStr: string) => {
-    let works = [];
-    let sales = [];
+    let works: any[] = [];
+    let sales: any[] = [];
     
     if (ganttViewMode === 'byCrop') {
       works = allWorkLogs.filter(w => w.crop_id === itemId && w.work_date === dateStr);
       sales = allSalesLogs.filter(s => s.crop_id === itemId && s.sales_date === dateStr);
     } else {
-      // 圃場別ビューの場合、売上は作目に紐づくため表示しない
+      // 圃場別ビューの場合
       works = allWorkLogs.filter(w => w.field_id === itemId && w.work_date === dateStr);
-      sales = []; 
+      
+      // その圃場に紐づく（作業予定・実績がある）作目IDのリストを取得
+      const cropIdsInField = Array.from(new Set(
+        allWorkLogs.filter(w => w.field_id === itemId).map(w => w.crop_id).filter(Boolean)
+      ));
+      
+      // その圃場に関連する作目の売上目標を表示する
+      sales = allSalesLogs.filter(s => cropIdsInField.includes(s.crop_id) && s.sales_date === dateStr);
     }
     
     return {
@@ -271,6 +308,58 @@ export default function PlansPage() {
           <Plus className="w-5 h-5" />
           予定を追加
         </button>
+      </div>
+
+      {/* サマリーダッシュボード */}
+      <div className="bg-slate-800 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
+        {/* 装飾 */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
+        <div className="absolute bottom-0 right-1/4 w-48 h-48 bg-rose-500/10 rounded-full blur-2xl translate-y-1/2"></div>
+        
+        <div className="relative z-10">
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+            <h2 className="text-xl font-black tracking-wider flex items-center gap-2">
+              <Calculator className="w-5 h-5 text-amber-400" />
+              {currentDate.getMonth() + 1}月の 予測サマリー
+            </h2>
+            <div className="flex items-center gap-3 bg-slate-700/50 p-2 pr-4 rounded-xl backdrop-blur-sm border border-slate-600">
+              <span className="text-sm font-bold text-slate-300 pl-2">基準時給</span>
+              <div className="flex items-center gap-1 bg-slate-800 rounded-lg px-3 py-1.5 focus-within:ring-2 focus-within:ring-amber-400 transition-shadow">
+                <span className="text-slate-400 text-sm">¥</span>
+                <input 
+                  type="number" 
+                  value={baseHourlyWage}
+                  onChange={(e) => setBaseHourlyWage(Number(e.target.value) || 0)}
+                  className="bg-transparent w-20 font-black text-white text-right outline-none"
+                />
+                <span className="text-slate-400 text-sm">/h</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10">
+              <div className="text-sm font-bold text-slate-400 mb-1">売上予測 (今月)</div>
+              <div className="text-3xl font-black text-white">¥{monthlySummary.plannedSales.toLocaleString()}</div>
+            </div>
+            
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10">
+              <div className="text-sm font-bold text-slate-400 mb-1 flex items-center justify-between">
+                <span>作業コスト予測</span>
+                <span className="text-xs bg-slate-700/50 px-2 py-0.5 rounded text-slate-300">{monthlySummary.plannedWorkHours.toFixed(1)}h</span>
+              </div>
+              <div className="text-3xl font-black text-rose-300">¥{monthlySummary.plannedCost.toLocaleString()}</div>
+            </div>
+            
+            <div className="bg-gradient-to-br from-amber-500/20 to-orange-500/20 backdrop-blur-md rounded-2xl p-5 border border-amber-500/30 relative overflow-hidden">
+              <div className="absolute inset-0 bg-amber-400/5 mix-blend-overlay"></div>
+              <div className="relative z-10">
+                <div className="text-sm font-bold text-amber-200/80 mb-1">予測粗利 (売上 - コスト)</div>
+                <div className="text-3xl font-black text-amber-400">¥{monthlySummary.plannedProfit.toLocaleString()}</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* コントロールパネル */}
