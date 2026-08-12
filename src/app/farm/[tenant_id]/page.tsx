@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, use } from 'react';
-import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle, Building2 } from 'lucide-react';
+import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle, Building2, Youtube, Lock, X } from 'lucide-react';
 import { getFarmInfo, getFarmWorkers, verifyWorkerPin, getFarmMasters, submitWorkLog, TenantInfo } from '@/app/actions/farm';
 import { supabase } from '@/lib/supabase';
 import imageCompression from 'browser-image-compression';
@@ -46,10 +46,15 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   const [materialQuantity, setMaterialQuantity] = useState<string>('');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
 
-  const [inputMode, setInputMode] = useState<'timer' | 'manual'>('timer');
+  const [inputMode, setInputMode] = useState<'timer' | 'manual' | 'manuals'>('timer');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
+
+  // マニュアル関連
+  const [manuals, setManuals] = useState<any[]>([]);
+  const [playingVideo, setPlayingVideo] = useState<string | null>(null);
 
   // 打刻関連の状態 (簡易実装：今回は開始と同時に保存せず、完了時に一括保存する方式にします)
   const [activeWorkStartTime, setActiveWorkStartTime] = useState<string | null>(null);
@@ -93,12 +98,26 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
 
   const fetchMasters = async () => {
     const res = await getFarmMasters(tenantId);
-    if (res.success && res.data) {
-      setCrops(res.data.crops);
-      setFields(res.data.fields);
-      setMaterials(res.data.materials);
-    }
-  };
+      if (res.success && res.data) {
+        setCrops(res.data.crops);
+        setFields(res.data.fields);
+        setMaterials(res.data.materials);
+      }
+    };
+
+    const fetchManuals = async () => {
+      const { data, error } = await supabase
+        .from('video_manuals')
+        .select('*')
+        .eq('user_id', tenantId)
+        .order('created_at', { ascending: false });
+        
+      if (!error && data) setManuals(data);
+    };
+
+    fetchMasters();
+    fetchManuals();
+  }, [tenantId]);
 
   // 経過時間の計算タイマー
   useEffect(() => {
@@ -127,6 +146,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     setMaterialQuantity('');
     setPhotoFile(null);
     setPhotoPreview(null);
+    setVideoFile(null);
     setErrorMsg('');
   };
 
@@ -172,41 +192,23 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     setErrorMsg('');
 
     try {
-      // 1. 写真がある場合は圧縮してSupabase Storageにアップロード
-      let photoUrl = null;
+      let uploadedPhotoUrl = null;
+      let uploadedVideoUrl = null;
+
       if (photoFile) {
-        try {
-          // 画像の圧縮
-          const options = {
-            maxSizeMB: 1, // 最大1MB
-            maxWidthOrHeight: 1280, // 最大1280px
-            useWebWorker: true
-          };
+          const options = { maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true };
           const compressedFile = await imageCompression(photoFile, options);
-          
-          // 一意のファイル名を生成 (tenantId/workerId/timestamp.jpg)
-          const fileExt = compressedFile.name.split('.').pop() || 'jpg';
-          const fileName = `${tenantId}/${currentUser.id}/${Date.now()}.${fileExt}`;
-          
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('work_photos')
-            .upload(fileName, compressedFile, {
-              cacheControl: '3600',
-              upsert: false
-            });
-            
+          const fileName = `${tenantId}/${currentUser.id}/${Date.now()}.jpg`;
+          const { error: uploadError } = await supabase.storage.from('work_photos').upload(fileName, compressedFile);
           if (uploadError) throw uploadError;
-          
-          // 公開URLを取得
-          const { data: publicUrlData } = supabase.storage
-            .from('work_photos')
-            .getPublicUrl(fileName);
-            
-          photoUrl = publicUrlData.publicUrl;
-        } catch (photoErr) {
-          console.error('Photo upload failed:', photoErr);
-          throw new Error('写真のアップロードに失敗しました。');
-        }
+          uploadedPhotoUrl = supabase.storage.from('work_photos').getPublicUrl(fileName).data.publicUrl;
+      }
+      
+      if (videoFile && currentUser.role === 'admin') {
+          const fileName = `${tenantId}/${currentUser.id}/${Date.now()}_video.mp4`;
+          const { error: uploadError } = await supabase.storage.from('work_videos').upload(fileName, videoFile);
+          if (uploadError) throw uploadError;
+          uploadedVideoUrl = supabase.storage.from('work_videos').getPublicUrl(fileName).data.publicUrl;
       }
 
       const endTime = new Date();
@@ -229,7 +231,8 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
         material_id: matId || null,
         material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,
         memo: memo || null,
-        photo_url: photoUrl,
+        photo_url: uploadedPhotoUrl,
+        video_url: uploadedVideoUrl
       };
 
       const res = await submitWorkLog(tenantId, currentUser.id, logData);
@@ -259,25 +262,23 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     setErrorMsg('');
 
     try {
-      // 1. 写真のアップロード処理
-      let photoUrl = null;
+      let uploadedPhotoUrl = null;
+      let uploadedVideoUrl = null;
+
       if (photoFile) {
-        try {
           const options = { maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true };
           const compressedFile = await imageCompression(photoFile, options);
-          const fileExt = compressedFile.name.split('.').pop() || 'jpg';
-          const fileName = `${tenantId}/${currentUser.id}/${Date.now()}.${fileExt}`;
-          
-          const { error: uploadError } = await supabase.storage
-            .from('work_photos')
-            .upload(fileName, compressedFile);
-            
+          const fileName = `${tenantId}/${currentUser.id}/${Date.now()}.jpg`;
+          const { error: uploadError } = await supabase.storage.from('work_photos').upload(fileName, compressedFile);
           if (uploadError) throw uploadError;
-          const { data: publicUrlData } = supabase.storage.from('work_photos').getPublicUrl(fileName);
-          photoUrl = publicUrlData.publicUrl;
-        } catch (photoErr) {
-          throw new Error('写真のアップロードに失敗しました。');
-        }
+          uploadedPhotoUrl = supabase.storage.from('work_photos').getPublicUrl(fileName).data.publicUrl;
+      }
+
+      if (videoFile && currentUser.role === 'admin') {
+          const fileName = `${tenantId}/${currentUser.id}/${Date.now()}_video.mp4`;
+          const { error: uploadError } = await supabase.storage.from('work_videos').upload(fileName, videoFile);
+          if (uploadError) throw uploadError;
+          uploadedVideoUrl = supabase.storage.from('work_videos').getPublicUrl(fileName).data.publicUrl;
       }
 
       const cropId = crops.find(c => c.name === selectedCrop)?.id;
@@ -294,6 +295,8 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
         material_id: matId || null,
         material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,
         memo: memo || null,
+        photo_url: uploadedPhotoUrl,
+        video_url: uploadedVideoUrl
       };
 
       const res = await submitWorkLog(tenantId, currentUser.id, logData);
@@ -319,7 +322,6 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setPhotoFile(file);
-      // プレビュー用のURL生成
       const previewUrl = URL.createObjectURL(file);
       setPhotoPreview(previewUrl);
     }
@@ -337,7 +339,6 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     </div>
   );
 
-  // エラー時（URL間違いなど）
   if (errorMsg && !farmInfo) return (
     <div className="min-h-screen bg-emerald-950 flex flex-col items-center justify-center text-rose-500 gap-4 p-6 text-center">
       <AlertCircle className="w-12 h-12" />
@@ -346,7 +347,6 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     </div>
   );
 
-  // === ログイン画面 ===
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-emerald-950 flex items-center justify-center p-4">
@@ -417,7 +417,6 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     );
   }
 
-  // === 作業記録画面 ===
   return (
     <main className="min-h-screen bg-emerald-950 text-slate-100 font-sans pb-32">
       <header className="sticky top-0 z-10 backdrop-blur-md bg-emerald-950/80 border-b border-emerald-800/50 px-4 pt-4 pb-2 shadow-lg flex flex-col gap-4">
@@ -441,15 +440,13 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
           </button>
         </div>
 
-        {/* タブ切り替え */}
         <div className={`max-w-md w-full mx-auto flex bg-emerald-900/50 p-1 rounded-xl ${activeWorkStartTime ? 'opacity-50 pointer-events-none' : ''}`}>
           <button
             onClick={() => setInputMode('timer')}
-            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
+            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
               inputMode === 'timer' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70'
             }`}
           >
-            <Play className="w-4 h-4 fill-current" />
             作業開始(打刻)
           </button>
           <button
@@ -644,6 +641,40 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                     className="w-full h-24 p-3 bg-slate-950 border border-slate-700 text-white rounded-xl placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
                   />
                 </div>
+                
+                {/* 動画添付 (Premium限定) */}
+                <div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
+                    <span className="text-lg">📹</span> 動画で記録 (Premium限定)
+                  </h2>
+                  
+                  {farmInfo?.plan_type === 'premium' ? (
+                    <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                      <input 
+                        type="file" 
+                        accept="video/mp4,video/quicktime,video/webm" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file && file.size > 50 * 1024 * 1024) {
+                            alert('動画のサイズは50MB以下にしてください。');
+                            e.target.value = '';
+                            setVideoFile(null);
+                          } else {
+                            setVideoFile(file || null);
+                          }
+                        }}
+                        className="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-emerald-500/20 file:text-emerald-400 hover:file:bg-emerald-500/30"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-2">※最大50MB。実際の作業の様子を記録に残せます。</p>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 flex flex-col items-center text-center opacity-80">
+                      <Lock className="w-6 h-6 text-slate-500 mb-2" />
+                      <p className="text-xs font-bold text-slate-400">プレミアムプラン限定</p>
+                      <p className="text-[10px] text-slate-500 mt-1">動画での作業記録機能はプレミアムでご利用いただけます</p>
+                    </div>
+                  )}
+                </div>
               </section>
             </div>
 
@@ -700,6 +731,68 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
             )}
             
           </form>
+        ) : (
+          <div className="px-4 py-6 space-y-4 animate-in fade-in slide-in-from-bottom-4">
+            <h2 className="text-lg font-black text-white flex items-center gap-2 mb-4">
+              <Youtube className="w-5 h-5 text-rose-500" /> 動画マニュアル集
+            </h2>
+            
+            {farmInfo?.plan_type !== 'premium' ? (
+              <div className="bg-slate-900/60 rounded-2xl p-8 text-center border border-slate-800">
+                <Lock className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+                <h3 className="font-bold text-white mb-2">プレミアムプラン限定</h3>
+                <p className="text-sm text-slate-400">マニュアル動画の閲覧機能はプレミアムプランでのみご利用いただけます。</p>
+              </div>
+            ) : manuals.length === 0 ? (
+              <div className="bg-slate-900/60 rounded-2xl p-8 text-center border border-slate-800">
+                <p className="text-sm text-slate-400">まだマニュアルが登録されていません。<br/>管理画面から登録してください。</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4">
+                {manuals.map(manual => (
+                  <div key={manual.id} className="bg-slate-900/60 rounded-2xl overflow-hidden border border-slate-800">
+                    <div 
+                      className="aspect-video bg-black relative flex items-center justify-center cursor-pointer"
+                      onClick={async () => {
+                        try {
+                          const { data, error } = await supabase.storage.from('work_videos').createSignedUrl(manual.video_url, 3600);
+                          if (!error && data?.signedUrl) setPlayingVideo(data.signedUrl);
+                        } catch (err) {
+                          alert('動画の再生に失敗しました。');
+                        }
+                      }}
+                    >
+                      <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                        <Play className="w-6 h-6 text-white ml-1" />
+                      </div>
+                    </div>
+                    <div className="p-4">
+                      <h3 className="font-bold text-white mb-1">{manual.title}</h3>
+                      {manual.description && <p className="text-xs text-slate-400 line-clamp-2">{manual.description}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* マニュアル再生モーダル */}
+        {playingVideo && (
+          <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black">
+            <div className="w-full flex justify-end p-4">
+              <button onClick={() => setPlayingVideo(null)} className="p-2 bg-white/20 rounded-full text-white">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <video 
+              src={playingVideo} 
+              controls 
+              autoPlay 
+              playsInline
+              className="w-full max-h-[80vh] object-contain"
+            />
+          </div>
         )}
       </div>
     </main>

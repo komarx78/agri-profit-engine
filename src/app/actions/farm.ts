@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase-admin';
 export type TenantInfo = {
   id: string;
   company_name: string;
+  plan_type: string;
 };
 
 // 1. 農園情報の取得
@@ -19,7 +20,7 @@ export async function getFarmInfo(tenantId: string): Promise<{ success: boolean;
 
     const { data, error } = await supabase
       .from('company_settings')
-      .select('user_id, company_name')
+      .select('user_id, company_name, plan_type')
       .eq('user_id', tenantId)
       .single();
 
@@ -29,7 +30,11 @@ export async function getFarmInfo(tenantId: string): Promise<{ success: boolean;
 
     return { 
       success: true, 
-      data: { id: data.user_id, company_name: data.company_name || '名称未設定の農園' } 
+      data: { 
+        id: data.user_id, 
+        company_name: data.company_name || '名称未設定の農園',
+        plan_type: data.plan_type || 'standard'
+      } 
     };
   } catch (error: any) {
     console.error('getFarmInfo Error:', error);
