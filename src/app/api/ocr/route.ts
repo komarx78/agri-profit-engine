@@ -1,19 +1,21 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Gemini APIの初期化
-// ※ 本番環境（Vercel）やローカルの .env.local に GEMINI_API_KEY を設定する必要があります
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-
 export async function POST(req: Request) {
   try {
+    // APIルートの実行時に環境変数を読み込む（Vercelの静的最適化によるエラーを防ぐため）
+    const apiKey = process.env.GEMINI_API_KEY;
+    
     // APIキーが設定されていない場合はエラー
-    if (!process.env.GEMINI_API_KEY) {
+    if (!apiKey) {
       return NextResponse.json(
         { error: 'Gemini APIキーが設定されていません。環境変数 GEMINI_API_KEY を設定してください。' },
         { status: 500 }
       );
     }
+
+    // Gemini APIの初期化
+    const genAI = new GoogleGenerativeAI(apiKey);
 
     const body = await req.json();
     const { imageBase64 } = body;
