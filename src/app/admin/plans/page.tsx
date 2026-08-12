@@ -17,14 +17,15 @@ export default function PlansPage() {
   const [salesPrices, setSalesPrices] = useState<any[]>([]);
   const workTypes = ['収穫', '定植・播種', '水やり', '肥料・農薬', '草刈り', '片付け・メンテ'];
 
-  // 予定データ
-  const [plannedWork, setPlannedWork] = useState<any[]>([]);
-  const [plannedSales, setPlannedSales] = useState<any[]>([]);
+  // データ (予定と実績をすべて含む)
+  const [allWorkLogs, setAllWorkLogs] = useState<any[]>([]);
+  const [allSalesLogs, setAllSalesLogs] = useState<any[]>([]);
 
   // モーダルステート
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'work' | 'sales'>('work');
-  const [targetDate, setTargetDate] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [selectedCrop, setSelectedCrop] = useState<string>('');
   const [selectedField, setSelectedField] = useState<string>('');
   const [selectedWorkType, setSelectedWorkType] = useState<string>('');
@@ -62,25 +63,24 @@ export default function PlansPage() {
     setIsLoading(true);
     const year = currentDate.getFullYear();
     const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+    // 簡単のため1日から31日まで取得（存在しない日は無視される）
     const startOfMonth = `${year}-${month}-01`;
-    const endOfMonth = `${year}-${month}-31`; // 簡易的な月末判定
+    const endOfMonth = `${year}-${month}-31`;
 
     try {
       const [workRes, salesRes] = await Promise.all([
         supabase.from('work_logs')
           .select('*, crops(name)')
-          .eq('status', 'planned')
           .gte('work_date', startOfMonth)
           .lte('work_date', endOfMonth),
         supabase.from('sales_logs')
           .select('*, crops(name)')
-          .eq('status', 'planned')
           .gte('sales_date', startOfMonth)
           .lte('sales_date', endOfMonth)
       ]);
 
-      if (workRes.data) setPlannedWork(workRes.data);
-      if (salesRes.data) setPlannedSales(salesRes.data);
+      if (workRes.data) setAllWorkLogs(workRes.data);
+      if (salesRes.data) setAllSalesLogs(salesRes.data);
     } catch (err) {
       console.error(err);
     } finally {
@@ -105,7 +105,8 @@ export default function PlansPage() {
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
 
   const openModal = (dateStr: string, cropName: string = '') => {
-    setTargetDate(dateStr);
+    setStartDate(dateStr);
+    setEndDate(dateStr); // デフォルトは1日のみ
     setSelectedCrop(cropName);
     setSelectedField('');
     setSelectedWorkType('');
@@ -119,40 +120,65 @@ export default function PlansPage() {
   const currentPrice = currentPriceObj ? currentPriceObj.price_per_unit : 0;
   const calculatedTotal = plannedQuantity && currentPrice ? parseFloat(plannedQuantity) * currentPrice : 0;
 
+  // 開始日〜終了日までの日付配列を生成する関数
+  const generateDateRange = (start: string, end: string) => {
+    const dates = [];
+    let curr = new Date(start);
+    const last = new Date(end);
+    while (curr <= last) {
+      dates.push(curr.toISOString().split('T')[0]);
+      curr.setDate(curr.getDate() + 1);
+    }
+    return dates;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (new Date(startDate) > new Date(endDate)) {
+      setMessage({ text: '終了日は開始日以降の日付を指定してください', type: 'error' });
+      return;
+    }
+
     setIsSubmitting(true);
     setMessage(null);
 
     try {
+      const datesToInsert = generateDateRange(startDate, endDate);
+      const cropId = crops.find(c => c.name === selectedCrop)?.id;
+
       if (activeTab === 'work') {
-        const cropId = crops.find(c => c.name === selectedCrop)?.id;
         const fieldId = fields.find(f => f.name === selectedField)?.id;
+        const duration = plannedDuration ? parseInt(plannedDuration, 10) : null;
         
-        const { error } = await supabase.from('work_logs').insert([{
+        // 複数日分を一括作成
+        const inserts = datesToInsert.map(dateStr => ({
           crop_id: cropId || null,
           field_id: fieldId || null,
           work_type: selectedWorkType,
-          work_date: targetDate,
-          duration_minutes: parseInt(plannedDuration, 10),
+          work_date: dateStr,
+          duration_minutes: duration,
           status: 'planned'
-        }]);
-        
-        if (error) throw error;
-      } else {
-        const cropId = crops.find(c => c.name === selectedCrop)?.id;
-        const channelId = channels.find(c => c.name === selectedChannel)?.id;
+        }));
 
-        const { error } = await supabase.from('sales_logs').insert([{
+        const { error } = await supabase.from('work_logs').insert(inserts);
+        if (error) throw error;
+
+      } else {
+        const channelId = channels.find(c => c.name === selectedChannel)?.id;
+        const qty = plannedQuantity ? parseFloat(plannedQuantity) : 0;
+        const total = calculatedTotal > 0 ? calculatedTotal : null;
+
+        const inserts = datesToInsert.map(dateStr => ({
           crop_id: cropId || null,
           channel_id: channelId || null,
-          sales_date: targetDate,
-          quantity: parseFloat(plannedQuantity),
+          sales_date: dateStr,
+          quantity: qty,
           unit: 'kg/箱',
-          total_sales: calculatedTotal > 0 ? calculatedTotal : null,
+          total_sales: total,
           status: 'planned'
-        }]);
+        }));
 
+        const { error } = await supabase.from('sales_logs').insert(inserts);
         if (error) throw error;
       }
 
@@ -170,11 +196,17 @@ export default function PlansPage() {
     }
   };
 
-  // セルに表示する予定を検索
-  const getPlansForCell = (cropName: string, dateStr: string) => {
-    const works = plannedWork.filter(w => w.crops?.name === cropName && w.work_date === dateStr);
-    const sales = plannedSales.filter(s => s.crops?.name === cropName && s.sales_date === dateStr);
-    return { works, sales };
+  // セルに表示するデータを抽出（予定と実績を分類）
+  const getCellData = (cropName: string, dateStr: string) => {
+    const works = allWorkLogs.filter(w => w.crops?.name === cropName && w.work_date === dateStr);
+    const sales = allSalesLogs.filter(s => s.crops?.name === cropName && s.sales_date === dateStr);
+    
+    return {
+      plannedWorks: works.filter(w => w.status === 'planned'),
+      actualWorks: works.filter(w => w.status !== 'planned'),
+      plannedSales: sales.filter(s => s.status === 'planned'),
+      actualSales: sales.filter(s => s.status !== 'planned'),
+    };
   };
 
   return (
@@ -183,9 +215,9 @@ export default function PlansPage() {
         <div>
           <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
             <Target className="w-8 h-8 text-rose-500" />
-            予定・目標ガントチャート
+            予実ガントチャート
           </h1>
-          <p className="text-slate-500 mt-2 font-medium">作業予定や出荷目標をカレンダー上で視覚的に管理します。</p>
+          <p className="text-slate-500 mt-2 font-medium">作業予定や出荷目標（薄い色）と、実際の実績（濃い色）を比較できます。</p>
         </div>
         <button
           onClick={() => openModal(new Date().toISOString().split('T')[0])}
@@ -217,10 +249,10 @@ export default function PlansPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            {/* 動的グリッドカラム: 120px(作目) + (日数分 x 50px) */}
+            {/* 動的グリッドカラム: 120px(作目) + (日数分 x 55px) */}
             <div 
               className="min-w-max"
-              style={{ display: 'grid', gridTemplateColumns: `120px repeat(${daysInMonth.length}, minmax(50px, 1fr))` }}
+              style={{ display: 'grid', gridTemplateColumns: `120px repeat(${daysInMonth.length}, minmax(55px, 1fr))` }}
             >
               {/* ヘッダー行 */}
               <div className="sticky left-0 z-10 bg-slate-100 border-r border-b border-slate-200 p-3 font-bold text-slate-600 text-sm flex items-center justify-center">
@@ -247,31 +279,47 @@ export default function PlansPage() {
                   {/* 日付セル */}
                   {daysInMonth.map((d, i) => {
                     const dateStr = d.toISOString().split('T')[0];
-                    const { works, sales } = getPlansForCell(crop.name, dateStr);
+                    const { plannedWorks, actualWorks, plannedSales, actualSales } = getCellData(crop.name, dateStr);
                     const isToday = dateStr === new Date().toISOString().split('T')[0];
                     
                     return (
                       <div 
                         key={i} 
                         onClick={() => openModal(dateStr, crop.name)}
-                        className={`border-b border-r border-slate-100 p-1 min-h-[60px] relative hover:bg-slate-50 cursor-pointer transition-colors group ${isToday ? 'bg-amber-50/30' : ''}`}
+                        className={`border-b border-r border-slate-100 p-1 min-h-[70px] relative hover:bg-slate-50 cursor-pointer transition-colors group ${isToday ? 'bg-amber-50/20' : ''}`}
                       >
                         <div className="flex flex-col gap-1 w-full relative z-0">
-                          {works.map((w, idx) => (
-                            <div key={`w-${idx}`} className="bg-emerald-100 border border-emerald-200 text-emerald-800 text-[10px] font-bold px-1 py-0.5 rounded truncate" title={`${w.work_type} (${w.duration_minutes}分)`}>
-                              {w.work_type.substring(0, 2)}
+                          {/* 作業：予定 (薄い枠線) */}
+                          {plannedWorks.map((w, idx) => (
+                            <div key={`pw-${idx}`} className="bg-emerald-50 border border-emerald-300 border-dashed text-emerald-600 text-[10px] font-bold px-1 py-0.5 rounded truncate" title={`[予定] ${w.work_type} ${w.duration_minutes ? `(${w.duration_minutes}分)` : ''}`}>
+                              予:{w.work_type.substring(0, 2)}
                             </div>
                           ))}
-                          {sales.map((s, idx) => (
-                            <div key={`s-${idx}`} className="bg-amber-100 border border-amber-200 text-amber-800 text-[10px] font-bold px-1 py-0.5 rounded truncate" title={`売上予測: ¥${s.total_sales?.toLocaleString()}`}>
-                              ¥{(s.total_sales / 1000).toFixed(0)}k
+                          {/* 作業：実績 (濃いベタ塗り) */}
+                          {actualWorks.map((w, idx) => (
+                            <div key={`aw-${idx}`} className="bg-emerald-500 border border-emerald-600 text-white shadow-sm text-[10px] font-bold px-1 py-0.5 rounded truncate" title={`[実績] ${w.work_type} (${w.duration_minutes || 0}分)`}>
+                              実:{w.work_type.substring(0, 2)}
+                            </div>
+                          ))}
+
+                          {/* 売上：予定 (薄い枠線) */}
+                          {plannedSales.map((s, idx) => (
+                            <div key={`ps-${idx}`} className="bg-amber-50 border border-amber-300 border-dashed text-amber-600 text-[10px] font-bold px-1 py-0.5 rounded truncate" title={`[目標] 売上予測: ¥${s.total_sales?.toLocaleString() || '-'}`}>
+                              目:¥{(s.total_sales / 1000).toFixed(0)}k
+                            </div>
+                          ))}
+                          {/* 売上：実績 (濃いベタ塗り) */}
+                          {actualSales.map((s, idx) => (
+                            <div key={`as-${idx}`} className="bg-amber-500 border border-amber-600 text-white shadow-sm text-[10px] font-bold px-1 py-0.5 rounded truncate" title={`[実績] 売上: ¥${s.total_sales?.toLocaleString() || '-'}`}>
+                              実:¥{(s.total_sales / 1000).toFixed(0)}k
                             </div>
                           ))}
                         </div>
+                        
                         {/* ホバー時の＋アイコン */}
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                           <div className="bg-rose-500 text-white rounded-full p-1 shadow-lg">
-                            <Plus className="w-3 h-3" />
+                            <Plus className="w-4 h-4" />
                           </div>
                         </div>
                       </div>
@@ -282,6 +330,14 @@ export default function PlansPage() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* レジェンド (凡例) */}
+      <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-slate-500 mt-2 px-2">
+        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-emerald-50 border border-emerald-300 border-dashed rounded"></div>作業予定</div>
+        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-emerald-500 border border-emerald-600 rounded"></div>作業実績</div>
+        <div className="flex items-center gap-1.5 ml-4"><div className="w-3 h-3 bg-amber-50 border border-amber-300 border-dashed rounded"></div>売上目標</div>
+        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-amber-500 border border-amber-600 rounded"></div>売上実績</div>
       </div>
 
       {/* モーダル */}
@@ -328,16 +384,21 @@ export default function PlansPage() {
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">対象日</label>
-                    <input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:border-rose-500 focus:outline-none" />
+                    <label className="block text-xs font-bold text-slate-500 mb-1">開始日</label>
+                    <input type="date" value={startDate} onChange={e => { setStartDate(e.target.value); if(e.target.value > endDate) setEndDate(e.target.value); }} required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:border-rose-500 focus:outline-none" />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">作目</label>
-                    <select value={selectedCrop} onChange={e => setSelectedCrop(e.target.value)} required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:border-rose-500 focus:outline-none">
-                      <option value="">選択</option>
-                      {crops.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                    </select>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">終了日</label>
+                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} required min={startDate} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:border-rose-500 focus:outline-none" />
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">作目</label>
+                  <select value={selectedCrop} onChange={e => setSelectedCrop(e.target.value)} required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:border-rose-500 focus:outline-none">
+                    <option value="">選択</option>
+                    {crops.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  </select>
                 </div>
 
                 {activeTab === 'work' ? (
@@ -359,8 +420,8 @@ export default function PlansPage() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">予定時間 (分)</label>
-                      <input type="number" value={plannedDuration} onChange={e => setPlannedDuration(e.target.value)} placeholder="120" required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg focus:border-emerald-500 focus:outline-none" />
+                      <label className="block text-xs font-bold text-slate-500 mb-1">予定時間 (分) <span className="text-slate-400 font-normal ml-1">※任意</span></label>
+                      <input type="number" value={plannedDuration} onChange={e => setPlannedDuration(e.target.value)} placeholder="空欄でもOKです" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg focus:border-emerald-500 focus:outline-none placeholder:font-normal placeholder:text-sm" />
                     </div>
                   </>
                 ) : (
@@ -375,8 +436,8 @@ export default function PlansPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">予定数量</label>
-                      <input type="number" value={plannedQuantity} onChange={e => setPlannedQuantity(e.target.value)} placeholder="50" required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg focus:border-amber-500 focus:outline-none" />
+                      <label className="block text-xs font-bold text-slate-500 mb-1">予定数量 <span className="text-slate-400 font-normal ml-1">※任意</span></label>
+                      <input type="number" value={plannedQuantity} onChange={e => setPlannedQuantity(e.target.value)} placeholder="空欄でもOKです" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg focus:border-amber-500 focus:outline-none placeholder:font-normal placeholder:text-sm" />
                     </div>
                     {calculatedTotal > 0 && (
                       <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 flex justify-between items-center">

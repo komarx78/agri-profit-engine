@@ -38,6 +38,7 @@ export default function HistoryPage() {
             materials(name),
             material_quantity
           `)
+          .neq('status', 'planned')
           .order('start_time', { ascending: false });
 
         if (error) throw error;
