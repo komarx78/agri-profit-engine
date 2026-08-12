@@ -288,11 +288,31 @@ export default function PlansPage() {
       sales = allSalesLogs.filter(s => cropIdsInField.includes(s.crop_id) && s.sales_date === dateStr);
     }
     
+    // 同じ作業内容・作目でグループ化する
+    const groupWorks = (workList: any[]) => {
+      const groups: Record<string, any> = {};
+      workList.forEach(w => {
+        const key = `${w.work_type}_${w.crops?.name || 'unknown'}`;
+        if (!groups[key]) {
+          groups[key] = {
+            work_type: w.work_type,
+            crop_name: w.crops?.name || '不明',
+            duration_minutes_total: 0,
+            status: w.status,
+            logs: []
+          };
+        }
+        groups[key].duration_minutes_total += (w.duration_minutes || 0);
+        groups[key].logs.push(w);
+      });
+      return Object.values(groups);
+    };
+
     return {
-      plannedWorks: works.filter(w => w.status === 'planned'),
-      actualWorks: works.filter(w => w.status !== 'planned'),
+      plannedWorks: groupWorks(works.filter(w => w.status === 'planned')),
+      actualWorks: groupWorks(works.filter(w => w.status === 'completed')),
       plannedSales: sales.filter(s => s.status === 'planned'),
-      actualSales: sales.filter(s => s.status !== 'planned'),
+      actualSales: sales.filter(s => s.status === 'completed')
     };
   };
 
@@ -482,15 +502,17 @@ export default function PlansPage() {
                       >
                         <div className="flex flex-col gap-1 w-full relative z-0">
                           {/* 作業：予定 (薄い枠線) */}
-                          {(ganttFilter === 'all' || ganttFilter === 'workOnly') && plannedWorks.map((w, idx) => (
-                            <div key={`pw-${idx}`} onClick={(e) => { e.stopPropagation(); setSelectedLogDetail(w); }} className="bg-emerald-50 border border-emerald-300 border-dashed text-emerald-600 text-[10px] font-bold px-1 py-0.5 rounded truncate cursor-pointer hover:bg-emerald-100" title={`[予定] ${w.crops?.name || '不明'} - ${w.work_type} ${w.duration_minutes ? `(${w.duration_minutes}分)` : ''}`}>
-                              予:{ganttViewMode === 'byField' ? `${w.crops?.name || '?'}/` : ''}{w.work_type.substring(0, 2)}
+                          {(ganttFilter === 'all' || ganttFilter === 'workOnly') && plannedWorks.map((group, idx) => (
+                            <div key={`pw-${idx}`} onClick={(e) => { e.stopPropagation(); setSelectedLogDetail(group); }} className="bg-emerald-50 border border-emerald-300 border-dashed text-emerald-600 text-[10px] font-bold px-1 py-0.5 rounded truncate cursor-pointer hover:bg-emerald-100" title={`[予定] ${group.crop_name} - ${group.work_type} (${group.logs.length}件)`}>
+                              予:{ganttViewMode === 'byField' ? `${group.crop_name}/` : ''}{group.work_type.substring(0, 2)}
+                              {group.logs.length > 1 && <span className="ml-1 opacity-70">x{group.logs.length}</span>}
                             </div>
                           ))}
                           {/* 作業：実績 (濃いベタ塗り) */}
-                          {(ganttFilter === 'all' || ganttFilter === 'workOnly') && actualWorks.map((w, idx) => (
-                            <div key={`aw-${idx}`} onClick={(e) => { e.stopPropagation(); setSelectedLogDetail(w); }} className="bg-emerald-500 border border-emerald-600 text-white shadow-sm text-[10px] font-bold px-1 py-0.5 rounded truncate cursor-pointer hover:bg-emerald-400" title={`[実績] ${w.crops?.name || '不明'} - ${w.work_type} (${w.duration_minutes || 0}分)`}>
-                              実:{ganttViewMode === 'byField' ? `${w.crops?.name || '?'}/` : ''}{w.work_type.substring(0, 2)}
+                          {(ganttFilter === 'all' || ganttFilter === 'workOnly') && actualWorks.map((group, idx) => (
+                            <div key={`aw-${idx}`} onClick={(e) => { e.stopPropagation(); setSelectedLogDetail(group); }} className="bg-emerald-500 border border-emerald-600 text-white shadow-sm text-[10px] font-bold px-1 py-0.5 rounded truncate cursor-pointer hover:bg-emerald-400" title={`[実績] ${group.crop_name} - ${group.work_type} (${group.duration_minutes_total}分, ${group.logs.length}人)`}>
+                              実:{ganttViewMode === 'byField' ? `${group.crop_name}/` : ''}{group.work_type.substring(0, 2)}
+                              {group.logs.length > 1 && <span className="ml-1 opacity-90 text-[8px]">x{group.logs.length}</span>}
                             </div>
                           ))}
 
@@ -663,23 +685,22 @@ export default function PlansPage() {
         </div>
       )}
 
-      {/* 詳細確認モーダル */}
+      {/* 詳細確認モーダル (グループ化対応) */}
       {selectedLogDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setSelectedLogDetail(null)}>
-          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-3xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white/80 backdrop-blur-md px-6 py-4 border-b border-slate-100 flex items-center justify-between z-10">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-lg ${selectedLogDetail.status === 'planned' ? 'bg-emerald-50 border border-emerald-200 text-emerald-500' : 'bg-emerald-100 text-emerald-700'}`}>
-                  {(selectedLogDetail.workers?.name || '?').slice(0, 1)}
+                  {selectedLogDetail.work_type.substring(0, 1)}
                 </div>
                 <div>
                   <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
-                    {selectedLogDetail.workers?.name || '担当者未定'} の作業{selectedLogDetail.status === 'planned' ? '予定' : '記録'}
+                    {selectedLogDetail.crop_name} - {selectedLogDetail.work_type}
                     {selectedLogDetail.status === 'planned' && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-bold">予定</span>}
                   </h3>
                   <p className="text-sm font-bold text-slate-500">
-                    {selectedLogDetail.work_date} 
-                    {selectedLogDetail.start_time && ` ${formatTime(selectedLogDetail.start_time)} ~ ${formatTime(selectedLogDetail.end_time)}`}
+                    作業記録: {selectedLogDetail.logs.length}件 / 合計時間: {selectedLogDetail.duration_minutes_total}分
                   </p>
                 </div>
               </div>
@@ -688,59 +709,84 @@ export default function PlansPage() {
               </button>
             </div>
 
-            <div className="p-6 space-y-8">
-              {/* 基本情報 */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-slate-50 p-4 rounded-2xl">
-                  <span className="text-xs font-bold text-slate-400 block mb-1">作目 / 圃場</span>
-                  <div className="font-black text-slate-700 text-lg">{selectedLogDetail.crops?.name || '不明'}</div>
-                  <div className="text-sm font-medium text-slate-500">{selectedLogDetail.fields?.name || '-'}</div>
-                </div>
-                <div className="bg-slate-50 p-4 rounded-2xl">
-                  <span className="text-xs font-bold text-slate-400 block mb-1">作業内容</span>
-                  <div className="font-black text-slate-700 text-lg">{selectedLogDetail.work_type}</div>
-                  <div className="text-sm font-bold text-emerald-600">
-                    {selectedLogDetail.duration_minutes ? `${selectedLogDetail.duration_minutes} 分` : '-'}
+            <div className="p-6 bg-slate-50 min-h-[50vh]">
+              <div className="space-y-4">
+                {selectedLogDetail.logs.map((log: any, idx: number) => (
+                  <div key={idx} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm relative overflow-hidden">
+                    <div className="flex flex-col md:flex-row gap-6">
+                      
+                      {/* 左側：担当者と時間 */}
+                      <div className="flex-shrink-0 md:w-1/3 space-y-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold">
+                            {(log.workers?.name || '?').slice(0,1)}
+                          </div>
+                          <div>
+                            <div className="font-black text-slate-700">{log.workers?.name || '担当者未定'}</div>
+                            <div className="text-xs text-slate-400 font-bold">{log.work_date}</div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs font-bold text-slate-400">作業時間</span>
+                          <span className="font-black text-emerald-600 text-xl">{log.duration_minutes ? `${log.duration_minutes} 分` : '-'}</span>
+                          {log.start_time && (
+                            <span className="text-xs text-slate-500 font-medium">
+                              {formatTime(log.start_time)} ~ {formatTime(log.end_time)}
+                            </span>
+                          )}
+                        </div>
+                        
+                        {log.fields && (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-xs font-bold text-slate-400">圃場</span>
+                            <span className="font-bold text-slate-600 text-sm flex items-center gap-1">
+                              <MapPin className="w-3 h-3 text-slate-400" /> {log.fields.name}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 右側：資材、メモ、写真 */}
+                      <div className="flex-grow space-y-4 md:border-l md:border-slate-100 md:pl-6">
+                        {log.material_quantity && (
+                          <div className="bg-purple-50 p-3 rounded-xl border border-purple-100">
+                            <div className="text-xs font-bold text-purple-500 mb-1 flex items-center gap-1">
+                              <Sprout className="w-3 h-3" /> 使用資材
+                            </div>
+                            <div className="font-bold text-purple-700 text-sm">
+                              {log.materials?.name} <span className="opacity-70 text-xs ml-1">(使用量: {log.material_quantity})</span>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {log.memo && (
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <div className="text-xs font-bold text-slate-400 mb-1 flex items-center gap-1">
+                              <FileText className="w-3 h-3" /> メモ
+                            </div>
+                            <div className="text-slate-600 text-sm whitespace-pre-wrap">{log.memo}</div>
+                          </div>
+                        )}
+
+                        {log.photo_url && (
+                          <div>
+                            <div className="text-xs font-bold text-slate-400 mb-1 flex items-center gap-1">
+                              <ImageIcon className="w-3 h-3" /> 写真
+                            </div>
+                            <img src={log.photo_url} alt="作業写真" className="rounded-xl w-32 h-32 object-cover border border-slate-200" />
+                          </div>
+                        )}
+                        
+                        {!log.material_quantity && !log.memo && !log.photo_url && (
+                          <div className="text-slate-400 text-sm italic py-4">特記事項なし</div>
+                        )}
+                      </div>
+                      
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
-              
-              {/* 資材 */}
-              {selectedLogDetail.material_quantity && (
-                <div>
-                  <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                    <Sprout className="w-4 h-4 text-purple-500" /> 使用資材・農薬等
-                  </h4>
-                  <div className="p-5 bg-purple-50 border border-purple-100 rounded-2xl">
-                    <div className="font-bold text-purple-700">{selectedLogDetail.materials?.name || '不明'}</div>
-                    <div className="text-sm text-purple-600 mt-1">使用量: {selectedLogDetail.material_quantity}</div>
-                  </div>
-                </div>
-              )}
-
-              {/* 写真 */}
-              {selectedLogDetail.photo_url && (
-                <div>
-                  <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                    <ImageIcon className="w-4 h-4 text-emerald-500" /> 添付写真
-                  </h4>
-                  <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-100">
-                    <img src={selectedLogDetail.photo_url} alt="作業写真" className="w-full h-auto object-contain max-h-96" />
-                  </div>
-                </div>
-              )}
-
-              {/* メモ */}
-              {selectedLogDetail.memo && (
-                <div>
-                  <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-emerald-500" /> 作業メモ
-                  </h4>
-                  <div className="p-5 bg-emerald-50/50 border border-emerald-100 rounded-2xl text-slate-700 whitespace-pre-wrap leading-relaxed">
-                    {selectedLogDetail.memo}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>

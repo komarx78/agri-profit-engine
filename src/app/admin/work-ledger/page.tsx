@@ -75,14 +75,17 @@ export default function WorkLedgerPage() {
   }
 
   // クロス集計データの生成
-  const { tableData, salesData, cropsList, workTypesList, totals } = useMemo(() => {
+  const { tableData, salesData, materialData, cropsList, workTypesList, totals } = useMemo(() => {
     const cropsSet = new Set<string>();
     const workTypesSet = new Set<string>();
     
     const pivotMap: Record<string, Record<string, number>> = {};
     const salesMap: Record<string, number> = {};
-    let grandTotalCost = 0;
-    let grandTotalSales = 0;
+    const materialMap: Record<string, number> = {};
+    
+    let grandTotalCost = 0; // 作業費（人件費など）
+    let grandTotalMaterial = 0; // 資材費
+    let grandTotalSales = 0; // 売上
 
     workLogs.forEach(log => {
       const cropName = log.crops?.name || '作目未指定';
@@ -102,12 +105,14 @@ export default function WorkLedgerPage() {
       
       let value = 0;
       if (viewMode === 'hours') value = durationHours;
-      else if (viewMode === 'cost') value = laborCost;
-      else if (viewMode === 'materialCost') value = materialCost;
-      else if (viewMode === 'totalCost') value = laborCost + materialCost;
+      else if (viewMode === 'cost' || viewMode === 'totalCost') value = laborCost; // 作業列には純粋な人件費を入れる
+      else if (viewMode === 'materialCost') value = materialCost; // 既存互換
 
       pivotMap[cropName][workType] = (pivotMap[cropName][workType] || 0) + value;
       grandTotalCost += value;
+      
+      materialMap[cropName] = (materialMap[cropName] || 0) + materialCost;
+      grandTotalMaterial += materialCost;
     });
 
     salesLogs.forEach(log => {
@@ -124,9 +129,10 @@ export default function WorkLedgerPage() {
     return { 
       tableData: pivotMap,
       salesData: salesMap,
+      materialData: materialMap,
       cropsList: cropsArray, 
       workTypesList: workTypesArray,
-      totals: { cost: grandTotalCost, sales: grandTotalSales }
+      totals: { cost: grandTotalCost, material: grandTotalMaterial, sales: grandTotalSales }
     };
   }, [workLogs, salesLogs, viewMode]);
 
@@ -138,12 +144,17 @@ export default function WorkLedgerPage() {
       workTypesList.forEach(wt => {
         row[wt] = Math.round(tableData[crop]?.[wt] || 0);
       });
-      const rowCost = workTypesList.reduce((sum, wt) => sum + (tableData[crop]?.[wt] || 0), 0);
-      row['費用合計'] = Math.round(rowCost);
+      const rowLaborCost = workTypesList.reduce((sum, wt) => sum + (tableData[crop]?.[wt] || 0), 0);
+      row['作業費合計'] = Math.round(rowLaborCost);
       if (viewMode === 'totalCost') {
+        const material = materialData[crop] || 0;
+        const totalCost = rowLaborCost + material;
         const sales = salesData[crop] || 0;
+        
+        row['資材費(種・苗・農薬等)'] = material;
+        row['総費用(作業+資材)'] = Math.round(totalCost);
         row['売上実績'] = sales;
-        row['粗利'] = sales - rowCost;
+        row['粗利'] = sales - Math.round(totalCost);
       }
       return row;
     });
@@ -273,15 +284,21 @@ export default function WorkLedgerPage() {
                     </th>
                   ))}
                   <th className="bg-indigo-50/50 p-4 border-b border-l-2 border-indigo-200 font-black text-indigo-800 whitespace-nowrap">
-                    作目別 費用計
+                    作目別 作業費計
                   </th>
                   {viewMode === 'totalCost' && (
                     <>
+                      <th className="bg-purple-50/50 p-4 border-b border-l border-purple-200 font-black text-purple-800 whitespace-nowrap">
+                        資材費 (種・苗等)
+                      </th>
+                      <th className="bg-slate-100 p-4 border-b border-l-2 border-slate-300 font-black text-slate-800 whitespace-nowrap">
+                        総費用 (作業+資材)
+                      </th>
                       <th className="bg-emerald-50/50 p-4 border-b border-l border-emerald-200 font-black text-emerald-800 whitespace-nowrap">
                         売上実績
                       </th>
                       <th className="bg-amber-50/50 p-4 border-b border-l-2 border-amber-200 font-black text-amber-800 whitespace-nowrap">
-                        粗利 (売上 - 費用)
+                        粗利 (売上 - 総費用)
                       </th>
                     </>
                   )}
@@ -304,16 +321,29 @@ export default function WorkLedgerPage() {
                     <td className="p-4 border-l-2 border-indigo-100 font-black text-indigo-600 bg-indigo-50/20">
                       {formatValue(workTypesList.reduce((sum, wt) => sum + (tableData[crop]?.[wt] || 0), 0))}
                     </td>
-                    {viewMode === 'totalCost' && (
-                      <>
-                        <td className="p-4 border-l border-emerald-100 font-black text-emerald-600 bg-emerald-50/20">
-                          ¥{(salesData[crop] || 0).toLocaleString()}
-                        </td>
-                        <td className={`p-4 border-l-2 border-amber-200 font-black text-lg bg-amber-50/20 ${(salesData[crop] || 0) - workTypesList.reduce((sum, wt) => sum + (tableData[crop]?.[wt] || 0), 0) < 0 ? 'text-rose-600' : 'text-amber-600'}`}>
-                          ¥{((salesData[crop] || 0) - workTypesList.reduce((sum, wt) => sum + (tableData[crop]?.[wt] || 0), 0)).toLocaleString()}
-                        </td>
-                      </>
-                    )}
+                    {viewMode === 'totalCost' && (() => {
+                      const laborTotal = workTypesList.reduce((sum, wt) => sum + (tableData[crop]?.[wt] || 0), 0);
+                      const materialTotal = materialData[crop] || 0;
+                      const totalCost = laborTotal + materialTotal;
+                      const sales = salesData[crop] || 0;
+                      const profit = sales - totalCost;
+                      return (
+                        <>
+                          <td className="p-4 border-l border-purple-100 font-black text-purple-600 bg-purple-50/20">
+                            ¥{materialTotal.toLocaleString()}
+                          </td>
+                          <td className="p-4 border-l-2 border-slate-200 font-black text-slate-700 bg-slate-100/80">
+                            ¥{totalCost.toLocaleString()}
+                          </td>
+                          <td className="p-4 border-l border-emerald-100 font-black text-emerald-600 bg-emerald-50/20">
+                            ¥{sales.toLocaleString()}
+                          </td>
+                          <td className={`p-4 border-l-2 border-amber-200 font-black text-lg bg-amber-50/20 ${profit < 0 ? 'text-rose-600' : 'text-amber-600'}`}>
+                            ¥{profit.toLocaleString()}
+                          </td>
+                        </>
+                      );
+                    })()}
                   </tr>
                 ))}
                 
@@ -330,16 +360,26 @@ export default function WorkLedgerPage() {
                   <td className="p-4 border-l-2 border-indigo-200 font-black text-indigo-700 text-lg bg-indigo-100/50">
                     {formatValue(totals.cost)}
                   </td>
-                  {viewMode === 'totalCost' && (
-                    <>
-                      <td className="p-4 border-l border-emerald-200 font-black text-emerald-700 text-lg bg-emerald-100/50">
-                        ¥{totals.sales.toLocaleString()}
-                      </td>
-                      <td className={`p-4 border-l-2 border-amber-300 font-black text-xl bg-amber-100/50 ${totals.sales - totals.cost < 0 ? 'text-rose-600' : 'text-amber-700'}`}>
-                        ¥{(totals.sales - totals.cost).toLocaleString()}
-                      </td>
-                    </>
-                  )}
+                  {viewMode === 'totalCost' && (() => {
+                    const totalCostAll = totals.cost + totals.material;
+                    const profitAll = totals.sales - totalCostAll;
+                    return (
+                      <>
+                        <td className="p-4 border-l border-purple-200 font-black text-purple-700 text-lg bg-purple-100/50">
+                          ¥{totals.material.toLocaleString()}
+                        </td>
+                        <td className="p-4 border-l-2 border-slate-300 font-black text-slate-800 text-lg bg-slate-200/60">
+                          ¥{totalCostAll.toLocaleString()}
+                        </td>
+                        <td className="p-4 border-l border-emerald-200 font-black text-emerald-700 text-lg bg-emerald-100/50">
+                          ¥{totals.sales.toLocaleString()}
+                        </td>
+                        <td className={`p-4 border-l-2 border-amber-300 font-black text-xl bg-amber-100/50 ${profitAll < 0 ? 'text-rose-600' : 'text-amber-700'}`}>
+                          ¥{profitAll.toLocaleString()}
+                        </td>
+                      </>
+                    );
+                  })()}
                 </tr>
               </tbody>
             </table>
