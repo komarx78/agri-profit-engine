@@ -23,7 +23,11 @@ export default function WorkLedgerPage() {
   async function fetchLogs() {
     setIsLoading(true);
     try {
-      // 指定月のデータを取得 (work_dateが該当月で始まるもの)
+        const startOfMonth = `${targetMonth}-01`;
+        // 簡単のため31日を月末とする（PostgreSQLのdate型なら、存在しない日でもその月の範囲まで検索可能）
+        const endOfMonth = `${targetMonth}-31`;
+
+      // 指定月のデータを取得
       const { data, error } = await supabase
         .from('work_logs')
         .select(`
@@ -34,7 +38,8 @@ export default function WorkLedgerPage() {
           crops(name),
           workers(name, hourly_wage)
         `)
-        .like('work_date', `${targetMonth}%`)
+        .gte('work_date', startOfMonth)
+        .lte('work_date', endOfMonth)
         .eq('status', 'completed'); // 実績のみ
 
       if (error) throw error;

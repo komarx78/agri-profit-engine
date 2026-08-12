@@ -27,7 +27,7 @@ export default function PlansPage() {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [selectedCrop, setSelectedCrop] = useState<string>('');
-  const [selectedField, setSelectedField] = useState<string>('');
+  const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [selectedWorkType, setSelectedWorkType] = useState<string>('');
   const [plannedDuration, setPlannedDuration] = useState<string>('');
   const [selectedChannel, setSelectedChannel] = useState<string>('');
@@ -108,7 +108,7 @@ export default function PlansPage() {
     setStartDate(dateStr);
     setEndDate(dateStr); // デフォルトは1日のみ
     setSelectedCrop(cropName);
-    setSelectedField('');
+    setSelectedFields([]);
     setSelectedWorkType('');
     setPlannedDuration('');
     setSelectedChannel('');
@@ -147,18 +147,34 @@ export default function PlansPage() {
       const cropId = crops.find(c => c.name === selectedCrop)?.id;
 
       if (activeTab === 'work') {
-        const fieldId = fields.find(f => f.name === selectedField)?.id;
         const duration = plannedDuration ? parseInt(plannedDuration, 10) : null;
         
-        // 複数日分を一括作成
-        const inserts = datesToInsert.map(dateStr => ({
-          crop_id: cropId || null,
-          field_id: fieldId || null,
-          work_type: selectedWorkType,
-          work_date: dateStr,
-          duration_minutes: duration,
-          status: 'planned'
-        }));
+        // 複数日分 × 複数圃場分 を一括作成
+        const inserts: any[] = [];
+        datesToInsert.forEach(dateStr => {
+          if (selectedFields.length > 0) {
+            selectedFields.forEach(fieldName => {
+              const fieldId = fields.find(f => f.name === fieldName)?.id;
+              inserts.push({
+                crop_id: cropId || null,
+                field_id: fieldId || null,
+                work_type: selectedWorkType,
+                work_date: dateStr,
+                duration_minutes: duration,
+                status: 'planned'
+              });
+            });
+          } else {
+            inserts.push({
+              crop_id: cropId || null,
+              field_id: null,
+              work_type: selectedWorkType,
+              work_date: dateStr,
+              duration_minutes: duration,
+              status: 'planned'
+            });
+          }
+        });
 
         const { error } = await supabase.from('work_logs').insert(inserts);
         if (error) throw error;
@@ -403,25 +419,39 @@ export default function PlansPage() {
 
                 {activeTab === 'work' ? (
                   <>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1">圃場</label>
-                        <select value={selectedField} onChange={e => setSelectedField(e.target.value)} required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:border-emerald-500 focus:outline-none">
-                          <option value="">選択</option>
-                          {fields.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
-                        </select>
+                    <div className="grid grid-cols-1 gap-4">
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <label className="block text-xs font-bold text-slate-500 mb-2">圃場 (複数選択可)</label>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {fields.map(f => (
+                            <label key={f.id} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-emerald-50 transition-colors">
+                              <input 
+                                type="checkbox" 
+                                checked={selectedFields.includes(f.name)}
+                                onChange={(e) => {
+                                  if (e.target.checked) setSelectedFields([...selectedFields, f.name]);
+                                  else setSelectedFields(selectedFields.filter(n => n !== f.name));
+                                }}
+                                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 border-slate-300"
+                              />
+                              <span className="text-sm font-bold text-slate-700">{f.name}</span>
+                            </label>
+                          ))}
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1">作業内容</label>
-                        <select value={selectedWorkType} onChange={e => setSelectedWorkType(e.target.value)} required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:border-emerald-500 focus:outline-none">
-                          <option value="">選択</option>
-                          {workTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">作業内容</label>
+                          <select value={selectedWorkType} onChange={e => setSelectedWorkType(e.target.value)} required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:border-emerald-500 focus:outline-none">
+                            <option value="">選択</option>
+                            {workTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">予定時間 (分) <span className="text-slate-400 font-normal ml-1">※任意</span></label>
+                          <input type="number" value={plannedDuration} onChange={e => setPlannedDuration(e.target.value)} placeholder="空欄でもOK" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg focus:border-emerald-500 focus:outline-none placeholder:font-normal placeholder:text-sm" />
+                        </div>
                       </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">予定時間 (分) <span className="text-slate-400 font-normal ml-1">※任意</span></label>
-                      <input type="number" value={plannedDuration} onChange={e => setPlannedDuration(e.target.value)} placeholder="空欄でもOKです" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg focus:border-emerald-500 focus:outline-none placeholder:font-normal placeholder:text-sm" />
                     </div>
                   </>
                 ) : (
