@@ -10,6 +10,11 @@ export default function PurchasesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  
+  // OCR関連のステート
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [ocrError, setOcrError] = useState('');
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // フォームステート
   const [formData, setFormData] = useState({
@@ -129,6 +134,63 @@ export default function PurchasesPage() {
     }
   };
 
+  // ----------------------------------------------------
+  // レシートOCR (画像アップロードと解析)
+  // ----------------------------------------------------
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // ファイルサイズが大きい場合はリサイズする等の処理が必要になる場合がありますが、
+    // 今回は簡易的にFileReaderでBase64エンコードします
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64Str = event.target?.result as string;
+      await analyzeReceipt(base64Str);
+    };
+    reader.readAsDataURL(file);
+    
+    // 同じファイルを再度選べるようにリセット
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const analyzeReceipt = async (imageBase64: string) => {
+    setIsAnalyzing(true);
+    setOcrError('');
+    
+    try {
+      const response = await fetch('/api/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64 })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || '解析に失敗しました');
+      }
+
+      // 解析結果をフォームに反映
+      setFormData(prev => ({
+        ...prev,
+        purchase_date: data.date || prev.purchase_date,
+        supplier: data.supplier || prev.supplier,
+        // AIが判別した金額をそのまま合計金額に入れる（単価・数量は自動計算と競合するため注意）
+        // 簡易的に単価に全額を入れ、数量1として扱うことで自動計算を活用する
+        unit_price: data.total_amount ? Number(data.total_amount) : prev.unit_price,
+        quantity: 1,
+      }));
+      
+      alert('レシートの読み取りが完了しました！');
+    } catch (error: any) {
+      console.error(error);
+      setOcrError(error.message || 'レシートの解析に失敗しました');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-16">
       
@@ -160,12 +222,43 @@ export default function PurchasesPage() {
             
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
               
-              {/* OCR・レシート撮影（将来機能のプレースホルダー） */}
-              <div className="border-2 border-dashed border-emerald-200 bg-emerald-50/50 rounded-xl p-4 flex flex-col items-center justify-center text-emerald-700 cursor-pointer hover:bg-emerald-50 transition-colors group">
-                <Camera className="w-8 h-8 mb-2 group-hover:scale-110 transition-transform" />
-                <span className="font-bold text-sm">レシートを撮影して自動入力</span>
-                <span className="text-xs text-emerald-600/70 mt-1">※フェーズ3で実装予定</span>
+              {/* OCR・レシート撮影 */}
+              <div 
+                onClick={() => !isAnalyzing && fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all group relative overflow-hidden ${
+                  isAnalyzing ? 'border-slate-300 bg-slate-50 cursor-wait' : 'border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-50'
+                }`}
+              >
+                {isAnalyzing ? (
+                  <div className="flex flex-col items-center justify-center space-y-3 z-10">
+                    <div className="w-8 h-8 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin"></div>
+                    <span className="font-bold text-sm text-emerald-700">AIがレシートを解析中...</span>
+                    <span className="text-xs text-emerald-600/70">数秒かかる場合があります</span>
+                  </div>
+                ) : (
+                  <>
+                    <Camera className="w-8 h-8 mb-2 group-hover:scale-110 transition-transform" />
+                    <span className="font-bold text-sm">レシートを撮影してAI自動入力</span>
+                    <span className="text-xs text-emerald-600/70 mt-1">スマホのカメラまたは画像ファイル</span>
+                  </>
+                )}
+                {/* 隠しファイル入力 */}
+                <input 
+                  type="file" 
+                  accept="image/jpeg, image/png, image/jpg" 
+                  capture="environment" // スマホで背面カメラを優先起動
+                  className="hidden" 
+                  ref={fileInputRef}
+                  onChange={handleImageUpload}
+                />
               </div>
+
+              {ocrError && (
+                <div className="bg-rose-50 text-rose-600 p-3 rounded-lg text-sm font-bold flex items-start gap-2 border border-rose-200">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                  <span>{ocrError}<br/><span className="text-xs font-normal opacity-80">※APIキーが未設定の場合はエラーになります</span></span>
+                </div>
+              )}
 
               <div className="space-y-4 pt-2">
                 <div>

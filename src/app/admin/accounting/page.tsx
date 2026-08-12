@@ -39,7 +39,7 @@ export default function AccountingPage() {
     
     try {
       // 指定期間のデータを取得
-      const [salesRes, workRes, cropsRes, channelsRes] = await Promise.all([
+      const [salesRes, purchasesRes, cropsRes, channelsRes] = await Promise.all([
         supabase
           .from('sales_logs')
           .select(`
@@ -52,18 +52,16 @@ export default function AccountingPage() {
           .lte('sales_date', endDate),
         
         supabase
-          .from('work_logs')
+          .from('material_purchases')
           .select(`
-            work_date,
-            duration_minutes,
-            material_quantity,
-            crops(name),
-            fields(name),
-            workers(name, hourly_wage),
-            materials(name, default_price)
+            purchase_date,
+            supplier,
+            total_price,
+            notes,
+            materials(name)
           `)
-          .gte('work_date', startDate)
-          .lte('work_date', endDate),
+          .gte('purchase_date', startDate)
+          .lte('purchase_date', endDate),
           
         supabase.from('crops').select('id, name'),
         supabase.from('sales_channels').select('id, name')
@@ -150,43 +148,43 @@ export default function AccountingPage() {
       // -------------------------------------------------------------
       // 2. コスト（資材費・人件費）データは日々の発生ベースで仕訳化
       // -------------------------------------------------------------
-      workLogs.forEach((log: any) => {
-        const dateStr = log.work_date?.replace(/-/g, '/') || '';
-        const cropName = log.crops?.name || '';
+      const purchases = purchasesRes.data || [];
+
+      purchases.forEach((p: any) => {
+        if (!p.total_price || p.total_price <= 0) return;
         
-        // 資材費の仕訳
-        if (log.material_quantity && log.materials?.default_price) {
-          const matCost = log.material_quantity * log.materials.default_price;
-          if (matCost > 0) {
-            journalEntries.push({
-              'No': index++,
-              '日付': dateStr,
-              '借方勘定科目': accounts.materialDebit,
-              '借方補助科目': '',
-              '借方部門': '',
-              '借方税区分': taxCategories.material,
-              '借方インボイス': '',
-              '借方金額(円)': Math.round(matCost),
-              '借方税額': 0,
-              '貸方勘定科目': accounts.materialCredit,
-              '貸方補助科目': '',
-              '貸方部門': '',
-              '貸方税区分': '対象外', // 現金などは対象外
-              '貸方インボイス': '',
-              '貸方金額(円)': Math.round(matCost),
-              '貸方税額': 0,
-              '摘要': `${log.materials.name} 使用 (${cropName})`,
-              '仕訳メモ': '',
-              'タグ': '',
-              'MF仕訳タイプ': '',
-              '決算整理仕訳': '',
-              '作成日時': '',
-              '作成者': '',
-              '最終更新日時': '',
-              '最終更新者': ''
-            });
-          }
-        }
+        const dateStr = p.purchase_date?.replace(/-/g, '/') || '';
+        const matName = p.materials?.name || 'その他資材';
+        const supplier = p.supplier ? `${p.supplier} ` : '';
+        const notes = p.notes ? ` (${p.notes})` : '';
+        
+        journalEntries.push({
+          'No': index++,
+          '日付': dateStr,
+          '借方勘定科目': accounts.materialDebit,
+          '借方補助科目': '',
+          '借方部門': '',
+          '借方税区分': taxCategories.material,
+          '借方インボイス': '',
+          '借方金額(円)': Math.round(p.total_price),
+          '借方税額': 0,
+          '貸方勘定科目': accounts.materialCredit,
+          '貸方補助科目': '',
+          '貸方部門': '',
+          '貸方税区分': '対象外', // 現金などは対象外
+          '貸方インボイス': '',
+          '貸方金額(円)': Math.round(p.total_price),
+          '貸方税額': 0,
+          '摘要': `${supplier}資材購入: ${matName}${notes}`,
+          '仕訳メモ': '',
+          'タグ': '',
+          'MF仕訳タイプ': '',
+          '決算整理仕訳': '',
+          '作成日時': '',
+          '作成者': '',
+          '最終更新日時': '',
+          '最終更新者': ''
+        });
       });
 
       if (journalEntries.length === 0) {
