@@ -42,7 +42,7 @@ export default function WorkEntryPage() {
   const [activeWorkLog, setActiveWorkLog] = useState<any>(null);
   const [elapsedMinutes, setElapsedMinutes] = useState<number>(0);
 
-  const workTypes = ['収穫', '定植・播種', '水やり', '肥料・農薬', '草刈り', '片付け・メンテ'];
+  const workTypes = ['収穫', '播種', '定植', '水やり', '肥料・農薬', '草刈り', '片付け・メンテ'];
 
   useEffect(() => {
     setIsMounted(true);

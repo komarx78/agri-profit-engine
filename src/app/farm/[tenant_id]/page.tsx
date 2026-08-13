@@ -65,7 +65,8 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const workTypes = [
-    { ja: '播種・定植', en: 'Sowing/Planting', vi: 'Gieo hạt/Trồng cây', id: 'Menabur/Menanam', zh: '播种/种植' },
+    { ja: '播種', en: 'Sowing', vi: 'Gieo hạt', id: 'Menabur', zh: '播种' },
+    { ja: '定植', en: 'Planting', vi: 'Trồng cây', id: 'Menanam', zh: '种植' },
     { ja: '水やり・追肥', en: 'Watering/Fertilizing', vi: 'Tưới nước/Bón phân', id: 'Menyiram/Memupuk', zh: '浇水/施肥' },
     { ja: '草引き・防除', en: 'Weeding/Pest control', vi: 'Làm cỏ/Kiểm soát dịch hại', id: 'Menyiangi/Pengendalian hama', zh: '除草/害虫防治' },
     { ja: '収穫・調整', en: 'Harvesting/Adjustment', vi: 'Thu hoạch/Điều chỉnh', id: 'Memanen/Penyesuaian', zh: '收获/调整' },
