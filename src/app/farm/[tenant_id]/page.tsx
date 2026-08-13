@@ -644,9 +644,9 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
             ) : (
               <button
                 type="submit"
-                disabled={!selectedCrop || !selectedField || !workType || (inputMode === 'manual' && !duration) || isSubmitting}
+                disabled={!selectedTaskTarget || !selectedField || !workType || (inputMode === 'manual' && !duration) || isSubmitting}
                 className={`w-full py-5 rounded-2xl font-black text-xl shadow-xl transition-all flex items-center justify-center gap-3 mt-8 ${
-                  (!selectedCrop || !selectedField || !workType || (inputMode === 'manual' && !duration) || isSubmitting)
+                  (!selectedTaskTarget || !selectedField || !workType || (inputMode === 'manual' && !duration) || isSubmitting)
                     ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
                     : 'bg-gradient-to-r from-emerald-400 to-teal-400 text-emerald-950'
                 }`}
