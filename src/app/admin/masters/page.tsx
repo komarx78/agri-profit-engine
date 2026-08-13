@@ -143,6 +143,11 @@ export default function MastersPage() {
         dataToSave = { ...dataToSave, ...translations };
       }
 
+      // cropsテーブルには存在しないカラムを除外する
+      if (table === 'crops') {
+        delete dataToSave.seedlings_per_10a;
+      }
+
       let query;
       let insertedId = editingItem?.id;
       
