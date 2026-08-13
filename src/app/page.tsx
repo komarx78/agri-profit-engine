@@ -27,6 +27,7 @@ export default function WorkEntryPage() {
   const [selectedField, setSelectedField] = useState<string>('');
   const [workType, setWorkType] = useState<string>('');
   const [duration, setDuration] = useState<string>(''); // 手入力用
+  const [manualDate, setManualDate] = useState<string>(() => new Date().toISOString().split('T')[0]); // 手入力用日付
   const [memo, setMemo] = useState<string>('');
   const [selectedMaterial, setSelectedMaterial] = useState<string>('');
   const [materialQuantity, setMaterialQuantity] = useState<string>('');
@@ -130,6 +131,7 @@ export default function WorkEntryPage() {
     setSelectedField('');
     setWorkType('');
     setDuration('');
+    setManualDate(new Date().toISOString().split('T')[0]);
     setMemo('');
     setSelectedMaterial('');
     setMaterialQuantity('');
@@ -255,7 +257,7 @@ export default function WorkEntryPage() {
             work_type: workType,
             duration_minutes: parseInt(duration, 10),
             status: 'completed',
-            work_date: new Date().toISOString().split('T')[0],
+            work_date: manualDate,
             material_id: matId || null,
             material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,
             memo: memo || null,
@@ -377,6 +379,23 @@ export default function WorkEntryPage() {
 
             {/* ▼ フォーム入力部分（作業中は操作不可にする） */}
             <div className={`space-y-6 transition-all duration-300 ${activeWorkLog ? 'opacity-60 pointer-events-none grayscale-[30%]' : ''}`}>
+              
+              {/* 手入力モード時の日付選択 */}
+              {inputMode === 'manual' && (
+                <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
+                    <Clock className="w-4 h-4" />日付
+                  </h2>
+                  <input
+                    type="date"
+                    value={manualDate}
+                    onChange={(e) => setManualDate(e.target.value)}
+                    className="w-full bg-emerald-950/60 text-slate-300 px-4 py-3 border border-emerald-800/60 rounded-xl focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-bold"
+                    required
+                  />
+                </section>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
