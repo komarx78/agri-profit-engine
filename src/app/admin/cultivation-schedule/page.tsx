@@ -27,7 +27,7 @@ export default function CultivationSchedulePage() {
   const [isPanelLoading, setIsPanelLoading] = useState(false);
   
   // 新規入力用ステート
-  const [newWork, setNewWork] = useState({ date: new Date().toISOString().split('T')[0], type: '定植・播種', duration: '', note: '' });
+  const [newWork, setNewWork] = useState({ date: new Date().toISOString().split('T')[0], type: '播種', duration: '', note: '' });
   const [newSales, setNewSales] = useState({ date: new Date().toISOString().split('T')[0], quantity: '', price: '', channel: '直売所' });
 
   // 8月〜7月の月配列
@@ -530,7 +530,8 @@ export default function CultivationSchedulePage() {
                           <div>
                             <label className="block text-xs font-bold text-slate-500 mb-1">作業種類</label>
                             <select value={newWork.type} onChange={e => setNewWork({...newWork, type: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm">
-                              <option>定植・播種</option>
+                              <option>播種</option>
+                              <option>定植</option>
                               <option>水やり</option>
                               <option>肥料・農薬</option>
                               <option>草刈り</option>

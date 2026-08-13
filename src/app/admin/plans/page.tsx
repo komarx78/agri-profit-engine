@@ -16,7 +16,7 @@ export default function PlansPage() {
   const [channels, setChannels] = useState<any[]>([]);
   const [salesPrices, setSalesPrices] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
-  const workTypes = ['収穫', '定植・播種', '水やり', '肥料・農薬', '草刈り', '片付け・メンテ'];
+  const workTypes = ['収穫', '播種', '定植', '水やり', '肥料・農薬', '草刈り', '片付け・メンテ'];
 
   const [allWorkLogs, setAllWorkLogs] = useState<any[]>([]);
   const [allSalesLogs, setAllSalesLogs] = useState<any[]>([]);
