@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft } from 'lucide-react';
 import Papa from 'papaparse';
+import { autoTranslateMasterData } from '@/app/actions/translate';
 
 type MasterType = 'materials' | 'sales_prices' | 'crops' | 'fields' | 'workers';
 
@@ -117,18 +118,35 @@ export default function MastersPage() {
         throw new Error('作目名と販路名は必須です');
       }
 
+      // 自動翻訳処理（作目、圃場、資材のみ）
+      // 編集時は、名前が変更された場合のみ、または翻訳カラムが空の場合のみ翻訳し直すなどの工夫も考えられるが、
+      // 今回はシンプルに毎回翻訳を更新するか、または既存の翻訳を保持する。
+      // 新規作成時、または既存データの名前変更時などに翻訳を実行する。
+      let dataToSave = { ...formData };
+      
+      if (['crops', 'fields', 'materials'].includes(table) && dataToSave.name) {
+        // 名前が変更されたか、新規かの場合に翻訳を実行する
+        const shouldTranslate = !editingItem || editingItem.name !== dataToSave.name;
+        
+        if (shouldTranslate) {
+          setUploadStatus({ type: 'info', message: '多言語翻訳を生成中...' });
+          const translations = await autoTranslateMasterData(dataToSave.name);
+          dataToSave = { ...dataToSave, ...translations };
+        }
+      }
+
       let query;
       if (editingItem) {
-        query = supabase.from(table).update(formData).eq('id', editingItem.id);
+        query = supabase.from(table).update(dataToSave).eq('id', editingItem.id);
       } else {
-        const { id, created_at, ...insertData } = formData;
+        const { id, created_at, ...insertData } = dataToSave;
         query = supabase.from(table).insert([insertData]);
       }
 
       const { error } = await query;
       if (error) throw error;
       
-      setUploadStatus({ type: 'success', message: '保存しました！' });
+      setUploadStatus({ type: 'success', message: '保存・翻訳完了しました！' });
       setTimeout(() => setUploadStatus(null), 3000);
       handleCloseModal();
       fetchMasters(); // 再取得
