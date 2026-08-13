@@ -47,48 +47,36 @@ export default function MaterialRequirementsPage() {
   const handlePrevYear = () => setYear(y => y - 1);
   const handleNextYear = () => setYear(y => y + 1);
 
-  // === シミュレーション用ダミーロジック ===
-  // 本来は crop_standards の materials_per_10a (JSON) から計算しますが、
-  // 今回はUIとしての完成度を示すため、ランダム（または固定ルール）で必要資材を仮計算します。
   const calculateRequirements = () => {
     const requirements: Record<string, { material: any, totalAmount: number, details: any[] }> = {};
     
     // マスタがなければ何もしない
     if (materials.length === 0 || plans.length === 0) return [];
 
-    // 固定ルール：作付面積(a) 1aにつき、資材インデックス0番(肥料)を2kg、インデックス1番(農薬)を0.5L使うとする
-    const mainFertilizer = materials[0];
-    const mainPesticide = materials.length > 1 ? materials[1] : null;
-
     plans.forEach(plan => {
       const area = plan.calculated_area || 0;
       if (area <= 0) return;
 
-      // 肥料の計算 (10aあたり 20kg とする)
-      if (mainFertilizer) {
-        const amount = (area / 10) * 20;
-        if (!requirements[mainFertilizer.id]) {
-          requirements[mainFertilizer.id] = { material: mainFertilizer, totalAmount: 0, details: [] };
-        }
-        requirements[mainFertilizer.id].totalAmount += amount;
-        requirements[mainFertilizer.id].details.push({
-          plan,
-          amount
-        });
-      }
+      // この作目の基準値を取得
+      const standard = cropStandards.find(s => s.crop_id === plan.crop_id);
+      if (!standard || !standard.materials_per_10a) return;
 
-      // 農薬の計算 (10aあたり 5L とする)
-      if (mainPesticide) {
-        const amount = (area / 10) * 5;
-        if (!requirements[mainPesticide.id]) {
-          requirements[mainPesticide.id] = { material: mainPesticide, totalAmount: 0, details: [] };
+      const materialsPer10a = Array.isArray(standard.materials_per_10a) ? standard.materials_per_10a : [];
+
+      materialsPer10a.forEach((m: any) => {
+        const material = materials.find(mat => mat.id === m.material_id);
+        if (!material) return;
+
+        const amount = (area / 10) * m.amount;
+        if (!requirements[material.id]) {
+          requirements[material.id] = { material: material, totalAmount: 0, details: [] };
         }
-        requirements[mainPesticide.id].totalAmount += amount;
-        requirements[mainPesticide.id].details.push({
+        requirements[material.id].totalAmount += amount;
+        requirements[material.id].details.push({
           plan,
           amount
         });
-      }
+      });
     });
 
     return Object.values(requirements);
@@ -130,7 +118,7 @@ export default function MaterialRequirementsPage() {
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 text-amber-800 text-sm font-medium">
         <Info className="w-5 h-5 shrink-0 text-amber-600" />
         <p>
-          ※ 現在はデモンストレーション用として、<strong>10aあたり 肥料20kg、農薬5L</strong>という固定ルールで栽培計画の面積から自動計算して表示しています。将来的にはマスタ管理画面で各作目ごとの資材基準値を設定し、そのJSONデータに基づいて精緻な計算を行うことが可能です。
+          「マスタ管理」で各作目ごとに設定した「10aあたりの必要資材」を基に、栽培計画で登録した面積から自動的に総量を算出します。
         </p>
       </div>
 

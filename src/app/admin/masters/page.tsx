@@ -80,6 +80,9 @@ export default function MastersPage() {
         const standard = cropStandards.find(s => s.crop_id === item.id);
         if (standard) {
           initial.seedlings_per_10a = standard.seedlings_per_10a;
+          initial.materials_per_10a = standard.materials_per_10a || [];
+        } else {
+          initial.materials_per_10a = [];
         }
       }
       setFormData(initial);
@@ -104,6 +107,7 @@ export default function MastersPage() {
       else if (type === 'crops') {
         initial.name = initial.name || '';
         initial.seedlings_per_10a = initial.seedlings_per_10a || 0;
+        initial.materials_per_10a = initial.materials_per_10a || [];
       }
       else {
         initial.name = initial.name || '';
@@ -168,11 +172,12 @@ export default function MastersPage() {
       // 作目の場合は基準値も保存
       if (table === 'crops' && insertedId) {
         // formData.seedlings_per_10a が入力されていれば保存、なければ削除
-        if (formData.seedlings_per_10a || formData.seedlings_per_10a === 0) {
+        if (formData.seedlings_per_10a || formData.seedlings_per_10a === 0 || formData.materials_per_10a) {
           const standardData = {
             crop_id: insertedId,
             variety: formData.variety || null,
-            seedlings_per_10a: Number(formData.seedlings_per_10a)
+            seedlings_per_10a: Number(formData.seedlings_per_10a) || 0,
+            materials_per_10a: formData.materials_per_10a || []
           };
           
           // 一旦既存の基準があるか確認
@@ -710,6 +715,67 @@ export default function MastersPage() {
                       placeholder="例: 4000"
                     />
                     <p className="text-xs text-slate-400 mt-1">※ 栽培計画入力時に、圃場面積×この値で必要苗数が自動計算されます。</p>
+                  </div>
+                  
+                  <div className="mt-4 pt-4 border-t border-slate-200">
+                    <label className="block text-xs font-bold text-slate-500 mb-2">10aあたりの必要資材 (肥料・農薬など)</label>
+                    <div className="space-y-2 mb-2">
+                      {(formData.materials_per_10a || []).map((m: any, idx: number) => {
+                        const mat = materials.find(x => x.id === m.material_id);
+                        return (
+                          <div key={idx} className="flex items-center gap-2 bg-white p-2 border border-slate-200 rounded-lg">
+                            <span className="flex-1 text-sm font-bold text-slate-700">{mat ? mat.name : '不明な資材'}</span>
+                            <input 
+                              type="number" 
+                              value={m.amount || ''}
+                              onChange={(e) => {
+                                const newMats = [...formData.materials_per_10a];
+                                newMats[idx].amount = Number(e.target.value);
+                                setFormData({...formData, materials_per_10a: newMats});
+                              }}
+                              className="w-20 p-1.5 border border-slate-200 rounded focus:outline-none focus:border-emerald-500 text-right text-sm"
+                              placeholder="数量"
+                            />
+                            <span className="text-xs text-slate-500 w-8">{mat ? mat.unit : ''}</span>
+                            <button 
+                              onClick={() => {
+                                const newMats = formData.materials_per_10a.filter((_: any, i: number) => i !== idx);
+                                setFormData({...formData, materials_per_10a: newMats});
+                              }}
+                              className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex gap-2">
+                      <select 
+                        id="addMaterialSelect"
+                        className="flex-1 p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 font-bold"
+                      >
+                        <option value="">資材を選択して追加</option>
+                        {materials.map(m => (
+                          <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>
+                        ))}
+                      </select>
+                      <button 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          const select = document.getElementById('addMaterialSelect') as HTMLSelectElement;
+                          if (select.value) {
+                            const newMats = [...(formData.materials_per_10a || []), { material_id: select.value, amount: 0 }];
+                            setFormData({...formData, materials_per_10a: newMats});
+                            select.value = "";
+                          }
+                        }}
+                        className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-sm font-bold flex items-center gap-1 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" /> 追加
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-2">※ 必要な資材を追加し、10aあたりの使用量を設定してください。</p>
                   </div>
                 </div>
               )}
