@@ -88,14 +88,27 @@ export async function verifyWorkerPin(tenantId: string, workerId: string, pinCod
   }
 }
 
-// 4. マスタデータ（作目・圃場・資材）の取得
+// 4. マスタデータ（作目・圃場・資材）と栽培計画の取得
 export async function getFarmMasters(tenantId: string) {
   try {
     const supabase = createAdminClient();
-    const [cRes, fRes, mRes] = await Promise.all([
+    
+    // 現在の年度を取得（8月始まりの事業年度と仮定、簡易的に現在の年を使用）
+    const currentYear = new Date().getFullYear();
+
+    const [cRes, fRes, mRes, pRes] = await Promise.all([
       supabase.from('crops').select('id, name').eq('user_id', tenantId).order('name'),
-      supabase.from('fields').select('id, name').eq('user_id', tenantId).order('name'),
-      supabase.from('materials').select('*').eq('user_id', tenantId).order('name')
+      supabase.from('fields').select('id, name, area_size').eq('user_id', tenantId).order('name'),
+      supabase.from('materials').select('*').eq('user_id', tenantId).order('name'),
+      supabase.from('cultivation_plans_v2').select(`
+        id, 
+        field_id, 
+        crop_id, 
+        variety, 
+        start_month, 
+        end_month,
+        crops ( name )
+      `).eq('year', currentYear)
     ]);
 
     return {
@@ -103,7 +116,8 @@ export async function getFarmMasters(tenantId: string) {
       data: {
         crops: cRes.data || [],
         fields: fRes.data || [],
-        materials: mRes.data || []
+        materials: mRes.data || [],
+        plans: pRes.data || []
       }
     };
   } catch (error: any) {

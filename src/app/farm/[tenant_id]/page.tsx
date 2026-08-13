@@ -39,8 +39,9 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   const [crops, setCrops] = useState<MasterItem[]>([]);
   const [fields, setFields] = useState<MasterItem[]>([]);
   const [materials, setMaterials] = useState<MasterItem[]>([]);
+  const [plans, setPlans] = useState<any[]>([]);
 
-  const [selectedCrop, setSelectedCrop] = useState('');
+  const [selectedTaskTarget, setSelectedTaskTarget] = useState(''); // 'plan_UUID' or 'crop_UUID'
   const [selectedField, setSelectedField] = useState('');
   const [workType, setWorkType] = useState('');
   const [duration, setDuration] = useState('');
@@ -114,6 +115,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
       setCrops(res.data.crops);
       setFields(res.data.fields);
       setMaterials(res.data.materials);
+      setPlans(res.data.plans || []);
     }
   };
 
@@ -148,7 +150,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   }, [activeWorkStartTime]);
 
   const resetForm = () => {
-    setSelectedCrop('');
+    setSelectedTaskTarget('');
     setSelectedField('');
     setWorkType('');
     setDuration('');
@@ -236,12 +238,21 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
       const startTime = new Date(activeWorkStartTime);
       const diffMins = Math.floor((endTime.getTime() - startTime.getTime()) / 1000 / 60);
 
-      const cropId = crops.find(c => c.name === selectedCrop)?.id;
-      const fieldId = fields.find(f => f.name === selectedField)?.id;
+      const fieldId = selectedField; // selectedField is now ID
+      
+      let planId = null;
+      let cropId = null;
+      if (selectedTaskTarget.startsWith('plan_')) {
+        planId = selectedTaskTarget.replace('plan_', '');
+      } else if (selectedTaskTarget.startsWith('crop_')) {
+        cropId = selectedTaskTarget.replace('crop_', '');
+      }
+
       const matId = materials.find(m => m.name === selectedMaterial)?.id;
 
       const logData = {
-        crop_id: cropId || null,
+        plan_id: planId,
+        crop_id: cropId,
         field_id: fieldId || null,
         work_type: workType,
         start_time: startTime.toISOString(),
@@ -302,12 +313,21 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
           uploadedVideoUrl = fileName;
       }
 
-      const cropId = crops.find(c => c.name === selectedCrop)?.id;
-      const fieldId = fields.find(f => f.name === selectedField)?.id;
+      const fieldId = selectedField; // selectedField is now ID
+      
+      let planId = null;
+      let cropId = null;
+      if (selectedTaskTarget.startsWith('plan_')) {
+        planId = selectedTaskTarget.replace('plan_', '');
+      } else if (selectedTaskTarget.startsWith('crop_')) {
+        cropId = selectedTaskTarget.replace('crop_', '');
+      }
+
       const matId = materials.find(m => m.name === selectedMaterial)?.id;
 
       const logData = {
-        crop_id: cropId || null,
+        plan_id: planId,
+        crop_id: cropId,
         field_id: fieldId || null,
         work_type: workType,
         duration_minutes: parseInt(duration, 10),
@@ -470,22 +490,38 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
             <div className={`space-y-6 transition-all duration-300 ${activeWorkStartTime ? 'opacity-60 pointer-events-none grayscale-[30%]' : ''}`}>
               <div className="grid grid-cols-2 gap-4">
                 <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
-                    <Sprout className="w-4 h-4" />{t('crop', language)}
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-teal-400 mb-2.5 flex items-center gap-2">
+                    <MapPin className="w-4 h-4" />{t('field', language)}
                   </h2>
-                  <select value={selectedCrop} onChange={(e) => setSelectedCrop(e.target.value)} required className="w-full bg-emerald-950/60 p-3 rounded-xl border border-emerald-800/60 text-sm font-bold">
+                  <select value={selectedField} onChange={(e) => {
+                    setSelectedField(e.target.value);
+                    setSelectedTaskTarget(''); // 圃場が変わったらリセット
+                  }} required className="w-full bg-emerald-950/60 p-3 rounded-xl border border-emerald-800/60 text-sm font-bold">
                       <option value="">-- {t('selectRequired', language)} --</option>
-                      {crops.map(c => <option key={c.id} value={c.name}>{getTranslatedName(c, language)}</option>)}
+                      {fields.map(f => <option key={f.id} value={f.id}>{getTranslatedName(f, language)}</option>)}
                   </select>
                 </section>
 
                 <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-teal-400 mb-2.5 flex items-center gap-2">
-                    <MapPin className="w-4 h-4" />{t('field', language)}
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
+                    <Sprout className="w-4 h-4" />{t('crop', language)}
                   </h2>
-                  <select value={selectedField} onChange={(e) => setSelectedField(e.target.value)} required className="w-full bg-emerald-950/60 p-3 rounded-xl border border-emerald-800/60 text-sm font-bold">
+                  <select value={selectedTaskTarget} onChange={(e) => setSelectedTaskTarget(e.target.value)} required disabled={!selectedField} className="w-full bg-emerald-950/60 p-3 rounded-xl border border-emerald-800/60 text-sm font-bold disabled:opacity-50">
                       <option value="">-- {t('selectRequired', language)} --</option>
-                      {fields.map(f => <option key={f.id} value={f.name}>{getTranslatedName(f, language)}</option>)}
+                      {/* 選択された圃場の進行中計画を優先表示 */}
+                      {plans.filter(p => p.field_id === selectedField).length > 0 && (
+                        <optgroup label="進行中の栽培計画">
+                          {plans.filter(p => p.field_id === selectedField).map(p => (
+                            <option key={`plan_${p.id}`} value={`plan_${p.id}`}>
+                              {p.crops?.name} {p.variety ? `(${p.variety})` : ''}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {/* 計画外の通常の作目 */}
+                      <optgroup label="計画外の作業">
+                        {crops.map(c => <option key={`crop_${c.id}`} value={`crop_${c.id}`}>{getTranslatedName(c, language)}</option>)}
+                      </optgroup>
                   </select>
                 </section>
               </div>
