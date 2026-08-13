@@ -292,6 +292,8 @@ export default function MastersPage() {
           if (type === 'materials') {
             insertData = data.map((row: any) => ({
               name: row['資材名'] || row.name,
+              category: row['カテゴリ'] || row.category || '未設定',
+              specification: row['規格'] || row.specification || null,
               unit: row['単位'] || row.unit,
               default_price: parseFloat(row['単価']) || parseFloat(row.price) || 0
             }));
@@ -346,7 +348,7 @@ export default function MastersPage() {
   // --- CSVダウンロード・エクスポート処理 ---
   const handleDownloadTemplate = (type: MasterType) => {
     let content = "";
-    if (type === 'materials') content = "資材名,単位,単価\n苦土石灰,袋,1500\n化成肥料(8-8-8),kg,200\n液肥アミノ酸,L,800";
+    if (type === 'materials') content = "資材名,カテゴリ,規格,単位,単価\n苦土石灰,肥料費,20kg袋,袋,1500\n化成肥料(8-8-8),肥料費,20kg袋,袋,2500\n液肥アミノ酸,肥料費,1L,L,800";
     else if (type === 'sales_prices') content = "作目名,販路名,単価\n伏見唐辛子,JA,500\n伏見唐辛子,直売所,650\n米（キヌヒカリ）,JA,12000";
     else if (type === 'crops') content = "作目名\n伏見唐辛子\n米\n九条ネギ";
     else if (type === 'fields') content = "圃場名,面積(a)\nA-1 ハウス,10\n北側 第2農地,24\n南側 露地,14";
@@ -363,7 +365,7 @@ export default function MastersPage() {
 
   const handleExportData = (type: MasterType) => {
     let data: Record<string, any>[] = [];
-    if (type === 'materials') data = materials.map(m => ({ '資材名': m.name, 'カテゴリ': m.category || '未設定', '単位': m.unit, '単価': m.default_price }));
+    if (type === 'materials') data = materials.map(m => ({ '資材名': m.name, 'カテゴリ': m.category || '未設定', '規格': m.specification || '', '単位': m.unit, '単価': m.default_price }));
     else if (type === 'sales_prices') data = salesPrices.map(s => ({ '作目名': s.crop_name, '販路名': s.channel_name, '単価': s.price_per_unit }));
     else if (type === 'crops') data = crops.map(c => ({ '作目名': c.name }));
     else if (type === 'fields') data = fields.map(f => ({ '圃場名': f.name, '面積(a)': f.area_size || '' }));
@@ -572,7 +574,7 @@ export default function MastersPage() {
                       <div className="font-bold text-slate-700">{m.name}</div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">{m.category || '未設定'}</span>
-                        <span className="text-xs text-slate-400">{m.unit}</span>
+                        <span className="text-xs text-slate-400">{m.specification ? `${m.specification} ` : ''}({m.unit})</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -852,6 +854,16 @@ export default function MastersPage() {
                         <option key={cat} value={cat}>{cat}</option>
                       ))}
                     </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold text-slate-500 mb-1">規格 (詳細レポート用)</label>
+                    <input 
+                      type="text" 
+                      value={formData.specification || ''} 
+                      onChange={e => setFormData({...formData, specification: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
+                      placeholder="例: 20kg袋, 1Lボトル, 200穴セルトレイ"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1">単位</label>

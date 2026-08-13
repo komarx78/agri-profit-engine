@@ -700,11 +700,21 @@ export default function CultivationSchedulePage() {
                         
                         return (
                           <>
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                              <h4 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
-                                <BarChart2 className="w-5 h-5 text-amber-500" />
-                                経営指標 (10a当たり)
-                              </h4>
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative">
+                              <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-4">
+                                <h4 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                                  <BarChart2 className="w-5 h-5 text-amber-500" />
+                                  経営指標 (10a当たり)
+                                </h4>
+                                <a 
+                                  href={`/admin/report/${selectedPlan.id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs font-bold bg-amber-100 hover:bg-amber-200 text-amber-700 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                                >
+                                  📄 詳細レポート(PDF印刷)
+                                </a>
+                              </div>
                               
                               <div className="text-xs text-slate-500 mb-4 bg-amber-50 p-3 rounded-lg border border-amber-100 font-medium">
                                 ※ 現在の圃場面積({area}a)から10aあたりの数値を自動換算しています。<br/>
