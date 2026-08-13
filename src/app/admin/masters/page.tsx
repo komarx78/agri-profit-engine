@@ -150,6 +150,7 @@ export default function MastersPage() {
       // cropsテーブルには存在しないカラムを除外する
       if (table === 'crops') {
         delete dataToSave.seedlings_per_10a;
+        delete dataToSave.materials_per_10a;
       }
 
       let query;
