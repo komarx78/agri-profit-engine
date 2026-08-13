@@ -138,10 +138,10 @@ export default function CultivationSchedulePage() {
   const handleOpenDetails = async (plan: any) => {
     setSelectedPlan(plan);
     setActiveTab('work');
-    fetchPlanDetails(plan.id);
+    fetchPlanDetails(plan);
   };
 
-  const fetchPlanDetails = async (planId: string) => {
+  const fetchPlanDetails = async (plan: any) => {
     setIsPanelLoading(true);
     try {
       const [workRes, salesRes] = await Promise.all([
@@ -149,8 +149,8 @@ export default function CultivationSchedulePage() {
           *,
           workers (hourly_wage),
           materials (default_price, category)
-        `).eq('plan_id', planId).order('work_date', { ascending: false }),
-        supabase.from('sales_logs').select('*').eq('plan_id', planId).order('sales_date', { ascending: false })
+        `).or(`plan_id.eq.${plan.id},crop_id.eq.${plan.crop_id}`).order('work_date', { ascending: false }),
+        supabase.from('sales_logs').select('*').or(`plan_id.eq.${plan.id},crop_id.eq.${plan.crop_id}`).order('sales_date', { ascending: false })
       ]);
       setWorkLogs(workRes.data || []);
       setSalesLogs(salesRes.data || []);
@@ -176,7 +176,7 @@ export default function CultivationSchedulePage() {
       }]);
       if (error) throw error;
       setNewWork({ ...newWork, duration: '', note: '' });
-      fetchPlanDetails(selectedPlan.id);
+      fetchPlanDetails(selectedPlan);
     } catch (err: any) {
       alert(`エラー: ${err.message}`);
     } finally {
@@ -198,7 +198,7 @@ export default function CultivationSchedulePage() {
       }]);
       if (error) throw error;
       setNewSales({ ...newSales, quantity: '', price: '' });
-      fetchPlanDetails(selectedPlan.id);
+      fetchPlanDetails(selectedPlan);
     } catch (err: any) {
       alert(`エラー: ${err.message}`);
     } finally {
