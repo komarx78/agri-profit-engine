@@ -61,6 +61,7 @@ export default function AdminLayout({
     {
       title: '作業管理',
       items: [
+        { name: '育苗スケジュール表', path: '/admin/nursery-schedule', icon: Table },
         { name: '作業記録一覧', path: '/admin/history', icon: History },
         { name: '作業内容台帳 (集計)', path: '/admin/work-ledger', icon: Table },
         { name: '動画マニュアル集', path: '/admin/manuals', icon: Video },
