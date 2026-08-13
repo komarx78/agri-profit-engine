@@ -620,6 +620,17 @@ export default function MastersPage() {
               </div>
 
               <div className="overflow-y-auto flex-1 mb-4 pr-1 space-y-4">
+                
+                {/* 完全に新しいカテゴリの追加を一番上に移動 */}
+                <div className="pb-2">
+                  <button 
+                    onClick={() => handleOpenModal('sales_prices')}
+                    className="w-full py-2.5 border-2 border-dashed border-emerald-200 hover:border-emerald-400 bg-emerald-50/30 text-emerald-700 font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all"
+                  >
+                    <Plus className="w-4 h-4" />新しい販売価格を追加
+                  </button>
+                </div>
+
                 {Object.keys(groupedSalesPrices).length === 0 ? (
                   <p className="text-slate-400 text-sm text-center pt-8">販売価格データがありません</p>
                 ) : (
@@ -665,15 +676,8 @@ export default function MastersPage() {
                     </div>
                   ))
                 )}
-                
-                {/* 完全に新しいカテゴリの追加 */}
+                {/* 既存の販路から一括コピーなどのボタン群 */}
                 <div className="pt-2 space-y-2">
-                  <button 
-                    onClick={() => handleOpenModal('sales_prices')}
-                    className="w-full py-2.5 border-2 border-dashed border-emerald-200 hover:border-emerald-400 bg-emerald-50/30 text-emerald-700 font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all"
-                  >
-                    <Plus className="w-4 h-4" />新しい販売価格を追加
-                  </button>
                   <button 
                     onClick={() => setIsCopyModalOpen(true)}
                     className="w-full py-2.5 border-2 border-dashed border-blue-200 hover:border-blue-400 bg-blue-50/30 text-blue-700 font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all"
@@ -898,9 +902,18 @@ export default function MastersPage() {
                       className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-slate-700"
                     >
                       <option value="">-- 作目を選択してください --</option>
-                      {crops.map(c => (
-                        <option key={c.id} value={c.name}>{c.name}</option>
-                      ))}
+                      {crops.map(c => {
+                        const isRegistered = salesPrices.some(sp => sp.crop_name === c.name);
+                        const isCurrentEditing = editingItem && editingItem.crop_name === c.name;
+                        // すでに登録済みで、かつ現在編集中のものではない場合は選択不可にする
+                        const isDisabled = isRegistered && !isCurrentEditing;
+                        
+                        return (
+                          <option key={c.id} value={c.name} disabled={isDisabled}>
+                            {c.name} {isDisabled ? '(登録済み)' : ''}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                   <div>
