@@ -46,7 +46,7 @@ export default function SalesEntryPage() {
 
         const [cRes, chRes, spRes] = await Promise.all([
           supabase.from('crops').select('*'),
-          supabase.from('sales_channels').select('id, name'),
+          supabase.from('sales_channels').select('*'),
           supabase.from('sales_prices').select('*')
         ]);
 
@@ -218,21 +218,24 @@ export default function SalesEntryPage() {
               ) : (
                 <div className="grid grid-cols-2 gap-2.5">
                   {/* salesPricesの中から、選んだ作目に紐づく販路だけを抽出 */}
-                  {salesPrices.filter(sp => sp.crop_name === selectedCrop).map(sp => (
-                    <button
-                      key={sp.id}
-                      type="button"
-                      onClick={() => setSelectedChannel(sp.channel_name)}
-                      className={`py-3.5 px-3 rounded-xl font-bold text-base transition-all border text-center ${
-                        selectedChannel === sp.channel_name
-                          ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-slate-950 border-blue-300 shadow-md'
-                          : 'bg-slate-950/60 text-slate-300 border-slate-800/80 hover:bg-slate-800/60'
-                      }`}
-                    >
-                      {sp.channel_name}
-                      <div className="text-[10px] font-medium opacity-80 mt-1">¥{sp.price_per_unit}</div>
-                    </button>
-                  ))}
+                  {salesPrices.filter(sp => sp.crop_name === selectedCrop).map(sp => {
+                    const channelObj = channels.find(c => c.name === sp.channel_name) || { name: sp.channel_name };
+                    return (
+                      <button
+                        key={sp.id}
+                        type="button"
+                        onClick={() => setSelectedChannel(sp.channel_name)}
+                        className={`py-3.5 px-3 rounded-xl font-bold text-base transition-all border text-center ${
+                          selectedChannel === sp.channel_name
+                            ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-slate-950 border-blue-300 shadow-md'
+                            : 'bg-slate-950/60 text-slate-300 border-slate-800/80 hover:bg-slate-800/60'
+                        }`}
+                      >
+                        {getTranslatedName(channelObj, language)}
+                        <div className="text-[10px] font-medium opacity-80 mt-1">¥{sp.price_per_unit}</div>
+                      </button>
+                    );
+                  })}
                   {salesPrices.filter(sp => sp.crop_name === selectedCrop).length === 0 && (
                     <div className="col-span-2 text-xs text-rose-400 p-2 text-center bg-rose-950/30 rounded-lg">
                       {t('noPriceMaster', language)}
