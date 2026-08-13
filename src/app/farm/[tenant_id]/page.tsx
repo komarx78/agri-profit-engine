@@ -236,7 +236,8 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
 
       const endTime = new Date();
       const startTime = new Date(activeWorkStartTime);
-      const diffMins = Math.floor((endTime.getTime() - startTime.getTime()) / 1000 / 60);
+      // 秒単位の差分から切り上げて分を計算し、最低1分とする
+      const diffMins = Math.max(1, Math.ceil((endTime.getTime() - startTime.getTime()) / 1000 / 60));
 
       const fieldId = selectedField; // selectedField is now ID
       
