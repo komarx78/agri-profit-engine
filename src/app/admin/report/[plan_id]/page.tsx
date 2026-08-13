@@ -128,10 +128,19 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
       if (!totals.byType) totals.byType = {};
       totals.byType[mappedType] = (totals.byType[mappedType] || 0) + hours;
       
-      // カレンダーマーク
-      if (rawType.includes('播種')) marks[monthPeriodKey] = '○';
-      else if (rawType.includes('定植')) marks[monthPeriodKey] = '◎';
-      else if (rawType.includes('収穫')) marks[monthPeriodKey] = '■';
+      // カレンダーマーク（同じ旬に複数の作業がある場合は結合して表示）
+      let newMark = '';
+      if (rawType.includes('播種')) newMark = '○';
+      else if (rawType.includes('定植')) newMark = '◎';
+      else if (rawType.includes('収穫')) newMark = '■';
+      
+      if (newMark) {
+        if (!marks[monthPeriodKey]) {
+          marks[monthPeriodKey] = newMark;
+        } else if (!marks[monthPeriodKey].includes(newMark)) {
+          marks[monthPeriodKey] += newMark;
+        }
+      }
       
       // 経費計算 (10a換算しない。実際の使用量を表示して後で換算する)
       if (log.material_quantity && log.materials) {
