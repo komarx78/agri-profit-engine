@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, use } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Printer, Loader2, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -15,7 +15,9 @@ const WORK_TYPE_MAP: Record<string, string> = {
   '片付け・メンテ': '片付け',
 };
 
-export default function ReportPage({ params }: { params: { plan_id: string } }) {
+export default function ReportPage({ params }: { params: Promise<{ plan_id: string }> | { plan_id: string } }) {
+  const unwrappedParams = params instanceof Promise ? use(params) : params;
+  
   const [isLoading, setIsLoading] = useState(true);
   const [planData, setPlanData] = useState<any>(null);
   
@@ -36,7 +38,7 @@ export default function ReportPage({ params }: { params: { plan_id: string } }) 
 
   useEffect(() => {
     fetchData();
-  }, [params.plan_id]);
+  }, [unwrappedParams.plan_id]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -49,7 +51,7 @@ export default function ReportPage({ params }: { params: { plan_id: string } }) 
           fields ( name, area_size ),
           crops ( name )
         `)
-        .eq('id', params.plan_id)
+        .eq('id', unwrappedParams.plan_id)
         .single();
         
       if (planErr) throw planErr;
@@ -66,7 +68,7 @@ export default function ReportPage({ params }: { params: { plan_id: string } }) 
       const [workRes, salesRes] = await Promise.all([
         supabase.from('work_logs').select(`
           *,
-          materials (name, default_price, category, specification, unit)
+          materials (*)
         `).eq('plan_id', params.plan_id).order('work_date', { ascending: true }),
         supabase.from('sales_logs').select('*').eq('plan_id', params.plan_id).order('sales_date', { ascending: true })
       ]);
@@ -76,9 +78,9 @@ export default function ReportPage({ params }: { params: { plan_id: string } }) 
       
       processLogs(workLogs, salesLogs, m);
       
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('データの取得に失敗しました');
+      alert(`データの取得に失敗しました: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
