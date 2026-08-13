@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { WorkerGate } from '@/components/WorkerGate';
+import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 
 interface MasterItem {
   id: string;
@@ -19,6 +20,7 @@ export default function WorkEntryPage() {
   const [crops, setCrops] = useState<MasterItem[]>([]);
   const [fields, setFields] = useState<MasterItem[]>([]);
   const [materials, setMaterials] = useState<MasterItem[]>([]);
+  const [language, setLanguage] = useState<LanguageCode>('ja');
 
   // フォーム状態
   const [selectedCrop, setSelectedCrop] = useState<string>('');
@@ -52,6 +54,13 @@ export default function WorkEntryPage() {
     }
     const parsedUser = JSON.parse(savedUser);
     setCurrentUser(parsedUser);
+
+    let loadedLang = 'ja' as LanguageCode;
+    const savedGlobalLang = localStorage.getItem('agri_lang_sales') as LanguageCode;
+    if (savedGlobalLang && LANGUAGES.some(l => l.code === savedGlobalLang)) {
+        loadedLang = savedGlobalLang;
+    }
+    setLanguage(loadedLang);
 
     async function fetchData() {
       try {
@@ -292,18 +301,35 @@ export default function WorkEntryPage() {
               <Clock className="w-6 h-6 stroke-[2.5]" />
             </div>
             <div>
-              <h1 className="text-xl font-black tracking-tight text-white">作業記録</h1>
+              <h1 className="text-xl font-black tracking-tight text-white">{t('workRecord', language)}</h1>
               <p className="text-xs font-medium text-emerald-400">
-                お疲れ様です、{currentUser.name}さん！
+                {t('goodWork', language)}、{getTranslatedName(currentUser, language)}！
               </p>
             </div>
           </div>
-          <button 
-            onClick={handleLogout}
-            className="p-2 bg-emerald-900 text-emerald-400 rounded-full hover:bg-emerald-800 transition-colors"
-          >
-            <LogOut className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <select 
+              value={language}
+              onChange={e => {
+                const newLang = e.target.value as LanguageCode;
+                setLanguage(newLang);
+                localStorage.setItem('agri_lang_sales', newLang);
+                const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang_'));
+                langKeys.forEach(key => localStorage.setItem(key, newLang));
+              }}
+              className="bg-emerald-800 text-white text-xs font-bold rounded-lg px-2 py-1 focus:outline-none"
+            >
+              {LANGUAGES.map(l => (
+                <option key={l.code} value={l.code}>{l.flag} {l.code.toUpperCase()}</option>
+              ))}
+            </select>
+            <button 
+              onClick={handleLogout}
+              className="p-2 bg-emerald-900 text-emerald-400 rounded-full hover:bg-emerald-800 transition-colors"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* タブ切り替え（作業中は切り替え不可） */}
@@ -315,7 +341,7 @@ export default function WorkEntryPage() {
             }`}
           >
             <Play className="w-4 h-4 fill-current" />
-            作業開始(打刻)
+            {t('tabTimer', language)}
           </button>
           <button
             onClick={() => setInputMode('manual')}
@@ -324,7 +350,7 @@ export default function WorkEntryPage() {
             }`}
           >
             <History className="w-4 h-4" />
-            手入力(事後)
+            {t('tabManual', language)}
           </button>
         </div>
       </header>
@@ -335,8 +361,8 @@ export default function WorkEntryPage() {
             <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center border border-emerald-400/40 shadow-inner">
               <CheckCircle2 className="w-12 h-12 text-emerald-400" />
             </div>
-            <h2 className="text-2xl font-black text-white">記録完了！</h2>
-            <p className="text-sm text-emerald-200">お疲れ様でした！🌱</p>
+            <h2 className="text-2xl font-black text-white">{t('recordingComplete', language)}</h2>
+            <p className="text-sm text-emerald-200">{t('goodJob', language)}</p>
           </div>
         ) : (
           <form onSubmit={inputMode === 'timer' ? handleStartWork : handleManualSubmit} className="space-y-6">
@@ -354,7 +380,7 @@ export default function WorkEntryPage() {
               <div className="grid grid-cols-2 gap-4">
                 <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
-                    <Sprout className="w-4 h-4" />作目 (必須)
+                    <Sprout className="w-4 h-4" />{t('crop', language)}
                   </h2>
                   <div className="flex flex-col gap-2">
                     {crops.map(c => (
@@ -368,7 +394,7 @@ export default function WorkEntryPage() {
                             : 'bg-emerald-950/60 text-slate-300 border-emerald-800/60'
                         }`}
                       >
-                        {c.name}
+                        {getTranslatedName(c, language)}
                       </button>
                     ))}
                   </div>
@@ -376,7 +402,7 @@ export default function WorkEntryPage() {
 
                 <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-teal-400 mb-2.5 flex items-center gap-2">
-                    <MapPin className="w-4 h-4" />圃場 (必須)
+                    <MapPin className="w-4 h-4" />{t('field', language)}
                   </h2>
                   <div className="flex flex-col gap-2">
                     {fields.map(f => (
@@ -390,7 +416,7 @@ export default function WorkEntryPage() {
                             : 'bg-emerald-950/60 text-slate-300 border-emerald-800/60'
                         }`}
                       >
-                        {f.name}
+                        {getTranslatedName(f, language)}
                       </button>
                     ))}
                   </div>
@@ -400,21 +426,22 @@ export default function WorkEntryPage() {
               {/* 作業内容 */}
               <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 mb-2.5 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4" />作業内容 (必須)
+                  <Sparkles className="w-4 h-4" />{t('workType', language)}
                 </h2>
                 <div className="grid grid-cols-3 gap-2">
-                  {workTypes.map(t => (
+                  {workTypes.map(tData => (
                     <button
-                      key={t}
+                      key={tData}
                       type="button"
-                      onClick={() => setWorkType(t)}
+                      onClick={() => setWorkType(tData)}
                       className={`py-3 px-2 rounded-xl font-bold text-xs transition-all border text-center ${
-                        workType === t
+                        workType === tData
                           ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 border-amber-200 shadow-md'
                           : 'bg-emerald-950/60 text-slate-300 border-emerald-800/60'
                       }`}
                     >
-                      {t}
+                      {/* TODO: 本来はマスタ化するか固定辞書が必要だが、とりあえずそのまま出す */}
+                      {tData}
                     </button>
                   ))}
                 </div>
@@ -423,7 +450,7 @@ export default function WorkEntryPage() {
               {/* 資材の使用 */}
               <section className="bg-purple-900/30 p-4 rounded-2xl border border-purple-800/40 shadow-sm">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-purple-400 mb-2.5 flex items-center gap-2">
-                  <Package className="w-4 h-4" />使った資材 (任意)
+                  <Package className="w-4 h-4" />{t('material', language)}
                 </h2>
                 <div className="space-y-3">
                   <select 
@@ -431,9 +458,9 @@ export default function WorkEntryPage() {
                     onChange={(e) => setSelectedMaterial(e.target.value)}
                     className="w-full py-3 px-4 bg-emerald-950/80 rounded-xl border border-purple-800/60 text-slate-200 focus:outline-none focus:border-purple-400 font-bold"
                   >
-                    <option value="">資材を選ばない</option>
+                    <option value="">{t('noMaterial', language)}</option>
                     {materials.map(m => (
-                      <option key={m.id} value={m.name}>{m.name}</option>
+                      <option key={m.id} value={m.name}>{getTranslatedName(m, language)}</option>
                     ))}
                   </select>
                   
@@ -443,10 +470,10 @@ export default function WorkEntryPage() {
                         type="number"
                         value={materialQuantity}
                         onChange={(e) => setMaterialQuantity(e.target.value)}
-                        placeholder="使用量"
+                        placeholder={t('amount', language)}
                         className="flex-1 py-3 px-4 text-xl font-black bg-emerald-950/80 rounded-xl border border-purple-800/60 text-white placeholder-emerald-800 focus:outline-none focus:border-purple-400"
                       />
-                      <span className="text-purple-300 font-bold">単位</span>
+                      <span className="text-purple-300 font-bold">{t('unit', language)}</span>
                     </div>
                   )}
                 </div>
@@ -456,7 +483,7 @@ export default function WorkEntryPage() {
               {inputMode === 'manual' && (
                 <section className="bg-sky-900/30 p-4 rounded-2xl border border-sky-800/40 shadow-sm">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-sky-400 mb-2.5 flex items-center gap-2">
-                    <Clock className="w-4 h-4" />作業時間 (分) (必須)
+                    <Clock className="w-4 h-4" />作業時間 ({t('minute', language)})
                   </h2>
                   <input
                     type="number"
@@ -476,13 +503,17 @@ export default function WorkEntryPage() {
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-teal-400 animate-pulse"></div>
                 <div className="flex items-center justify-center gap-2 text-emerald-400 font-bold mb-2">
                   <Clock className="w-5 h-5 animate-spin-slow" style={{ animationDuration: '3s' }} />
-                  現在作業中...
+                  {t('currentlyWorking', language)}
                 </div>
                 <div className="text-6xl font-black text-white tracking-tighter tabular-nums mb-4 drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]">
-                  {elapsedMinutes}<span className="text-2xl text-emerald-400 ml-1">分</span>
+                  {elapsedMinutes}<span className="text-2xl text-emerald-400 ml-1">{t('minute', language)}</span>
                 </div>
                 <div className="text-emerald-200 font-bold text-sm mb-6 flex flex-col gap-1 items-center">
-                  <span>{activeWorkLog.crops?.name || selectedCrop}</span>
+                  <span>
+                    {activeWorkLog.crops?.name 
+                      ? getTranslatedName(crops.find(c => c.name === activeWorkLog.crops.name) || activeWorkLog.crops, language)
+                      : getTranslatedName(crops.find(c => c.name === selectedCrop) || {name: selectedCrop}, language)}
+                  </span>
                   <span className="bg-emerald-950/50 px-3 py-1 rounded-full">{activeWorkLog.work_type || workType}</span>
                 </div>
                 
@@ -495,7 +526,7 @@ export default function WorkEntryPage() {
                   {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : (
                     <>
                       <Square className="w-6 h-6 fill-white" />
-                      作業を終了する
+                      {t('stopWork', language)}
                     </>
                   )}
                 </button>
@@ -515,12 +546,12 @@ export default function WorkEntryPage() {
                 ) : inputMode === 'timer' ? (
                   <>
                     <Play className="w-6 h-6 fill-current" />
-                    作業を開始する
+                    {t('startWork', language)}
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-6 h-6" />
-                    作業を記録する
+                    {t('save', language)}
                   </>
                 )}
               </button>

@@ -230,6 +230,51 @@ export const TRANSLATIONS: Record<string, Record<LanguageCode, string>> = {
     id: 'Masuk',
     zh: '登录',
   },
+  
+  // page.tsx (ルートページ) 専用
+  workRecord: {
+    ja: '作業記録', en: 'Work Record', vi: 'Ghi nhận công việc', id: 'Catatan Kerja', zh: '工作记录'
+  },
+  goodWork: {
+    ja: 'お疲れ様です', en: 'Good work', vi: 'Làm tốt lắm', id: 'Kerja bagus', zh: '辛苦了'
+  },
+  currentlyWorking: {
+    ja: '現在作業中...', en: 'Currently working...', vi: 'Hiện đang làm việc...', id: 'Sedang bekerja...', zh: '目前正在工作...'
+  },
+  noMaterial: {
+    ja: '資材を選ばない', en: 'No material', vi: 'Không có vật liệu', id: 'Tidak ada material', zh: '不选材料'
+  },
+  minute: {
+    ja: '分', en: 'min', vi: 'phút', id: 'menit', zh: '分钟'
+  },
+  // WorkerGate用
+  workerLogin: {
+    ja: '現場ログイン', en: 'Worker Login', vi: 'Đăng nhập nhân viên', id: 'Login Pekerja', zh: '工人登录'
+  },
+  yourName: {
+    ja: 'お名前', en: 'Your Name', vi: 'Tên của bạn', id: 'Nama Anda', zh: '您的名字'
+  },
+  selectNamePrompt: {
+    ja: '自分の名前と暗証番号を入力してください', en: 'Enter your name and PIN', vi: 'Nhập tên và mã PIN của bạn', id: 'Masukkan nama dan PIN Anda', zh: '输入您的名字和 PIN'
+  },
+  selectName: {
+    ja: '名前を選択してください', en: 'Please select your name', vi: 'Vui lòng chọn tên của bạn', id: 'Silakan pilih nama Anda', zh: '请选择您的名字'
+  },
+  yourPin: {
+    ja: '暗証番号 (4桁)', en: 'PIN (4 digits)', vi: 'Mã PIN (4 chữ số)', id: 'PIN (4 digit)', zh: 'PIN (4 位数字)'
+  },
+  pinHint: {
+    ja: '※初期設定は「0000」です', en: '* Default is "0000"', vi: '* Mặc định là "0000"', id: '* Bawaan adalah "0000"', zh: '* 默认为“0000”'
+  },
+  incorrectPin: {
+    ja: '暗証番号が間違っています。', en: 'Incorrect PIN.', vi: 'Mã PIN không đúng.', id: 'PIN salah.', zh: 'PIN 错误。'
+  },
+  loginFailed: {
+    ja: 'ログインに失敗しました。', en: 'Login failed.', vi: 'Đăng nhập thất bại.', id: 'Gagal masuk.', zh: '登录失败。'
+  },
+  loginAndStart: {
+    ja: 'ログインして作業開始', en: 'Login & Start Work', vi: 'Đăng nhập & Bắt đầu làm việc', id: 'Login & Mulai Kerja', zh: '登录并开始工作'
+  },
 };
 
 export function t(key: string, lang: LanguageCode = 'ja'): string {
