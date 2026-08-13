@@ -892,13 +892,16 @@ export default function MastersPage() {
                 <>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1">作目名 (必須)</label>
-                    <input 
-                      type="text" 
-                      value={formData.crop_name || ''} 
+                    <select
+                      value={formData.crop_name || ''}
                       onChange={e => setFormData({...formData, crop_name: e.target.value})}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
-                      placeholder="例: 伏見唐辛子"
-                    />
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-slate-700"
+                    >
+                      <option value="">-- 作目を選択してください --</option>
+                      {crops.map(c => (
+                        <option key={c.id} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1">販路名 (必須)</label>
