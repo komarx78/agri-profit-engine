@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Table, Sprout, Save, Loader2, Info } from 'lucide-react';
+import { Table, Sprout, Save, Loader2, Info, Paintbrush, Eraser } from 'lucide-react';
 
 // 日付操作ユーティリティ
 const addWeeks = (date: Date, weeks: number) => {
@@ -22,6 +22,8 @@ const formatToYYYYMMDD = (date: Date) => {
   return `${y}-${m}-${d}`;
 };
 
+type TaskType = 'sowing' | 'potting' | 'planting';
+
 export default function NurserySchedulePage() {
   const [plans, setPlans] = useState<any[]>([]);
   const [schedules, setSchedules] = useState<any[]>([]);
@@ -29,6 +31,9 @@ export default function NurserySchedulePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [year, setYear] = useState(new Date().getFullYear());
   const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), 0, 1)); // 今年の1月1日を起点とする
+  
+  // 現在の入力モード（ブラシの色）
+  const [currentMode, setCurrentMode] = useState<TaskType>('sowing');
 
   // ヘッダーの日付リストを生成 (15週分程度)
   const weeks = Array.from({ length: 15 }).map((_, i) => addWeeks(startDate, i));
@@ -106,7 +111,8 @@ export default function NurserySchedulePage() {
       if (!value) {
         delete newSchedule[dateStr];
       } else {
-        newSchedule[dateStr] = { quantity: Number(value), type: 'plan' };
+        // 現在選択中のブラシ(モード)の色情報を一緒に保存する
+        newSchedule[dateStr] = { quantity: value, type: currentMode };
       }
       return { ...s, schedule_data: newSchedule };
     }));
@@ -144,6 +150,15 @@ export default function NurserySchedulePage() {
     }
   };
 
+  const getCellColorClass = (type: string) => {
+    switch (type) {
+      case 'sowing': return 'bg-orange-400 text-white placeholder:text-white/50 border-orange-500';
+      case 'potting': return 'bg-pink-400 text-white placeholder:text-white/50 border-pink-500';
+      case 'planting': return 'bg-green-600 text-white placeholder:text-white/50 border-green-700';
+      default: return 'bg-transparent text-slate-700 focus:bg-blue-50 border-transparent';
+    }
+  };
+
   return (
     <div className="max-w-[95vw] mx-auto space-y-6 pb-12 relative">
       <div className="flex items-center justify-between">
@@ -178,6 +193,48 @@ export default function NurserySchedulePage() {
         <p>
           このリストは<strong>「栽培計画表」と連動</strong>しています。新しい苗を計画に追加したい場合は、先に「栽培計画表」画面で計画を立ててください。自動的にこちらに必要数と共に追加されます。
         </p>
+      </div>
+      
+      {/* ツールバー (入力モード選択) */}
+      <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
+        <div className="flex items-center gap-2 text-slate-500 font-bold text-sm ml-2">
+          <Paintbrush className="w-4 h-4" /> 入力時の色（作業種類）を選択：
+        </div>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setCurrentMode('sowing')}
+            className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
+              currentMode === 'sowing' ? 'bg-orange-100 border-orange-400 text-orange-800 shadow-sm' : 'border-transparent hover:bg-slate-50 text-slate-500'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-orange-400"></div> 種まき
+            </div>
+          </button>
+          <button 
+            onClick={() => setCurrentMode('potting')}
+            className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
+              currentMode === 'potting' ? 'bg-pink-100 border-pink-400 text-pink-800 shadow-sm' : 'border-transparent hover:bg-slate-50 text-slate-500'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-pink-400"></div> 鉢上げ
+            </div>
+          </button>
+          <button 
+            onClick={() => setCurrentMode('planting')}
+            className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
+              currentMode === 'planting' ? 'bg-green-100 border-green-500 text-green-800 shadow-sm' : 'border-transparent hover:bg-slate-50 text-slate-500'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-green-600"></div> 植え付け
+            </div>
+          </button>
+        </div>
+        <div className="ml-auto text-xs text-slate-400 mr-2">
+          ※ 選択した色の状態で表に文字（数字）を入力すると、そのセルに色が付きます。<br/>※ 消したい場合は文字を消して空にしてください。
+        </div>
       </div>
 
       {isLoading ? (
@@ -217,14 +274,14 @@ export default function NurserySchedulePage() {
                         {plan.crops?.name} {plan.variety && <span className="text-emerald-600 text-xs ml-1">{plan.variety}</span>}
                       </td>
                       <td className="p-3 border-r text-center font-black text-slate-700 bg-slate-50/50">
-                        {plan.calculated_seedlings.toLocaleString()} 本
+                        {plan.calculated_seedlings?.toLocaleString()} 本
                       </td>
-                      <td className="p-0 border-r">
+                      <td className="p-1 border-r">
                         <input 
                           type="number" 
                           value={schedule.sown_quantity || ''} 
                           onChange={(e) => handleCellChange(plan.id, 'sown_quantity', Number(e.target.value))}
-                          className="w-full p-3 bg-transparent focus:outline-none focus:bg-emerald-50 text-center font-bold text-emerald-700"
+                          className="w-full p-2 bg-slate-100/50 rounded focus:outline-none focus:bg-emerald-50 text-center font-bold text-emerald-700"
                           placeholder="0"
                         />
                       </td>
@@ -234,14 +291,16 @@ export default function NurserySchedulePage() {
                         const dateStr = formatToYYYYMMDD(week);
                         const cellData = schedule.schedule_data?.[dateStr];
                         const val = cellData ? cellData.quantity : '';
+                        const type = cellData ? cellData.type : 'none';
+                        const colorClass = getCellColorClass(type);
                         
                         return (
-                          <td key={i} className="p-0 border-r text-center">
+                          <td key={i} className="p-0.5 border-r border-slate-100 text-center">
                             <input 
                               type="text" 
                               value={val}
                               onChange={(e) => handleScheduleDataChange(plan.id, dateStr, e.target.value)}
-                              className="w-full h-full p-3 bg-transparent focus:outline-none focus:bg-blue-50 text-center text-xs font-bold"
+                              className={`w-full h-[32px] focus:outline-none text-center text-xs font-bold rounded ${colorClass}`}
                             />
                           </td>
                         );
