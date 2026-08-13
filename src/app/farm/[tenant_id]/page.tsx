@@ -87,7 +87,10 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
         setWorkers(workersRes.data);
       }
 
-      const savedLang = localStorage.getItem(`agri_lang_${tenantId}`) as LanguageCode;
+      let savedLang = localStorage.getItem(`agri_lang_${tenantId}`) as LanguageCode;
+      if (!savedLang) {
+          savedLang = localStorage.getItem('agri_lang_sales') as LanguageCode;
+      }
       if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
         setLanguage(savedLang);
       }
@@ -161,6 +164,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   const handleLanguageChange = (code: LanguageCode) => {
     setLanguage(code);
     localStorage.setItem(`agri_lang_${tenantId}`, code);
+    localStorage.setItem('agri_lang_sales', code); // 共通キーにも保存
     
     // 出荷記録など他のページとも同期するため、存在するすべてのキーを更新
     const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang_'));

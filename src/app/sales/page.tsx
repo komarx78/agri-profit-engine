@@ -25,15 +25,22 @@ export default function SalesEntryPage() {
     async function fetchData() {
       try {
         // tenant_id を localStorage から取得し、言語設定をロード
-        const tenantIds = Object.keys(localStorage).filter(k => k.startsWith('agri_lang_')).map(k => k.replace('agri_lang_', ''));
-        const tenantId = tenantIds.length > 0 ? tenantIds[0] : null;
-        
         let loadedLang = 'ja' as LanguageCode;
-        if (tenantId) {
-          const savedLang = localStorage.getItem(`agri_lang_${tenantId}`) as LanguageCode;
-          if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
-            loadedLang = savedLang;
-          }
+        
+        // まず共通キーを探す
+        const savedGlobalLang = localStorage.getItem('agri_lang_sales') as LanguageCode;
+        if (savedGlobalLang && LANGUAGES.some(l => l.code === savedGlobalLang)) {
+            loadedLang = savedGlobalLang;
+        } else {
+            // なければ他のキーを探す
+            const tenantIds = Object.keys(localStorage).filter(k => k.startsWith('agri_lang_')).map(k => k.replace('agri_lang_', ''));
+            const tenantId = tenantIds.length > 0 ? tenantIds[0] : null;
+            if (tenantId) {
+              const savedLang = localStorage.getItem(`agri_lang_${tenantId}`) as LanguageCode;
+              if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
+                loadedLang = savedLang;
+              }
+            }
         }
         setLanguage(loadedLang);
 
@@ -143,6 +150,10 @@ export default function SalesEntryPage() {
               onChange={e => {
                 const newLang = e.target.value as LanguageCode;
                 setLanguage(newLang);
+                
+                // 確実に保存するため共通キーにセット
+                localStorage.setItem('agri_lang_sales', newLang);
+                
                 // すべての agri_lang_ キーを更新する（どの農園の画面でも反映されるように）
                 const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang_'));
                 langKeys.forEach(key => localStorage.setItem(key, newLang));
