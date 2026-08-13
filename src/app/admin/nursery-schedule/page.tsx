@@ -184,8 +184,8 @@ export default function NurserySchedulePage() {
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
             </button>
-            <span className="px-3 text-sm font-bold text-slate-600 min-w-[100px] text-center">
-              {formatToMD(startDate)} から
+            <span className="px-3 text-sm font-bold text-slate-600 min-w-[140px] text-center">
+              {startDate.getFullYear()}年{startDate.getMonth() + 1}月{startDate.getDate()}日 〜
             </span>
             <button 
               onClick={handleNextWeeks}
