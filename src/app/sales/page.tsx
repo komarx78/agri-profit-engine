@@ -14,6 +14,7 @@ export default function SalesEntryPage() {
   const [selectedChannel, setSelectedChannel] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('');
   const [manualPrice, setManualPrice] = useState<string>('');
+  const [salesDate, setSalesDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
 
   const [language, setLanguage] = useState<LanguageCode>('ja');
   
@@ -102,7 +103,7 @@ export default function SalesEntryPage() {
           {
             crop_id: cropId || null,
             channel_id: channelId || null,
-            sales_date: new Date().toISOString().split('T')[0],
+            sales_date: salesDate,
             quantity: parseFloat(quantity) || 0,
             unit: 'kg/箱',
             total_sales: calculatedTotal > 0 ? calculatedTotal : null,
@@ -122,6 +123,7 @@ export default function SalesEntryPage() {
         setSelectedChannel('');
         setQuantity('');
         setManualPrice('');
+        setSalesDate(new Date().toISOString().split('T')[0]);
       }, 2500);
     } catch (err) {
       console.error(err);
@@ -180,6 +182,20 @@ export default function SalesEntryPage() {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
             
+            {/* 0. 日付選択 */}
+            <section className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/60 shadow-sm">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
+                日付
+              </h2>
+              <input
+                type="date"
+                value={salesDate}
+                onChange={(e) => setSalesDate(e.target.value)}
+                className="w-full bg-slate-950/60 text-slate-300 px-4 py-3 border border-slate-800/60 rounded-xl focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-bold"
+                required
+              />
+            </section>
+
             {/* 1. 作目選択 */}
             <section className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/60 shadow-sm">
               <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
