@@ -64,13 +64,13 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
       const m = 10 / area;
       setMultiplier(m);
       
-      // 作業ログと出荷ログの取得
+      // 作業ログと出荷ログの取得 (スマホから入力された plan_id のないデータも拾うため or 条件を使用)
       const [workRes, salesRes] = await Promise.all([
         supabase.from('work_logs').select(`
           *,
           materials (*)
-        `).eq('plan_id', params.plan_id).order('work_date', { ascending: true }),
-        supabase.from('sales_logs').select('*').eq('plan_id', params.plan_id).order('sales_date', { ascending: true })
+        `).or(`plan_id.eq.${unwrappedParams.plan_id},and(crop_id.eq.${plan.crop_id},field_id.eq.${plan.field_id})`).order('work_date', { ascending: true }),
+        supabase.from('sales_logs').select('*').or(`plan_id.eq.${unwrappedParams.plan_id},crop_id.eq.${plan.crop_id}`).order('sales_date', { ascending: true })
       ]);
       
       const workLogs = workRes.data || [];
