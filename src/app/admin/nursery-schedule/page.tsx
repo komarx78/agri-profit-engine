@@ -35,8 +35,12 @@ export default function NurserySchedulePage() {
   // 現在の入力モード（ブラシの色）
   const [currentMode, setCurrentMode] = useState<TaskType>('sowing');
 
-  // ヘッダーの日付リストを生成 (15週分程度)
-  const weeks = Array.from({ length: 15 }).map((_, i) => addWeeks(startDate, i));
+  // ヘッダーの日付リストを生成 (20週分)
+  const weeks = Array.from({ length: 20 }).map((_, i) => addWeeks(startDate, i));
+
+  // 表示期間の移動
+  const handlePrevWeeks = () => setStartDate(prev => addWeeks(prev, -4));
+  const handleNextWeeks = () => setStartDate(prev => addWeeks(prev, 4));
 
   useEffect(() => {
     fetchData();
@@ -171,6 +175,27 @@ export default function NurserySchedulePage() {
         </div>
         
         <div className="flex items-center gap-4">
+          {/* 表示期間の移動 */}
+          <div className="flex items-center bg-slate-100 rounded-xl p-1 border border-slate-200">
+            <button 
+              onClick={handlePrevWeeks}
+              className="p-1.5 hover:bg-white rounded-lg text-slate-600 transition-colors shadow-sm"
+              title="4週間戻る"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            </button>
+            <span className="px-3 text-sm font-bold text-slate-600 min-w-[100px] text-center">
+              {formatToMD(startDate)} から
+            </span>
+            <button 
+              onClick={handleNextWeeks}
+              className="p-1.5 hover:bg-white rounded-lg text-slate-600 transition-colors shadow-sm"
+              title="4週間進む"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            </button>
+          </div>
+
           <button 
             onClick={fetchData}
             className="px-4 py-2 text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 font-bold transition-colors"
