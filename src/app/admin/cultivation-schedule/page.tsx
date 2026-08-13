@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Calendar, Save, Loader2, ChevronLeft, ChevronRight, Plus, Trash2, X } from 'lucide-react';
+import { Calendar, Save, Loader2, ChevronLeft, ChevronRight, Plus, Trash2, X, BarChart2 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 
 export default function CultivationSchedulePage() {
   const [fields, setFields] = useState<any[]>([]);
@@ -20,7 +21,7 @@ export default function CultivationSchedulePage() {
 
   // 詳細パネル(予実管理)用ステート
   const [selectedPlan, setSelectedPlan] = useState<any | null>(null);
-  const [activeTab, setActiveTab] = useState<'work' | 'sales'>('work');
+  const [activeTab, setActiveTab] = useState<'work' | 'sales' | 'analysis'>('work');
   const [workLogs, setWorkLogs] = useState<any[]>([]);
   const [salesLogs, setSalesLogs] = useState<any[]>([]);
   const [isPanelLoading, setIsPanelLoading] = useState(false);
@@ -144,7 +145,11 @@ export default function CultivationSchedulePage() {
     setIsPanelLoading(true);
     try {
       const [workRes, salesRes] = await Promise.all([
-        supabase.from('work_logs').select('*').eq('plan_id', planId).order('work_date', { ascending: false }),
+        supabase.from('work_logs').select(`
+          *,
+          workers (hourly_wage),
+          materials (default_price, category)
+        `).eq('plan_id', planId).order('work_date', { ascending: false }),
         supabase.from('sales_logs').select('*').eq('plan_id', planId).order('sales_date', { ascending: false })
       ]);
       setWorkLogs(workRes.data || []);
@@ -499,6 +504,12 @@ export default function CultivationSchedulePage() {
               >
                 出荷記録
               </button>
+              <button
+                onClick={() => setActiveTab('analysis')}
+                className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'analysis' ? 'border-amber-600 text-amber-700' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+              >
+                📊 分析
+              </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
@@ -614,6 +625,178 @@ export default function CultivationSchedulePage() {
                         ))}
                         {salesLogs.length === 0 && <p className="text-center text-sm text-slate-400 py-4">出荷履歴はありません</p>}
                       </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'analysis' && (
+                    <div className="space-y-6">
+                      {(() => {
+                        const areaStr = fields.find(f => f.id === selectedPlan.field_id)?.area_size || selectedPlan.calculated_area;
+                        const area = Number(areaStr) || 1; // 0除算防止
+                        const multiplier = 10 / area;
+                        
+                        // 売上集計
+                        const totalSalesQuantity = salesLogs.reduce((sum, log) => sum + (Number(log.quantity) || 0), 0);
+                        const totalSalesAmount = salesLogs.reduce((sum, log) => sum + (Number(log.total_sales) || 0), 0);
+                        
+                        // 作業時間集計
+                        const totalWorkMinutes = workLogs.reduce((sum, log) => sum + (Number(log.duration_minutes) || 0), 0);
+                        const totalWorkHours = totalWorkMinutes / 60;
+                        
+                        // 費用集計
+                        let totalLaborCost = 0;
+                        const materialCostByCategory: Record<string, number> = {};
+                        
+                        // 作業タイプ別時間割合
+                        const workTypeHours: Record<string, number> = {};
+                        
+                        workLogs.forEach(log => {
+                          const durationH = (Number(log.duration_minutes) || 0) / 60;
+                          
+                          // 作業タイプ集計
+                          const wType = log.work_type || 'その他';
+                          workTypeHours[wType] = (workTypeHours[wType] || 0) + durationH;
+                          
+                          // 人件費
+                          const wage = log.workers?.hourly_wage || 1000;
+                          totalLaborCost += durationH * wage;
+                          
+                          // 資材費
+                          if (log.material_quantity && log.materials) {
+                            const cost = log.material_quantity * (log.materials.default_price || 0);
+                            const cat = log.materials.category || '諸材料費';
+                            materialCostByCategory[cat] = (materialCostByCategory[cat] || 0) + cost;
+                          }
+                        });
+                        
+                        // 10a換算値
+                        const yield10a = totalSalesQuantity * multiplier;
+                        const revenue10a = totalSalesAmount * multiplier;
+                        const unitPrice = totalSalesQuantity > 0 ? totalSalesAmount / totalSalesQuantity : 0;
+                        
+                        const laborCost10a = totalLaborCost * multiplier;
+                        let totalMaterialCost10a = 0;
+                        const costs10a: Record<string, number> = {};
+                        Object.keys(materialCostByCategory).forEach(cat => {
+                          const c10a = materialCostByCategory[cat] * multiplier;
+                          costs10a[cat] = c10a;
+                          totalMaterialCost10a += c10a;
+                        });
+                        
+                        const totalCost10a = laborCost10a + totalMaterialCost10a;
+                        const profit10a = revenue10a - totalCost10a;
+                        const profitMargin = revenue10a > 0 ? (profit10a / revenue10a) * 100 : 0;
+                        
+                        const laborHours10a = totalWorkHours * multiplier;
+                        const profitPerHour = laborHours10a > 0 ? profit10a / laborHours10a : 0;
+                        
+                        // 円グラフデータ
+                        const pieData = Object.keys(workTypeHours).map(k => ({
+                          name: k,
+                          value: Number((workTypeHours[k] * multiplier).toFixed(1))
+                        })).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
+                        
+                        const PIE_COLORS = ['#fb7185', '#f43f5e', '#e11d48', '#fda4af', '#be123c', '#9f1239', '#ffe4e6'];
+                        
+                        return (
+                          <>
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                              <h4 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
+                                <BarChart2 className="w-5 h-5 text-amber-500" />
+                                経営指標 (10a当たり)
+                              </h4>
+                              
+                              <div className="text-xs text-slate-500 mb-4 bg-amber-50 p-3 rounded-lg border border-amber-100 font-medium">
+                                ※ 現在の圃場面積({area}a)から10aあたりの数値を自動換算しています。<br/>
+                                （換算倍率: {multiplier.toFixed(2)}倍）
+                              </div>
+                              
+                              <table className="w-full text-sm mb-4 border-collapse">
+                                <tbody>
+                                  <tr className="border-b border-slate-100"><td className="py-2 text-slate-500 font-bold">生産量(kg)</td><td className="py-2 text-right font-black text-slate-800">{Math.round(yield10a).toLocaleString()}</td></tr>
+                                  <tr className="border-b border-slate-100"><td className="py-2 text-slate-500 font-bold">単価(円/kg)</td><td className="py-2 text-right font-black text-slate-800">{Math.round(unitPrice).toLocaleString()}</td></tr>
+                                  <tr className="border-b border-slate-100"><td className="py-2 text-slate-500 font-bold">粗収益(円)</td><td className="py-2 text-right font-black text-amber-600">{Math.round(revenue10a).toLocaleString()}</td></tr>
+                                  <tr className="border-b border-slate-100"><td className="py-2 text-slate-500 font-bold">所得(円)</td><td className="py-2 text-right font-black text-blue-600">{Math.round(profit10a).toLocaleString()}</td></tr>
+                                  <tr className="border-b border-slate-100"><td className="py-2 text-slate-500 font-bold">所得率(%)</td><td className="py-2 text-right font-black text-slate-800">{Math.round(profitMargin)}</td></tr>
+                                  <tr className="border-b border-slate-100"><td className="py-2 text-slate-500 font-bold">労働時間(時間)</td><td className="py-2 text-right font-black text-slate-800">{Math.round(laborHours10a).toLocaleString()}</td></tr>
+                                  <tr className="border-b border-slate-100"><td className="py-2 text-slate-500 font-bold">1時間当たり所得(円)</td><td className="py-2 text-right font-black text-slate-800">{Math.round(profitPerHour).toLocaleString()}</td></tr>
+                                </tbody>
+                              </table>
+                              
+                              <h5 className="text-sm font-black text-slate-700 mt-6 mb-2 border-b border-slate-100 pb-1">費用の内訳 (10a当たり)</h5>
+                              <table className="w-full text-sm border-collapse">
+                                <tbody>
+                                  {Object.keys(costs10a).map(cat => (
+                                    <tr key={cat} className="border-b border-slate-100">
+                                      <td className="py-2 text-slate-500 font-medium">{cat}</td>
+                                      <td className="py-2 text-right text-slate-700">{Math.round(costs10a[cat]).toLocaleString()}</td>
+                                    </tr>
+                                  ))}
+                                  <tr className="border-b border-slate-100">
+                                    <td className="py-2 text-slate-500 font-medium">人件費 (参考値)</td>
+                                    <td className="py-2 text-right text-slate-700">{Math.round(laborCost10a).toLocaleString()}</td>
+                                  </tr>
+                                  <tr className="bg-slate-50 font-black text-slate-800">
+                                    <td className="py-2 px-2">合計</td>
+                                    <td className="py-2 px-2 text-right">{Math.round(totalCost10a).toLocaleString()}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                            
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                              <h4 className="text-sm font-black text-slate-700 mb-4 text-center">10a当たり作業別時間割合</h4>
+                              {pieData.length > 0 ? (
+                                <div className="h-64">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                      <Pie
+                                        data={pieData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={40}
+                                        outerRadius={80}
+                                        paddingAngle={2}
+                                        dataKey="value"
+                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                        labelLine={false}
+                                      >
+                                        {pieData.map((entry, index) => (
+                                          <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                                        ))}
+                                      </Pie>
+                                      <RechartsTooltip formatter={(value: number) => [`${value} 時間/10a`, '時間']} />
+                                    </PieChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              ) : (
+                                <p className="text-center text-sm text-slate-400 py-8">作業記録がありません</p>
+                              )}
+                              
+                              <table className="w-full text-sm mt-4 border-collapse">
+                                <thead>
+                                  <tr className="border-b-2 border-slate-200 text-slate-500">
+                                    <th className="py-2 text-left font-bold">作業内容</th>
+                                    <th className="py-2 text-right font-bold">労働時間 (h/10a)</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {pieData.map((d, i) => (
+                                    <tr key={i} className="border-b border-slate-100">
+                                      <td className="py-2 text-slate-700">{d.name}</td>
+                                      <td className="py-2 text-right font-black text-slate-700">{d.value.toFixed(1)}</td>
+                                    </tr>
+                                  ))}
+                                  <tr className="bg-slate-50 font-black text-slate-800">
+                                    <td className="py-2 px-2">合計</td>
+                                    <td className="py-2 px-2 text-right">{Math.round(laborHours10a).toLocaleString()}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
                 </>

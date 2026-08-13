@@ -8,6 +8,16 @@ import { autoTranslateMasterData } from '@/app/actions/translate';
 
 type MasterType = 'materials' | 'sales_prices' | 'crops' | 'fields' | 'workers';
 
+const MATERIAL_CATEGORIES = [
+  '種苗費',
+  '肥料費',
+  '農薬費',
+  '動力光熱費',
+  '諸材料費',
+  '機械・車両費',
+  'その他経費'
+];
+
 export default function MastersPage() {
   const [crops, setCrops] = useState<any[]>([]);
   const [fields, setFields] = useState<any[]>([]);
@@ -98,6 +108,7 @@ export default function MastersPage() {
         initial.name = initial.name || '';
         initial.unit = initial.unit || '';
         initial.default_price = initial.default_price || 0;
+        initial.category = initial.category || '諸材料費';
       }
       else if (type === 'sales_prices') {
         initial.crop_name = initial.crop_name || '';
@@ -352,7 +363,7 @@ export default function MastersPage() {
 
   const handleExportData = (type: MasterType) => {
     let data: Record<string, any>[] = [];
-    if (type === 'materials') data = materials.map(m => ({ '資材名': m.name, '単位': m.unit, '単価': m.default_price }));
+    if (type === 'materials') data = materials.map(m => ({ '資材名': m.name, 'カテゴリ': m.category || '未設定', '単位': m.unit, '単価': m.default_price }));
     else if (type === 'sales_prices') data = salesPrices.map(s => ({ '作目名': s.crop_name, '販路名': s.channel_name, '単価': s.price_per_unit }));
     else if (type === 'crops') data = crops.map(c => ({ '作目名': c.name }));
     else if (type === 'fields') data = fields.map(f => ({ '圃場名': f.name, '面積(a)': f.area_size || '' }));
@@ -559,7 +570,10 @@ export default function MastersPage() {
                   <div key={m.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
                     <div>
                       <div className="font-bold text-slate-700">{m.name}</div>
-                      <div className="text-xs text-slate-400">{m.unit}</div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">{m.category || '未設定'}</span>
+                        <span className="text-xs text-slate-400">{m.unit}</span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="font-bold text-emerald-600">¥{m.default_price}</div>
@@ -826,6 +840,19 @@ export default function MastersPage() {
               {/* 資材専用 */}
               {modalType === 'materials' && (
                 <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold text-slate-500 mb-1">カテゴリ</label>
+                    <select
+                      value={formData.category || ''}
+                      onChange={e => setFormData({...formData, category: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-slate-700"
+                    >
+                      <option value="">-- 選択してください --</option>
+                      {MATERIAL_CATEGORIES.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1">単位</label>
                     <input 
