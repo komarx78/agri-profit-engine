@@ -30,8 +30,14 @@ export default function NurserySchedulePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [year, setYear] = useState(new Date().getFullYear());
-  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), 0, 1)); // 今年の1月1日を起点とする
   
+  // 今日の日付から2週間前を起点とする（今日が画面の左寄りに表示されるように）
+  const [startDate, setStartDate] = useState(() => {
+    const today = new Date();
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    d.setDate(d.getDate() - 14); // 2週間前
+    return d;
+  });
   // 現在の入力モード（ブラシの色）
   const [currentMode, setCurrentMode] = useState<TaskType>('sowing');
 
