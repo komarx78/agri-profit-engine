@@ -14,6 +14,7 @@ export default function MastersPage() {
   const [workers, setWorkers] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [salesPrices, setSalesPrices] = useState<any[]>([]);
+  const [cropStandards, setCropStandards] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [uploadStatus, setUploadStatus] = useState<{type: string, message: string} | null>(null);
 
@@ -41,12 +42,13 @@ export default function MastersPage() {
   const fetchMasters = async () => {
     try {
       setIsLoading(true);
-      const [cRes, fRes, wRes, mRes, spRes] = await Promise.all([
+      const [cRes, fRes, wRes, mRes, spRes, csRes] = await Promise.all([
         supabase.from('crops').select('*').order('name'),
         supabase.from('fields').select('*').order('name'),
         supabase.from('workers').select('*').order('name'),
         supabase.from('materials').select('*').order('name'),
-        supabase.from('sales_prices').select('*').order('crop_name')
+        supabase.from('sales_prices').select('*').order('crop_name'),
+        supabase.from('crop_standards').select('*')
       ]);
       
       setCrops(cRes.data || []);
@@ -54,6 +56,7 @@ export default function MastersPage() {
       setWorkers(wRes.data || []);
       setMaterials(mRes.data || []);
       setSalesPrices(spRes.data || []);
+      setCropStandards(csRes.data || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -71,7 +74,15 @@ export default function MastersPage() {
     setModalType(type);
     setEditingItem(item);
     if (item) {
-      setFormData({ ...item });
+      let initial = { ...item };
+      // 作目の場合は基準値も合わせて読み込む
+      if (type === 'crops') {
+        const standard = cropStandards.find(s => s.crop_id === item.id);
+        if (standard) {
+          initial.seedlings_per_10a = standard.seedlings_per_10a;
+        }
+      }
+      setFormData(initial);
     } else {
       // 新規作成時の初期値 ＋ 渡されたdefaultValuesをマージ
       const initial: any = { ...defaultValues };
@@ -89,6 +100,10 @@ export default function MastersPage() {
         initial.crop_name = initial.crop_name || '';
         initial.channel_name = initial.channel_name || '';
         initial.price_per_unit = initial.price_per_unit || 0;
+      }
+      else if (type === 'crops') {
+        initial.name = initial.name || '';
+        initial.seedlings_per_10a = initial.seedlings_per_10a || 0;
       }
       else {
         initial.name = initial.name || '';
@@ -129,15 +144,47 @@ export default function MastersPage() {
       }
 
       let query;
+      let insertedId = editingItem?.id;
+      
       if (editingItem) {
-        query = supabase.from(table).update(dataToSave).eq('id', editingItem.id);
+        query = supabase.from(table).update(dataToSave).eq('id', editingItem.id).select();
       } else {
         const { id, created_at, ...insertData } = dataToSave;
-        query = supabase.from(table).insert([insertData]);
+        query = supabase.from(table).insert([insertData]).select();
       }
 
-      const { error } = await query;
+      const { data: savedData, error } = await query;
       if (error) throw error;
+      
+      if (!insertedId && savedData && savedData.length > 0) {
+        insertedId = savedData[0].id;
+      }
+      
+      // 作目の場合は基準値も保存
+      if (table === 'crops' && insertedId) {
+        // formData.seedlings_per_10a が入力されていれば保存、なければ削除
+        if (formData.seedlings_per_10a || formData.seedlings_per_10a === 0) {
+          const standardData = {
+            crop_id: insertedId,
+            variety: formData.variety || null,
+            seedlings_per_10a: Number(formData.seedlings_per_10a)
+          };
+          
+          // 一旦既存の基準があるか確認
+          const { data: existingStandard } = await supabase
+            .from('crop_standards')
+            .select('id')
+            .eq('crop_id', insertedId)
+            .is('variety', null) // シンプル化のため一旦variety=nullの基本基準として扱う
+            .single();
+            
+          if (existingStandard) {
+            await supabase.from('crop_standards').update(standardData).eq('id', existingStandard.id);
+          } else {
+            await supabase.from('crop_standards').insert([standardData]);
+          }
+        }
+      }
       
       setUploadStatus({ type: 'success', message: '保存・翻訳完了しました！' });
       setTimeout(() => setUploadStatus(null), 3000);
@@ -241,7 +288,10 @@ export default function MastersPage() {
             const { error } = await supabase.from('crops').insert(insertData);
             if (error) throw error;
           } else if (type === 'fields') {
-            insertData = data.map((row: any) => ({ name: row['圃場名'] || row.name }));
+            insertData = data.map((row: any) => ({ 
+              name: row['圃場名'] || row.name,
+              area_size: parseFloat(row['面積(a)']) || parseFloat(row.area_size) || null
+            }));
             const { error } = await supabase.from('fields').insert(insertData);
             if (error) throw error;
           } else if (type === 'workers') {
@@ -277,7 +327,7 @@ export default function MastersPage() {
     if (type === 'materials') content = "資材名,単位,単価\n苦土石灰,袋,1500\n化成肥料(8-8-8),kg,200\n液肥アミノ酸,L,800";
     else if (type === 'sales_prices') content = "作目名,販路名,単価\n伏見唐辛子,JA,500\n伏見唐辛子,直売所,650\n米（キヌヒカリ）,JA,12000";
     else if (type === 'crops') content = "作目名\n伏見唐辛子\n米\n九条ネギ";
-    else if (type === 'fields') content = "圃場名\nA-1 ハウス\n北側 第2農地\n南側 露地";
+    else if (type === 'fields') content = "圃場名,面積(a)\nA-1 ハウス,10\n北側 第2農地,24\n南側 露地,14";
     else if (type === 'workers') content = "作業者名,時給,暗証番号\n京都 太郎,1000,1234\n農場 花子,1100,5678";
     
     const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), content], { type: 'text/csv;charset=utf-8;' });
@@ -294,7 +344,7 @@ export default function MastersPage() {
     if (type === 'materials') data = materials.map(m => ({ '資材名': m.name, '単位': m.unit, '単価': m.default_price }));
     else if (type === 'sales_prices') data = salesPrices.map(s => ({ '作目名': s.crop_name, '販路名': s.channel_name, '単価': s.price_per_unit }));
     else if (type === 'crops') data = crops.map(c => ({ '作目名': c.name }));
-    else if (type === 'fields') data = fields.map(f => ({ '圃場名': f.name }));
+    else if (type === 'fields') data = fields.map(f => ({ '圃場名': f.name, '面積(a)': f.area_size || '' }));
     else if (type === 'workers') data = workers.map(w => ({ '作業者名': w.name, '時給': w.hourly_wage, '暗証番号': w.pin_code || '0000' }));
       
     if (data.length === 0) {
@@ -434,7 +484,10 @@ export default function MastersPage() {
                 {fields.length === 0 ? <p className="text-slate-400 text-sm">データなし</p> : null}
                 {fields.map(f => (
                   <div key={f.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
-                    <span className="font-bold text-slate-700">{f.name}</span>
+                    <div>
+                      <span className="font-bold text-slate-700">{f.name}</span>
+                      {f.area_size && <span className="text-[10px] text-slate-500 ml-2 font-bold">{f.area_size}a</span>}
+                    </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => handleOpenModal('fields', f)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
                         <Edit2 className="w-4 h-4" />
@@ -633,7 +686,39 @@ export default function MastersPage() {
                     value={formData.name || ''} 
                     onChange={e => setFormData({...formData, name: e.target.value})}
                     className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
-                    placeholder="例: 伏見唐辛子"
+                    placeholder={modalType === 'crops' ? '例: カリフラワー' : '例: 伏見唐辛子'}
+                  />
+                </div>
+              )}
+
+              {/* 作目専用 */}
+              {modalType === 'crops' && (
+                <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <div className="text-sm font-black text-slate-700 mb-3">栽培基準 (自動計算用)</div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">10aあたりの必要苗数 (株/本)</label>
+                    <input 
+                      type="number" 
+                      value={formData.seedlings_per_10a || ''} 
+                      onChange={e => setFormData({...formData, seedlings_per_10a: Number(e.target.value)})}
+                      className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
+                      placeholder="例: 4000"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">※ 栽培計画入力時に、圃場面積×この値で必要苗数が自動計算されます。</p>
+                  </div>
+                </div>
+              )}
+
+              {/* 圃場専用 */}
+              {modalType === 'fields' && (
+                <div className="mt-4">
+                  <label className="block text-xs font-bold text-slate-500 mb-1">面積 (a)</label>
+                  <input 
+                    type="number" 
+                    value={formData.area_size || ''} 
+                    onChange={e => setFormData({...formData, area_size: Number(e.target.value)})}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
+                    placeholder="例: 14"
                   />
                 </div>
               )}

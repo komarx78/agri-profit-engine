@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Database, LogOut, Sprout, History, Menu, FileSpreadsheet, Truck, FileText, Settings, Store, Copy, Check, Table, Target, Receipt, Video } from 'lucide-react';
+import { LayoutDashboard, Database, LogOut, Sprout, History, Menu, FileSpreadsheet, Truck, FileText, Settings, Store, Copy, Check, Table, Target, Receipt, Video, Calendar, Calculator } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 
 export default function AdminLayout({
@@ -62,6 +62,8 @@ export default function AdminLayout({
       title: '作業管理',
       items: [
         { name: '育苗スケジュール表', path: '/admin/nursery-schedule', icon: Table },
+        { name: '栽培計画表', path: '/admin/cultivation-schedule', icon: Calendar },
+        { name: '必要資材 自動集計', path: '/admin/material-requirements', icon: Calculator },
         { name: '作業記録一覧', path: '/admin/history', icon: History },
         { name: '作業内容台帳 (集計)', path: '/admin/work-ledger', icon: Table },
         { name: '動画マニュアル集', path: '/admin/manuals', icon: Video },
