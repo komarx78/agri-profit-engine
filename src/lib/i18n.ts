@@ -164,20 +164,55 @@ export const TRANSLATIONS: Record<string, Record<LanguageCode, string>> = {
     zh: '请选择',
   },
   
-  // マニュアル機能
+  // 動画マニュアル関連
   videoManuals: {
-    ja: '動画マニュアル集',
-    en: 'Video Manuals',
-    vi: 'Hướng dẫn bằng video',
-    id: 'Panduan Video',
-    zh: '视频手册',
+    ja: '動画マニュアル集', en: 'Video Manuals', vi: 'Hướng dẫn bằng video', id: 'Manual Video', zh: '视频手册'
   },
   noManuals: {
-    ja: '現在登録されているマニュアルはありません',
-    en: 'No manuals currently registered',
-    vi: 'Hiện không có hướng dẫn nào được đăng ký',
-    id: 'Tidak ada panduan yang terdaftar saat ini',
-    zh: '当前没有注册的手册',
+    ja: '現在登録されているマニュアルはありません', en: 'No manuals currently registered', vi: 'Hiện không có hướng dẫn nào được đăng ký', id: 'Tidak ada manual yang terdaftar saat ini', zh: '目前没有注册的手册'
+  },
+  // 出荷記録関連
+  salesRecord: {
+    ja: '出荷記録', en: 'Sales Record', vi: 'Ghi nhận xuất hàng', id: 'Catatan Penjualan', zh: '发货记录'
+  },
+  autoCalcDesc: {
+    ja: '数量だけ入れて自動計算！', en: 'Auto calculated just by entering quantity!', vi: 'Tự động tính toán chỉ bằng cách nhập số lượng!', id: 'Dihitung otomatis hanya dengan memasukkan jumlah!', zh: '只需输入数量即可自动计算！'
+  },
+  salesCompleted: {
+    ja: '出荷記録完了！', en: 'Sales Record Completed!', vi: 'Hoàn thành ghi nhận xuất hàng!', id: 'Catatan Penjualan Selesai!', zh: '发货记录完成！'
+  },
+  salesAutoCalculated: {
+    ja: '売上も自動計算されました🚚', en: 'Sales calculated automatically🚚', vi: 'Doanh thu cũng được tính tự động🚚', id: 'Penjualan juga dihitung secara otomatis🚚', zh: '销售额也已自动计算🚚'
+  },
+  salesChannel: {
+    ja: '出荷先', en: 'Sales Channel', vi: 'Nơi xuất hàng', id: 'Saluran Penjualan', zh: '出货方'
+  },
+  selectCropFirst: {
+    ja: '先に作目を選択してください', en: 'Please select a crop first', vi: 'Vui lòng chọn loại cây trồng trước', id: 'Silakan pilih tanaman terlebih dahulu', zh: '请先选择作物'
+  },
+  noPriceMaster: {
+    ja: 'この作目の販売価格マスタが登録されていません。', en: 'Sales price master for this crop is not registered.', vi: 'Bảng giá cho loại cây trồng này chưa được đăng ký.', id: 'Master harga jual untuk tanaman ini belum terdaftar.', zh: '未注册该作物的销售价格主数据。'
+  },
+  quantityRequired: {
+    ja: '出荷量・数 (必須)', en: 'Quantity (Required)', vi: 'Số lượng xuất (Bắt buộc)', id: 'Kuantitas (Wajib)', zh: '发货量/数量 (必填)'
+  },
+  appliedPrice: {
+    ja: '適用単価', en: 'Applied Unit Price', vi: 'Đơn giá áp dụng', id: 'Harga Satuan Diterapkan', zh: '适用单价'
+  },
+  editable: {
+    ja: '手動変更可', en: 'Editable', vi: 'Có thể chỉnh sửa thủ công', id: 'Dapat diedit', zh: '可手动更改'
+  },
+  unit: {
+    ja: '単位', en: 'Unit', vi: 'Đơn vị', id: 'Satuan', zh: '单位'
+  },
+  actualSales: {
+    ja: '売上実績 (自動計算)', en: 'Actual Sales (Auto Calc)', vi: 'Doanh thu thực tế (Tự động)', id: 'Penjualan Aktual (Hitung Otomatis)', zh: '实际销售额 (自动计算)'
+  },
+  saveSalesRecord: {
+    ja: '出荷記録を保存する', en: 'Save Sales Record', vi: 'Lưu ghi nhận xuất hàng', id: 'Simpan Catatan Penjualan', zh: '保存发货记录'
+  },
+  loadingData: {
+    ja: 'データ取得中...', en: 'Loading data...', vi: 'Đang tải dữ liệu...', id: 'Memuat data...', zh: '正在加载数据...'
   },
   
   // エラー・その他

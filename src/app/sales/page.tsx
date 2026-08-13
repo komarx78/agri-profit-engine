@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Truck, Sprout, Store, CheckCircle2, AlertCircle, FileDigit, Calculator } from 'lucide-react';
+import { Truck, Sprout, Store, CheckCircle2, AlertCircle, FileDigit, Calculator, LogOut } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 
 export default function SalesEntryPage() {
   const [crops, setCrops] = useState<any[]>([]);
@@ -14,6 +15,8 @@ export default function SalesEntryPage() {
   const [quantity, setQuantity] = useState<string>('');
   const [manualPrice, setManualPrice] = useState<string>('');
 
+  const [language, setLanguage] = useState<LanguageCode>('ja');
+  
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
@@ -21,8 +24,19 @@ export default function SalesEntryPage() {
   useEffect(() => {
     async function fetchData() {
       try {
+        // tenant_id を localStorage から取得（`/farm/[tenant_id]`のセッションから推測するか、今回は簡易的に設定された言語を読む）
+        const tenantIds = Object.keys(localStorage).filter(k => k.startsWith('agri_lang_')).map(k => k.replace('agri_lang_', ''));
+        const tenantId = tenantIds.length > 0 ? tenantIds[0] : null;
+        
+        if (tenantId) {
+          const savedLang = localStorage.getItem(`agri_lang_${tenantId}`) as LanguageCode;
+          if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
+            setLanguage(savedLang);
+          }
+        }
+
         const [cRes, chRes, spRes] = await Promise.all([
-          supabase.from('crops').select('id, name'),
+          supabase.from('crops').select('*'),
           supabase.from('sales_channels').select('id, name'),
           supabase.from('sales_prices').select('*')
         ]);
@@ -116,10 +130,27 @@ export default function SalesEntryPage() {
             </div>
             <div>
               <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
-                出荷記録
+                {t('salesRecord', language)}
               </h1>
-              <p className="text-xs font-medium text-amber-300/80">数量だけ入れて自動計算！</p>
+              <p className="text-xs font-medium text-amber-300/80">{t('autoCalcDesc', language)}</p>
             </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <select 
+              value={language}
+              onChange={e => {
+                setLanguage(e.target.value as LanguageCode);
+                const tenantIds = Object.keys(localStorage).filter(k => k.startsWith('agri_lang_')).map(k => k.replace('agri_lang_', ''));
+                if (tenantIds.length > 0) {
+                  localStorage.setItem(`agri_lang_${tenantIds[0]}`, e.target.value);
+                }
+              }}
+              className="bg-amber-900/50 text-white text-xs font-bold rounded-lg px-2 py-1 focus:outline-none"
+            >
+              {LANGUAGES.map(l => (
+                <option key={l.code} value={l.code}>{l.flag} {l.code.toUpperCase()}</option>
+              ))}
+            </select>
           </div>
         </div>
       </header>
@@ -130,8 +161,8 @@ export default function SalesEntryPage() {
             <div className="w-20 h-20 bg-amber-500/20 rounded-full flex items-center justify-center border border-amber-400/40 shadow-inner">
               <CheckCircle2 className="w-12 h-12 text-amber-400" />
             </div>
-            <h2 className="text-2xl font-black text-white">出荷記録完了！</h2>
-            <p className="text-sm text-amber-200">売上も自動計算されました🚚</p>
+            <h2 className="text-2xl font-black text-white">{t('salesCompleted', language)}</h2>
+            <p className="text-sm text-amber-200">{t('salesAutoCalculated', language)}</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -139,7 +170,7 @@ export default function SalesEntryPage() {
             {/* 1. 作目選択 */}
             <section className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/60 shadow-sm">
               <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
-                <Sprout className="w-4 h-4 text-emerald-400" />作目
+                <Sprout className="w-4 h-4 text-emerald-400" />{t('crop', language)}
               </h2>
               <div className="grid grid-cols-2 gap-2.5">
                 {crops.length > 0 ? crops.map(crop => (
@@ -153,10 +184,10 @@ export default function SalesEntryPage() {
                         : 'bg-slate-950/60 text-slate-300 border-slate-800/80'
                     }`}
                   >
-                    {crop.name}
+                    {getTranslatedName(crop, language)}
                   </button>
                 )) : (
-                  <div className="col-span-2 text-sm text-slate-500 p-2 text-center">データ取得中...</div>
+                  <div className="col-span-2 text-sm text-slate-500 p-2 text-center">{t('loadingData', language)}</div>
                 )}
               </div>
             </section>
@@ -166,11 +197,11 @@ export default function SalesEntryPage() {
               selectedCrop ? 'bg-slate-900/60 border-slate-800/60' : 'bg-slate-950/30 border-slate-900/30 opacity-50'
             }`}>
               <h2 className="text-xs font-bold uppercase tracking-wider text-blue-400 mb-2.5 flex items-center gap-2">
-                <Store className="w-4 h-4 text-blue-400" />出荷先
+                <Store className="w-4 h-4 text-blue-400" />{t('salesChannel', language)}
               </h2>
               
               {!selectedCrop ? (
-                <div className="text-sm text-slate-500 p-2 text-center font-bold">先に作目を選択してください</div>
+                <div className="text-sm text-slate-500 p-2 text-center font-bold">{t('selectCropFirst', language)}</div>
               ) : (
                 <div className="grid grid-cols-2 gap-2.5">
                   {/* salesPricesの中から、選んだ作目に紐づく販路だけを抽出 */}
@@ -191,7 +222,7 @@ export default function SalesEntryPage() {
                   ))}
                   {salesPrices.filter(sp => sp.crop_name === selectedCrop).length === 0 && (
                     <div className="col-span-2 text-xs text-rose-400 p-2 text-center bg-rose-950/30 rounded-lg">
-                      この作目の販売価格マスタが登録されていません。<br/>管理画面から登録してください。
+                      {t('noPriceMaster', language)}
                     </div>
                   )}
                 </div>
@@ -201,7 +232,7 @@ export default function SalesEntryPage() {
             {/* 3. 数量 */}
             <section className="bg-amber-900/20 p-4 rounded-2xl border border-amber-900/40 shadow-sm">
               <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 mb-2.5 flex items-center gap-2">
-                <FileDigit className="w-4 h-4 text-amber-400" />出荷量・数 (必須)
+                <FileDigit className="w-4 h-4 text-amber-400" />{t('quantityRequired', language)}
               </h2>
               <div className="relative">
                 <input
@@ -223,7 +254,7 @@ export default function SalesEntryPage() {
               <section className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50 flex flex-col gap-4">
                 <div className="flex justify-between items-center text-sm">
                   <div className="flex flex-col gap-1">
-                    <span className="text-slate-400 flex items-center gap-1"><Calculator className="w-4 h-4" /> 適用単価 <span className="text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded ml-1">手動変更可</span></span>
+                    <span className="text-slate-400 flex items-center gap-1"><Calculator className="w-4 h-4" /> {t('appliedPrice', language)} <span className="text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded ml-1">{t('editable', language)}</span></span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-slate-400">¥</span>
@@ -234,11 +265,11 @@ export default function SalesEntryPage() {
                       placeholder="0"
                       className="w-24 px-2 py-1.5 bg-slate-900 border border-slate-700 rounded text-right font-bold text-white focus:outline-none focus:border-amber-500"
                     />
-                    <span className="text-slate-400">/ 単位</span>
+                    <span className="text-slate-400">/ {t('unit', language)}</span>
                   </div>
                 </div>
                 <div className="flex justify-between items-end border-t border-slate-700/50 pt-3 mt-1">
-                  <span className="text-emerald-400 font-bold text-sm">売上実績 (自動計算)</span>
+                  <span className="text-emerald-400 font-bold text-sm">{t('actualSales', language)}</span>
                   <span className="text-3xl font-black text-white">
                     ¥{calculatedTotal.toLocaleString()}
                   </span>
@@ -257,11 +288,11 @@ export default function SalesEntryPage() {
               }`}
             >
               {isSubmitting ? (
-                <span>記録中...</span>
+                <span>{t('loadingData', language)}</span>
               ) : (
                 <>
                   <CheckCircle2 className="w-6 h-6" />
-                  <span>出荷記録を保存する</span>
+                  <span>{t('saveSalesRecord', language)}</span>
                 </>
               )}
             </button>
