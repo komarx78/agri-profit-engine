@@ -1,51 +1,62 @@
 "use server";
 
-// Note: To use this, you need to install @google-cloud/translate
-// npm install @google-cloud/translate
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-import { v2 } from '@google-cloud/translate';
-
-// 環境変数 GOOGLE_APPLICATION_CREDENTIALS が設定されている前提で動く
-// または直接 key を渡すことも可能ですが、OCRのときと同じ環境変数を想定
-const translate = new v2.Translate();
-
-export async function translateText(text: string, targetLanguage: string) {
-  try {
-    if (!text) return text;
-    
-    // APIを呼び出して翻訳
-    const [translation] = await translate.translate(text, targetLanguage);
-    return translation;
-  } catch (error) {
-    console.error(`Translation error for ${targetLanguage}:`, error);
-    // エラー時は元のテキストをそのまま返す
-    return text;
-  }
-}
+// すでにOCRで使っている環境変数を利用する
+const apiKey = process.env.GEMINI_API_KEY;
 
 export async function autoTranslateMasterData(name: string) {
   try {
-    // 4言語へ並列で翻訳リクエストを投げる
-    const [en, vi, id, zh] = await Promise.all([
-      translateText(name, 'en'),
-      translateText(name, 'vi'),
-      translateText(name, 'id'),
-      translateText(name, 'zh-CN'), // 中国語(簡体)は zh-CN
-    ]);
+    if (!name) {
+      return { name_en: '', name_vi: '', name_id: '', name_zh: '' };
+    }
+    
+    if (!apiKey) {
+      console.warn("GEMINI_API_KEY is not set. Skipping translation.");
+      return { name_en: '', name_vi: '', name_id: '', name_zh: '' };
+    }
 
-    return {
-      name_en: en,
-      name_vi: vi,
-      name_id: id,
-      name_zh: zh,
-    };
+    const genAI = new GoogleGenerativeAI(apiKey);
+    // 翻訳には軽量で高速な Flash モデルを使用
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+
+    const prompt = `
+以下の農業用語（作目、圃場名、作業名など）を4つの言語（英語、ベトナム語、インドネシア語、中国語）に翻訳し、JSON形式のみで出力してください。
+マークダウンのコードブロック(\`\`\`json)などは付けずに、純粋なJSONテキストのみを返してください。
+専門用語の場合は、農業現場で最も一般的に使われる単語を選んでください。
+
+翻訳対象の単語: "${name}"
+
+【出力フォーマット】
+{
+  "name_en": "英語の翻訳",
+  "name_vi": "ベトナム語の翻訳",
+  "name_id": "インドネシア語の翻訳",
+  "name_zh": "中国語(簡体字)の翻訳"
+}
+`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text();
+    
+    // Markdownのコードブロックが含まれている場合のクリーニング
+    text = text.replace(/```json\n/g, '').replace(/```\n?/g, '').trim();
+
+    try {
+      const parsedData = JSON.parse(text);
+      return {
+        name_en: parsedData.name_en || '',
+        name_vi: parsedData.name_vi || '',
+        name_id: parsedData.name_id || '',
+        name_zh: parsedData.name_zh || '',
+      };
+    } catch (parseError) {
+      console.error('Failed to parse AI translation response:', text);
+      return { name_en: '', name_vi: '', name_id: '', name_zh: '' };
+    }
   } catch (error) {
     console.error("Auto translation failed:", error);
-    return {
-      name_en: '',
-      name_vi: '',
-      name_id: '',
-      name_zh: '',
-    };
+    return { name_en: '', name_vi: '', name_id: '', name_zh: '' };
   }
 }
