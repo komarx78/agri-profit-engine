@@ -43,10 +43,12 @@ export default function AdminLayout({
 
   const navGroups = [
     {
-      title: 'メイン',
+      title: '計画・予実管理',
       items: [
         { name: 'ダッシュボード', path: '/admin/dashboard', icon: LayoutDashboard },
-        { name: '予実管理', path: '/admin/plans', icon: Target },
+        { name: '栽培・予実管理表', path: '/admin/cultivation-schedule', icon: Calendar },
+        { name: '育苗スケジュール', path: '/admin/nursery-schedule', icon: Table },
+        { name: '必要資材自動集計', path: '/admin/material-requirements', icon: Calculator },
       ]
     },
     {
@@ -59,11 +61,8 @@ export default function AdminLayout({
       ]
     },
     {
-      title: '作業管理',
+      title: '作業履歴・記録',
       items: [
-        { name: '育苗スケジュール表', path: '/admin/nursery-schedule', icon: Table },
-        { name: '栽培計画表', path: '/admin/cultivation-schedule', icon: Calendar },
-        { name: '必要資材 自動集計', path: '/admin/material-requirements', icon: Calculator },
         { name: '作業記録一覧', path: '/admin/history', icon: History },
         { name: '作業内容台帳 (集計)', path: '/admin/work-ledger', icon: Table },
         { name: '動画マニュアル集', path: '/admin/manuals', icon: Video },

@@ -18,6 +18,17 @@ export default function CultivationSchedulePage() {
   const [formData, setFormData] = useState<any>({ field_id: '', crop_id: '', variety: '', start_month: 8, end_month: 11 });
   const [isSaving, setIsSaving] = useState(false);
 
+  // 詳細パネル(予実管理)用ステート
+  const [selectedPlan, setSelectedPlan] = useState<any | null>(null);
+  const [activeTab, setActiveTab] = useState<'work' | 'sales'>('work');
+  const [workLogs, setWorkLogs] = useState<any[]>([]);
+  const [salesLogs, setSalesLogs] = useState<any[]>([]);
+  const [isPanelLoading, setIsPanelLoading] = useState(false);
+  
+  // 新規入力用ステート
+  const [newWork, setNewWork] = useState({ date: new Date().toISOString().split('T')[0], type: '定植・播種', duration: '', note: '' });
+  const [newSales, setNewSales] = useState({ date: new Date().toISOString().split('T')[0], quantity: '', price: '', channel: '直売所' });
+
   // 8月〜7月の月配列
   const months = [8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7];
 
@@ -108,15 +119,85 @@ export default function CultivationSchedulePage() {
     }
   };
 
-  const handleDeletePlan = async (id: string) => {
+  const handleDeletePlan = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (!confirm("この計画を削除しますか？\n（関連する育苗スケジュールも削除されます）")) return;
     
     try {
       const { error } = await supabase.from('cultivation_plans_v2').delete().eq('id', id);
       if (error) throw error;
+      if (selectedPlan?.id === id) setSelectedPlan(null);
       fetchData();
     } catch (err: any) {
       alert(`削除エラー: ${err.message}`);
+    }
+  };
+
+  // 詳細パネル関連
+  const handleOpenDetails = async (plan: any) => {
+    setSelectedPlan(plan);
+    setActiveTab('work');
+    fetchPlanDetails(plan.id);
+  };
+
+  const fetchPlanDetails = async (planId: string) => {
+    setIsPanelLoading(true);
+    try {
+      const [workRes, salesRes] = await Promise.all([
+        supabase.from('work_logs').select('*').eq('plan_id', planId).order('work_date', { ascending: false }),
+        supabase.from('sales_logs').select('*').eq('plan_id', planId).order('sales_date', { ascending: false })
+      ]);
+      setWorkLogs(workRes.data || []);
+      setSalesLogs(salesRes.data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsPanelLoading(false);
+    }
+  };
+
+  const handleAddWork = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPlan) return;
+    setIsSaving(true);
+    try {
+      const { error } = await supabase.from('work_logs').insert([{
+        plan_id: selectedPlan.id,
+        work_date: newWork.date,
+        work_type: newWork.type,
+        duration_minutes: Number(newWork.duration) || 0,
+        notes: newWork.note,
+        status: 'completed'
+      }]);
+      if (error) throw error;
+      setNewWork({ ...newWork, duration: '', note: '' });
+      fetchPlanDetails(selectedPlan.id);
+    } catch (err: any) {
+      alert(`エラー: ${err.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAddSales = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPlan) return;
+    setIsSaving(true);
+    try {
+      const { error } = await supabase.from('sales_logs').insert([{
+        plan_id: selectedPlan.id,
+        sales_date: newSales.date,
+        quantity: Number(newSales.quantity) || 0,
+        total_sales: Number(newSales.price) || 0,
+        status: 'completed'
+      }]);
+      if (error) throw error;
+      setNewSales({ ...newSales, quantity: '', price: '' });
+      fetchPlanDetails(selectedPlan.id);
+    } catch (err: any) {
+      alert(`エラー: ${err.message}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -225,7 +306,11 @@ export default function CultivationSchedulePage() {
                               {/* 計画バーの表示 */}
                               <div className="relative z-10 space-y-1 mt-1">
                                 {startingPlans.map(plan => (
-                                  <div key={plan.id} className="bg-blue-100 border border-blue-200 rounded-md p-1.5 shadow-sm flex items-start justify-between group/item">
+                                  <div 
+                                    key={plan.id} 
+                                    onClick={() => handleOpenDetails(plan)}
+                                    className="bg-blue-100 border border-blue-200 rounded-md p-1.5 shadow-sm flex items-start justify-between group/item cursor-pointer hover:bg-blue-200 transition-colors"
+                                  >
                                     <div>
                                       <div className="font-bold text-blue-800 text-xs">
                                         {plan.crops?.name} {plan.variety && <span className="text-blue-600">{plan.variety}</span>}
@@ -240,7 +325,7 @@ export default function CultivationSchedulePage() {
                                       </div>
                                     </div>
                                     <button 
-                                      onClick={() => handleDeletePlan(plan.id)}
+                                      onClick={(e) => handleDeletePlan(plan.id, e)}
                                       className="opacity-0 group-hover/item:opacity-100 p-0.5 text-blue-400 hover:text-red-500 hover:bg-white rounded"
                                     >
                                       <Trash2 className="w-3 h-3" />
@@ -376,6 +461,163 @@ export default function CultivationSchedulePage() {
               >
                 {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : '計画を登録する'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedPlan && (
+        <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-50 flex justify-end">
+          <div className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div>
+                <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
+                  {selectedPlan.crops?.name} {selectedPlan.variety && <span className="text-sm font-medium text-slate-500">({selectedPlan.variety})</span>}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium mt-1">
+                  {fields.find(f => f.id === selectedPlan.field_id)?.name} / {selectedPlan.start_month}月〜{selectedPlan.end_month}月
+                </p>
+              </div>
+              <button 
+                onClick={() => setSelectedPlan(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex border-b border-slate-200">
+              <button
+                onClick={() => setActiveTab('work')}
+                className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'work' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+              >
+                作業記録
+              </button>
+              <button
+                onClick={() => setActiveTab('sales')}
+                className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'sales' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
+              >
+                出荷記録
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
+              {isPanelLoading ? (
+                <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
+              ) : (
+                <>
+                  {activeTab === 'work' && (
+                    <div className="space-y-6">
+                      {/* 作業記録追加フォーム */}
+                      <form onSubmit={handleAddWork} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                        <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Plus className="w-4 h-4"/>作業を追加</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">日付</label>
+                            <input type="date" required value={newWork.date} onChange={e => setNewWork({...newWork, date: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">作業種類</label>
+                            <select value={newWork.type} onChange={e => setNewWork({...newWork, type: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm">
+                              <option>定植・播種</option>
+                              <option>水やり</option>
+                              <option>肥料・農薬</option>
+                              <option>草刈り</option>
+                              <option>収穫</option>
+                              <option>片付け・メンテ</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">所要時間(分)</label>
+                            <input type="number" required placeholder="60" value={newWork.duration} onChange={e => setNewWork({...newWork, duration: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">メモ(任意)</label>
+                            <input type="text" placeholder="例: 10畝完了" value={newWork.note} onChange={e => setNewWork({...newWork, note: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm" />
+                          </div>
+                        </div>
+                        <button disabled={isSaving} className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition-colors">
+                          {isSaving ? '保存中...' : '記録する'}
+                        </button>
+                      </form>
+
+                      {/* 作業履歴一覧 */}
+                      <div className="space-y-3">
+                        {workLogs.map(log => (
+                          <div key={log.id} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex justify-between items-start">
+                            <div>
+                              <div className="text-xs font-bold text-slate-500">{log.work_date}</div>
+                              <div className="font-bold text-slate-800">{log.work_type}</div>
+                              {log.notes && <div className="text-xs text-slate-500 mt-1">{log.notes}</div>}
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-black text-blue-600">{log.duration_minutes} 分</div>
+                              <div className="text-[10px] text-slate-400">完了</div>
+                            </div>
+                          </div>
+                        ))}
+                        {workLogs.length === 0 && <p className="text-center text-sm text-slate-400 py-4">作業履歴はありません</p>}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'sales' && (
+                    <div className="space-y-6">
+                      {/* 出荷記録追加フォーム */}
+                      <form onSubmit={handleAddSales} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                        <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Plus className="w-4 h-4"/>出荷を追加</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">日付</label>
+                            <input type="date" required value={newSales.date} onChange={e => setNewSales({...newSales, date: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">出荷先(チャネル)</label>
+                            <select value={newSales.channel} onChange={e => setNewSales({...newSales, channel: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm">
+                              <option>直売所</option>
+                              <option>スーパー</option>
+                              <option>飲食店</option>
+                              <option>市場</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">数量</label>
+                            <input type="number" required placeholder="例: 50" value={newSales.quantity} onChange={e => setNewSales({...newSales, quantity: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">売上額(円)</label>
+                            <input type="number" required placeholder="例: 10000" value={newSales.price} onChange={e => setNewSales({...newSales, price: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm" />
+                          </div>
+                        </div>
+                        <button disabled={isSaving} className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-sm transition-colors">
+                          {isSaving ? '保存中...' : '記録する'}
+                        </button>
+                      </form>
+
+                      {/* 出荷履歴一覧 */}
+                      <div className="space-y-3">
+                        {salesLogs.map(log => (
+                          <div key={log.id} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex justify-between items-start">
+                            <div>
+                              <div className="text-xs font-bold text-slate-500">{log.sales_date}</div>
+                              <div className="font-bold text-slate-800">数量: {log.quantity}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-black text-emerald-600">¥ {log.total_sales?.toLocaleString()}</div>
+                              <div className="text-[10px] text-slate-400">完了</div>
+                            </div>
+                          </div>
+                        ))}
+                        {salesLogs.length === 0 && <p className="text-center text-sm text-slate-400 py-4">出荷履歴はありません</p>}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
