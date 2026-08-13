@@ -296,140 +296,138 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
           </tbody>
         </table>
 
-        {/* 下段レイアウト */}
-        <div className="grid grid-cols-2 gap-8">
-          {/* 左カラム */}
-          <div>
-            <div className="section-title">◆ 作付体系及び粗収益 (10aあたり)</div>
-            <table className="mb-4">
-              <thead>
-                <tr>
-                  <th className="bg-slate-100">旬</th>
-                  {months.map(m => periods.map(p => (
-                    <th key={`c-${m}-${p}`} className="text-[9px] font-normal">{m}月{p}</th>
-                  )))}
-                  <th className="bg-slate-100 text-[10px]">備考</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className="bg-slate-100 text-left">作付体系</td>
-                  {months.map(m => periods.map(p => (
-                    <td key={`mark-${m}-${p}`}>{calendarMarks[`${m}-${p}`] || ''}</td>
-                  )))}
-                  <td className="text-[10px] text-left leading-tight">○:播種<br/>◎:定植<br/>■:収穫</td>
-                </tr>
-              </tbody>
-            </table>
+        {/* 作付体系 (横幅いっぱい使うため、グリッドの外に配置) */}
+        <div className="section-title">◆ 作付体系及び粗収益 (10aあたり)</div>
+        <table className="mb-6">
+          <thead>
+            <tr>
+              <th className="bg-slate-100">旬</th>
+              {months.map(m => periods.map(p => (
+                <th key={`c-${m}-${p}`} className="text-[9px] font-normal">{m}月{p}</th>
+              )))}
+              <th className="bg-slate-100 text-[10px]">備考</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="bg-slate-100 text-left">作付体系</td>
+              {months.map(m => periods.map(p => (
+                <td key={`mark-${m}-${p}`}>{calendarMarks[`${m}-${p}`] || ''}</td>
+              )))}
+              <td className="text-[10px] text-left leading-tight">○:播種<br/>◎:定植<br/>■:収穫</td>
+            </tr>
+          </tbody>
+        </table>
 
+        {/* 費用・売上の詳細 (3カラムレイアウトで配置) */}
+        <div className="grid grid-cols-3 gap-6">
+          {/* 左カラム */}
+          <div className="space-y-6">
             <table>
               <tbody>
                 <tr>
-                  <th className="w-32 bg-slate-100 text-left">収量 (kg/10a)</th>
+                  <th className="w-24 bg-slate-100 text-left">収量 (kg/10a)</th>
                   <td className="text-right font-bold">{Math.round(sales.yield_10a || 0).toLocaleString()}</td>
                 </tr>
                 <tr>
-                  <th className="w-32 bg-slate-100 text-left">単価 (円/kg)</th>
+                  <th className="w-24 bg-slate-100 text-left">単価 (円/kg)</th>
                   <td className="text-right">{Math.round(sales.unit_price || 0).toLocaleString()}</td>
                 </tr>
                 <tr>
-                  <th className="w-32 bg-slate-100 text-left">金額 (円/10a)</th>
+                  <th className="w-24 bg-slate-100 text-left">金額 (円/10a)</th>
                   <td className="text-right font-bold">{Math.round(sales.revenue_10a || 0).toLocaleString()}</td>
                 </tr>
               </tbody>
             </table>
 
-            {/* 費目別 (例：種苗費、肥料費) */}
-            <div className="flex gap-4 mt-4">
-              <div className="flex-1">
-                <div className="section-title">◆ 種苗費 (10aあたり)</div>
-                <table>
-                  <thead><tr className="bg-slate-100"><th>品名</th><th>数量</th><th>単価</th><th>金額</th></tr></thead>
-                  <tbody>
-                    {costs['種苗費']?.map((c: any, i: number) => (
-                      <tr key={i}>
-                        <td className="text-left">{c.name}</td><td className="text-right">{(c.quantity * multiplier).toFixed(1)}{c.unit}</td><td className="text-right">{c.price}</td><td className="text-right">{Math.round(c.amount * multiplier).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                    {(!costs['種苗費'] || costs['種苗費'].length === 0) && [...Array(3)].map((_, i) => <tr key={`e1-${i}`}><td>&nbsp;</td><td></td><td></td><td></td></tr>)}
-                    <tr className="bg-slate-50"><th className="text-left">合計</th><td colSpan={2}></td><td className="text-right font-bold">{Math.round(costs['種苗費']?.reduce((sum: number, c: any) => sum + c.amount * multiplier, 0) || 0).toLocaleString()}</td></tr>
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex-1">
-                <div className="section-title">◆ 肥料費 (10aあたり)</div>
-                <table>
-                  <thead><tr className="bg-slate-100"><th>品名</th><th>使用量</th><th>規格</th><th>価格</th><th>金額</th></tr></thead>
-                  <tbody>
-                    {costs['肥料費']?.map((c: any, i: number) => (
-                      <tr key={i}>
-                        <td className="text-left">{c.name}</td><td className="text-right">{(c.quantity * multiplier).toFixed(1)}{c.unit}</td><td>{c.specification}</td><td className="text-right">{c.price}</td><td className="text-right">{Math.round(c.amount * multiplier).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                    {(!costs['肥料費'] || costs['肥料費'].length === 0) && [...Array(4)].map((_, i) => <tr key={`e2-${i}`}><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>)}
-                    <tr className="bg-slate-50"><th className="text-left">合計</th><td colSpan={3}></td><td className="text-right font-bold">{Math.round(costs['肥料費']?.reduce((sum: number, c: any) => sum + c.amount * multiplier, 0) || 0).toLocaleString()}</td></tr>
-                  </tbody>
-                </table>
-              </div>
+            <div>
+              <div className="section-title mt-0">◆ 種苗費 (10aあたり)</div>
+              <table>
+                <thead><tr className="bg-slate-100"><th>品名</th><th>数量</th><th>単価</th><th>金額</th></tr></thead>
+                <tbody>
+                  {costs['種苗費']?.map((c: any, i: number) => (
+                    <tr key={i}>
+                      <td className="text-left">{c.name}</td><td className="text-right">{(c.quantity * multiplier).toFixed(1)}{c.unit}</td><td className="text-right">{c.price}</td><td className="text-right">{Math.round(c.amount * multiplier).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {(!costs['種苗費'] || costs['種苗費'].length === 0) && [...Array(3)].map((_, i) => <tr key={`e1-${i}`}><td>&nbsp;</td><td></td><td></td><td></td></tr>)}
+                  <tr className="bg-slate-50"><th className="text-left">合計</th><td colSpan={2}></td><td className="text-right font-bold">{Math.round(costs['種苗費']?.reduce((sum: number, c: any) => sum + c.amount * multiplier, 0) || 0).toLocaleString()}</td></tr>
+                </tbody>
+              </table>
             </div>
             
-            <div className="flex gap-4 mt-4">
-              <div className="flex-1">
-                <div className="section-title">◆ 農薬費 (10aあたり)</div>
-                <table>
-                  <thead><tr className="bg-slate-100"><th>品名</th><th>規格</th><th>使用量</th><th>金額</th></tr></thead>
-                  <tbody>
-                    {costs['農薬費']?.map((c: any, i: number) => (
-                      <tr key={i}>
-                        <td className="text-left">{c.name}</td><td>{c.specification}</td><td className="text-right">{(c.quantity * multiplier).toFixed(1)}{c.unit}</td><td className="text-right">{Math.round(c.amount * multiplier).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                    {(!costs['農薬費'] || costs['農薬費'].length === 0) && [...Array(3)].map((_, i) => <tr key={`e3-${i}`}><td>&nbsp;</td><td></td><td></td><td></td></tr>)}
-                    <tr className="bg-slate-50"><th className="text-left">合計</th><td colSpan={2}></td><td className="text-right font-bold">{Math.round(costs['農薬費']?.reduce((sum: number, c: any) => sum + c.amount * multiplier, 0) || 0).toLocaleString()}</td></tr>
-                  </tbody>
-                </table>
-              </div>
+            <div>
+              <div className="section-title mt-0">◆ 農薬費 (10aあたり)</div>
+              <table>
+                <thead><tr className="bg-slate-100"><th>品名</th><th>規格</th><th>使用量</th><th>金額</th></tr></thead>
+                <tbody>
+                  {costs['農薬費']?.map((c: any, i: number) => (
+                    <tr key={i}>
+                      <td className="text-left">{c.name}</td><td>{c.specification}</td><td className="text-right">{(c.quantity * multiplier).toFixed(1)}{c.unit}</td><td className="text-right">{Math.round(c.amount * multiplier).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {(!costs['農薬費'] || costs['農薬費'].length === 0) && [...Array(3)].map((_, i) => <tr key={`e3-${i}`}><td>&nbsp;</td><td></td><td></td><td></td></tr>)}
+                  <tr className="bg-slate-50"><th className="text-left">合計</th><td colSpan={2}></td><td className="text-right font-bold">{Math.round(costs['農薬費']?.reduce((sum: number, c: any) => sum + c.amount * multiplier, 0) || 0).toLocaleString()}</td></tr>
+                </tbody>
+              </table>
             </div>
+          </div>
 
+          {/* 中央カラム */}
+          <div className="space-y-6">
+            <div>
+              <div className="section-title mt-0">◆ 肥料費 (10aあたり)</div>
+              <table>
+                <thead><tr className="bg-slate-100"><th>品名</th><th>使用量</th><th>規格</th><th>価格</th><th>金額</th></tr></thead>
+                <tbody>
+                  {costs['肥料費']?.map((c: any, i: number) => (
+                    <tr key={i}>
+                      <td className="text-left">{c.name}</td><td className="text-right">{(c.quantity * multiplier).toFixed(1)}{c.unit}</td><td>{c.specification}</td><td className="text-right">{c.price}</td><td className="text-right">{Math.round(c.amount * multiplier).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {(!costs['肥料費'] || costs['肥料費'].length === 0) && [...Array(4)].map((_, i) => <tr key={`e2-${i}`}><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>)}
+                  <tr className="bg-slate-50"><th className="text-left">合計</th><td colSpan={3}></td><td className="text-right font-bold">{Math.round(costs['肥料費']?.reduce((sum: number, c: any) => sum + c.amount * multiplier, 0) || 0).toLocaleString()}</td></tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <div>
+              <div className="section-title mt-0">◆ その他諸材料費 (10aあたり)</div>
+              <table>
+                <thead><tr className="bg-slate-100"><th>品名</th><th>規格</th><th>数量</th><th>金額</th></tr></thead>
+                <tbody>
+                  {costs['諸材料費']?.map((c: any, i: number) => (
+                    <tr key={i}>
+                      <td className="text-left">{c.name}</td><td>{c.specification}</td><td className="text-right">{(c.quantity * multiplier).toFixed(1)}{c.unit}</td><td className="text-right">{Math.round(c.amount * multiplier).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {(!costs['諸材料費'] || costs['諸材料費'].length === 0) && [...Array(3)].map((_, i) => <tr key={`e4-${i}`}><td>&nbsp;</td><td></td><td></td><td></td></tr>)}
+                  <tr className="bg-slate-50"><th className="text-left">合計</th><td colSpan={2}></td><td className="text-right font-bold">{Math.round(costs['諸材料費']?.reduce((sum: number, c: any) => sum + c.amount * multiplier, 0) || 0).toLocaleString()}</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* 右カラム */}
-          <div>
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <div className="section-title">◆ その他諸材料費 (10aあたり)</div>
-                <table>
-                  <thead><tr className="bg-slate-100"><th>品名</th><th>規格</th><th>数量</th><th>金額</th></tr></thead>
-                  <tbody>
-                    {costs['諸材料費']?.map((c: any, i: number) => (
-                      <tr key={i}>
-                        <td className="text-left">{c.name}</td><td>{c.specification}</td><td className="text-right">{(c.quantity * multiplier).toFixed(1)}{c.unit}</td><td className="text-right">{Math.round(c.amount * multiplier).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                    {(!costs['諸材料費'] || costs['諸材料費'].length === 0) && [...Array(3)].map((_, i) => <tr key={`e4-${i}`}><td>&nbsp;</td><td></td><td></td><td></td></tr>)}
-                    <tr className="bg-slate-50"><th className="text-left">合計</th><td colSpan={2}></td><td className="text-right font-bold">{Math.round(costs['諸材料費']?.reduce((sum: number, c: any) => sum + c.amount * multiplier, 0) || 0).toLocaleString()}</td></tr>
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex-1">
-                <div className="section-title">◆ 動力光熱費 (10aあたり)</div>
-                <table>
-                  <thead><tr className="bg-slate-100"><th>品名</th><th>数量</th><th>金額</th></tr></thead>
-                  <tbody>
-                    {costs['動力光熱費']?.map((c: any, i: number) => (
-                      <tr key={i}>
-                        <td className="text-left">{c.name}</td><td className="text-right">{(c.quantity * multiplier).toFixed(1)}{c.unit}</td><td className="text-right">{Math.round(c.amount * multiplier).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                    {(!costs['動力光熱費'] || costs['動力光熱費'].length === 0) && [...Array(3)].map((_, i) => <tr key={`e5-${i}`}><td>&nbsp;</td><td></td><td></td></tr>)}
-                    <tr className="bg-slate-50"><th className="text-left">合計</th><td></td><td className="text-right font-bold">{Math.round(costs['動力光熱費']?.reduce((sum: number, c: any) => sum + c.amount * multiplier, 0) || 0).toLocaleString()}</td></tr>
-                  </tbody>
-                </table>
-              </div>
+          <div className="space-y-6">
+            <div>
+              <div className="section-title mt-0">◆ 動力光熱費 (10aあたり)</div>
+              <table>
+                <thead><tr className="bg-slate-100"><th>品名</th><th>数量</th><th>金額</th></tr></thead>
+                <tbody>
+                  {costs['動力光熱費']?.map((c: any, i: number) => (
+                    <tr key={i}>
+                      <td className="text-left">{c.name}</td><td className="text-right">{(c.quantity * multiplier).toFixed(1)}{c.unit}</td><td className="text-right">{Math.round(c.amount * multiplier).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {(!costs['動力光熱費'] || costs['動力光熱費'].length === 0) && [...Array(3)].map((_, i) => <tr key={`e5-${i}`}><td>&nbsp;</td><td></td><td></td></tr>)}
+                  <tr className="bg-slate-50"><th className="text-left">合計</th><td></td><td className="text-right font-bold">{Math.round(costs['動力光熱費']?.reduce((sum: number, c: any) => sum + c.amount * multiplier, 0) || 0).toLocaleString()}</td></tr>
+                </tbody>
+              </table>
             </div>
 
-            <div className="mt-8 ml-auto w-3/4">
-              <div className="section-title">◇ 直接経費 (10aあたり合計)</div>
+            <div>
+              <div className="section-title mt-0">◇ 直接経費 (10aあたり合計)</div>
               <table>
                 <thead>
                   <tr className="bg-slate-100"><th>費目</th><th>金額 (円)</th></tr>
@@ -456,7 +454,6 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
               </table>
               <p className="text-[10px] text-slate-500 mt-1 text-right">※減価償却費等の固定費は除外しています</p>
             </div>
-
           </div>
         </div>
       </div>
