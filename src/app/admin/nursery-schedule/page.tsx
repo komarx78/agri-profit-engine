@@ -154,13 +154,40 @@ export default function NurserySchedulePage() {
     }
   };
 
-  const getCellColorClass = (type: string) => {
+  const getCellColorClass = (type: string, isAuto: boolean = false) => {
     switch (type) {
-      case 'sowing': return 'bg-orange-400 text-white placeholder:text-white/50 border-orange-500';
-      case 'potting': return 'bg-pink-400 text-white placeholder:text-white/50 border-pink-500';
-      case 'planting': return 'bg-green-600 text-white placeholder:text-white/50 border-green-700';
-      default: return 'bg-transparent text-slate-700 focus:bg-blue-50 border-transparent';
+      case 'sowing': return isAuto ? 'bg-orange-200/50 text-orange-600/70 placeholder:text-orange-600/70 border-orange-200' : 'bg-orange-400 text-white placeholder:text-white/50 border-orange-500 shadow-sm';
+      case 'potting': return isAuto ? 'bg-pink-200/50 text-pink-600/70 placeholder:text-pink-600/70 border-pink-200' : 'bg-pink-400 text-white placeholder:text-white/50 border-pink-500 shadow-sm';
+      case 'planting': return 'bg-green-600 text-white placeholder:text-white/50 border-green-700 shadow-sm';
+      default: return 'bg-transparent text-slate-700 focus:bg-blue-50 border-transparent hover:bg-slate-50/50';
     }
+  };
+
+  const getCellState = (schedule: any, dateStr: string) => {
+    if (!schedule || !schedule.schedule_data) return { val: '', type: 'none', isAuto: false };
+    
+    // 1. その日に実際の入力があるかチェック
+    if (schedule.schedule_data[dateStr]) {
+      const data = schedule.schedule_data[dateStr];
+      return { val: data.quantity, type: data.type, isAuto: false };
+    }
+    
+    // 2. なければ、過去の最も近い入力を探す
+    const pastDates = Object.keys(schedule.schedule_data)
+      .filter(d => d < dateStr)
+      .sort((a, b) => b.localeCompare(a)); // 降順 (最新の過去日が先頭)
+      
+    if (pastDates.length > 0) {
+      const latestPastData = schedule.schedule_data[pastDates[0]];
+      // 植え付け(planting) が最後だったら、もう継続しない
+      if (latestPastData.type === 'planting') {
+        return { val: '', type: 'none', isAuto: false };
+      }
+      // それ以外 (sowing, potting) なら継続
+      return { val: latestPastData.quantity, type: latestPastData.type, isAuto: true };
+    }
+    
+    return { val: '', type: 'none', isAuto: false };
   };
 
   return (
@@ -314,18 +341,17 @@ export default function NurserySchedulePage() {
                       {/* スケジュール入力セル */}
                       {weeks.map((week, i) => {
                         const dateStr = formatToYYYYMMDD(week);
-                        const cellData = schedule.schedule_data?.[dateStr];
-                        const val = cellData ? cellData.quantity : '';
-                        const type = cellData ? cellData.type : 'none';
-                        const colorClass = getCellColorClass(type);
+                        const { val, type, isAuto } = getCellState(schedule, dateStr);
+                        const colorClass = getCellColorClass(type, isAuto);
                         
                         return (
                           <td key={i} className="p-0.5 border-r border-slate-100 text-center">
                             <input 
                               type="text" 
-                              value={val}
+                              value={isAuto ? '' : val}
+                              placeholder={isAuto ? val : ''}
                               onChange={(e) => handleScheduleDataChange(plan.id, dateStr, e.target.value)}
-                              className={`w-full h-[32px] focus:outline-none text-center text-xs font-bold rounded ${colorClass}`}
+                              className={`w-full h-[32px] focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:z-10 relative text-center text-xs font-bold rounded transition-colors ${colorClass}`}
                             />
                           </td>
                         );
