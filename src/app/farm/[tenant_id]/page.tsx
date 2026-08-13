@@ -372,8 +372,19 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     return (
       <div className="min-h-screen bg-emerald-950 flex items-center justify-center p-4">
         <div className="max-w-sm w-full bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl overflow-hidden">
-          <div className="p-8 text-center bg-emerald-900/20 border-b border-emerald-900/50">
-            <h1 className="text-xl font-black text-white">{farmInfo?.company_name}</h1>
+          <div className="p-8 text-center bg-emerald-900/20 border-b border-emerald-900/50 relative">
+            <div className="absolute top-4 right-4">
+              <select 
+                value={language}
+                onChange={e => handleLanguageChange(e.target.value as LanguageCode)}
+                className="bg-emerald-900/80 text-emerald-100 text-xs font-bold rounded-lg px-2 py-1 focus:outline-none border border-emerald-800"
+              >
+                {LANGUAGES.map(l => (
+                  <option key={l.code} value={l.code}>{l.flag} {l.code.toUpperCase()}</option>
+                ))}
+              </select>
+            </div>
+            <h1 className="text-xl font-black text-white mt-2">{farmInfo?.company_name}</h1>
           </div>
           <form onSubmit={handleLogin} className="p-8 space-y-6">
             <select
