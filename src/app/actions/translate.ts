@@ -1,9 +1,37 @@
 "use server";
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+// 環境変数（APIキー）を必要としない無料の簡易翻訳APIを使用
+// ※大量のアクセスには適しませんが、マスタ登録時の数件程度の翻訳であれば問題なく動作します。
 
-// すでにOCRで使っている環境変数を利用する
-const apiKey = process.env.GEMINI_API_KEY;
+async function translateTextFree(text: string, targetLanguage: string) {
+  try {
+    if (!text) return text;
+    
+    // Google Translateの非公開（ブラウザ向け）API。簡易的な翻訳に利用可能。
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=${targetLanguage}&dt=t&q=${encodeURIComponent(text)}`;
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    // data[0][0][0] に翻訳結果が入っている
+    if (data && data[0] && data[0][0] && data[0][0][0]) {
+      return data[0][0][0];
+    }
+    return text;
+  } catch (error) {
+    console.error(`Free translation error for ${targetLanguage}:`, error);
+    return text;
+  }
+}
 
 export async function autoTranslateMasterData(name: string) {
   try {
@@ -11,50 +39,20 @@ export async function autoTranslateMasterData(name: string) {
       return { name_en: '', name_vi: '', name_id: '', name_zh: '' };
     }
     
-    if (!apiKey) {
-      console.warn("GEMINI_API_KEY is not set. Skipping translation.");
-      return { name_en: '', name_vi: '', name_id: '', name_zh: '' };
-    }
+    // 4言語へ並列で翻訳リクエストを投げる
+    const [en, vi, id, zh] = await Promise.all([
+      translateTextFree(name, 'en'),
+      translateTextFree(name, 'vi'),
+      translateTextFree(name, 'id'),
+      translateTextFree(name, 'zh-CN'),
+    ]);
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    // 翻訳には軽量で高速な Flash モデルを使用
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
-
-    const prompt = `
-以下の農業用語（作目、圃場名、作業名など）を4つの言語（英語、ベトナム語、インドネシア語、中国語）に翻訳し、JSON形式のみで出力してください。
-マークダウンのコードブロック(\`\`\`json)などは付けずに、純粋なJSONテキストのみを返してください。
-専門用語の場合は、農業現場で最も一般的に使われる単語を選んでください。
-
-翻訳対象の単語: "${name}"
-
-【出力フォーマット】
-{
-  "name_en": "英語の翻訳",
-  "name_vi": "ベトナム語の翻訳",
-  "name_id": "インドネシア語の翻訳",
-  "name_zh": "中国語(簡体字)の翻訳"
-}
-`;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let text = response.text();
-    
-    // Markdownのコードブロックが含まれている場合のクリーニング
-    text = text.replace(/```json\n/g, '').replace(/```\n?/g, '').trim();
-
-    try {
-      const parsedData = JSON.parse(text);
-      return {
-        name_en: parsedData.name_en || '',
-        name_vi: parsedData.name_vi || '',
-        name_id: parsedData.name_id || '',
-        name_zh: parsedData.name_zh || '',
-      };
-    } catch (parseError) {
-      console.error('Failed to parse AI translation response:', text);
-      return { name_en: '', name_vi: '', name_id: '', name_zh: '' };
-    }
+    return {
+      name_en: en,
+      name_vi: vi,
+      name_id: id,
+      name_zh: zh,
+    };
   } catch (error) {
     console.error("Auto translation failed:", error);
     return { name_en: '', name_vi: '', name_id: '', name_zh: '' };
