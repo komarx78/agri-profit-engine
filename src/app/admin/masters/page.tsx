@@ -119,22 +119,13 @@ export default function MastersPage() {
       }
 
       // 自動翻訳処理（作目、圃場、資材のみ）
-      // 編集時は、名前が変更された場合のみ、または翻訳カラムが空の場合のみ翻訳し直すなどの工夫も考えられるが、
-      // 今回はシンプルに毎回翻訳を更新するか、または既存の翻訳を保持する。
-      // 新規作成時、または既存データの名前変更時などに翻訳を実行する。
+      // ユーザーが手動で更新した場合でも、必ず最新の翻訳を強制的に取得する
       let dataToSave = { ...formData };
       
       if (['crops', 'fields', 'materials'].includes(table) && dataToSave.name) {
-        // 名前が変更されたか、新規か、あるいは翻訳データがまだ無い場合に翻訳を実行する
-        const shouldTranslate = !editingItem || 
-                                editingItem.name !== dataToSave.name || 
-                                !editingItem.name_en; // 既存データでも翻訳が入っていなければ再翻訳
-        
-        if (shouldTranslate) {
-          setUploadStatus({ type: 'info', message: '多言語翻訳を生成中...' });
-          const translations = await autoTranslateMasterData(dataToSave.name);
-          dataToSave = { ...dataToSave, ...translations };
-        }
+        setUploadStatus({ type: 'info', message: '多言語翻訳を生成中...' });
+        const translations = await autoTranslateMasterData(dataToSave.name);
+        dataToSave = { ...dataToSave, ...translations };
       }
 
       let query;

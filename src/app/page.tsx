@@ -65,9 +65,9 @@ export default function WorkEntryPage() {
     async function fetchData() {
       try {
         const [cRes, fRes, mRes] = await Promise.all([
-          supabase.from('crops').select('id, name'),
-          supabase.from('fields').select('id, name'),
-          supabase.from('materials').select('id, name')
+          supabase.from('crops').select('*'),
+          supabase.from('fields').select('*'),
+          supabase.from('materials').select('*')
         ]);
 
         if (cRes.data) setCrops(cRes.data);
@@ -440,8 +440,7 @@ export default function WorkEntryPage() {
                           : 'bg-emerald-950/60 text-slate-300 border-emerald-800/60'
                       }`}
                     >
-                      {/* TODO: 本来はマスタ化するか固定辞書が必要だが、とりあえずそのまま出す */}
-                      {tData}
+                      {t(tData, language)}
                     </button>
                   ))}
                 </div>

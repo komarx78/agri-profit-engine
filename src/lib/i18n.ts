@@ -275,6 +275,26 @@ export const TRANSLATIONS: Record<string, Record<LanguageCode, string>> = {
   loginAndStart: {
     ja: 'ログインして作業開始', en: 'Login & Start Work', vi: 'Đăng nhập & Bắt đầu làm việc', id: 'Login & Mulai Kerja', zh: '登录并开始工作'
   },
+  
+  // 作業内容（固定）
+  '収穫': {
+    ja: '収穫', en: 'Harvest', vi: 'Thu hoạch', id: 'Panen', zh: '收获'
+  },
+  '定植・播種': {
+    ja: '定植・播種', en: 'Planting / Sowing', vi: 'Trồng / Gieo hạt', id: 'Menanam / Menyemai', zh: '定植/播种'
+  },
+  '水やり': {
+    ja: '水やり', en: 'Watering', vi: 'Tưới nước', id: 'Menyiram', zh: '浇水'
+  },
+  '肥料・農薬': {
+    ja: '肥料・農薬', en: 'Fertilizer / Pesticide', vi: 'Phân bón / Thuốc trừ sâu', id: 'Pupuk / Pestisida', zh: '肥料/农药'
+  },
+  '草刈り': {
+    ja: '草刈り', en: 'Weeding / Mowing', vi: 'Cắt cỏ', id: 'Membabat rumput', zh: '除草'
+  },
+  '片付け・メンテ': {
+    ja: '片付け・メンテ', en: 'Cleanup / Maintenance', vi: 'Dọn dẹp / Bảo trì', id: 'Pembersihan / Perawatan', zh: '清理/维护'
+  },
 };
 
 export function t(key: string, lang: LanguageCode = 'ja'): string {
