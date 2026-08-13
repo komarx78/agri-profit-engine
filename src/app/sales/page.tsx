@@ -24,16 +24,18 @@ export default function SalesEntryPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        // tenant_id を localStorage から取得（`/farm/[tenant_id]`のセッションから推測するか、今回は簡易的に設定された言語を読む）
+        // tenant_id を localStorage から取得し、言語設定をロード
         const tenantIds = Object.keys(localStorage).filter(k => k.startsWith('agri_lang_')).map(k => k.replace('agri_lang_', ''));
         const tenantId = tenantIds.length > 0 ? tenantIds[0] : null;
         
+        let loadedLang = 'ja' as LanguageCode;
         if (tenantId) {
           const savedLang = localStorage.getItem(`agri_lang_${tenantId}`) as LanguageCode;
           if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
-            setLanguage(savedLang);
+            loadedLang = savedLang;
           }
         }
+        setLanguage(loadedLang);
 
         const [cRes, chRes, spRes] = await Promise.all([
           supabase.from('crops').select('*'),
@@ -139,11 +141,11 @@ export default function SalesEntryPage() {
             <select 
               value={language}
               onChange={e => {
-                setLanguage(e.target.value as LanguageCode);
-                const tenantIds = Object.keys(localStorage).filter(k => k.startsWith('agri_lang_')).map(k => k.replace('agri_lang_', ''));
-                if (tenantIds.length > 0) {
-                  localStorage.setItem(`agri_lang_${tenantIds[0]}`, e.target.value);
-                }
+                const newLang = e.target.value as LanguageCode;
+                setLanguage(newLang);
+                // すべての agri_lang_ キーを更新する（どの農園の画面でも反映されるように）
+                const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang_'));
+                langKeys.forEach(key => localStorage.setItem(key, newLang));
               }}
               className="bg-amber-900/50 text-white text-xs font-bold rounded-lg px-2 py-1 focus:outline-none"
             >

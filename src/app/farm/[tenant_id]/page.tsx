@@ -161,6 +161,10 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   const handleLanguageChange = (code: LanguageCode) => {
     setLanguage(code);
     localStorage.setItem(`agri_lang_${tenantId}`, code);
+    
+    // 出荷記録など他のページとも同期するため、存在するすべてのキーを更新
+    const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang_'));
+    langKeys.forEach(key => localStorage.setItem(key, code));
   };
 
   const handleLogin = async (e: React.FormEvent) => {

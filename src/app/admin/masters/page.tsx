@@ -125,8 +125,10 @@ export default function MastersPage() {
       let dataToSave = { ...formData };
       
       if (['crops', 'fields', 'materials'].includes(table) && dataToSave.name) {
-        // 名前が変更されたか、新規かの場合に翻訳を実行する
-        const shouldTranslate = !editingItem || editingItem.name !== dataToSave.name;
+        // 名前が変更されたか、新規か、あるいは翻訳データがまだ無い場合に翻訳を実行する
+        const shouldTranslate = !editingItem || 
+                                editingItem.name !== dataToSave.name || 
+                                !editingItem.name_en; // 既存データでも翻訳が入っていなければ再翻訳
         
         if (shouldTranslate) {
           setUploadStatus({ type: 'info', message: '多言語翻訳を生成中...' });
