@@ -127,7 +127,7 @@ export default function AdminLayout({
 
       {/* モバイル用ドロップダウンメニュー */}
       {isMobileMenuOpen && (
-        <div className="md:hidden bg-white border-b border-slate-200 p-4 space-y-2 shadow-lg absolute w-full z-40">
+        <div className="md:hidden bg-white border-b border-slate-200 p-4 space-y-2 shadow-lg absolute top-16 left-0 right-0 w-full z-40">
           <NavLinks />
           <div className="pt-2 mt-2 border-t border-slate-100">
             {tenantId && (
@@ -202,7 +202,7 @@ export default function AdminLayout({
       </aside>
 
       {/* メインコンテンツエリア */}
-      <main className="flex-1 flex flex-col h-full md:h-screen overflow-auto">
+      <main className="flex-1 flex flex-col w-full md:h-screen md:overflow-auto relative">
         <div className="flex-1 p-4 md:p-8">
           {children}
         </div>
