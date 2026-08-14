@@ -299,14 +299,14 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 pb-16">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-8 pb-16 pt-4 sm:pt-8">
       
       {/* ページヘッダー＆直感的なコントロールパネル */}
       <div className="flex flex-col gap-6 border-b-2 border-slate-200 pb-8">
-        <div className="flex justify-between items-end">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
           <div>
-            <h1 className="text-4xl font-black text-slate-800 tracking-tight mb-2">経営ダッシュボード</h1>
-            <p className="text-slate-500 font-medium">作業・売上データから農園の健康状態（P&L）をリアルタイムに可視化します。</p>
+            <h1 className="text-2xl md:text-4xl font-black text-slate-800 tracking-tight mb-2">経営ダッシュボード</h1>
+            <p className="text-sm md:text-base text-slate-500 font-medium">作業・売上データから農園の健康状態（P&L）をリアルタイムに可視化します。</p>
           </div>
           
           {/* シンプルな経費率設定 */}

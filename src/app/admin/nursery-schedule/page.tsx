@@ -198,16 +198,16 @@ export default function NurserySchedulePage() {
 
   return (
     <div className="max-w-[95vw] mx-auto space-y-6 pb-12 relative">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-            <Sprout className="w-8 h-8 text-emerald-600" />
+          <h1 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
+            <Sprout className="w-6 h-6 md:w-8 md:h-8 text-emerald-600 flex-shrink-0" />
             育苗スケジュール表
           </h1>
-          <p className="text-slate-500 mt-2 font-medium">栽培計画に基づいて「必要な苗リスト」が自動生成されます。日々の播種・定植の予定を入力してください。</p>
+          <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">栽培計画に基づいて「必要な苗リスト」が自動生成されます。日々の播種・定植の予定を入力してください。</p>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-2 md:gap-4">
           {/* 表示期間の移動 */}
           <div className="flex items-center bg-slate-100 rounded-xl p-1 border border-slate-200">
             <button 

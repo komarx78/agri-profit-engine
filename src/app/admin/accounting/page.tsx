@@ -223,13 +223,13 @@ export default function AccountingPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-12">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 space-y-8 pb-12 pt-4 sm:pt-8">
       <div>
-        <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-          <FileSpreadsheet className="w-8 h-8 text-blue-600" />
+        <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
+          <FileSpreadsheet className="w-6 h-6 md:w-8 md:h-8 text-blue-600 flex-shrink-0" />
           会計データ出力（仕訳CSV生成）
         </h1>
-        <p className="text-slate-500 mt-2 font-medium">
+        <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">
           売上と作業記録（資材費）から、マネーフォワードクラウドの「仕訳帳」へ直接インポートできる全25項目のCSVを生成します。
         </p>
       </div>

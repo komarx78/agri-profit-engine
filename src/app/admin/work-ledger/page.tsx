@@ -197,14 +197,14 @@ export default function WorkLedgerPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-12">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6 pb-12 pt-4 sm:pt-6">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-            <Table className="w-8 h-8 text-indigo-500" />
+          <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
+            <Table className="w-6 h-6 md:w-8 md:h-8 text-indigo-500 flex-shrink-0" />
             経営分析 (作目別 期間集計)
           </h1>
-          <p className="text-slate-500 mt-2 font-medium">任意の期間を指定して、作目ごとのトータルコストと最終的な売上・粗利を分析します。</p>
+          <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">任意の期間を指定して、作目ごとのトータルコストと最終的な売上・粗利を分析します。</p>
         </div>
       </div>
 

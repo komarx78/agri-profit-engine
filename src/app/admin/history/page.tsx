@@ -123,14 +123,14 @@ export default function HistoryPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-12">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6 pb-12 pt-4 sm:pt-6">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-            <History className="w-8 h-8 text-emerald-600" />
+          <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
+            <History className="w-6 h-6 md:w-8 md:h-8 text-emerald-600 flex-shrink-0" />
             作業記録一覧
           </h1>
-          <p className="text-slate-500 mt-2 font-medium">現場で打刻・入力された作業の生データ一覧です。</p>
+          <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">現場で打刻・入力された作業の生データ一覧です。</p>
         </div>
         
         <button

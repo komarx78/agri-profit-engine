@@ -263,13 +263,13 @@ export default function PurchasesPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 pb-16">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-8 pb-16 pt-4 sm:pt-8">
       
       {/* ヘッダー */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b-2 border-slate-200 pb-6">
         <div>
-          <h1 className="text-4xl font-black text-slate-800 tracking-tight mb-2">資材・経費管理</h1>
-          <p className="text-slate-500 font-medium">日々の資材購入履歴を記録し、経費を可視化します。</p>
+          <h1 className="text-2xl md:text-4xl font-black text-slate-800 tracking-tight mb-2">資材・経費管理</h1>
+          <p className="text-sm md:text-base text-slate-500 font-medium">日々の資材購入履歴を記録し、経費を可視化します。</p>
         </div>
         <div className="flex gap-2">
           {/* 将来用：会計ソフト向けCSV出力 */}

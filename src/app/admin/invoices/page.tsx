@@ -352,14 +352,14 @@ export default function InvoicesPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 space-y-6 pb-20 pt-4 sm:pt-6">
       <div className="print:hidden space-y-6">
         <div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-            <FileText className="w-8 h-8 text-indigo-500" />
+          <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
+            <FileText className="w-6 h-6 md:w-8 md:h-8 text-indigo-500 flex-shrink-0" />
             請求書の一括発行
           </h1>
-          <p className="text-slate-500 mt-2 font-medium">対象月を選ぶだけで、その月に出荷があったすべての取引先の請求書を一斉に作成します。</p>
+          <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">対象月を選ぶだけで、その月に出荷があったすべての取引先の請求書を一斉に作成します。</p>
         </div>
 
         {!settings && (
