@@ -85,17 +85,17 @@ export default function MaterialRequirementsPage() {
   const reqs = calculateRequirements();
 
   return (
-    <div className="max-w-[95vw] mx-auto space-y-6 pb-12 relative">
-      <div className="flex items-center justify-between">
+    <div className="max-w-[95vw] mx-auto px-4 sm:px-6 space-y-6 pb-12 pt-4 sm:pt-6 relative">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-            <Calculator className="w-8 h-8 text-amber-600" />
+          <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
+            <Calculator className="w-6 h-6 md:w-8 md:h-8 text-amber-600 flex-shrink-0" />
             必要資材 自動集計
           </h1>
-          <p className="text-slate-500 mt-2 font-medium">栽培計画（面積×基準値）に基づき、今年度必要な資材の総量を自動計算・集計します。</p>
+          <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">栽培計画（面積×基準値）に基づき、今年度必要な資材の総量を自動計算・集計します。</p>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-2 md:gap-4">
           <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
             <button onClick={handlePrevYear} className="p-2 hover:bg-slate-100 transition-colors">
               <ChevronLeft className="w-5 h-5 text-slate-600" />
