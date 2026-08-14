@@ -370,7 +370,7 @@ export default function PlansPage() {
   const rowItems = ganttViewMode === 'byCrop' ? crops : fields;
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-6 pb-12">
+    <div className="w-full max-w-[1400px] mx-auto px-2 sm:px-6 space-y-6 pb-12 pt-4 sm:pt-6">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
@@ -501,7 +501,7 @@ export default function PlansPage() {
 
       {/* コントロールパネル */}
       <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-        <div className="flex bg-slate-100 p-1 rounded-xl">
+        <div className="flex flex-wrap bg-slate-100 p-1 rounded-xl gap-1">
           <button
             onClick={() => setGanttViewMode('byCrop')}
             className={`px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center gap-2 ${
@@ -521,7 +521,7 @@ export default function PlansPage() {
         </div>
         
         {ganttViewMode === 'byCrop' && (
-          <div className="flex bg-slate-100 p-1 rounded-xl sm:ml-auto">
+          <div className="flex flex-wrap bg-slate-100 p-1 rounded-xl sm:ml-auto gap-1">
             <button
               onClick={() => setGanttFilter('all')}
               className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${

@@ -217,7 +217,8 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
       </div>
 
       {/* 印刷用領域 (A4横を想定) */}
-      <div id="printable-report" className="bg-white mx-auto mt-8 shadow-lg p-8 text-sm" style={{ width: '100%', maxWidth: '297mm', minHeight: '210mm' }}>
+      <div className="overflow-x-auto w-full px-2 sm:px-8">
+        <div id="printable-report" className="bg-white mx-auto mt-4 sm:mt-8 shadow-lg p-4 sm:p-8 text-sm min-w-[800px]" style={{ width: '100%', maxWidth: '297mm', minHeight: '210mm' }}>
         
         {/* スタイル定義 */}
         <style dangerouslySetInnerHTML={{__html: `
@@ -463,6 +464,7 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
               </table>
               <p className="text-[10px] text-slate-500 mt-1 text-right">※減価償却費等の固定費は除外しています</p>
             </div>
+          </div>
           </div>
         </div>
       </div>
