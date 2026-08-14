@@ -227,16 +227,16 @@ export default function CultivationSchedulePage() {
 
   return (
     <div className="max-w-[95vw] mx-auto space-y-6 pb-12 relative">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-            <Calendar className="w-8 h-8 text-blue-600" />
+          <h1 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
+            <Calendar className="w-6 h-6 md:w-8 md:h-8 text-blue-600 flex-shrink-0" />
             栽培計画表 (作付カレンダー)
           </h1>
-          <p className="text-slate-500 mt-2 font-medium">ここで作付計画を立てると、マスタの基準値に基づき必要な苗や資材の量が自動計算されます。</p>
+          <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">ここで作付計画を立てると、マスタの基準値に基づき必要な苗や資材の量が自動計算されます。</p>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-4">
           <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
             <button onClick={handlePrevYear} className="p-2 hover:bg-slate-100 transition-colors">
               <ChevronLeft className="w-5 h-5 text-slate-600" />
