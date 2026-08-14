@@ -902,29 +902,32 @@ export default function MastersPage() {
                       className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-slate-700"
                     >
                       <option value="">-- 作目を選択してください --</option>
-                      {crops.map(c => {
-                        const isRegistered = salesPrices.some(sp => sp.crop_name === c.name);
-                        const isCurrentEditing = editingItem && editingItem.crop_name === c.name;
-                        // すでに登録済みで、かつ現在編集中のものではない場合は選択不可にする
-                        const isDisabled = isRegistered && !isCurrentEditing;
-                        
-                        return (
-                          <option key={c.id} value={c.name} disabled={isDisabled}>
-                            {c.name} {isDisabled ? '(登録済み)' : ''}
-                          </option>
-                        );
-                      })}
+                      {crops.map(c => (
+                        <option key={c.id} value={c.name}>
+                          {c.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1">販路名 (必須)</label>
-                    <input 
-                      type="text" 
+                    <select
                       value={formData.channel_name || ''} 
                       onChange={e => setFormData({...formData, channel_name: e.target.value})}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
-                      placeholder="例: JA, 直売所, スーパーA"
-                    />
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-slate-700"
+                    >
+                      <option value="">-- 販路を選択してください --</option>
+                      {channels.map(ch => {
+                        const isRegistered = formData.crop_name ? salesPrices.some(sp => sp.crop_name === formData.crop_name && sp.channel_name === ch.name) : false;
+                        const isCurrentEditing = editingItem && editingItem.crop_name === formData.crop_name && editingItem.channel_name === ch.name;
+                        const isDisabled = isRegistered && !isCurrentEditing;
+                        return (
+                          <option key={ch.id} value={ch.name} disabled={isDisabled}>
+                            {ch.name} {isDisabled ? '(この作目で登録済み)' : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1">販売単価 (円)</label>

@@ -107,6 +107,7 @@ export default function SalesEntryPage() {
             quantity: parseFloat(quantity) || 0,
             unit: 'kg/箱',
             total_sales: calculatedTotal > 0 ? calculatedTotal : null,
+            status: 'completed'
           }
         ]);
         if (error) console.error('Insert error:', error);
