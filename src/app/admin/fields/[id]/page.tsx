@@ -74,7 +74,7 @@ export default function FieldDetailPage() {
       // 最近の作業履歴を取得
       const { data: worksData } = await supabase
         .from('work_logs')
-        .select(`*`)
+        .select(`*, workers(name)`)
         .or(latestPlan ? `plan_id.eq.${latestPlan.id},field_id.eq.${fieldId}` : `field_id.eq.${fieldId}`)
         .order('work_date', { ascending: false })
         .limit(5);
@@ -232,7 +232,14 @@ export default function FieldDetailPage() {
                         {date.getMonth() + 1}/{date.getDate()}
                       </div>
                       <div>
-                        <h4 className="font-bold text-slate-700">{work.work_type}</h4>
+                        <h4 className="font-bold text-slate-700 flex items-center gap-2">
+                          {work.work_type}
+                          {work.workers?.name && (
+                            <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
+                              👤 {work.workers.name}
+                            </span>
+                          )}
+                        </h4>
                         <p className="text-xs text-slate-500 mt-1">{work.notes || 'メモなし'} ({work.duration_minutes}分)</p>
                       </div>
                     </div>

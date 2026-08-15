@@ -147,7 +147,7 @@ export default function CultivationSchedulePage() {
       const [workRes, salesRes] = await Promise.all([
         supabase.from('work_logs').select(`
           *,
-          workers (hourly_wage),
+          workers (name, hourly_wage),
           materials (default_price, category)
         `).or(`plan_id.eq.${plan.id},crop_id.eq.${plan.crop_id}`).order('work_date', { ascending: false }),
         supabase.from('sales_logs').select('*').or(`plan_id.eq.${plan.id},crop_id.eq.${plan.crop_id}`).order('sales_date', { ascending: false })
@@ -560,7 +560,14 @@ export default function CultivationSchedulePage() {
                         {workLogs.map(log => (
                           <div key={log.id} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex justify-between items-start">
                             <div>
-                              <div className="text-xs font-bold text-slate-500">{log.work_date}</div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <div className="text-xs font-bold text-slate-500">{log.work_date}</div>
+                                {log.workers?.name && (
+                                  <div className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                    <User className="w-3 h-3" /> {log.workers.name}
+                                  </div>
+                                )}
+                              </div>
                               <div className="font-bold text-slate-800">{log.work_type}</div>
                               {log.notes && <div className="text-xs text-slate-500 mt-1">{log.notes}</div>}
                             </div>
