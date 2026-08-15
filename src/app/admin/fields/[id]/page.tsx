@@ -244,9 +244,12 @@ export default function FieldDetailPage() {
             </div>
 
             {recentWorks.length > 0 && (
-              <button className="w-full mt-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl text-sm transition-colors">
+              <Link 
+                href="/admin/work-ledger"
+                className="w-full mt-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl text-sm transition-colors flex items-center justify-center"
+              >
                 すべての履歴を見る
-              </button>
+              </Link>
             )}
           </div>
 
