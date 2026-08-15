@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { GoogleMap, useJsApiLoader, DrawingManager, Polygon, InfoWindow } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, Polygon, InfoWindow } from '@react-google-maps/api';
 import { supabase } from '@/lib/supabase';
-import { MapPin, Plus, Loader2, Save, X, Info, Search } from 'lucide-react';
+import { MapPin, Plus, Loader2, Save, X, Info, Search, Check, Trash2 } from 'lucide-react';
 
 const containerStyle = {
   width: '100%',
@@ -183,28 +183,56 @@ export default function MapPage() {
     }
   }, [map]);
 
-  // 新しいポリゴンが描き終わったときの処理
-  const onPolygonComplete = (polygon: google.maps.Polygon) => {
+  // 地図がクリックされたとき（描画モード用）
+  const handleMapClick = (e: google.maps.MapMouseEvent) => {
+    if (!isDrawingMode || !e.latLng) return;
+    const lat = e.latLng.lat();
+    const lng = e.latLng.lng();
+    
+    setNewPolygonPath(prev => {
+      const nextPath = [...(prev || []), { lat, lng }];
+      
+      // リアルタイム面積計算 (3点以上ある場合)
+      if (nextPath.length >= 3 && window.google?.maps?.geometry?.spherical) {
+        const latLngPath = nextPath.map(p => new window.google.maps.LatLng(p.lat, p.lng));
+        const areaSqMeters = window.google.maps.geometry.spherical.computeArea(latLngPath);
+        setNewArea(Number((areaSqMeters / 100).toFixed(1)));
+      }
+      
+      return nextPath;
+    });
+  };
+
+  // 描画を完了して面積計算・保存モーダルへ
+  const handleDrawingComplete = () => {
+    if (!newPolygonPath || newPolygonPath.length < 3) {
+      alert("畑を作るには最低3か所の頂点をクリックしてください。");
+      return;
+    }
+
     if (!window.google?.maps?.geometry?.spherical) {
       alert("Geometry library not loaded");
       return;
     }
 
-    const path = polygon.getPath().getArray();
-    const coordinates = path.map(p => ({ lat: p.lat(), lng: p.lng() }));
+    // パスを LatLng オブジェクトの配列に変換
+    const latLngPath = newPolygonPath.map(p => new window.google.maps.LatLng(p.lat, p.lng));
     
     // 面積計算 (平方メートル)
-    const areaSqMeters = window.google.maps.geometry.spherical.computeArea(polygon.getPath());
+    const areaSqMeters = window.google.maps.geometry.spherical.computeArea(latLngPath);
     // a(アール)に変換: 1a = 100㎡
     const areaAres = areaSqMeters / 100;
 
-    setNewPolygonPath(coordinates);
     setNewArea(Number(areaAres.toFixed(1)));
     
-    // 描画されたポリゴンは一旦消す（ステートで管理して表示し直すため）
-    polygon.setMap(null);
+    // 描画モードを終了してモーダルを開く
     setIsDrawingMode(false);
     setIsSaveModalOpen(true);
+  };
+
+  const handleCancelDrawing = () => {
+    setIsDrawingMode(false);
+    setNewPolygonPath(null);
   };
 
   const handleSavePolygon = async () => {
@@ -308,21 +336,57 @@ export default function MapPage() {
       {/* メイン: マップ領域 */}
       <div className="flex-1 relative h-2/3 md:h-full min-h-[400px]">
         {/* コントロールパネル */}
-        <div className="absolute top-4 left-4 z-10 flex gap-2">
-          <button
-            onClick={() => setIsDrawingMode(!isDrawingMode)}
-            className={`px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-colors shrink-0 ${
-              isDrawingMode 
-                ? 'bg-rose-500 hover:bg-rose-600 text-white' 
-                : 'bg-white hover:bg-slate-50 text-slate-800 border border-slate-200'
-            }`}
-          >
-            {isDrawingMode ? (
-              <>描画をキャンセル</>
-            ) : (
-              <><Plus className="w-5 h-5 text-emerald-500" /> 地図に畑を追加</>
-            )}
-          </button>
+        <div className="absolute top-4 left-4 z-10 flex gap-2 flex-col sm:flex-row">
+          {!isDrawingMode ? (
+            <button
+              onClick={() => {
+                setIsDrawingMode(true);
+                setNewPolygonPath([]);
+                setNewArea(0);
+              }}
+              className="px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-colors shrink-0 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200"
+            >
+              <Plus className="w-5 h-5 text-emerald-500" /> 地図に畑を追加
+            </button>
+          ) : (
+            <div className="flex gap-2">
+              <button
+                onClick={handleDrawingComplete}
+                className="px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-colors shrink-0 bg-emerald-500 hover:bg-emerald-600 text-white"
+              >
+                <Check className="w-5 h-5" /> 描画完了
+              </button>
+              {newPolygonPath && newPolygonPath.length > 0 && (
+                <button
+                  onClick={() => {
+                    setNewPolygonPath([]);
+                    setNewArea(0);
+                  }}
+                  className="px-3 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-colors shrink-0 bg-amber-500 hover:bg-amber-600 text-white"
+                >
+                  <Trash2 className="w-4 h-4" /> やり直す
+                </button>
+              )}
+              <button
+                onClick={handleCancelDrawing}
+                className="px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-colors shrink-0 bg-rose-500 hover:bg-rose-600 text-white"
+              >
+                <X className="w-5 h-5" /> キャンセル
+              </button>
+            </div>
+          )}
+          
+          {/* 操作案内バナー */}
+          {isDrawingMode && (
+            <div className="bg-slate-800/90 text-white text-sm font-bold px-4 py-2 rounded-xl shadow-lg flex items-center gap-3">
+              <span>地図をクリックして畑を囲んでください。</span>
+              {newArea > 0 && (
+                <span className="bg-emerald-500 px-3 py-1 rounded-lg text-xs shadow-inner">
+                  現在の面積: {newArea} a
+                </span>
+              )}
+            </div>
+          )}
           
           {/* 住所・地名検索窓 */}
           {!isDrawingMode && (
@@ -354,32 +418,28 @@ export default function MapPage() {
           onLoad={onLoad}
           onUnmount={onUnmount}
           onIdle={handleMapIdle}
+          onClick={handleMapClick}
           options={{
             mapTypeId: 'hybrid', // デフォルトを航空写真+ラベルに固定
             disableDefaultUI: false,
             mapTypeControl: true,
             streetViewControl: false,
             fullscreenControl: true,
+            draggableCursor: isDrawingMode ? 'crosshair' : null,
           }}
         >
-          {/* Drawing Manager */}
-          {isDrawingMode && (
-            <DrawingManager
-              onPolygonComplete={onPolygonComplete}
+          {/* 現在描画中のポリゴン */}
+          {isDrawingMode && newPolygonPath && newPolygonPath.length > 0 && (
+            <Polygon
+              paths={newPolygonPath}
               options={{
-                drawingControl: true,
-                drawingControlOptions: {
-                  position: window.google.maps.ControlPosition.TOP_CENTER,
-                  drawingModes: [window.google.maps.drawing.OverlayType.POLYGON],
-                },
-                polygonOptions: {
-                  fillColor: '#3b82f6',
-                  fillOpacity: 0.4,
-                  strokeWeight: 2,
-                  clickable: false,
-                  editable: true,
-                  zIndex: 2,
-                },
+                fillColor: '#3b82f6',
+                fillOpacity: 0.4,
+                strokeColor: '#2563eb',
+                strokeWeight: 2,
+                clickable: false,
+                editable: false,
+                zIndex: 2,
               }}
             />
           )}
