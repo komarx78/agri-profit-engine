@@ -60,6 +60,9 @@ export default function MapPage() {
   const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
   const polygonsRef = useRef<{ [key: number]: google.maps.Polygon }>({});
 
+  // 選択された圃場の詳細（作付・履歴）用ステート
+  const [selectedFieldDetails, setSelectedFieldDetails] = useState<{ plan: any, works: any[] } | null>(null);
+
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
@@ -379,13 +382,45 @@ export default function MapPage() {
     }
   };
 
-  const handlePolygonClick = (field: any, e: google.maps.MapMouseEvent) => {
+  const handlePolygonClick = async (field: any, e: google.maps.MapMouseEvent) => {
     // 描画モードや編集中はポップアップを出さない
     if (isDrawingMode || editingFieldId) return;
     
     setSelectedField(field);
+    setSelectedFieldDetails(null); // 以前の詳細をクリア
     if (e.latLng) {
       setInfoWindowPos({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+    }
+
+    // 実際のデータを取得（今年度の作付計画と作業履歴）
+    try {
+      const currentYear = new Date().getFullYear();
+      const { data: plansData } = await supabase
+        .from('cultivation_plans_v2')
+        .select(`*, crops(name)`)
+        .eq('field_id', field.id)
+        .eq('year', currentYear)
+        .order('start_month', { ascending: false })
+        .limit(1);
+
+      let latestPlan = null;
+      let works: any[] = [];
+      
+      if (plansData && plansData.length > 0) {
+        latestPlan = plansData[0];
+        const { data: worksData } = await supabase
+          .from('work_logs')
+          .select(`*`)
+          .eq('plan_id', latestPlan.id)
+          .order('work_date', { ascending: false })
+          .limit(2); // ポップアップ用なので2件だけ
+          
+        if (worksData) works = worksData;
+      }
+      
+      setSelectedFieldDetails({ plan: latestPlan, works });
+    } catch (err) {
+      console.error("詳細データの取得に失敗しました", err);
     }
   };
 
@@ -632,11 +667,30 @@ export default function MapPage() {
 
                 <div className="space-y-2">
                   <div className="mt-3 bg-slate-50 p-2 rounded-lg text-xs">
-                    <div className="text-slate-400 font-bold mb-1">最近の作業</div>
-                    <ul className="space-y-1 text-slate-600">
-                      <li>• 8/12 肥料散布 (太郎)</li>
-                      <li>• 8/10 トラクター耕起 (次郎)</li>
-                    </ul>
+                    <div className="text-slate-400 font-bold mb-1 flex justify-between">
+                      <span>最近の作業</span>
+                      {selectedFieldDetails && selectedFieldDetails.plan && (
+                        <span className="text-emerald-500 bg-emerald-100 px-1.5 py-0.5 rounded-sm">
+                          {selectedFieldDetails.plan.crops?.name}
+                        </span>
+                      )}
+                    </div>
+                    {selectedFieldDetails ? (
+                      selectedFieldDetails.works.length > 0 ? (
+                        <ul className="space-y-1 text-slate-600">
+                          {selectedFieldDetails.works.map(work => {
+                            const date = new Date(work.work_date);
+                            return (
+                              <li key={work.id}>• {date.getMonth() + 1}/{date.getDate()} {work.work_type} ({work.duration_minutes}分)</li>
+                            );
+                          })}
+                        </ul>
+                      ) : (
+                        <div className="text-slate-400 py-1">作業記録はありません</div>
+                      )
+                    ) : (
+                      <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-slate-300" /></div>
+                    )}
                   </div>
                 </div>
                 

@@ -21,6 +21,8 @@ export default function FieldDetailPage() {
   const fieldId = params.id as string;
 
   const [field, setField] = useState<any>(null);
+  const [currentPlan, setCurrentPlan] = useState<any>(null);
+  const [recentWorks, setRecentWorks] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const { isLoaded } = useJsApiLoader({
@@ -53,6 +55,37 @@ export default function FieldDetailPage() {
       }
 
       setField({ ...data, path });
+
+      // 現在の作付（今年度の計画）を取得
+      const currentYear = new Date().getFullYear();
+      const { data: plansData } = await supabase
+        .from('cultivation_plans_v2')
+        .select(`*, crops(name)`)
+        .eq('field_id', fieldId)
+        .eq('year', currentYear)
+        .order('start_month', { ascending: false })
+        .limit(1);
+
+      let latestPlan = null;
+      if (plansData && plansData.length > 0) {
+        latestPlan = plansData[0];
+        setCurrentPlan(latestPlan);
+      }
+
+      // 最近の作業履歴を取得
+      if (latestPlan) {
+        const { data: worksData } = await supabase
+          .from('work_logs')
+          .select(`*`)
+          .eq('plan_id', latestPlan.id)
+          .order('work_date', { ascending: false })
+          .limit(5);
+          
+        if (worksData) {
+          setRecentWorks(worksData);
+        }
+      }
+
     } catch (err) {
       console.error(err);
       alert('圃場データの取得に失敗しました');
@@ -156,17 +189,25 @@ export default function FieldDetailPage() {
                 <Sprout className="w-5 h-5 text-emerald-600" /> 現在の作付
               </h2>
               <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full">
-                生育中
+                {currentPlan ? '生育中' : '計画なし'}
               </span>
             </div>
             
             <div className="flex items-center gap-4 mb-6">
-              <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center">
+              <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center shrink-0">
                 <Leaf className="w-8 h-8 text-emerald-500" />
               </div>
               <div>
-                <p className="text-sm text-slate-500 font-bold mb-1">2026年 春作</p>
-                <h3 className="text-2xl font-black text-slate-800">春キャベツ (YR輝石)</h3>
+                {currentPlan ? (
+                  <>
+                    <p className="text-sm text-slate-500 font-bold mb-1">{currentPlan.year}年</p>
+                    <h3 className="text-xl md:text-2xl font-black text-slate-800">
+                      {currentPlan.crops?.name || '不明な作物'} {currentPlan.variety ? `(${currentPlan.variety})` : ''}
+                    </h3>
+                  </>
+                ) : (
+                  <p className="text-slate-500 font-bold">現在この圃場に設定されている作付計画はありません。</p>
+                )}
               </div>
             </div>
 
@@ -185,26 +226,31 @@ export default function FieldDetailPage() {
             </h2>
             
             <div className="space-y-4">
-              {/* ダミーデータ（将来はwork_logsから取得） */}
-              <div className="flex gap-4 p-3 hover:bg-slate-50 rounded-xl transition-colors">
-                <div className="text-sm font-bold text-slate-400 pt-1 w-12 text-center">8/12</div>
-                <div>
-                  <h4 className="font-bold text-slate-700">肥料散布（追肥）</h4>
-                  <p className="text-xs text-slate-500 mt-1">作業者: 太郎 / 尿素 20kg</p>
-                </div>
-              </div>
-              <div className="flex gap-4 p-3 hover:bg-slate-50 rounded-xl transition-colors">
-                <div className="text-sm font-bold text-slate-400 pt-1 w-12 text-center">8/10</div>
-                <div>
-                  <h4 className="font-bold text-slate-700">トラクター耕起</h4>
-                  <p className="text-xs text-slate-500 mt-1">作業者: 次郎 / 深耕</p>
-                </div>
-              </div>
+              {recentWorks.length > 0 ? (
+                recentWorks.map((work) => {
+                  const date = new Date(work.work_date);
+                  return (
+                    <div key={work.id} className="flex gap-4 p-3 hover:bg-slate-50 rounded-xl transition-colors">
+                      <div className="text-sm font-bold text-slate-400 pt-1 w-12 text-center shrink-0">
+                        {date.getMonth() + 1}/{date.getDate()}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-700">{work.work_type}</h4>
+                        <p className="text-xs text-slate-500 mt-1">{work.notes || 'メモなし'} ({work.duration_minutes}分)</p>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="text-sm text-slate-500 p-4 text-center bg-slate-50 rounded-xl">作業履歴がまだありません。</p>
+              )}
             </div>
 
-            <button className="w-full mt-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl text-sm transition-colors">
-              すべての履歴を見る
-            </button>
+            {recentWorks.length > 0 && (
+              <button className="w-full mt-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl text-sm transition-colors">
+                すべての履歴を見る
+              </button>
+            )}
           </div>
 
         </div>
