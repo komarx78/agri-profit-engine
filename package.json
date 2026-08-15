@@ -11,6 +11,7 @@
   "dependencies": {
     "@google-cloud/translate": "^10.0.1",
     "@google/generative-ai": "^0.24.1",
+    "@react-google-maps/api": "^2.20.8",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.2",
     "@types/papaparse": "^5.5.2",
