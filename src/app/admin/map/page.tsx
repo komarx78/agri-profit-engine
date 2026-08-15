@@ -57,7 +57,7 @@ export default function MapPage() {
 
   // 既存ポリゴン編集用のステート
   const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
-  const editingPolygonRef = useRef<google.maps.Polygon | null>(null);
+  const polygonsRef = useRef<{ [key: number]: google.maps.Polygon }>({});
 
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -279,10 +279,14 @@ export default function MapPage() {
 
   // 既存の畑の形を保存する
   const handleUpdatePolygon = async () => {
-    if (!editingFieldId || !editingPolygonRef.current) return;
+    if (!editingFieldId) return;
+    const polygon = polygonsRef.current[editingFieldId];
+    if (!polygon) {
+      alert("エラー: 地図データの取得に失敗しました。");
+      return;
+    }
     
     try {
-      const polygon = editingPolygonRef.current;
       const pathArray = polygon.getPath().getArray();
       const newPath = pathArray.map(p => ({ lat: p.lat(), lng: p.lng() }));
       
@@ -535,9 +539,10 @@ export default function MapPage() {
                 key={f.id}
                 paths={f.path}
                 onLoad={(polygon) => {
-                  if (editingFieldId === f.id) {
-                    editingPolygonRef.current = polygon;
-                  }
+                  polygonsRef.current[f.id] = polygon;
+                }}
+                onUnmount={() => {
+                  delete polygonsRef.current[f.id];
                 }}
                 options={{
                   ...polygonOptions,
