@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Calendar, Save, Loader2, ChevronLeft, ChevronRight, Plus, Trash2, X, BarChart2 } from 'lucide-react';
+import { Calendar, Save, Loader2, ChevronLeft, ChevronRight, Plus, Trash2, X, BarChart2, User } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 
 export default function CultivationSchedulePage() {
