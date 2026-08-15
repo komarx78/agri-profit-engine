@@ -68,7 +68,7 @@ export default function MapPage() {
         map.panTo(results[0].geometry.location);
         map.setZoom(15);
       } else {
-        alert('住所が見つかりませんでした。');
+        alert(`住所が見つかりませんでした。\n（エラー詳細: ${status}）\n※REQUEST_DENIED と出る場合は、Google Cloud側で Geocoding API に制限がかかっている可能性があります。`);
       }
     });
   };
