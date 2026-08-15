@@ -53,6 +53,7 @@ export default function MapPage() {
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldColor, setNewFieldColor] = useState('#10b981'); // デフォルトカラー
+  const [selectedUnmappedFieldId, setSelectedUnmappedFieldId] = useState<string>(''); // 既存マスタ紐付け用
   const [isSaving, setIsSaving] = useState(false);
 
   // 既存ポリゴン編集用のステート
@@ -243,27 +244,47 @@ export default function MapPage() {
   };
 
   const handleSavePolygon = async () => {
-    if (!newFieldName || !newPolygonPath) return;
+    if (!newPolygonPath) return;
+    
+    // 新規登録なら名前必須、既存紐付けならID必須
+    if (!selectedUnmappedFieldId && !newFieldName) return;
     
     try {
       setIsSaving(true);
-      const { data, error } = await supabase
-        .from('fields')
-        .insert([
-          { 
-            name: newFieldName, 
+      
+      let error;
+      
+      if (selectedUnmappedFieldId) {
+        // 既存マスタへの紐付け（Update）
+        const res = await supabase
+          .from('fields')
+          .update({ 
             area_size: newArea,
             polygon_coordinates: newPolygonPath,
             color: newFieldColor
-          }
-        ])
-        .select()
-        .single();
+          })
+          .eq('id', selectedUnmappedFieldId);
+        error = res.error;
+      } else {
+        // 新規作成（Insert）
+        const res = await supabase
+          .from('fields')
+          .insert([
+            { 
+              name: newFieldName, 
+              area_size: newArea,
+              polygon_coordinates: newPolygonPath,
+              color: newFieldColor
+            }
+          ]);
+        error = res.error;
+      }
         
       if (error) throw error;
       
       setIsSaveModalOpen(false);
       setNewFieldName('');
+      setSelectedUnmappedFieldId('');
       setNewPolygonPath(null);
       
       // データ再取得
@@ -274,6 +295,28 @@ export default function MapPage() {
       alert('保存に失敗しました');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // 既存の畑を削除する
+  const handleDeletePolygon = async (fieldId: number, fieldName: string) => {
+    if (!confirm(`本当に「${fieldName}」を削除してもよろしいですか？\nこの操作は取り消せません。`)) return;
+    
+    try {
+      const { error } = await supabase
+        .from('fields')
+        .delete()
+        .eq('id', fieldId);
+        
+      if (error) throw error;
+      
+      alert('削除しました。');
+      setSelectedField(null);
+      setInfoWindowPos(null);
+      fetchFieldsData();
+    } catch (err) {
+      console.error(err);
+      alert('削除に失敗しました。');
     }
   };
 
@@ -614,6 +657,13 @@ export default function MapPage() {
                   >
                     詳細カルテ <ArrowRight className="w-3 h-3" />
                   </Link>
+                  <button 
+                    onClick={() => handleDeletePolygon(selectedField.id, selectedField.name)}
+                    className="w-10 py-2 bg-rose-50 hover:bg-rose-100 text-rose-500 rounded-lg transition-colors flex items-center justify-center shrink-0"
+                    title="この畑を削除"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </InfoWindow>
@@ -624,7 +674,7 @@ export default function MapPage() {
       {/* 新規ポリゴン保存モーダル */}
       {isSaveModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl">
+          <div className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl overflow-y-auto max-h-[90vh]">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
                 <Save className="w-6 h-6 text-emerald-500" />
@@ -644,17 +694,59 @@ export default function MapPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-bold text-slate-600 mb-2">圃場・畑の名前</label>
-                <input
-                  type="text"
-                  value={newFieldName}
-                  onChange={(e) => setNewFieldName(e.target.value)}
-                  placeholder="例: 第1圃場 (北側)"
-                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
-                  autoFocus
-                />
-              </div>
+              {/* マスタ未設定の圃場がある場合、タブで切り替えられるようにする */}
+              {fields.filter(f => !f.polygon_coordinates || (Array.isArray(f.polygon_coordinates) && f.polygon_coordinates.length === 0)).length > 0 && (
+                <div className="mb-4">
+                  <label className="block text-sm font-bold text-slate-600 mb-2">登録方法の選択</label>
+                  <div className="flex bg-slate-100 p-1 rounded-lg">
+                    <button
+                      onClick={() => setSelectedUnmappedFieldId('')}
+                      className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${!selectedUnmappedFieldId ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      新規に名前をつける
+                    </button>
+                    <button
+                      onClick={() => {
+                        const unmapped = fields.filter(f => !f.polygon_coordinates || (Array.isArray(f.polygon_coordinates) && f.polygon_coordinates.length === 0));
+                        if (unmapped.length > 0) {
+                          setSelectedUnmappedFieldId(unmapped[0].id.toString());
+                        }
+                      }}
+                      className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${selectedUnmappedFieldId ? 'bg-white shadow-sm text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      既存の畑に紐づける
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {selectedUnmappedFieldId ? (
+                <div className="animate-in fade-in slide-in-from-top-2">
+                  <label className="block text-sm font-bold text-slate-600 mb-2">紐づける畑を選択</label>
+                  <select
+                    value={selectedUnmappedFieldId}
+                    onChange={(e) => setSelectedUnmappedFieldId(e.target.value)}
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all text-slate-700"
+                  >
+                    {fields.filter(f => !f.polygon_coordinates || (Array.isArray(f.polygon_coordinates) && f.polygon_coordinates.length === 0)).map(f => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-500 mt-2">※マスター登録済みで、まだ地図の枠線が設定されていない畑の一覧です。</p>
+                </div>
+              ) : (
+                <div className="animate-in fade-in slide-in-from-top-2">
+                  <label className="block text-sm font-bold text-slate-600 mb-2">新しい圃場・畑の名前</label>
+                  <input
+                    type="text"
+                    value={newFieldName}
+                    onChange={(e) => setNewFieldName(e.target.value)}
+                    placeholder="例: 第1圃場 (北側)"
+                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+                    autoFocus
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-bold text-slate-600 mb-2">表示色（任意）</label>
@@ -680,7 +772,7 @@ export default function MapPage() {
                 </button>
                 <button
                   onClick={handleSavePolygon}
-                  disabled={!newFieldName || isSaving}
+                  disabled={(!selectedUnmappedFieldId && !newFieldName) || isSaving}
                   className="flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white font-bold rounded-xl transition-colors shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2"
                 >
                   {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : '登録する'}
