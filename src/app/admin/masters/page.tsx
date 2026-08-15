@@ -802,47 +802,47 @@ export default function MastersPage() {
                     </div>
                     <p className="text-xs text-slate-400 mt-2">※ 必要な資材を追加し、10aあたりの使用量を設定してください。</p>
                   </div>
-                </div>
 
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4">
-                  <div className="text-sm font-black text-slate-700 mb-3 flex items-center gap-2">
-                    <Banknote className="w-4 h-4 text-emerald-600" />
-                    10aあたり概算経費 (予算)
-                  </div>
-                  <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-                    ※ 月次の実績経費が未入力の月に、レポートの予測計算として使用されます。
-                  </p>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">動力光熱費 (円)</label>
-                      <input 
-                        type="number" 
-                        value={formData.est_fuel_cost_10a || ''} 
-                        onChange={e => setFormData({...formData, est_fuel_cost_10a: Number(e.target.value)})}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 font-bold"
-                        placeholder="例: 0"
-                      />
+                  <div className="mt-4 pt-4 border-t border-slate-200">
+                    <div className="text-sm font-black text-slate-700 mb-3 flex items-center gap-2">
+                      <Banknote className="w-4 h-4 text-emerald-600" />
+                      10aあたり概算経費 (予算)
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">機械・車両費 (円)</label>
-                      <input 
-                        type="number" 
-                        value={formData.est_machinery_cost_10a || ''} 
-                        onChange={e => setFormData({...formData, est_machinery_cost_10a: Number(e.target.value)})}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 font-bold"
-                        placeholder="例: 0"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">その他経費 (円)</label>
-                      <input 
-                        type="number" 
-                        value={formData.est_other_cost_10a || ''} 
-                        onChange={e => setFormData({...formData, est_other_cost_10a: Number(e.target.value)})}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 font-bold"
-                        placeholder="例: 0"
-                      />
+                    <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                      ※ 月次の実績経費が未入力の月に、レポートの予測計算として使用されます。
+                    </p>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">動力光熱費 (円)</label>
+                        <input 
+                          type="number" 
+                          value={formData.est_fuel_cost_10a || ''} 
+                          onChange={e => setFormData({...formData, est_fuel_cost_10a: Number(e.target.value)})}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 font-bold"
+                          placeholder="例: 0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">機械・車両費 (円)</label>
+                        <input 
+                          type="number" 
+                          value={formData.est_machinery_cost_10a || ''} 
+                          onChange={e => setFormData({...formData, est_machinery_cost_10a: Number(e.target.value)})}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 font-bold"
+                          placeholder="例: 0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">その他経費 (円)</label>
+                        <input 
+                          type="number" 
+                          value={formData.est_other_cost_10a || ''} 
+                          onChange={e => setFormData({...formData, est_other_cost_10a: Number(e.target.value)})}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 font-bold"
+                          placeholder="例: 0"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
