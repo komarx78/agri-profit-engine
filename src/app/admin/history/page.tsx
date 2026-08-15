@@ -1,17 +1,21 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
-import { History, Search, Download, CheckCircle2, Clock, Filter, User, MapPin, Sprout, Image as ImageIcon, FileText, X, Video, Play } from 'lucide-react';
+import { History, Search, Download, CheckCircle2, Clock, Filter, User, MapPin, Sprout, Image as ImageIcon, FileText, X, Video, Play, Loader2 } from 'lucide-react';
 import Papa from 'papaparse';
+import { useSearchParams } from 'next/navigation';
 
-export default function HistoryPage() {
+function HistoryContent() {
+  const searchParams = useSearchParams();
+  const defaultField = searchParams.get('field') || 'all';
+
   const [workLogs, setWorkLogs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // フィルター用ステート
   const [filterWorker, setFilterWorker] = useState<string>('all');
-  const [filterField, setFilterField] = useState<string>('all');
+  const [filterField, setFilterField] = useState<string>(defaultField);
   const [filterCrop, setFilterCrop] = useState<string>('all');
 
   // モーダル用ステート
@@ -422,5 +426,13 @@ export default function HistoryPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function HistoryPage() {
+  return (
+    <Suspense fallback={<div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-emerald-600" /></div>}>
+      <HistoryContent />
+    </Suspense>
   );
 }

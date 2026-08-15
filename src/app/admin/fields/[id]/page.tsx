@@ -245,7 +245,7 @@ export default function FieldDetailPage() {
 
             {recentWorks.length > 0 && (
               <Link 
-                href="/admin/history"
+                href={`/admin/history?field=${encodeURIComponent(field?.name || '')}`}
                 className="w-full mt-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl text-sm transition-colors flex items-center justify-center"
               >
                 すべての履歴を見る
