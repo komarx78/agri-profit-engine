@@ -273,7 +273,15 @@ export default function MonthlyExpensesPage() {
                   <td className="px-4 py-3 text-right text-slate-600">¥ {row.other.toLocaleString()}</td>
                   <td className="px-4 py-3 text-right font-black text-emerald-600">¥ {row.total.toLocaleString()}</td>
                   <td className="px-4 py-3 text-center">
-                    <button className="p-1 text-slate-400 group-hover:text-emerald-600 transition-colors">
+                    <button 
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedMonth(row.month);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className="p-1 text-slate-400 group-hover:text-emerald-600 transition-colors"
+                    >
                       <Edit2 className="w-4 h-4" />
                     </button>
                   </td>
