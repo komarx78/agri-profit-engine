@@ -77,7 +77,7 @@ export default function AccountingPage() {
         sales_channels: { name: channels.find(c => c.id === log.channel_id)?.name || '不明な請求先' }
       }));
       
-      const workLogs = workRes.data || [];
+      
       const journalEntries: any[] = [];
 
       // -------------------------------------------------------------
