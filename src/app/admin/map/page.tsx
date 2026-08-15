@@ -611,7 +611,7 @@ export default function MapPage() {
           )}
 
           {/* 登録済みポリゴン */}
-          {!isDrawingMode && fields.map(f => (
+          {fields.map(f => (
             f.path && f.path.length > 0 && (
               <Polygon
                 key={f.id}
@@ -628,6 +628,7 @@ export default function MapPage() {
                   strokeColor: f.statusColor,
                   editable: editingFieldId === f.id, // 編集モードの場合は動かせるように
                   draggable: editingFieldId === f.id,
+                  clickable: !isDrawingMode, // 描画モード中は既存の畑をクリックできないようにする（描画を優先）
                 }}
                 onClick={(e) => handlePolygonClick(f, e)}
               />
