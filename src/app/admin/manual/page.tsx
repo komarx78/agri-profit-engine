@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { BookOpen, UserPlus, Map, PackageOpen, Sprout, ClipboardList, Smartphone, Receipt, TrendingUp, AlertCircle, ArrowRight, CheckCircle2, RefreshCw, LayoutDashboard } from 'lucide-react';
+import { BookOpen, UserPlus, Map, PackageOpen, Sprout, ClipboardList, Smartphone, Receipt, TrendingUp, AlertCircle, ArrowRight, CheckCircle2, RefreshCw, LayoutDashboard, MapPin, Pointer } from 'lucide-react';
 
 export default function ManualPage() {
   const [activeTab, setActiveTab] = useState<number>(0);
@@ -30,10 +30,11 @@ export default function ManualPage() {
   const steps = [
     { id: 0, title: '画面の見方 (メニュー)', icon: LayoutDashboard },
     { id: 1, title: '初期設定 (マスタ)', icon: UserPlus },
-    { id: 2, title: '栽培計画を立てる', icon: Sprout },
-    { id: 3, title: '現場からスマホ入力', icon: Smartphone },
-    { id: 4, title: '月ごとの経費入力', icon: Receipt },
-    { id: 5, title: '利益の確認・分析', icon: TrendingUp },
+    { id: 2, title: '作付地図の活用', icon: MapPin },
+    { id: 3, title: '栽培計画を立てる', icon: Sprout },
+    { id: 4, title: '現場からスマホ入力', icon: Smartphone },
+    { id: 5, title: '月ごとの経費入力', icon: Receipt },
+    { id: 6, title: '利益の確認・分析', icon: TrendingUp },
   ];
 
   return (
@@ -227,7 +228,7 @@ export default function ManualPage() {
 
             </div>
             
-            <div className="flex justify-between pt-4 border-t border-slate-100">
+            <div className="flex justify-between pt-4 border-t border-slate-100 mt-8">
               <button onClick={() => setActiveTab(0)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
               <button onClick={() => setActiveTab(2)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
                 次のステップへ <ArrowRight className="w-5 h-5" />
@@ -236,11 +237,74 @@ export default function ManualPage() {
           </div>
         )}
 
-        {/* === STEP 2 === */}
+        {/* === STEP 2: 作付地図 === */}
         {activeTab === 2 && (
+          <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="border-b border-slate-100 pb-6">
+              <h2 className="text-2xl font-black text-slate-800 mb-2">【ステップ2】 作付地図の活用（地図上で畑を管理しよう）</h2>
+              <p className="text-slate-600 text-lg">
+                Googleマップの航空写真を使って、畑を直感的に管理できる機能です。<br/>
+                自分の畑を地図上で囲むだけで、面積が自動計算されます！
+              </p>
+            </div>
+
+            <div className="space-y-8">
+              
+              <div className="bg-emerald-50 p-5 sm:p-8 rounded-3xl border border-emerald-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div>
+                    <h3 className="font-bold text-xl text-emerald-900 flex items-center gap-2 mb-3">
+                      <MapPin className="w-6 h-6 text-emerald-600" /> 1. 地図を開いて畑を追加する
+                    </h3>
+                    <p className="text-emerald-800 leading-relaxed mb-4">
+                      左メニューの**「作付地図」**を開きます。<br/>
+                      左側には圃場の一覧、右側には航空写真が表示されます。<br/><br/>
+                      地図の左上にある <strong className="bg-white px-2 py-1 rounded border border-emerald-200">＋ 地図に畑を追加</strong> ボタンを押します。
+                    </p>
+                  </div>
+                  <div>
+                    <ImagePlaceholder src="/manual/step2-map1.png" alt="作付地図画面" filename="step2-map1.png" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div>
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2 mb-3">
+                      <Pointer className="w-6 h-6 text-emerald-600" /> 2. 地図をクリックして畑を囲む
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed mb-4">
+                      航空写真を見ながら、自分の畑の角（カド）を順番にポチポチとクリックしていきます。
+                    </p>
+                    <div className="p-3 bg-amber-50 rounded-xl text-sm text-amber-800 border border-amber-200">
+                      <strong className="flex items-center gap-1 mb-1"><CheckCircle2 className="w-4 h-4" /> 面積の自動計算！</strong>
+                      畑を囲んでいくと、右上に**「現在の面積: 〇〇 a」**と表示され、システムが自動で正確な面積を計算してくれます。メジャーで測る必要はありません！
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <ImagePlaceholder src="/manual/step2-map2.png" alt="描画ボタン" filename="step2-map2.png" />
+                    <ImagePlaceholder src="/manual/step2-map3.png" alt="描画中の画面" filename="step2-map3.png" />
+                  </div>
+                </div>
+              </div>
+
+            </div>
+            
+            <div className="flex justify-between pt-4 border-t border-slate-100">
+              <button onClick={() => setActiveTab(1)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
+              <button onClick={() => setActiveTab(3)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
+                次のステップへ <ArrowRight className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* === STEP 3 === */}
+        {activeTab === 3 && (
           <div className="space-y-8">
             <div className="border-b border-slate-100 pb-6">
-              <h2 className="text-2xl font-black text-slate-800 mb-2">【ステップ2】 栽培計画を立てよう</h2>
+              <h2 className="text-2xl font-black text-slate-800 mb-2">【ステップ3】 栽培計画を立てよう</h2>
               <p className="text-slate-600 text-lg">
                 基本データの登録が終わったら、いよいよ「今年の計画」を立てます。<br/>
                 左メニューの **「栽培・予実管理表」** をクリックしてください。
@@ -278,20 +342,20 @@ export default function ManualPage() {
               </div>
             </div>
 
-            <div className="flex justify-between pt-4 border-t border-slate-100">
-              <button onClick={() => setActiveTab(1)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
-              <button onClick={() => setActiveTab(3)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
+            <div className="flex justify-between pt-4 border-t border-slate-100 mt-8">
+              <button onClick={() => setActiveTab(2)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
+              <button onClick={() => setActiveTab(4)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
                 次のステップへ <ArrowRight className="w-5 h-5" />
               </button>
             </div>
           </div>
         )}
 
-        {/* === STEP 3 === */}
-        {activeTab === 3 && (
+        {/* === STEP 4 === */}
+        {activeTab === 4 && (
           <div className="space-y-8">
             <div className="border-b border-slate-100 pb-6">
-              <h2 className="text-2xl font-black text-slate-800 mb-2">【ステップ3】 日常の記録（現場からスマホで入力！）</h2>
+              <h2 className="text-2xl font-black text-slate-800 mb-2">【ステップ4】 日常の記録（現場からスマホで入力！）</h2>
               <p className="text-slate-600 text-lg">
                 ここからは、毎日の作業記録です。これは農場（現場）からスマートフォンで簡単に入力できます。
               </p>
@@ -335,20 +399,20 @@ export default function ManualPage() {
               </div>
             </div>
 
-            <div className="flex justify-between pt-4 border-t border-slate-100">
-              <button onClick={() => setActiveTab(2)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
-              <button onClick={() => setActiveTab(4)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
+            <div className="flex justify-between pt-4 border-t border-slate-100 mt-8">
+              <button onClick={() => setActiveTab(3)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
+              <button onClick={() => setActiveTab(5)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
                 次のステップへ <ArrowRight className="w-5 h-5" />
               </button>
             </div>
           </div>
         )}
 
-        {/* === STEP 4 === */}
-        {activeTab === 4 && (
+        {/* === STEP 5 === */}
+        {activeTab === 5 && (
           <div className="space-y-8">
             <div className="border-b border-slate-100 pb-6">
-              <h2 className="text-2xl font-black text-slate-800 mb-2">【ステップ4】 月に1回の経費入力</h2>
+              <h2 className="text-2xl font-black text-slate-800 mb-2">【ステップ5】 月に1回の経費入力</h2>
               <p className="text-slate-600 text-lg">
                 請求書が届いたら入力します。電気代、ハウスの燃料代、トラクターのガソリン代など、「農場全体にかかったお金」を月に1回入力します。
               </p>
@@ -385,20 +449,20 @@ export default function ManualPage() {
               </div>
             </div>
 
-            <div className="flex justify-between pt-4 border-t border-slate-100">
-              <button onClick={() => setActiveTab(3)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
-              <button onClick={() => setActiveTab(5)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
+            <div className="flex justify-between pt-4 border-t border-slate-100 mt-8">
+              <button onClick={() => setActiveTab(4)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
+              <button onClick={() => setActiveTab(6)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
                 最後のステップへ <ArrowRight className="w-5 h-5" />
               </button>
             </div>
           </div>
         )}
 
-        {/* === STEP 5 === */}
-        {activeTab === 5 && (
+        {/* === STEP 6 === */}
+        {activeTab === 6 && (
           <div className="space-y-8">
             <div className="border-b border-slate-100 pb-6">
-              <h2 className="text-2xl font-black text-slate-800 mb-2">【ステップ5】 利益を確認し、次につなげよう！</h2>
+              <h2 className="text-2xl font-black text-slate-800 mb-2">【ステップ6】 利益を確認し、次につなげよう！</h2>
               <p className="text-slate-600 text-lg">
                 1ヶ月の終わりや、栽培が終わったタイミングで、左メニューの **「栽培・予実管理表」** を見てみましょう。
               </p>
@@ -439,8 +503,8 @@ export default function ManualPage() {
               </div>
             </div>
 
-            <div className="flex justify-between pt-4 border-t border-slate-100">
-              <button onClick={() => setActiveTab(4)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
+            <div className="flex justify-between pt-4 border-t border-slate-100 mt-8">
+              <button onClick={() => setActiveTab(5)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
               <button onClick={() => setActiveTab(1)} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-sm">
                 最初に戻る <RefreshCw className="w-5 h-5" />
               </button>
