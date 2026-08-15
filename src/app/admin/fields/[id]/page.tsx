@@ -1,0 +1,214 @@
+"use client";
+
+import React, { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import { MapPin, ArrowLeft, Loader2, Calendar, Edit, History, Sprout, Leaf } from 'lucide-react';
+import Link from 'next/link';
+import { GoogleMap, useJsApiLoader, Polygon } from '@react-google-maps/api';
+
+const containerStyle = {
+  width: '100%',
+  height: '100%',
+  borderRadius: '0.75rem'
+};
+
+const libraries: ("drawing" | "geometry")[] = ["geometry"];
+
+export default function FieldDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const fieldId = params.id as string;
+
+  const [field, setField] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
+    libraries
+  });
+
+  useEffect(() => {
+    if (fieldId) {
+      fetchFieldDetails();
+    }
+  }, [fieldId]);
+
+  async function fetchFieldDetails() {
+    try {
+      const { data, error } = await supabase
+        .from('fields')
+        .select('*')
+        .eq('id', fieldId)
+        .single();
+      
+      if (error) throw error;
+
+      let path = [];
+      if (typeof data.polygon_coordinates === 'string') {
+        try { path = JSON.parse(data.polygon_coordinates); } catch(e) {}
+      } else if (Array.isArray(data.polygon_coordinates)) {
+        path = data.polygon_coordinates;
+      }
+
+      setField({ ...data, path });
+    } catch (err) {
+      console.error(err);
+      alert('圃場データの取得に失敗しました');
+      router.push('/admin/map');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  // 地図の初期位置（ポリゴンの中心）
+  const getCenter = () => {
+    if (field?.path && field.path.length > 0) {
+      const lats = field.path.map((p: any) => p.lat);
+      const lngs = field.path.map((p: any) => p.lng);
+      return {
+        lat: (Math.min(...lats) + Math.max(...lats)) / 2,
+        lng: (Math.min(...lngs) + Math.max(...lngs)) / 2
+      };
+    }
+    return { lat: 36.2048, lng: 138.2529 };
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-[calc(100vh-64px)] flex items-center justify-center bg-slate-50">
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+      </div>
+    );
+  }
+
+  if (!field) return null;
+
+  return (
+    <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-6">
+      {/* 戻るボタンとヘッダー */}
+      <div className="flex items-center gap-4 mb-8">
+        <Link 
+          href="/admin/map"
+          className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-500"
+        >
+          <ArrowLeft className="w-6 h-6" />
+        </Link>
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-black text-slate-800">{field.name}</h1>
+            <div 
+              className="px-3 py-1 rounded-full text-xs font-bold text-white shadow-sm"
+              style={{ backgroundColor: field.color || '#10b981' }}
+            >
+              カルテ
+            </div>
+          </div>
+          <p className="text-slate-500 font-medium mt-1 flex items-center gap-1">
+            <MapPin className="w-4 h-4" /> 面積: <span className="font-bold text-slate-700">{field.area_size} a</span>
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* 左側: ミニマップ */}
+        <div className="md:col-span-1 h-64 md:h-80 bg-white rounded-2xl shadow-sm border border-slate-200 p-2 relative">
+          {isLoaded ? (
+            <GoogleMap
+              mapContainerStyle={containerStyle}
+              center={getCenter()}
+              zoom={17}
+              options={{
+                mapTypeId: 'hybrid',
+                disableDefaultUI: true,
+                zoomControl: true,
+                draggable: false, // カルテ画面では簡易表示
+              }}
+            >
+              {field.path && field.path.length > 0 && (
+                <Polygon
+                  paths={field.path}
+                  options={{
+                    fillColor: field.color || '#10b981',
+                    fillOpacity: 0.4,
+                    strokeColor: field.color || '#10b981',
+                    strokeWeight: 2,
+                  }}
+                />
+              )}
+            </GoogleMap>
+          ) : (
+            <div className="w-full h-full bg-slate-100 rounded-xl flex items-center justify-center">
+              <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+            </div>
+          )}
+        </div>
+
+        {/* 右側: 現在の作付とアクション */}
+        <div className="md:col-span-2 space-y-6">
+          
+          {/* 現在の作付（栽培計画へのリンク） */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-emerald-100 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-2 h-full bg-emerald-500"></div>
+            <div className="flex justify-between items-start mb-4">
+              <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                <Sprout className="w-5 h-5 text-emerald-600" /> 現在の作付
+              </h2>
+              <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full">
+                生育中
+              </span>
+            </div>
+            
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center">
+                <Leaf className="w-8 h-8 text-emerald-500" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 font-bold mb-1">2026年 春作</p>
+                <h3 className="text-2xl font-black text-slate-800">春キャベツ (YR輝石)</h3>
+              </div>
+            </div>
+
+            <Link 
+              href="/admin/cultivation-schedule"
+              className="w-full py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+            >
+              <Calendar className="w-5 h-5" /> 栽培・予実管理表でスケジュールを確認
+            </Link>
+          </div>
+
+          {/* 最近の作業履歴 */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <h2 className="text-lg font-black text-slate-800 flex items-center gap-2 mb-4">
+              <History className="w-5 h-5 text-slate-500" /> 最新の作業履歴
+            </h2>
+            
+            <div className="space-y-4">
+              {/* ダミーデータ（将来はwork_logsから取得） */}
+              <div className="flex gap-4 p-3 hover:bg-slate-50 rounded-xl transition-colors">
+                <div className="text-sm font-bold text-slate-400 pt-1 w-12 text-center">8/12</div>
+                <div>
+                  <h4 className="font-bold text-slate-700">肥料散布（追肥）</h4>
+                  <p className="text-xs text-slate-500 mt-1">作業者: 太郎 / 尿素 20kg</p>
+                </div>
+              </div>
+              <div className="flex gap-4 p-3 hover:bg-slate-50 rounded-xl transition-colors">
+                <div className="text-sm font-bold text-slate-400 pt-1 w-12 text-center">8/10</div>
+                <div>
+                  <h4 className="font-bold text-slate-700">トラクター耕起</h4>
+                  <p className="text-xs text-slate-500 mt-1">作業者: 次郎 / 深耕</p>
+                </div>
+              </div>
+            </div>
+
+            <button className="w-full mt-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl text-sm transition-colors">
+              すべての履歴を見る
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}

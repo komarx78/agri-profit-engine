@@ -3,7 +3,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, Polygon, InfoWindow } from '@react-google-maps/api';
 import { supabase } from '@/lib/supabase';
-import { MapPin, Plus, Loader2, Save, X, Info, Search, Check, Trash2 } from 'lucide-react';
+import { MapPin, Plus, Loader2, Save, X, Info, Search, Check, Trash2, Edit2, Palette, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 
 const containerStyle = {
   width: '100%',
@@ -51,7 +52,12 @@ export default function MapPage() {
   const [newArea, setNewArea] = useState<number>(0);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
+  const [newFieldColor, setNewFieldColor] = useState('#10b981'); // デフォルトカラー
   const [isSaving, setIsSaving] = useState(false);
+
+  // 既存ポリゴン編集用のステート
+  const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
+  const editingPolygonRef = useRef<google.maps.Polygon | null>(null);
 
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -104,7 +110,8 @@ export default function MapPage() {
           id,
           name,
           area_size,
-          polygon_coordinates
+          polygon_coordinates,
+          color
         `)
         .order('name');
         
@@ -124,8 +131,8 @@ export default function MapPage() {
         return {
           ...f,
           path,
-          // ダミーステータス: 奇数IDは作付け中(緑)、偶数は空き(茶)など
-          statusColor: f.id % 2 === 0 ? '#10b981' : '#f59e0b',
+          // 色が保存されていればそれを、無ければIDで適当に割り当て
+          statusColor: f.color || (f.id % 2 === 0 ? '#10b981' : '#f59e0b'),
           statusText: f.id % 2 === 0 ? '生育中（キャベツ）' : '収穫待ち'
         };
       });
@@ -246,7 +253,8 @@ export default function MapPage() {
           { 
             name: newFieldName, 
             area_size: newArea,
-            polygon_coordinates: newPolygonPath
+            polygon_coordinates: newPolygonPath,
+            color: newFieldColor
           }
         ])
         .select()
@@ -269,7 +277,65 @@ export default function MapPage() {
     }
   };
 
+  // 既存の畑の形を保存する
+  const handleUpdatePolygon = async () => {
+    if (!editingFieldId || !editingPolygonRef.current) return;
+    
+    try {
+      const polygon = editingPolygonRef.current;
+      const pathArray = polygon.getPath().getArray();
+      const newPath = pathArray.map(p => ({ lat: p.lat(), lng: p.lng() }));
+      
+      // 面積再計算
+      let newAreaSize = 0;
+      if (window.google?.maps?.geometry?.spherical) {
+        const areaSqMeters = window.google.maps.geometry.spherical.computeArea(polygon.getPath());
+        newAreaSize = Number((areaSqMeters / 100).toFixed(1));
+      }
+
+      const { error } = await supabase
+        .from('fields')
+        .update({ 
+          polygon_coordinates: newPath,
+          area_size: newAreaSize || undefined // 計算失敗時は更新しない
+        })
+        .eq('id', editingFieldId);
+
+      if (error) throw error;
+
+      alert('形を修正しました！面積も自動再計算されています。');
+      setEditingFieldId(null);
+      setSelectedField(null);
+      fetchFieldsData();
+      
+    } catch (err) {
+      console.error(err);
+      alert('形の修正に失敗しました。');
+    }
+  };
+
+  // 色を変更する
+  const handleChangeColor = async (fieldId: number, color: string) => {
+    try {
+      const { error } = await supabase
+        .from('fields')
+        .update({ color })
+        .eq('id', fieldId);
+      if (error) throw error;
+      
+      // 再取得
+      fetchFieldsData();
+      setSelectedField(prev => prev ? { ...prev, statusColor: color } : null);
+    } catch (err) {
+      console.error(err);
+      alert('色の変更に失敗しました');
+    }
+  };
+
   const handlePolygonClick = (field: any, e: google.maps.MapMouseEvent) => {
+    // 描画モードや編集中はポップアップを出さない
+    if (isDrawingMode || editingFieldId) return;
+    
     setSelectedField(field);
     if (e.latLng) {
       setInfoWindowPos({ lat: e.latLng.lat(), lng: e.latLng.lng() });
@@ -337,7 +403,7 @@ export default function MapPage() {
       <div className="flex-1 relative h-2/3 md:h-full min-h-[400px]">
         {/* コントロールパネル */}
         <div className="absolute top-4 left-4 z-10 flex gap-2 flex-col sm:flex-row">
-          {!isDrawingMode ? (
+          {!isDrawingMode && !editingFieldId ? (
             <button
               onClick={() => {
                 setIsDrawingMode(true);
@@ -348,7 +414,7 @@ export default function MapPage() {
             >
               <Plus className="w-5 h-5 text-emerald-500" /> 地図に畑を追加
             </button>
-          ) : (
+          ) : isDrawingMode ? (
             <div className="flex gap-2">
               <button
                 onClick={handleDrawingComplete}
@@ -374,7 +440,25 @@ export default function MapPage() {
                 <X className="w-5 h-5" /> キャンセル
               </button>
             </div>
-          )}
+          ) : editingFieldId ? (
+            <div className="flex gap-2">
+              <div className="bg-slate-800/90 text-white text-sm font-bold px-4 py-2 rounded-xl shadow-lg flex items-center gap-2 animate-pulse">
+                <Edit2 className="w-4 h-4 text-amber-400" /> 白い丸をドラッグして形を修正
+              </div>
+              <button
+                onClick={handleUpdatePolygon}
+                className="px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-colors shrink-0 bg-emerald-500 hover:bg-emerald-600 text-white"
+              >
+                <Save className="w-5 h-5" /> 修正を保存
+              </button>
+              <button
+                onClick={() => setEditingFieldId(null)}
+                className="px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-colors shrink-0 bg-slate-500 hover:bg-slate-600 text-white"
+              >
+                キャンセル
+              </button>
+            </div>
+          ) : null}
           
           {/* 操作案内バナー */}
           {isDrawingMode && (
@@ -450,10 +534,17 @@ export default function MapPage() {
               <Polygon
                 key={f.id}
                 paths={f.path}
+                onLoad={(polygon) => {
+                  if (editingFieldId === f.id) {
+                    editingPolygonRef.current = polygon;
+                  }
+                }}
                 options={{
                   ...polygonOptions,
                   fillColor: f.statusColor,
                   strokeColor: f.statusColor,
+                  editable: editingFieldId === f.id, // 編集モードの場合は動かせるように
+                  draggable: editingFieldId === f.id,
                 }}
                 onClick={(e) => handlePolygonClick(f, e)}
               />
@@ -461,7 +552,7 @@ export default function MapPage() {
           ))}
 
           {/* クリック時のInfoWindow */}
-          {selectedField && infoWindowPos && (
+          {selectedField && infoWindowPos && !editingFieldId && (
             <InfoWindow
               position={infoWindowPos}
               onCloseClick={() => {
@@ -469,19 +560,29 @@ export default function MapPage() {
                 setInfoWindowPos(null);
               }}
             >
-              <div className="p-2 min-w-[200px]">
-                <h3 className="font-black text-lg text-slate-800 mb-1">{selectedField.name}</h3>
+              <div className="p-2 min-w-[240px]">
+                <h3 className="font-black text-xl text-slate-800 mb-1">{selectedField.name}</h3>
                 <div className="text-sm text-slate-500 mb-3 border-b border-slate-100 pb-2">
                   面積: <span className="font-bold text-slate-700">{selectedField.area_size} a</span>
                 </div>
                 
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: selectedField.statusColor }}></div>
-                    <span className="font-bold text-slate-700 text-sm">{selectedField.statusText}</span>
+                {/* 色の変更 */}
+                <div className="mb-3 flex items-center gap-2 bg-slate-50 p-2 rounded-lg">
+                  <Palette className="w-4 h-4 text-slate-400" />
+                  <div className="flex gap-1.5 flex-wrap">
+                    {['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'].map(color => (
+                      <button
+                        key={color}
+                        onClick={() => handleChangeColor(selectedField.id, color)}
+                        className={`w-6 h-6 rounded-full border-2 transition-all hover:scale-110 ${selectedField.statusColor === color ? 'border-slate-800 scale-110 shadow-sm' : 'border-transparent'}`}
+                        style={{ backgroundColor: color }}
+                        title="色を変更"
+                      />
+                    ))}
                   </div>
-                  
-                  {/* アグリハブ課題解決: 個別畑の作業履歴などをここに表示可能 */}
+                </div>
+
+                <div className="space-y-2">
                   <div className="mt-3 bg-slate-50 p-2 rounded-lg text-xs">
                     <div className="text-slate-400 font-bold mb-1">最近の作業</div>
                     <ul className="space-y-1 text-slate-600">
@@ -491,9 +592,24 @@ export default function MapPage() {
                   </div>
                 </div>
                 
-                <button className="w-full mt-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg text-xs transition-colors">
-                  詳細・計画を見る
-                </button>
+                <div className="mt-4 flex gap-2">
+                  <button 
+                    onClick={() => {
+                      setEditingFieldId(selectedField.id);
+                      setSelectedField(null);
+                      setInfoWindowPos(null);
+                    }}
+                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-1"
+                  >
+                    <Edit2 className="w-3 h-3" /> 形を修正
+                  </button>
+                  <Link 
+                    href={`/admin/fields/${selectedField.id}`}
+                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-colors shadow-md shadow-emerald-500/20 flex items-center justify-center gap-1"
+                  >
+                    詳細カルテ <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </div>
               </div>
             </InfoWindow>
           )}
@@ -533,6 +649,21 @@ export default function MapPage() {
                   className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                   autoFocus
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-600 mb-2">表示色（任意）</label>
+                <div className="flex gap-2">
+                  {['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'].map(color => (
+                    <button
+                      key={color}
+                      onClick={() => setNewFieldColor(color)}
+                      className={`w-10 h-10 rounded-full border-4 transition-all hover:scale-110 ${newFieldColor === color ? 'border-slate-800 scale-110 shadow-md' : 'border-transparent'}`}
+                      style={{ backgroundColor: color }}
+                      title="色を選択"
+                    />
+                  ))}
+                </div>
               </div>
 
               <div className="pt-4 flex gap-3">
