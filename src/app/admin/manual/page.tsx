@@ -29,8 +29,8 @@ export default function ManualPage() {
 
   const steps = [
     { id: 0, title: '画面の見方 (メニュー)', icon: LayoutDashboard },
-    { id: 1, title: '初期設定 (マスタ)', icon: UserPlus },
-    { id: 2, title: '作付地図の活用', icon: MapPin },
+    { id: 1, title: '作付地図で圃場登録', icon: MapPin },
+    { id: 2, title: 'その他の初期設定', icon: UserPlus },
     { id: 3, title: '栽培計画を立てる', icon: Sprout },
     { id: 4, title: '現場からスマホ入力', icon: Smartphone },
     { id: 5, title: '月ごとの経費入力', icon: Receipt },
@@ -117,38 +117,77 @@ export default function ManualPage() {
                 <h3 className="font-bold text-lg text-amber-800 border-b border-amber-200 pb-2 mb-3">📋 作業履歴・記録</h3>
                 <ul className="space-y-2 text-sm text-amber-900 leading-relaxed">
                   <li><strong className="text-amber-700">作業記録一覧:</strong> スマホから入力された記録の確認と修正を行います。</li>
-                  <li><strong className="text-amber-700">作業内容台帳(集計):</strong> 誰が何の作業にどれくらい時間を使ったか集計します。</li>
-                  <li><strong className="text-amber-700">動画マニュアル集:</strong> スタッフ向けの作業手順動画などを確認できます。</li>
-                </ul>
+            {/* === STEP 1: 作付地図で圃場登録 === */}
+        {activeTab === 1 && (
+          <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="border-b border-slate-100 pb-6">
+              <h2 className="text-2xl font-black text-slate-800 mb-2">【ステップ1】 作付地図で圃場（畑・ハウス）を登録しよう</h2>
+              <p className="text-slate-600 text-lg">
+                Googleマップの航空写真を使って、持っている畑やビニールハウスを直感的に登録します。<br/>
+                自分の畑を地図上で囲むだけで、面積が自動計算されます！
+              </p>
+            </div>
+
+            <div className="space-y-8">
+              <div className="bg-emerald-50 p-5 sm:p-8 rounded-3xl border border-emerald-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div>
+                    <h3 className="font-bold text-xl text-emerald-900 flex items-center gap-2 mb-3">
+                      <MapPin className="w-6 h-6 text-emerald-600" /> 1. 地図を開いて畑を追加する
+                    </h3>
+                    <p className="text-emerald-800 leading-relaxed mb-4">
+                      左メニューの**「作付地図」**を開きます。<br/>
+                      左側には圃場の一覧、右側には航空写真が表示されます。<br/><br/>
+                      地図の左上にある <strong className="bg-white px-2 py-1 rounded border border-emerald-200">＋ 地図に畑を追加</strong> ボタンを押します。
+                    </p>
+                  </div>
+                  <div>
+                    <ImagePlaceholder src="/manual/step1-map1.png" alt="作付地図画面" filename="step1-map1.png" />
+                  </div>
+                </div>
               </div>
 
-              {/* 設定・マスタ */}
-              <div className="bg-slate-100 p-5 rounded-2xl border border-slate-200 h-full">
-                <h3 className="font-bold text-lg text-slate-700 border-b border-slate-300 pb-2 mb-3">⚙️ 設定・マスタ</h3>
-                <ul className="space-y-2 text-sm text-slate-700 leading-relaxed">
-                  <li><strong className="text-slate-900">マスタ管理全般:</strong> 従業員、圃場、作目などの基本データを登録します。</li>
-                  <li><strong className="text-slate-900">出荷先・メール設定:</strong> 請求書を送る取引先やメールの設定を行います。</li>
-                  <li><strong className="text-slate-900">自社情報設定:</strong> 農場名や住所などの基本情報を設定します。</li>
-                </ul>
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div>
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2 mb-3">
+                      <Pointer className="w-6 h-6 text-emerald-600" /> 2. 地図をクリックして畑を囲む
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed mb-4">
+                      航空写真を見ながら、自分の畑の角（カド）を順番にポチポチとクリックしていきます。
+                    </p>
+                    <div className="p-3 bg-amber-50 rounded-xl text-sm text-amber-800 border border-amber-200 mb-4">
+                      <strong className="flex items-center gap-1 mb-1"><CheckCircle2 className="w-4 h-4" /> 面積の自動計算！（重要）</strong>
+                      畑を囲んでいくと、右上に**「現在の面積: 〇〇 a」**と表示され、システムが自動で正確な面積（アール: a）を計算してくれます。メジャーで測る必要はありません！<br/><br/>
+                      <strong>この面積をもとに、あとで経費が自動的に各畑へ割り振られます。</strong>
+                    </div>
+                    <p className="text-slate-500 text-xs">※地図を使わず、リストから直接手動で面積を入力して登録したい場合は、左メニューの「各種マスタ管理」からも行えます。</p>
+                  </div>
+                  <div className="space-y-4">
+                    <ImagePlaceholder src="/manual/step1-map2.png" alt="描画ボタン" filename="step1-map2.png" />
+                    <ImagePlaceholder src="/manual/step1-map3.png" alt="描画中の画面" filename="step1-map3.png" />
+                  </div>
+                </div>
               </div>
             </div>
             
-            <div className="flex justify-end pt-4 border-t border-slate-100 mt-8">
-              <button onClick={() => setActiveTab(1)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
-                初期設定に進む <ArrowRight className="w-5 h-5" />
+            <div className="flex justify-between pt-4 border-t border-slate-100 mt-8">
+              <button onClick={() => setActiveTab(0)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
+              <button onClick={() => setActiveTab(2)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
+                次のステップへ <ArrowRight className="w-5 h-5" />
               </button>
             </div>
           </div>
         )}
 
-        {/* === STEP 1 === */}
-        {activeTab === 1 && (
-          <div className="space-y-8">
+        {/* === STEP 2: その他の初期設定 === */}
+        {activeTab === 2 && (
+          <div className="space-y-8 animate-in fade-in duration-500">
             <div className="border-b border-slate-100 pb-6">
-              <h2 className="text-2xl font-black text-slate-800 mb-2">【ステップ1】 初期設定（基本データの登録）</h2>
+              <h2 className="text-2xl font-black text-slate-800 mb-2">【ステップ2】 その他の初期設定（基本データの登録）</h2>
               <p className="text-slate-600 text-lg">
-                まずは、あなたの農場で使っている「基本データ」をシステムに登録します。<br/>
-                左側メニューの **「各種マスタ管理」** をクリックしてください。
+                圃場の登録が終わったら、残りの基本データを登録しましょう。<br/>
+                左メニューから **「各種マスタ管理」** を開いてください。
               </p>
             </div>
 
@@ -166,7 +205,7 @@ export default function ManualPage() {
                     </p>
                   </div>
                   <div>
-                    <ImagePlaceholder src="/manual/step1-1.png" alt="作目登録" filename="step1-1.png" />
+                    <ImagePlaceholder src="/manual/step2-1.png" alt="作目登録" filename="step2-1.png" />
                   </div>
                 </div>
               </div>
@@ -175,28 +214,7 @@ export default function ManualPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
                   <div>
                     <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2 mb-3">
-                      <Map className="w-6 h-6 text-emerald-600" /> 2. 圃場（畑・ハウス）を登録しよう
-                    </h3>
-                    <p className="text-slate-600 leading-relaxed mb-4">
-                      持っている畑やビニールハウスを登録します。<br/>
-                      <strong className="text-emerald-700">ポイント:</strong> 面積（アール: a）を正確に入力してください。この面積をもとに、あとで経費が自動的に割り振られます。
-                    </p>
-                    <div className="p-3 bg-amber-50 rounded-xl text-sm text-amber-800 border border-amber-200">
-                      <strong className="flex items-center gap-1 mb-1"><AlertCircle className="w-4 h-4" /> TIPS（便利な小技）</strong>
-                      左メニューの「作付地図」画面から、地図上で直接ポリゴン（図形）を描いて、直感的に圃場を登録することもできます！
-                    </div>
-                  </div>
-                  <div>
-                    <ImagePlaceholder src="/manual/step1-2.png" alt="圃場登録" filename="step1-2.png" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
-                  <div>
-                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2 mb-3">
-                      <UserPlus className="w-6 h-6 text-emerald-600" /> 3. 作業者を登録しよう
+                      <UserPlus className="w-6 h-6 text-emerald-600" /> 2. 作業者を登録しよう
                     </h3>
                     <p className="text-slate-600 leading-relaxed mb-4">
                       一緒に働く従業員さんや、あなた自身を登録します。<br/>
@@ -204,7 +222,7 @@ export default function ManualPage() {
                     </p>
                   </div>
                   <div>
-                    <ImagePlaceholder src="/manual/step1-3.png" alt="作業者登録" filename="step1-3.png" />
+                    <ImagePlaceholder src="/manual/step2-2.png" alt="作業者登録" filename="step2-2.png" />
                   </div>
                 </div>
               </div>
@@ -213,7 +231,7 @@ export default function ManualPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
                   <div>
                     <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2 mb-3">
-                      <PackageOpen className="w-6 h-6 text-emerald-600" /> 4. 資材・農薬と販売価格を登録しよう
+                      <PackageOpen className="w-6 h-6 text-emerald-600" /> 3. 資材・農薬と販売価格を登録しよう
                     </h3>
                     <p className="text-slate-600 leading-relaxed mb-4">
                       <strong>【資材・農薬】</strong> よく使う肥料や梱包材の「購入金額」を登録しておくと、現場で「1キロ使った」と入力するだけで自動計算されます。<br/><br/>
@@ -221,7 +239,7 @@ export default function ManualPage() {
                     </p>
                   </div>
                   <div>
-                    <ImagePlaceholder src="/manual/step1-4.png" alt="資材と販売価格" filename="step1-4.png" />
+                    <ImagePlaceholder src="/manual/step2-3.png" alt="資材と販売価格" filename="step2-3.png" />
                   </div>
                 </div>
               </div>
@@ -229,22 +247,13 @@ export default function ManualPage() {
             </div>
             
             <div className="flex justify-between pt-4 border-t border-slate-100 mt-8">
-              <button onClick={() => setActiveTab(0)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
-              <button onClick={() => setActiveTab(2)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
+              <button onClick={() => setActiveTab(1)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
+              <button onClick={() => setActiveTab(3)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
                 次のステップへ <ArrowRight className="w-5 h-5" />
               </button>
             </div>
           </div>
-        )}
-
-        {/* === STEP 2: 作付地図 === */}
-        {activeTab === 2 && (
-          <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="border-b border-slate-100 pb-6">
-              <h2 className="text-2xl font-black text-slate-800 mb-2">【ステップ2】 作付地図の活用（地図上で畑を管理しよう）</h2>
-              <p className="text-slate-600 text-lg">
-                Googleマップの航空写真を使って、畑を直感的に管理できる機能です。<br/>
-                自分の畑を地図上で囲むだけで、面積が自動計算されます！
+        )}��の畑を地図上で囲むだけで、面積が自動計算されます！
               </p>
             </div>
 
