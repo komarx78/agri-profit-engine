@@ -43,12 +43,6 @@ export default function AdminLayout({
 
   const navGroups = [
     {
-      title: 'サポート',
-      items: [
-        { name: '使い方ガイド', path: '/admin/manual', icon: BookOpen },
-      ]
-    },
-    {
       title: '計画・予実管理',
       items: [
         { name: 'ダッシュボード', path: '/admin/dashboard', icon: LayoutDashboard },
@@ -82,6 +76,12 @@ export default function AdminLayout({
         { name: 'マスタ管理全般', path: '/admin/masters', icon: Database },
         { name: '出荷先・メール設定', path: '/admin/channels', icon: Store },
         { name: '自社情報設定', path: '/admin/settings', icon: Settings },
+      ]
+    },
+    {
+      title: 'サポート',
+      items: [
+        { name: '使い方ガイド', path: '/admin/manual', icon: BookOpen },
       ]
     }
   ];
