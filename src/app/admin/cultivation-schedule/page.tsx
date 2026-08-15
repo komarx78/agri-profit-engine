@@ -696,7 +696,7 @@ export default function CultivationSchedulePage() {
 
                         // ハイブリッド経費按分ロジック
                         // 1. 農場全体の面積合計
-                        const totalFarmArea = fields.reduce((sum, f) => sum + (Number(f.area) || 0), 0);
+                        const totalFarmArea = fields.reduce((sum, f) => sum + (Number(f.area_size) || 0), 0);
                         const areaRatio = totalFarmArea > 0 ? area / totalFarmArea : 0;
                         
                         // 2. 栽培期間の月リストを作成 (最大12ヶ月)

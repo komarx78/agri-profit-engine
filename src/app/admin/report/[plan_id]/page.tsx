@@ -170,7 +170,7 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
     });
 
     // ハイブリッド経費按分ロジック
-    const totalFarmArea = allFields.reduce((sum, f) => sum + (Number(f.area) || 0), 0);
+    const totalFarmArea = allFields.reduce((sum, f) => sum + (Number(f.area_size) || 0), 0);
     const areaRatio = totalFarmArea > 0 ? area / totalFarmArea : 0;
     
     const planMonths: string[] = [];
