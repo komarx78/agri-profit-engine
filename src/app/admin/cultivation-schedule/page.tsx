@@ -10,6 +10,7 @@ export default function CultivationSchedulePage() {
   const [crops, setCrops] = useState<any[]>([]);
   const [cropStandards, setCropStandards] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
+  const [monthlyExpenses, setMonthlyExpenses] = useState<any[]>([]);
   
   const [isLoading, setIsLoading] = useState(true);
   const [year, setYear] = useState(new Date().getFullYear());
@@ -40,19 +41,21 @@ export default function CultivationSchedulePage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [fRes, cRes, csRes, pRes] = await Promise.all([
+      const [fRes, cRes, csRes, pRes, expRes] = await Promise.all([
         supabase.from('fields').select('*').order('name'),
         supabase.from('crops').select('*').order('name'),
         supabase.from('crop_standards').select('*'),
         supabase.from('cultivation_plans_v2').select(`
           *,
-          crops ( name )
-        `).eq('year', year)
+          crops ( * )
+        `).eq('year', year),
+        supabase.from('monthly_expenses').select('*')
       ]);
       
       setFields(fRes.data || []);
       setCrops(cRes.data || []);
       setCropStandards(csRes.data || []);
+      setMonthlyExpenses(expRes.data || []);
       
       if (pRes.error && pRes.error.code !== '42P01') {
         console.error("Plans fetch error:", pRes.error);
@@ -690,6 +693,59 @@ export default function CultivationSchedulePage() {
                           costs10a[cat] = c10a;
                           totalMaterialCost10a += c10a;
                         });
+
+                        // ハイブリッド経費按分ロジック
+                        // 1. 農場全体の面積合計
+                        const totalFarmArea = fields.reduce((sum, f) => sum + (Number(f.area) || 0), 0);
+                        const areaRatio = totalFarmArea > 0 ? area / totalFarmArea : 0;
+                        
+                        // 2. 栽培期間の月リストを作成 (最大12ヶ月)
+                        const planMonths: string[] = [];
+                        let currentM = selectedPlan.start_month;
+                        let y = currentM >= 8 ? selectedPlan.year : selectedPlan.year + 1;
+                        for (let i = 0; i < 12; i++) {
+                          planMonths.push(`${y}-${String(currentM).padStart(2, '0')}`);
+                          if (currentM === selectedPlan.end_month) break;
+                          currentM++;
+                          if (currentM > 12) { currentM = 1; y++; }
+                        }
+
+                        // 3. マスタの概算（予算）を取得し、1ヶ月・自圃場面積あたりに変換
+                        const cropMaster = crops.find(c => c.id === selectedPlan.crop_id);
+                        const totalMonths = planMonths.length || 1;
+                        const estFuelPerMonth = ((cropMaster?.est_fuel_cost_10a || 0) * (area / 10)) / totalMonths;
+                        const estMachineryPerMonth = ((cropMaster?.est_machinery_cost_10a || 0) * (area / 10)) / totalMonths;
+                        const estOtherPerMonth = ((cropMaster?.est_other_cost_10a || 0) * (area / 10)) / totalMonths;
+
+                        // 4. 各月の実費または予算を加算
+                        let totalFuelArea = 0;
+                        let totalMachineryArea = 0;
+                        let totalOtherArea = 0;
+
+                        planMonths.forEach(mStr => {
+                          const monthLogs = monthlyExpenses.filter(e => e.month === mStr);
+                          if (monthLogs.length > 0) {
+                            // 実績あり：全体経費 × 面積按分率
+                            totalFuelArea += (monthLogs.find(e => e.expense_type === 'fuel')?.amount || 0) * areaRatio;
+                            totalMachineryArea += (monthLogs.find(e => e.expense_type === 'machinery')?.amount || 0) * areaRatio;
+                            totalOtherArea += (monthLogs.find(e => e.expense_type === 'other')?.amount || 0) * areaRatio;
+                          } else {
+                            // 実績なし：予算（概算）
+                            totalFuelArea += estFuelPerMonth;
+                            totalMachineryArea += estMachineryPerMonth;
+                            totalOtherArea += estOtherPerMonth;
+                          }
+                        });
+
+                        // 5. 10aあたりに再換算して costs10a に組み込む
+                        const fuel10a = totalFuelArea * multiplier;
+                        const machinery10a = totalMachineryArea * multiplier;
+                        const other10a = totalOtherArea * multiplier;
+                        
+                        costs10a['動力光熱費'] = (costs10a['動力光熱費'] || 0) + fuel10a;
+                        costs10a['機械・車両費 (参考)'] = (costs10a['機械・車両費 (参考)'] || 0) + machinery10a;
+                        costs10a['その他経費'] = (costs10a['その他経費'] || 0) + other10a;
+                        totalMaterialCost10a += (fuel10a + machinery10a + other10a);
                         
                         const totalCost10a = laborCost10a + totalMaterialCost10a;
                         const profit10a = revenue10a - totalCost10a;

@@ -57,7 +57,8 @@ export default function AdminLayout({
       items: [
         { name: '出荷記録一覧', path: '/admin/sales-history', icon: Truck },
         { name: '請求書一括発行', path: '/admin/invoices', icon: FileText },
-        { name: '資材・経費管理', path: '/admin/purchases', icon: Receipt },
+        { name: '資材購入・直接経費', path: '/admin/purchases', icon: Receipt },
+        { name: '月次全体経費(按分用)', path: '/admin/monthly-expenses', icon: Calculator },
         { name: '会計データ出力', path: '/admin/accounting', icon: FileSpreadsheet },
       ]
     },

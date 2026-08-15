@@ -49,7 +49,7 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
         .select(`
           *,
           fields ( name, area_size ),
-          crops ( name )
+          crops ( * )
         `)
         .eq('id', unwrappedParams.plan_id)
         .single();
@@ -65,18 +65,22 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
       setMultiplier(m);
       
       // 作業ログと出荷ログの取得 (スマホから入力された plan_id のないデータも拾うため or 条件を使用)
-      const [workRes, salesRes] = await Promise.all([
+      const [workRes, salesRes, fieldsRes, expRes] = await Promise.all([
         supabase.from('work_logs').select(`
           *,
           materials (*)
         `).or(`plan_id.eq.${unwrappedParams.plan_id},and(crop_id.eq.${plan.crop_id},field_id.eq.${plan.field_id})`).order('work_date', { ascending: true }),
-        supabase.from('sales_logs').select('*').or(`plan_id.eq.${unwrappedParams.plan_id},crop_id.eq.${plan.crop_id}`).order('sales_date', { ascending: true })
+        supabase.from('sales_logs').select('*').or(`plan_id.eq.${unwrappedParams.plan_id},crop_id.eq.${plan.crop_id}`).order('sales_date', { ascending: true }),
+        supabase.from('fields').select('*'),
+        supabase.from('monthly_expenses').select('*')
       ]);
       
       const workLogs = workRes.data || [];
       const salesLogs = salesRes.data || [];
+      const allFields = fieldsRes.data || [];
+      const expenses = expRes.data || [];
       
-      processLogs(workLogs, salesLogs, m);
+      processLogs(plan, workLogs, salesLogs, m, area, allFields, expenses);
       
     } catch (err: any) {
       console.error(err);
@@ -86,7 +90,7 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
     }
   };
 
-  const processLogs = (workLogs: any[], salesLogs: any[], m: number) => {
+  const processLogs = (plan: any, workLogs: any[], salesLogs: any[], m: number, area: number, allFields: any[], expenses: any[]) => {
     // 旬別労働時間のマトリックス初期化
     const matrix: any = {};
     const marks: any = {};
@@ -164,6 +168,53 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
         }
       }
     });
+
+    // ハイブリッド経費按分ロジック
+    const totalFarmArea = allFields.reduce((sum, f) => sum + (Number(f.area) || 0), 0);
+    const areaRatio = totalFarmArea > 0 ? area / totalFarmArea : 0;
+    
+    const planMonths: string[] = [];
+    let currentM = plan.start_month;
+    let y = currentM >= 8 ? plan.year : plan.year + 1;
+    for (let i = 0; i < 12; i++) {
+      planMonths.push(`${y}-${String(currentM).padStart(2, '0')}`);
+      if (currentM === plan.end_month) break;
+      currentM++;
+      if (currentM > 12) { currentM = 1; y++; }
+    }
+
+    const cropMaster = plan.crops; // crops(name) しかjoinされていなかったらエラーになるため別途修正が必要だが今回は(*)を後で直す
+    const estFuelPerMonth = cropMaster ? ((cropMaster.est_fuel_cost_10a || 0) * (area / 10)) / (planMonths.length || 1) : 0;
+    const estMachineryPerMonth = cropMaster ? ((cropMaster.est_machinery_cost_10a || 0) * (area / 10)) / (planMonths.length || 1) : 0;
+    const estOtherPerMonth = cropMaster ? ((cropMaster.est_other_cost_10a || 0) * (area / 10)) / (planMonths.length || 1) : 0;
+
+    let totalFuelArea = 0;
+    let totalMachineryArea = 0;
+    let totalOtherArea = 0;
+
+    planMonths.forEach(mStr => {
+      const monthLogs = expenses.filter(e => e.month === mStr);
+      if (monthLogs.length > 0) {
+        totalFuelArea += (monthLogs.find(e => e.expense_type === 'fuel')?.amount || 0) * areaRatio;
+        totalMachineryArea += (monthLogs.find(e => e.expense_type === 'machinery')?.amount || 0) * areaRatio;
+        totalOtherArea += (monthLogs.find(e => e.expense_type === 'other')?.amount || 0) * areaRatio;
+      } else {
+        totalFuelArea += estFuelPerMonth;
+        totalMachineryArea += estMachineryPerMonth;
+        totalOtherArea += estOtherPerMonth;
+      }
+    });
+
+    if (totalFuelArea > 0) {
+      calculatedCosts['動力光熱費'].push({ name: '月次按分・概算経費', specification: '', unit: '式', price: 0, quantity: 1, amount: totalFuelArea });
+    }
+    if (totalMachineryArea > 0) {
+      calculatedCosts['機械・車両費'].push({ name: '月次按分・概算経費', specification: '', unit: '式', price: 0, quantity: 1, amount: totalMachineryArea });
+    }
+    if (totalOtherArea > 0) {
+      calculatedCosts['その他経費'].push({ name: '月次按分・概算経費', specification: '', unit: '式', price: 0, quantity: 1, amount: totalOtherArea });
+    }
+
     
     // 売上計算 (10a換算)
     let totalYield = 0;

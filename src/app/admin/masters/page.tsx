@@ -119,6 +119,9 @@ export default function MastersPage() {
         initial.name = initial.name || '';
         initial.seedlings_per_10a = initial.seedlings_per_10a || 0;
         initial.materials_per_10a = initial.materials_per_10a || [];
+        initial.est_fuel_cost_10a = initial.est_fuel_cost_10a || 0;
+        initial.est_machinery_cost_10a = initial.est_machinery_cost_10a || 0;
+        initial.est_other_cost_10a = initial.est_other_cost_10a || 0;
       }
       else {
         initial.name = initial.name || '';
