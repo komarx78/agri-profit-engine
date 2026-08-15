@@ -29,7 +29,7 @@ const polygonOptions = {
 };
 
 // Google Maps API で読み込むライブラリ（再レンダリング防止のため外出し）
-const libraries: ("drawing" | "geometry")[] = ["drawing", "geometry"];
+const libraries: ("geometry")[] = ["geometry"];
 
 export default function MapPage() {
   const [fields, setFields] = useState<any[]>([]);
@@ -402,7 +402,7 @@ export default function MapPage() {
       {/* メイン: マップ領域 */}
       <div className="flex-1 relative h-2/3 md:h-full min-h-[400px]">
         {/* コントロールパネル */}
-        <div className="absolute top-4 left-4 z-10 flex gap-2 flex-col sm:flex-row">
+        <div className="absolute top-16 md:top-4 left-4 z-10 flex gap-2 flex-col sm:flex-row mt-2 md:mt-12">
           {!isDrawingMode && !editingFieldId ? (
             <button
               onClick={() => {

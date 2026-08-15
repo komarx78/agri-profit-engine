@@ -13,7 +13,7 @@ const containerStyle = {
   borderRadius: '0.75rem'
 };
 
-const libraries: ("drawing" | "geometry")[] = ["geometry"];
+const libraries: ("geometry")[] = ["geometry"];
 
 export default function FieldDetailPage() {
   const params = useParams();
