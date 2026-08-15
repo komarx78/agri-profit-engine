@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { GoogleMap, useJsApiLoader, DrawingManager, Polygon, InfoWindow } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, DrawingManager, Polygon, InfoWindow, StandaloneSearchBox } from '@react-google-maps/api';
 import { supabase } from '@/lib/supabase';
 import { MapPin, Plus, Loader2, Save, X, Info } from 'lucide-react';
 
@@ -16,7 +16,6 @@ const defaultCenter = {
   lng: 138.2529
 };
 
-// 描画されるポリゴンのデフォルトスタイル
 const polygonOptions = {
   fillColor: '#10b981',
   fillOpacity: 0.4,
@@ -27,6 +26,9 @@ const polygonOptions = {
   editable: false,
   zIndex: 1,
 };
+
+// Google Maps API で読み込むライブラリ（再レンダリング防止のため外出し）
+const libraries: ("drawing" | "geometry" | "places")[] = ["drawing", "geometry", "places"];
 
 export default function MapPage() {
   const [fields, setFields] = useState<any[]>([]);
@@ -50,8 +52,28 @@ export default function MapPage() {
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
-    libraries: ['drawing', 'geometry']
+    libraries: libraries
   });
+
+  // 住所検索ボックス用
+  const searchBoxRef = useRef<google.maps.places.SearchBox | null>(null);
+
+  const onSearchBoxLoad = useCallback((ref: google.maps.places.SearchBox) => {
+    searchBoxRef.current = ref;
+  }, []);
+
+  const onPlacesChanged = () => {
+    if (searchBoxRef.current && map) {
+      const places = searchBoxRef.current.getPlaces();
+      if (places && places.length > 0) {
+        const place = places[0];
+        if (place.geometry && place.geometry.location) {
+          map.panTo(place.geometry.location);
+          map.setZoom(17); // 検索後は少し拡大
+        }
+      }
+    }
+  };
 
   useEffect(() => {
     fetchFieldsData();
@@ -256,7 +278,7 @@ export default function MapPage() {
         <div className="absolute top-4 left-4 z-10 flex gap-2">
           <button
             onClick={() => setIsDrawingMode(!isDrawingMode)}
-            className={`px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-colors ${
+            className={`px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-colors shrink-0 ${
               isDrawingMode 
                 ? 'bg-rose-500 hover:bg-rose-600 text-white' 
                 : 'bg-white hover:bg-slate-50 text-slate-800 border border-slate-200'
@@ -268,6 +290,22 @@ export default function MapPage() {
               <><Plus className="w-5 h-5 text-emerald-500" /> 地図に畑を追加</>
             )}
           </button>
+          
+          {/* 住所・地名検索窓 */}
+          {!isDrawingMode && (
+            <StandaloneSearchBox
+              onLoad={onSearchBoxLoad}
+              onPlacesChanged={onPlacesChanged}
+            >
+              <div className="relative shadow-lg rounded-xl overflow-hidden bg-white border border-slate-200">
+                <input
+                  type="text"
+                  placeholder="住所や地名で検索..."
+                  className="px-4 py-2 w-64 md:w-80 outline-none font-bold text-slate-700"
+                />
+              </div>
+            </StandaloneSearchBox>
+          )}
         </div>
 
         <GoogleMap
