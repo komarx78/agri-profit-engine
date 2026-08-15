@@ -86,46 +86,49 @@ export default function ManualPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-              <div className="space-y-6">
-                
-                {/* 計画・予実管理 */}
-                <div className="bg-emerald-50 p-5 rounded-2xl border border-emerald-100">
-                  <h3 className="font-bold text-lg text-emerald-800 border-b border-emerald-200 pb-2 mb-3">📍 計画・予実管理</h3>
-                  <ul className="space-y-2 text-sm text-emerald-900 leading-relaxed">
-                    <li><strong className="text-emerald-700">ダッシュボード:</strong> 農場全体の現在の状況や利益のサマリーを確認します。</li>
-                    <li><strong className="text-emerald-700">作付地図:</strong> 地図上で畑の状況を確認したり、ポリゴンを描いて新しい畑を登録できます。</li>
-                    <li><strong className="text-emerald-700">栽培・予実管理表:</strong> 栽培計画を作成し、その後の利益分析を行います。</li>
-                    <li><strong className="text-emerald-700">必要資材自動集計:</strong> 計画をもとに、これから必要になる肥料や農薬の量を予測します。</li>
-                  </ul>
-                </div>
-
-                {/* 売上・経費管理 */}
-                <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100">
-                  <h3 className="font-bold text-lg text-blue-800 border-b border-blue-200 pb-2 mb-3">💰 売上・経費管理</h3>
-                  <ul className="space-y-2 text-sm text-blue-900 leading-relaxed">
-                    <li><strong className="text-blue-700">出荷記録一覧:</strong> これまでの売上履歴の確認と編集を行います。</li>
-                    <li><strong className="text-blue-700">請求書一括発行:</strong> 取引先への請求書を自動作成します。</li>
-                    <li><strong className="text-blue-700">月次全体経費:</strong> 月に1回、電気代などの全体経費を入力します。</li>
-                  </ul>
-                </div>
-
-                {/* 作業履歴・記録 */}
-                <div className="bg-amber-50 p-5 rounded-2xl border border-amber-100">
-                  <h3 className="font-bold text-lg text-amber-800 border-b border-amber-200 pb-2 mb-3">📋 作業履歴・設定</h3>
-                  <ul className="space-y-2 text-sm text-amber-900 leading-relaxed">
-                    <li><strong className="text-amber-700">作業記録一覧:</strong> 現場からスマホで入力された記録の確認と修正を行います。</li>
-                    <li><strong className="text-amber-700">各種マスタ管理:</strong> システムを使うための最初の基本データ（従業員、作目など）を登録します。</li>
-                  </ul>
-                </div>
-
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+              {/* 計画・予実管理 */}
+              <div className="bg-emerald-50 p-5 rounded-2xl border border-emerald-100 h-full">
+                <h3 className="font-bold text-lg text-emerald-800 border-b border-emerald-200 pb-2 mb-3">📍 計画・予実管理</h3>
+                <ul className="space-y-2 text-sm text-emerald-900 leading-relaxed">
+                  <li><strong className="text-emerald-700">ダッシュボード:</strong> 農場全体の状況や利益サマリーを確認します。</li>
+                  <li><strong className="text-emerald-700">作付地図:</strong> 地図上で畑の状況を確認・新しい畑を登録できます。</li>
+                  <li><strong className="text-emerald-700">栽培・予実管理表:</strong> 栽培計画を作成し、利益分析を行います。</li>
+                  <li><strong className="text-emerald-700">育苗スケジュール:</strong> 種まきから定植までの苗のスケジュールを管理します。</li>
+                  <li><strong className="text-emerald-700">必要資材自動集計:</strong> 今後必要になる肥料や農薬の量を予測計算します。</li>
+                </ul>
               </div>
-              <div className="sticky top-20">
-                <ImagePlaceholder 
-                  src="/manual/step0.png" 
-                  alt="左メニューの画面" 
-                  filename="step0.png" 
-                />
+
+              {/* 売上・経費管理 */}
+              <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100 h-full">
+                <h3 className="font-bold text-lg text-blue-800 border-b border-blue-200 pb-2 mb-3">💰 売上・経費管理</h3>
+                <ul className="space-y-2 text-sm text-blue-900 leading-relaxed">
+                  <li><strong className="text-blue-700">出荷記録一覧:</strong> 過去の売上履歴の確認と編集を行います。</li>
+                  <li><strong className="text-blue-700">請求書一括発行:</strong> 取引先への請求書を自動作成します。</li>
+                  <li><strong className="text-blue-700">資材購入・直接経費:</strong> 現場でその都度発生した経費（買い物など）を入力します。</li>
+                  <li><strong className="text-blue-700">月次全体経費(按分用):</strong> 電気代など、全体にかかる月ごとの経費を入力します。</li>
+                  <li><strong className="text-blue-700">会計データ出力:</strong> 確定申告などに使うためのデータをダウンロードします。</li>
+                </ul>
+              </div>
+
+              {/* 作業履歴・記録 */}
+              <div className="bg-amber-50 p-5 rounded-2xl border border-amber-100 h-full">
+                <h3 className="font-bold text-lg text-amber-800 border-b border-amber-200 pb-2 mb-3">📋 作業履歴・記録</h3>
+                <ul className="space-y-2 text-sm text-amber-900 leading-relaxed">
+                  <li><strong className="text-amber-700">作業記録一覧:</strong> スマホから入力された記録の確認と修正を行います。</li>
+                  <li><strong className="text-amber-700">作業内容台帳(集計):</strong> 誰が何の作業にどれくらい時間を使ったか集計します。</li>
+                  <li><strong className="text-amber-700">動画マニュアル集:</strong> スタッフ向けの作業手順動画などを確認できます。</li>
+                </ul>
+              </div>
+
+              {/* 設定・マスタ */}
+              <div className="bg-slate-100 p-5 rounded-2xl border border-slate-200 h-full">
+                <h3 className="font-bold text-lg text-slate-700 border-b border-slate-300 pb-2 mb-3">⚙️ 設定・マスタ</h3>
+                <ul className="space-y-2 text-sm text-slate-700 leading-relaxed">
+                  <li><strong className="text-slate-900">マスタ管理全般:</strong> 従業員、圃場、作目などの基本データを登録します。</li>
+                  <li><strong className="text-slate-900">出荷先・メール設定:</strong> 請求書を送る取引先やメールの設定を行います。</li>
+                  <li><strong className="text-slate-900">自社情報設定:</strong> 農場名や住所などの基本情報を設定します。</li>
+                </ul>
               </div>
             </div>
             
