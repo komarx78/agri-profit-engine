@@ -155,11 +155,11 @@ export default function ManualPage() {
               <div className="space-y-6">
                 <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
                   <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-2">
-                    <UserPlus className="w-5 h-5 text-emerald-600" /> 1. 従業員（作業者）を登録しよう
+                    <Sprout className="w-5 h-5 text-emerald-600" /> 1. 作目（育てる作物）を登録しよう
                   </h3>
-                  <p className="text-slate-600 text-sm leading-relaxed">
-                    一緒に働く従業員さんや、あなた自身を登録します。<br/>
-                    <strong className="text-emerald-700">ポイント:</strong> 「時給」や「現場で使う4桁のPINコード」を設定します。家族経営の場合でも、あなた自身の仮想時給を設定しておくと、正確な人件費が計算できます。
+                  <p className="text-slate-600 text-sm leading-relaxed mb-2">
+                    キャベツやトマトなど、育てる作物を登録します。<br/>
+                    <strong className="text-emerald-700">ポイント:</strong> 「10aあたりの概算経費（予算）」を設定しておくと、システムが自動で経費予測をしてくれます。
                   </p>
                 </div>
 
@@ -179,11 +179,21 @@ export default function ManualPage() {
 
                 <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
                   <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-2">
-                    <PackageOpen className="w-5 h-5 text-emerald-600" /> 3. 資材・作目を登録しよう
+                    <UserPlus className="w-5 h-5 text-emerald-600" /> 3. 作業者を登録しよう
                   </h3>
                   <p className="text-slate-600 text-sm leading-relaxed">
-                    よく使う肥料や農薬と、育てる作物（キャベツなど）を登録します。<br/>
-                    <strong className="text-emerald-700">ポイント:</strong> 作目の登録では「10aあたりの概算経費（予算）」を設定できます。これを設定しておくと、まだ実際の経費がわからなくてもシステムが自動で予測してくれます。
+                    一緒に働く従業員さんや、あなた自身を登録します。<br/>
+                    <strong className="text-emerald-700">ポイント:</strong> 「時給」や「現場で使う4桁のPINコード」を設定します。家族経営の場合でも、あなた自身の仮想時給を設定しておくと、正確な人件費が計算できます。
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                  <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-2">
+                    <PackageOpen className="w-5 h-5 text-emerald-600" /> 4. 資材・農薬と販売価格を登録しよう
+                  </h3>
+                  <p className="text-slate-600 text-sm leading-relaxed">
+                    <strong>【資材・農薬】</strong> よく使う肥料や梱包材の「購入金額」を登録しておくと、現場で「1キロ使った」と入力するだけで自動計算されます。<br/>
+                    <strong>【販売価格】</strong> 出荷先ごと（JA、直売所など）の販売単価を登録しておくと、出荷記録を入力した際の売上が自動計算されます。
                   </p>
                 </div>
               </div>
