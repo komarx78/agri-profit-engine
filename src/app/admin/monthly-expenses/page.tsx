@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Receipt, Save, Loader2, Calendar, TrendingDown, RefreshCw, AlertCircle } from 'lucide-react';
+import { Receipt, Save, Loader2, Calendar, TrendingDown, RefreshCw, AlertCircle, Edit2 } from 'lucide-react';
 
 type ExpenseType = 'fuel' | 'machinery' | 'other';
 
@@ -253,21 +253,35 @@ export default function MonthlyExpensesPage() {
                 <th className="px-4 py-3 text-right font-black text-slate-700">機械・車両費</th>
                 <th className="px-4 py-3 text-right font-black text-slate-700">その他経費</th>
                 <th className="px-4 py-3 text-right font-black text-emerald-700">合計</th>
+                <th className="px-4 py-3 w-16"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {historyByMonth.map((row) => (
-                <tr key={row.month} className="hover:bg-slate-50 transition-colors">
+                <tr 
+                  key={row.month} 
+                  className="hover:bg-amber-50 cursor-pointer transition-colors group"
+                  onClick={() => {
+                    setSelectedMonth(row.month);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  title={`${row.month} の経費を編集`}
+                >
                   <td className="px-4 py-3 font-bold text-slate-800">{row.month}</td>
                   <td className="px-4 py-3 text-right text-slate-600">¥ {row.fuel.toLocaleString()}</td>
                   <td className="px-4 py-3 text-right text-slate-600">¥ {row.machinery.toLocaleString()}</td>
                   <td className="px-4 py-3 text-right text-slate-600">¥ {row.other.toLocaleString()}</td>
                   <td className="px-4 py-3 text-right font-black text-emerald-600">¥ {row.total.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-center">
+                    <button className="p-1 text-slate-400 group-hover:text-emerald-600 transition-colors">
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  </td>
                 </tr>
               ))}
               {historyByMonth.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
                     登録されている履歴がありません
                   </td>
                 </tr>
