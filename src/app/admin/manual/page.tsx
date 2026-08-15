@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { BookOpen, UserPlus, Map, PackageOpen, Sprout, ClipboardList, Smartphone, Receipt, TrendingUp, AlertCircle, ArrowRight, CheckCircle2, RefreshCw, LayoutDashboard, MapPin, Pointer } from 'lucide-react';
 
 export default function ManualPage() {
-  const [activeTab, setActiveTab] = useState<number>(0);
+  const [activeTab, setActiveTab] = useState<number>(1);
 
   const ImagePlaceholder = ({ src, alt, filename }: { src: string, alt: string, filename: string }) => {
     return (
@@ -27,13 +27,13 @@ export default function ManualPage() {
   };
 
   const steps = [
-    { id: 0, title: '画面の見方 (メニュー)', icon: LayoutDashboard },
     { id: 1, title: '作付地図で圃場登録', icon: MapPin },
     { id: 2, title: 'その他の初期設定', icon: UserPlus },
     { id: 3, title: '栽培計画を立てる', icon: Sprout },
     { id: 4, title: '現場からスマホ入力', icon: Smartphone },
     { id: 5, title: '月ごとの経費入力', icon: Receipt },
     { id: 6, title: '利益の確認・分析', icon: TrendingUp },
+    { id: 0, title: '補足: 画面の見方', icon: LayoutDashboard },
   ];
 
   return (
@@ -74,70 +74,6 @@ export default function ManualPage() {
 
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 sm:p-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
         
-        {/* === STEP 0: メニュー早見表 === */}
-        {activeTab === 0 && (
-          <div className="space-y-8">
-            <div className="border-b border-slate-100 pb-6">
-              <h2 className="text-2xl font-black text-slate-800 mb-2">画面の見方（左メニュー早見表）</h2>
-              <p className="text-slate-600 text-lg">
-                管理画面の左側にあるメニューは、大きく分けて4つのグループに分かれています。<br/>
-                「どこで何ができるか」を一覧で確認しておきましょう。
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-              {/* 計画・予実管理 */}
-              <div className="bg-emerald-50 p-5 rounded-2xl border border-emerald-100 h-full">
-                <h3 className="font-bold text-lg text-emerald-800 border-b border-emerald-200 pb-2 mb-3">🌱 計画・予実管理</h3>
-                <ul className="space-y-2 text-sm text-emerald-900 leading-relaxed">
-                  <li><strong className="text-emerald-700">ダッシュボード:</strong> 農場全体の状況や利益サマリーを確認します。</li>
-                  <li><strong className="text-emerald-700">作付地図:</strong> 地図上で畑の状況を確認・新しい畑を登録できます。</li>
-                  <li><strong className="text-emerald-700">栽培・予実管理表:</strong> 栽培計画を作成し、利益分析を行います。</li>
-                  <li><strong className="text-emerald-700">育苗スケジュール:</strong> 種まきから定植までの苗のスケジュールを管理します。</li>
-                  <li><strong className="text-emerald-700">必要資材自動集計:</strong> 今後必要になる肥料や農薬の量を予測計算します。</li>
-                </ul>
-              </div>
-
-              {/* 売上・経費管理 */}
-              <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100 h-full">
-                <h3 className="font-bold text-lg text-blue-800 border-b border-blue-200 pb-2 mb-3">💰 売上・経費管理</h3>
-                <ul className="space-y-2 text-sm text-blue-900 leading-relaxed">
-                  <li><strong className="text-blue-700">出荷記録一覧:</strong> 過去の売上履歴の確認と編集を行います。</li>
-                  <li><strong className="text-blue-700">請求書一括発行:</strong> 取引先への請求書を自動作成します。</li>
-                  <li><strong className="text-blue-700">資材購入・直接経費:</strong> 現場でその都度発生した経費（買い物など）を入力します。</li>
-                  <li><strong className="text-blue-700">月次全体経費(按分用):</strong> 電気代など、全体にかかる月ごとの経費を入力します。</li>
-                  <li><strong className="text-blue-700">会計データ出力:</strong> 確定申告などに使うためのデータをダウンロードします。</li>
-                </ul>
-              </div>
-
-              {/* 作業履歴・記録 */}
-              <div className="bg-amber-50 p-5 rounded-2xl border border-amber-100 h-full">
-                <h3 className="font-bold text-lg text-amber-800 border-b border-amber-200 pb-2 mb-3">📝 作業履歴・記録</h3>
-                <ul className="space-y-2 text-sm text-amber-900 leading-relaxed">
-                  <li><strong className="text-amber-700">作業記録一覧:</strong> スマホから入力された記録の確認と修正を行います。</li>
-                  <li><strong className="text-amber-700">QRコード一覧:</strong> 現場でスキャンするためのQRコードを印刷できます。</li>
-                </ul>
-              </div>
-
-              {/* 各種設定 */}
-              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 h-full">
-                <h3 className="font-bold text-lg text-slate-800 border-b border-slate-200 pb-2 mb-3">⚙️ 各種設定</h3>
-                <ul className="space-y-2 text-sm text-slate-700 leading-relaxed">
-                  <li><strong className="text-slate-900">各種マスタ管理:</strong> 作物、作業者、資材などの基本データを登録・修正します。</li>
-                  <li><strong className="text-slate-900">出荷先・メール設定:</strong> 請求書を送る取引先やメールの設定を行います。</li>
-                  <li><strong className="text-slate-900">自社情報設定:</strong> 農場名や住所などの基本情報を設定します。</li>
-                </ul>
-              </div>
-            </div>
-            
-            <div className="flex justify-end pt-4 border-t border-slate-100 mt-8">
-              <button onClick={() => setActiveTab(1)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
-                ステップ1に進む <ArrowRight className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* === STEP 1: 作付地図で圃場登録 === */}
         {activeTab === 1 && (
           <div className="space-y-8 animate-in fade-in duration-500">
@@ -192,8 +128,7 @@ export default function ManualPage() {
               </div>
             </div>
             
-            <div className="flex justify-between pt-4 border-t border-slate-100 mt-8">
-              <button onClick={() => setActiveTab(0)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
+            <div className="flex justify-end pt-4 border-t border-slate-100 mt-8">
               <button onClick={() => setActiveTab(2)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
                 次のステップへ <ArrowRight className="w-5 h-5" />
               </button>
@@ -479,6 +414,76 @@ export default function ManualPage() {
 
             <div className="flex justify-between pt-4 border-t border-slate-100 mt-8">
               <button onClick={() => setActiveTab(5)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
+              <div className="flex gap-3">
+                <button onClick={() => setActiveTab(0)} className="text-slate-600 bg-slate-100 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-200 transition-colors">
+                  補足: メニュー早見表へ
+                </button>
+                <button onClick={() => setActiveTab(1)} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-sm">
+                  最初に戻る <RefreshCw className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* === STEP 0: メニュー早見表 (補足) === */}
+        {activeTab === 0 && (
+          <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="border-b border-slate-100 pb-6">
+              <h2 className="text-2xl font-black text-slate-800 mb-2">【補足】 画面の見方（左メニュー早見表）</h2>
+              <p className="text-slate-600 text-lg">
+                管理画面の左側にあるメニューは、大きく分けて4つのグループに分かれています。<br/>
+                「どこで何ができるか」を一覧で確認しておきましょう。
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+              {/* 計画・予実管理 */}
+              <div className="bg-emerald-50 p-5 rounded-2xl border border-emerald-100 h-full">
+                <h3 className="font-bold text-lg text-emerald-800 border-b border-emerald-200 pb-2 mb-3">🌱 計画・予実管理</h3>
+                <ul className="space-y-2 text-sm text-emerald-900 leading-relaxed">
+                  <li><strong className="text-emerald-700">ダッシュボード:</strong> 農場全体の状況や利益サマリーを確認します。</li>
+                  <li><strong className="text-emerald-700">作付地図:</strong> 地図上で畑の状況を確認・新しい畑を登録できます。</li>
+                  <li><strong className="text-emerald-700">栽培・予実管理表:</strong> 栽培計画を作成し、利益分析を行います。</li>
+                  <li><strong className="text-emerald-700">育苗スケジュール:</strong> 種まきから定植までの苗のスケジュールを管理します。</li>
+                  <li><strong className="text-emerald-700">必要資材自動集計:</strong> 今後必要になる肥料や農薬の量を予測計算します。</li>
+                </ul>
+              </div>
+
+              {/* 売上・経費管理 */}
+              <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100 h-full">
+                <h3 className="font-bold text-lg text-blue-800 border-b border-blue-200 pb-2 mb-3">💰 売上・経費管理</h3>
+                <ul className="space-y-2 text-sm text-blue-900 leading-relaxed">
+                  <li><strong className="text-blue-700">出荷記録一覧:</strong> 過去の売上履歴の確認と編集を行います。</li>
+                  <li><strong className="text-blue-700">請求書一括発行:</strong> 取引先への請求書を自動作成します。</li>
+                  <li><strong className="text-blue-700">資材購入・直接経費:</strong> 現場でその都度発生した経費（買い物など）を入力します。</li>
+                  <li><strong className="text-blue-700">月次全体経費(按分用):</strong> 電気代など、全体にかかる月ごとの経費を入力します。</li>
+                  <li><strong className="text-blue-700">会計データ出力:</strong> 確定申告などに使うためのデータをダウンロードします。</li>
+                </ul>
+              </div>
+
+              {/* 作業履歴・記録 */}
+              <div className="bg-amber-50 p-5 rounded-2xl border border-amber-100 h-full">
+                <h3 className="font-bold text-lg text-amber-800 border-b border-amber-200 pb-2 mb-3">📝 作業履歴・記録</h3>
+                <ul className="space-y-2 text-sm text-amber-900 leading-relaxed">
+                  <li><strong className="text-amber-700">作業記録一覧:</strong> スマホから入力された記録の確認と修正を行います。</li>
+                  <li><strong className="text-amber-700">QRコード一覧:</strong> 現場でスキャンするためのQRコードを印刷できます。</li>
+                </ul>
+              </div>
+
+              {/* 各種設定 */}
+              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 h-full">
+                <h3 className="font-bold text-lg text-slate-800 border-b border-slate-200 pb-2 mb-3">⚙️ 各種設定</h3>
+                <ul className="space-y-2 text-sm text-slate-700 leading-relaxed">
+                  <li><strong className="text-slate-900">各種マスタ管理:</strong> 作物、作業者、資材などの基本データを登録・修正します。</li>
+                  <li><strong className="text-slate-900">出荷先・メール設定:</strong> 請求書を送る取引先やメールの設定を行います。</li>
+                  <li><strong className="text-slate-900">自社情報設定:</strong> 農場名や住所などの基本情報を設定します。</li>
+                </ul>
+              </div>
+            </div>
+            
+            <div className="flex justify-between pt-4 border-t border-slate-100 mt-8">
+              <button onClick={() => setActiveTab(6)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
               <button onClick={() => setActiveTab(1)} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-sm">
                 最初に戻る <RefreshCw className="w-5 h-5" />
               </button>
