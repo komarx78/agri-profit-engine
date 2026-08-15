@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { GoogleMap, useJsApiLoader, DrawingManager, Polygon, InfoWindow, StandaloneSearchBox } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, DrawingManager, Polygon, InfoWindow } from '@react-google-maps/api';
 import { supabase } from '@/lib/supabase';
-import { MapPin, Plus, Loader2, Save, X, Info } from 'lucide-react';
+import { MapPin, Plus, Loader2, Save, X, Info, Search } from 'lucide-react';
 
 const containerStyle = {
   width: '100%',
@@ -28,7 +28,7 @@ const polygonOptions = {
 };
 
 // Google Maps API で読み込むライブラリ（再レンダリング防止のため外出し）
-const libraries: ("drawing" | "geometry" | "places")[] = ["drawing", "geometry", "places"];
+const libraries: ("drawing" | "geometry")[] = ["drawing", "geometry"];
 
 export default function MapPage() {
   const [fields, setFields] = useState<any[]>([]);
@@ -55,24 +55,22 @@ export default function MapPage() {
     libraries: libraries
   });
 
-  // 住所検索ボックス用
-  const searchBoxRef = useRef<google.maps.places.SearchBox | null>(null);
+  // 住所検索用
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const onSearchBoxLoad = useCallback((ref: google.maps.places.SearchBox) => {
-    searchBoxRef.current = ref;
-  }, []);
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim() || !map || !window.google) return;
 
-  const onPlacesChanged = () => {
-    if (searchBoxRef.current && map) {
-      const places = searchBoxRef.current.getPlaces();
-      if (places && places.length > 0) {
-        const place = places[0];
-        if (place.geometry && place.geometry.location) {
-          map.panTo(place.geometry.location);
-          map.setZoom(17); // 検索後は少し拡大
-        }
+    const geocoder = new window.google.maps.Geocoder();
+    geocoder.geocode({ address: searchQuery }, (results, status) => {
+      if (status === 'OK' && results && results[0]) {
+        map.panTo(results[0].geometry.location);
+        map.setZoom(15);
+      } else {
+        alert('住所が見つかりませんでした。');
       }
-    }
+    });
   };
 
   useEffect(() => {
@@ -293,18 +291,24 @@ export default function MapPage() {
           
           {/* 住所・地名検索窓 */}
           {!isDrawingMode && (
-            <StandaloneSearchBox
-              onLoad={onSearchBoxLoad}
-              onPlacesChanged={onPlacesChanged}
+            <form 
+              onSubmit={handleSearch}
+              className="relative shadow-lg rounded-xl overflow-hidden bg-white border border-slate-200 flex items-center"
             >
-              <div className="relative shadow-lg rounded-xl overflow-hidden bg-white border border-slate-200">
-                <input
-                  type="text"
-                  placeholder="住所や地名で検索..."
-                  className="px-4 py-2 w-64 md:w-80 outline-none font-bold text-slate-700"
-                />
-              </div>
-            </StandaloneSearchBox>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="住所や地名で検索..."
+                className="px-4 py-2 w-48 md:w-64 outline-none font-bold text-slate-700"
+              />
+              <button 
+                type="submit"
+                className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border-l border-slate-200 text-slate-500 hover:text-emerald-600 transition-colors"
+              >
+                <Search className="w-5 h-5" />
+              </button>
+            </form>
           )}
         </div>
 
