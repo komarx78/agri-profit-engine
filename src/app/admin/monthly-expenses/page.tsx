@@ -263,7 +263,13 @@ export default function MonthlyExpensesPage() {
                   className="hover:bg-amber-50 cursor-pointer transition-colors group"
                   onClick={() => {
                     setSelectedMonth(row.month);
+                    setFormData({
+                      fuel: row.fuel.toString(),
+                      machinery: row.machinery.toString(),
+                      other: row.other.toString()
+                    });
                     window.scrollTo({ top: 0, behavior: 'smooth' });
+                    document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                   title={`${row.month} の経費を編集`}
                 >
@@ -278,7 +284,13 @@ export default function MonthlyExpensesPage() {
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedMonth(row.month);
+                        setFormData({
+                          fuel: row.fuel.toString(),
+                          machinery: row.machinery.toString(),
+                          other: row.other.toString()
+                        });
                         window.scrollTo({ top: 0, behavior: 'smooth' });
+                        document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
                       className="p-1 text-slate-400 group-hover:text-emerald-600 transition-colors"
                     >
