@@ -151,60 +151,80 @@ export default function ManualPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-              <div className="space-y-6">
-                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                  <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-2">
-                    <Sprout className="w-5 h-5 text-emerald-600" /> 1. 作目（育てる作物）を登録しよう
-                  </h3>
-                  <p className="text-slate-600 text-sm leading-relaxed mb-2">
-                    キャベツやトマトなど、育てる作物を登録します。<br/>
-                    <strong className="text-emerald-700">ポイント:</strong> 「10aあたりの概算経費（予算）」を設定しておくと、システムが自動で経費予測をしてくれます。
-                  </p>
-                </div>
-
-                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                  <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-2">
-                    <Map className="w-5 h-5 text-emerald-600" /> 2. 圃場（畑・ハウス）を登録しよう
-                  </h3>
-                  <p className="text-slate-600 text-sm leading-relaxed mb-3">
-                    持っている畑やビニールハウスを登録します。<br/>
-                    <strong className="text-emerald-700">ポイント:</strong> 面積（アール: a）を正確に入力してください。この面積をもとに、あとで経費が自動的に割り振られます。
-                  </p>
-                  <div className="p-3 bg-amber-50 rounded-xl text-xs text-amber-800 border border-amber-200">
-                    <strong className="flex items-center gap-1 mb-1"><AlertCircle className="w-4 h-4" /> TIPS（便利な小技）</strong>
-                    左メニューの「作付地図」画面から、地図上で直接ポリゴン（図形）を描いて、直感的に圃場を登録することもできます！
+            <div className="space-y-8">
+              
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div>
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2 mb-3">
+                      <Sprout className="w-6 h-6 text-emerald-600" /> 1. 作目（育てる作物）を登録しよう
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed mb-4">
+                      キャベツやトマトなど、育てる作物を登録します。<br/>
+                      <strong className="text-emerald-700">ポイント:</strong> 「10aあたりの概算経費（予算）」を設定しておくと、システムが自動で経費予測をしてくれます。
+                    </p>
+                  </div>
+                  <div>
+                    <ImagePlaceholder src="/manual/step1-1.png" alt="作目登録" filename="step1-1.png" />
                   </div>
                 </div>
+              </div>
 
-                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                  <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-2">
-                    <UserPlus className="w-5 h-5 text-emerald-600" /> 3. 作業者を登録しよう
-                  </h3>
-                  <p className="text-slate-600 text-sm leading-relaxed">
-                    一緒に働く従業員さんや、あなた自身を登録します。<br/>
-                    <strong className="text-emerald-700">ポイント:</strong> 「時給」や「現場で使う4桁のPINコード」を設定します。家族経営の場合でも、あなた自身の仮想時給を設定しておくと、正確な人件費が計算できます。
-                  </p>
-                </div>
-
-                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                  <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-2">
-                    <PackageOpen className="w-5 h-5 text-emerald-600" /> 4. 資材・農薬と販売価格を登録しよう
-                  </h3>
-                  <p className="text-slate-600 text-sm leading-relaxed">
-                    <strong>【資材・農薬】</strong> よく使う肥料や梱包材の「購入金額」を登録しておくと、現場で「1キロ使った」と入力するだけで自動計算されます。<br/>
-                    <strong>【販売価格】</strong> 出荷先ごと（JA、直売所など）の販売単価を登録しておくと、出荷記録を入力した際の売上が自動計算されます。
-                  </p>
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div>
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2 mb-3">
+                      <Map className="w-6 h-6 text-emerald-600" /> 2. 圃場（畑・ハウス）を登録しよう
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed mb-4">
+                      持っている畑やビニールハウスを登録します。<br/>
+                      <strong className="text-emerald-700">ポイント:</strong> 面積（アール: a）を正確に入力してください。この面積をもとに、あとで経費が自動的に割り振られます。
+                    </p>
+                    <div className="p-3 bg-amber-50 rounded-xl text-sm text-amber-800 border border-amber-200">
+                      <strong className="flex items-center gap-1 mb-1"><AlertCircle className="w-4 h-4" /> TIPS（便利な小技）</strong>
+                      左メニューの「作付地図」画面から、地図上で直接ポリゴン（図形）を描いて、直感的に圃場を登録することもできます！
+                    </div>
+                  </div>
+                  <div>
+                    <ImagePlaceholder src="/manual/step1-2.png" alt="圃場登録" filename="step1-2.png" />
+                  </div>
                 </div>
               </div>
-              <div className="sticky top-20">
-                <ImagePlaceholder 
-                  src="/manual/step1.png" 
-                  alt="各種マスタ管理画面" 
-                  filename="step1.png" 
-                />
-                <p className="text-xs text-slate-400 text-center mt-2">▲ 各種マスタ管理画面のイメージ</p>
+
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div>
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2 mb-3">
+                      <UserPlus className="w-6 h-6 text-emerald-600" /> 3. 作業者を登録しよう
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed mb-4">
+                      一緒に働く従業員さんや、あなた自身を登録します。<br/>
+                      <strong className="text-emerald-700">ポイント:</strong> 「時給」や「現場で使う4桁のPINコード」を設定します。家族経営の場合でも、あなた自身の仮想時給を設定しておくと、正確な人件費が計算できます。
+                    </p>
+                  </div>
+                  <div>
+                    <ImagePlaceholder src="/manual/step1-3.png" alt="作業者登録" filename="step1-3.png" />
+                  </div>
+                </div>
               </div>
+
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div>
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2 mb-3">
+                      <PackageOpen className="w-6 h-6 text-emerald-600" /> 4. 資材・農薬と販売価格を登録しよう
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed mb-4">
+                      <strong>【資材・農薬】</strong> よく使う肥料や梱包材の「購入金額」を登録しておくと、現場で「1キロ使った」と入力するだけで自動計算されます。<br/><br/>
+                      <strong>【販売価格】</strong> 出荷先ごと（JA、直売所など）の販売単価を登録しておくと、出荷記録を入力した際の売上が自動計算されます。
+                    </p>
+                  </div>
+                  <div>
+                    <ImagePlaceholder src="/manual/step1-4.png" alt="資材と販売価格" filename="step1-4.png" />
+                  </div>
+                </div>
+              </div>
+
             </div>
             
             <div className="flex justify-between pt-4 border-t border-slate-100">
