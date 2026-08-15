@@ -14,9 +14,8 @@ export default function ManualPage() {
           alt={alt}
           className="w-full h-auto object-cover"
           onError={(e) => {
-            // 画像が存在しない場合はダミー画像を表示
             const target = e.currentTarget;
-            target.onerror = null; // 無限ループ防止
+            target.onerror = null; 
             target.src = `https://placehold.co/800x450/f8fafc/94a3b8?text=Image+Not+Found%5CnPlease+save+[+${filename}+]+in+public/manual/`;
           }}
         />
@@ -45,12 +44,11 @@ export default function ManualPage() {
           ご利用スタートガイド
         </h1>
         <p className="text-slate-500 font-medium">
-          「どの畑で・どの作物を育てると・いくら儲かるのか」を正確に把握するための5つのステップです。<br className="hidden sm:block" />
-          パソコンやスマートフォンが苦手な方でも、この順番通りに進めれば簡単に使い始めることができます！
+          「どの畑で・どの作物を育てると・いくら儲かるのか」を正確に把握するためのステップです。<br className="hidden sm:block" />
+          パソコンやスマートフォンが苦手な方でも、この順序通りに進めれば簡単に使い始めることができます！
         </p>
       </div>
 
-      {/* ステップナビゲーション (モバイルでは横スクロール) */}
       <div className="flex overflow-x-auto pb-4 mb-6 hide-scrollbar gap-2 snap-x">
         {steps.map((step) => {
           const Icon = step.icon;
@@ -90,7 +88,7 @@ export default function ManualPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
               {/* 計画・予実管理 */}
               <div className="bg-emerald-50 p-5 rounded-2xl border border-emerald-100 h-full">
-                <h3 className="font-bold text-lg text-emerald-800 border-b border-emerald-200 pb-2 mb-3">📍 計画・予実管理</h3>
+                <h3 className="font-bold text-lg text-emerald-800 border-b border-emerald-200 pb-2 mb-3">🌱 計画・予実管理</h3>
                 <ul className="space-y-2 text-sm text-emerald-900 leading-relaxed">
                   <li><strong className="text-emerald-700">ダッシュボード:</strong> 農場全体の状況や利益サマリーを確認します。</li>
                   <li><strong className="text-emerald-700">作付地図:</strong> 地図上で畑の状況を確認・新しい畑を登録できます。</li>
@@ -114,10 +112,33 @@ export default function ManualPage() {
 
               {/* 作業履歴・記録 */}
               <div className="bg-amber-50 p-5 rounded-2xl border border-amber-100 h-full">
-                <h3 className="font-bold text-lg text-amber-800 border-b border-amber-200 pb-2 mb-3">📋 作業履歴・記録</h3>
+                <h3 className="font-bold text-lg text-amber-800 border-b border-amber-200 pb-2 mb-3">📝 作業履歴・記録</h3>
                 <ul className="space-y-2 text-sm text-amber-900 leading-relaxed">
                   <li><strong className="text-amber-700">作業記録一覧:</strong> スマホから入力された記録の確認と修正を行います。</li>
-            {/* === STEP 1: 作付地図で圃場登録 === */}
+                  <li><strong className="text-amber-700">QRコード一覧:</strong> 現場でスキャンするためのQRコードを印刷できます。</li>
+                </ul>
+              </div>
+
+              {/* 各種設定 */}
+              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 h-full">
+                <h3 className="font-bold text-lg text-slate-800 border-b border-slate-200 pb-2 mb-3">⚙️ 各種設定</h3>
+                <ul className="space-y-2 text-sm text-slate-700 leading-relaxed">
+                  <li><strong className="text-slate-900">各種マスタ管理:</strong> 作物、作業者、資材などの基本データを登録・修正します。</li>
+                  <li><strong className="text-slate-900">出荷先・メール設定:</strong> 請求書を送る取引先やメールの設定を行います。</li>
+                  <li><strong className="text-slate-900">自社情報設定:</strong> 農場名や住所などの基本情報を設定します。</li>
+                </ul>
+              </div>
+            </div>
+            
+            <div className="flex justify-end pt-4 border-t border-slate-100 mt-8">
+              <button onClick={() => setActiveTab(1)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
+                ステップ1に進む <ArrowRight className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* === STEP 1: 作付地図で圃場登録 === */}
         {activeTab === 1 && (
           <div className="space-y-8 animate-in fade-in duration-500">
             <div className="border-b border-slate-100 pb-6">
@@ -192,7 +213,6 @@ export default function ManualPage() {
             </div>
 
             <div className="space-y-8">
-              
               <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
                   <div>
@@ -243,64 +263,9 @@ export default function ManualPage() {
                   </div>
                 </div>
               </div>
-
             </div>
             
             <div className="flex justify-between pt-4 border-t border-slate-100 mt-8">
-              <button onClick={() => setActiveTab(1)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
-              <button onClick={() => setActiveTab(3)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
-                次のステップへ <ArrowRight className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        )}��の畑を地図上で囲むだけで、面積が自動計算されます！
-              </p>
-            </div>
-
-            <div className="space-y-8">
-              
-              <div className="bg-emerald-50 p-5 sm:p-8 rounded-3xl border border-emerald-100">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
-                  <div>
-                    <h3 className="font-bold text-xl text-emerald-900 flex items-center gap-2 mb-3">
-                      <MapPin className="w-6 h-6 text-emerald-600" /> 1. 地図を開いて畑を追加する
-                    </h3>
-                    <p className="text-emerald-800 leading-relaxed mb-4">
-                      左メニューの**「作付地図」**を開きます。<br/>
-                      左側には圃場の一覧、右側には航空写真が表示されます。<br/><br/>
-                      地図の左上にある <strong className="bg-white px-2 py-1 rounded border border-emerald-200">＋ 地図に畑を追加</strong> ボタンを押します。
-                    </p>
-                  </div>
-                  <div>
-                    <ImagePlaceholder src="/manual/step2-map1.png" alt="作付地図画面" filename="step2-map1.png" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
-                  <div>
-                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2 mb-3">
-                      <Pointer className="w-6 h-6 text-emerald-600" /> 2. 地図をクリックして畑を囲む
-                    </h3>
-                    <p className="text-slate-600 leading-relaxed mb-4">
-                      航空写真を見ながら、自分の畑の角（カド）を順番にポチポチとクリックしていきます。
-                    </p>
-                    <div className="p-3 bg-amber-50 rounded-xl text-sm text-amber-800 border border-amber-200">
-                      <strong className="flex items-center gap-1 mb-1"><CheckCircle2 className="w-4 h-4" /> 面積の自動計算！</strong>
-                      畑を囲んでいくと、右上に**「現在の面積: 〇〇 a」**と表示され、システムが自動で正確な面積を計算してくれます。メジャーで測る必要はありません！
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <ImagePlaceholder src="/manual/step2-map2.png" alt="描画ボタン" filename="step2-map2.png" />
-                    <ImagePlaceholder src="/manual/step2-map3.png" alt="描画中の画面" filename="step2-map3.png" />
-                  </div>
-                </div>
-              </div>
-
-            </div>
-            
-            <div className="flex justify-between pt-4 border-t border-slate-100">
               <button onClick={() => setActiveTab(1)} className="text-slate-500 font-bold px-4 py-2 hover:bg-slate-50 rounded-lg transition-colors">戻る</button>
               <button onClick={() => setActiveTab(3)} className="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-700 transition-colors">
                 次のステップへ <ArrowRight className="w-5 h-5" />
@@ -334,7 +299,7 @@ export default function ManualPage() {
                   </ol>
                   <div className="mt-4 p-3 bg-white rounded-xl text-sm text-slate-600 border border-emerald-100 shadow-sm mb-3">
                     <strong className="text-amber-600 flex items-center gap-1 mb-1"><CheckCircle2 className="w-4 h-4" /> ここが便利！</strong>
-                    これだけで、ステップ1で登録したデータをもとに、「売上の目標」や「かかるであろう経費の予算」が自動で計算され、グラフが完成します！
+                    これだけで、ステップで登録したデータをもとに、「売上の目標」や「かかるであろう経費の予算」が自動で計算され、グラフが完成します！
                   </div>
                   <div className="p-3 bg-amber-50 rounded-xl text-xs text-amber-800 border border-amber-200">
                     <strong className="flex items-center gap-1 mb-1"><AlertCircle className="w-4 h-4" /> TIPS（便利な小技）</strong>
@@ -377,8 +342,8 @@ export default function ManualPage() {
                     <Smartphone className="w-5 h-5 text-emerald-600" /> 1. 従業員用画面を開く
                   </h3>
                   <p className="text-slate-600 text-sm leading-relaxed">
-                    管理者の画面左下にある「従業員URLコピー」を押して、LINEなどで従業員のスマホに送って開いてもらいます。<br/>
-                    自分の名前を選び、ステップ1で決めた **「4桁のPINコード」** を入力してログインします。
+                    管理者用画面左下にある「従業員URLコピー」を押して、LINEなどで従業員のスマホに送って開いてもらいます。<br/>
+                    自分の名前を選び、ステップで決めた **「4桁のPINコード」** を入力してログインします。
                   </p>
                 </div>
 
@@ -387,12 +352,12 @@ export default function ManualPage() {
                     <ClipboardList className="w-5 h-5 text-emerald-600" /> 2. 作業や収穫を記録する
                   </h3>
                   <p className="text-slate-600 text-sm leading-relaxed mb-3">
-                    <strong>【作業記録】</strong> 「どの畑で」「何分間」「どんな作業をしたか」を記録します。肥料や農薬を使った場合は「何キロ使ったか」も入力します。<br/>
+                    <strong>【作業記録】</strong> 「どの畑で」「何時間」「どんな作業をしたか」を記録します。肥料や農薬を使った場合は「何キロ使ったか」も入力します。<br/>
                     <strong>【出荷記録】</strong> 野菜が採れて出荷したら「いくつ出荷したか」「いくらで売れたか」を入力します。
                   </p>
                   <div className="p-3 bg-amber-50 rounded-xl text-sm text-amber-800 border border-amber-200">
                     <strong className="flex items-center gap-1 mb-1"><AlertCircle className="w-4 h-4" /> なぜ記録するの？</strong>
-                    これを毎日続けることで、システムが自動的に「いま、この畑は儲かっているか？ 人件費がかかりすぎていないか？」を正確に計算し続けてくれます。
+                    これを毎日続けることで、システムが自動的に「いま、この畑は儲かっているか？人件費がかかりすぎていないか？」を正確に計算し続けてくれます。
                   </div>
                 </div>
               </div>
@@ -495,7 +460,7 @@ export default function ManualPage() {
 
                 <div className="p-5 bg-amber-50 rounded-2xl border border-amber-200 shadow-sm">
                   <h3 className="font-bold text-lg text-amber-800 mb-2 flex items-center gap-2">
-                    🎯 次の計画に活かす
+                    💡 次の計画に活かす
                   </h3>
                   <p className="text-sm text-amber-800 leading-relaxed">
                     「Aの畑のキャベツは儲かったけど、Bの畑のトマトは人件費がかかりすぎて赤字だった」といったことがデータとしてハッキリわかります。<br/><br/>
@@ -520,7 +485,6 @@ export default function ManualPage() {
             </div>
           </div>
         )}
-
       </div>
     </div>
   );
