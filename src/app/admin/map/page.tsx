@@ -392,14 +392,13 @@ export default function MapPage() {
       setInfoWindowPos({ lat: e.latLng.lat(), lng: e.latLng.lng() });
     }
 
-    // 実際のデータを取得（今年度の作付計画と作業履歴）
+    // 実際のデータを取得（最新の作付計画と作業履歴）
     try {
-      const currentYear = new Date().getFullYear();
       const { data: plansData } = await supabase
         .from('cultivation_plans_v2')
         .select(`*, crops(name)`)
         .eq('field_id', field.id)
-        .eq('year', currentYear)
+        .order('year', { ascending: false })
         .order('start_month', { ascending: false })
         .limit(1);
 
@@ -408,15 +407,17 @@ export default function MapPage() {
       
       if (plansData && plansData.length > 0) {
         latestPlan = plansData[0];
-        const { data: worksData } = await supabase
-          .from('work_logs')
-          .select(`*`)
-          .eq('plan_id', latestPlan.id)
-          .order('work_date', { ascending: false })
-          .limit(2); // ポップアップ用なので2件だけ
-          
-        if (worksData) works = worksData;
       }
+
+      // 計画の有無に関わらず、この圃場に紐づく作業履歴を取得
+      const { data: worksData } = await supabase
+        .from('work_logs')
+        .select(`*`)
+        .or(latestPlan ? `plan_id.eq.${latestPlan.id},field_id.eq.${field.id}` : `field_id.eq.${field.id}`)
+        .order('work_date', { ascending: false })
+        .limit(2); // ポップアップ用なので2件だけ
+        
+      if (worksData) works = worksData;
       
       setSelectedFieldDetails({ plan: latestPlan, works });
     } catch (err) {

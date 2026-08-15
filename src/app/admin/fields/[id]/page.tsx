@@ -56,13 +56,12 @@ export default function FieldDetailPage() {
 
       setField({ ...data, path });
 
-      // 現在の作付（今年度の計画）を取得
-      const currentYear = new Date().getFullYear();
+      // 最新の作付計画を取得
       const { data: plansData } = await supabase
         .from('cultivation_plans_v2')
         .select(`*, crops(name)`)
         .eq('field_id', fieldId)
-        .eq('year', currentYear)
+        .order('year', { ascending: false })
         .order('start_month', { ascending: false })
         .limit(1);
 
@@ -73,17 +72,15 @@ export default function FieldDetailPage() {
       }
 
       // 最近の作業履歴を取得
-      if (latestPlan) {
-        const { data: worksData } = await supabase
-          .from('work_logs')
-          .select(`*`)
-          .eq('plan_id', latestPlan.id)
-          .order('work_date', { ascending: false })
-          .limit(5);
-          
-        if (worksData) {
-          setRecentWorks(worksData);
-        }
+      const { data: worksData } = await supabase
+        .from('work_logs')
+        .select(`*`)
+        .or(latestPlan ? `plan_id.eq.${latestPlan.id},field_id.eq.${fieldId}` : `field_id.eq.${fieldId}`)
+        .order('work_date', { ascending: false })
+        .limit(5);
+        
+      if (worksData) {
+        setRecentWorks(worksData);
       }
 
     } catch (err) {
