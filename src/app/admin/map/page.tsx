@@ -318,8 +318,8 @@ export default function MapPage() {
           zoom={14}
           onLoad={onLoad}
           onUnmount={onUnmount}
-          mapTypeId="hybrid"
           options={{
+            mapTypeId: 'hybrid', // デフォルトを航空写真+ラベルに固定
             disableDefaultUI: false,
             mapTypeControl: true,
             streetViewControl: false,
