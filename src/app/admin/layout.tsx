@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Database, LogOut, Sprout, History, Menu, FileSpreadsheet, Truck, FileText, Settings, Store, Copy, Check, Table, Target, Receipt, Video, Calendar, Calculator } from 'lucide-react';
+import { LayoutDashboard, Database, LogOut, Sprout, History, Menu, FileSpreadsheet, Truck, FileText, Settings, Store, Copy, Check, Table, Target, Receipt, Video, Calendar, Calculator, MapPin } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 
 export default function AdminLayout({
