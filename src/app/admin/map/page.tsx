@@ -34,6 +34,10 @@ export default function MapPage() {
   const [fields, setFields] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
+  // 地図の位置とズーム
+  const [center, setCenter] = useState(defaultCenter);
+  const [zoom, setZoom] = useState(14);
+  
   // 地図インスタンス
   const [map, setMap] = useState<google.maps.Map | null>(null);
 
@@ -74,6 +78,18 @@ export default function MapPage() {
   };
 
   useEffect(() => {
+    // 保存されている前回の地図位置を復元
+    const savedLat = localStorage.getItem('agri_map_lat');
+    const savedLng = localStorage.getItem('agri_map_lng');
+    const savedZoom = localStorage.getItem('agri_map_zoom');
+    
+    if (savedLat && savedLng) {
+      setCenter({ lat: parseFloat(savedLat), lng: parseFloat(savedLng) });
+    }
+    if (savedZoom) {
+      setZoom(parseInt(savedZoom, 10));
+    }
+
     fetchFieldsData();
   }, []);
 
@@ -116,20 +132,23 @@ export default function MapPage() {
 
       setFields(mappedFields);
 
-      // 取得したポリゴンがあれば、最初のポリゴンに合わせて地図をズームする
+      // 取得したポリゴンがあり、かつ「前回の保存位置」がない場合のみ自動ズーム
       if (mappedFields.length > 0 && map) {
-        const bounds = new window.google.maps.LatLngBounds();
-        let hasPoints = false;
-        mappedFields.forEach(f => {
-          if (f.path && f.path.length > 0) {
-            f.path.forEach((p: any) => {
-              bounds.extend(new window.google.maps.LatLng(p.lat, p.lng));
-              hasPoints = true;
-            });
+        const hasSavedPos = localStorage.getItem('agri_map_lat');
+        if (!hasSavedPos) {
+          const bounds = new window.google.maps.LatLngBounds();
+          let hasPoints = false;
+          mappedFields.forEach(f => {
+            if (f.path && f.path.length > 0) {
+              f.path.forEach((p: any) => {
+                bounds.extend(new window.google.maps.LatLng(p.lat, p.lng));
+                hasPoints = true;
+              });
+            }
+          });
+          if (hasPoints) {
+            map.fitBounds(bounds);
           }
-        });
-        if (hasPoints) {
-          map.fitBounds(bounds);
         }
       }
 
@@ -147,6 +166,22 @@ export default function MapPage() {
   const onUnmount = useCallback(function callback() {
     setMap(null);
   }, []);
+
+  // 地図の移動やズームが終わったタイミングで位置を保存
+  const handleMapIdle = useCallback(() => {
+    if (map) {
+      const newCenter = map.getCenter();
+      const newZoom = map.getZoom();
+      
+      if (newCenter) {
+        localStorage.setItem('agri_map_lat', newCenter.lat().toString());
+        localStorage.setItem('agri_map_lng', newCenter.lng().toString());
+      }
+      if (newZoom) {
+        localStorage.setItem('agri_map_zoom', newZoom.toString());
+      }
+    }
+  }, [map]);
 
   // 新しいポリゴンが描き終わったときの処理
   const onPolygonComplete = (polygon: google.maps.Polygon) => {
@@ -314,10 +349,11 @@ export default function MapPage() {
 
         <GoogleMap
           mapContainerStyle={containerStyle}
-          center={defaultCenter}
-          zoom={14}
+          center={center}
+          zoom={zoom}
           onLoad={onLoad}
           onUnmount={onUnmount}
+          onIdle={handleMapIdle}
           options={{
             mapTypeId: 'hybrid', // デフォルトを航空写真+ラベルに固定
             disableDefaultUI: false,
