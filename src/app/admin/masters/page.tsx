@@ -511,6 +511,7 @@ export default function MastersPage() {
                     <div>
                       <span className="font-bold text-slate-700">{f.name}</span>
                       {f.area_size && <span className="text-[10px] text-slate-500 ml-2 font-bold">{f.area_size}a</span>}
+                      {f.polygon_coordinates && <span className="text-[10px] bg-emerald-100 text-emerald-700 ml-2 px-1.5 py-0.5 rounded font-bold border border-emerald-200">マップ連携済</span>}
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => handleOpenModal('fields', f)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">

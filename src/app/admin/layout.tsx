@@ -46,6 +46,7 @@ export default function AdminLayout({
       title: '計画・予実管理',
       items: [
         { name: 'ダッシュボード', path: '/admin/dashboard', icon: LayoutDashboard },
+        { name: '作付地図', path: '/admin/map', icon: MapPin },
         { name: '栽培・予実管理表', path: '/admin/cultivation-schedule', icon: Calendar },
         { name: '育苗スケジュール', path: '/admin/nursery-schedule', icon: Table },
         { name: '必要資材自動集計', path: '/admin/material-requirements', icon: Calculator },
