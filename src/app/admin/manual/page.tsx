@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { BookOpen, UserPlus, Map, PackageOpen, Sprout, ClipboardList, Smartphone, Receipt, TrendingUp, AlertCircle, ArrowRight, CheckCircle2, RefreshCw, LayoutDashboard, MapPin, Pointer, Banknote } from 'lucide-react';
+import { BookOpen, UserPlus, Map, PackageOpen, Sprout, ClipboardList, Smartphone, Receipt, TrendingUp, AlertCircle, ArrowRight, CheckCircle2, RefreshCw, LayoutDashboard, MapPin, Pointer, Banknote, FileSpreadsheet, Sparkles } from 'lucide-react';
 
 export default function ManualPage() {
   const [activeTab, setActiveTab] = useState<number>(1);
@@ -205,13 +205,65 @@ export default function ManualPage() {
                     <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2 mb-3">
                       <Banknote className="w-6 h-6 text-emerald-600" /> 4. 販売価格を登録しよう
                     </h3>
-                    <p className="text-slate-600 leading-relaxed mb-4">
+                    <p className="text-slate-600 leading-relaxed mb-3">
                       出荷先ごと（JA、直売所、各スーパーなど）の作目ごとの販売単価を設定します。<br/>
-                      <strong className="text-emerald-700">ポイント:</strong> 出荷記録を入力した際に売上が自動計算されます。「既存の販路から価格設定を一括コピー」を使えば、新しい出荷先の単価設定も一瞬で完了します。
+                      出荷記録を入力した際に売上金額が自動計算されるようになります。
                     </p>
+                    <div className="space-y-2 bg-white p-4 rounded-2xl border border-slate-200 text-sm mb-2 shadow-sm">
+                      <div className="text-xs font-bold text-emerald-800 flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5" /> 便利な機能
+                      </div>
+                      <ul className="space-y-1.5 text-xs text-slate-600 list-disc ml-4">
+                        <li>
+                          <strong className="text-slate-700">「作目別」「販路別」の切り替え:</strong> 右上のボタンで、作物ごとに各出荷先の単価を見比べる「作目別」と、出荷先ごとに納品商品の一覧を見る「販路別」をいつでも切り替えられます。
+                        </li>
+                        <li>
+                          <strong className="text-slate-700">「販路から一括コピー」:</strong> 新しい出荷先が増えた際も、既存の価格設定を丸ごとコピーして一瞬で設定できます。
+                        </li>
+                      </ul>
+                    </div>
                   </div>
                   <div>
                     <ImagePlaceholder src="/manual/step2-4.png" alt="販売価格登録" filename="step2-4.png" />
+                  </div>
+                </div>
+              </div>
+
+              {/* CSV一括登録の解説 */}
+              <div className="bg-emerald-50/50 p-5 sm:p-8 rounded-3xl border-2 border-dashed border-emerald-200">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 text-white text-xs font-black rounded-full mb-3">
+                      <Sparkles className="w-3.5 h-3.5" /> 応用・時短テクニック
+                    </div>
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2 mb-3">
+                      <FileSpreadsheet className="w-6 h-6 text-emerald-600" /> データが多い時は「CSV一括追加」が便利！
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed mb-4 text-sm">
+                      登録する作目・圃場・資材・販売単価がたくさんある場合は、Excel等を使ってまとめて一気に登録することができます。
+                    </p>
+
+                    <div className="space-y-2.5 bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm text-sm">
+                      <div className="flex items-start gap-2.5 text-slate-700">
+                        <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">1</span>
+                        <span>各カードの下にある <strong>「雛形DL」</strong> を押して、入力用テンプレート（CSV）をダウンロードします。</span>
+                      </div>
+                      <div className="flex items-start gap-2.5 text-slate-700">
+                        <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">2</span>
+                        <span>ダウンロードしたファイルをExcelで開き、資材名や単価などを入力して保存します。</span>
+                      </div>
+                      <div className="flex items-start gap-2.5 text-slate-700">
+                        <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">3</span>
+                        <span><strong>「CSVで一括追加」</strong> を押してファイルを選択するだけで、一瞬で登録完了です！</span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-slate-500 mt-3 leading-relaxed">
+                      ※ <strong>「データDL」</strong> を押すと、現在登録されているデータをいつでもExcel形式（CSV）でパソコンに保存・バックアップできます。
+                    </p>
+                  </div>
+                  <div>
+                    <ImagePlaceholder src="/manual/step2-csv.png" alt="CSV一括追加とデータダウンロード" filename="step2-csv.png" />
                   </div>
                 </div>
               </div>
