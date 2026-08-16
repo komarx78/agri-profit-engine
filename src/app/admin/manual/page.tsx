@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { BookOpen, UserPlus, Map, PackageOpen, Sprout, ClipboardList, Smartphone, Receipt, TrendingUp, AlertCircle, ArrowRight, CheckCircle2, RefreshCw, LayoutDashboard, MapPin, Pointer, Banknote, FileSpreadsheet, Sparkles, Globe, Camera, Video, Play } from 'lucide-react';
+import { BookOpen, UserPlus, Map, PackageOpen, Sprout, ClipboardList, Smartphone, Receipt, TrendingUp, AlertCircle, ArrowRight, CheckCircle2, RefreshCw, LayoutDashboard, MapPin, Pointer, Banknote, FileSpreadsheet, Sparkles, Globe, Camera, Video, Play, Store, FileText, Calculator, Database } from 'lucide-react';
 
 export default function ManualPage() {
   const [activeTab, setActiveTab] = useState<number>(1);
