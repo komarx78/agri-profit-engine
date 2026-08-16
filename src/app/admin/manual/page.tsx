@@ -343,12 +343,22 @@ export default function ManualPage() {
               <div className="space-y-6">
                 <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
                   <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-2">
-                    <Smartphone className="w-5 h-5 text-emerald-600" /> 1. 従業員用画面を開く
+                    <Smartphone className="w-5 h-5 text-emerald-600" /> 1. 現場用（従業員用）画面を開く
                   </h3>
-                  <p className="text-slate-600 text-sm leading-relaxed">
-                    管理者用画面左下にある「従業員URLコピー」を押して、LINEなどで従業員のスマホに送って開いてもらいます。<br/>
-                    自分の名前を選び、ステップで決めた **「4桁のPINコード」** を入力してログインします。
-                  </p>
+                  <div className="text-slate-600 text-sm leading-relaxed space-y-2">
+                    <p>
+                      管理者画面の左下にある <strong>「現場URL（作業者用）」</strong> のコピーボタンを押して、LINEなどで従業員さんやご自身のスマートフォンにURLを送って開きます。
+                    </p>
+                    <div className="bg-white p-3 rounded-xl border border-slate-200 text-xs text-slate-700 space-y-1">
+                      <strong className="text-emerald-700 font-bold flex items-center gap-1">
+                        <UserPlus className="w-3.5 h-3.5" /> ログインの手順
+                      </strong>
+                      <p>
+                        ① 画面に表示される作業者一覧から <strong>「自分の名前」</strong> を選択します。<br/>
+                        ② 【ステップ2】の「2. 作業者を登録しよう」で設定した <strong>「4桁のPINコード（暗証番号）」</strong> を入力してログインします。
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
@@ -367,11 +377,11 @@ export default function ManualPage() {
               </div>
               <div className="sticky top-20 flex gap-4">
                 <div className="flex-1">
-                  <ImagePlaceholder src="/manual/step3-1.png" alt="スマホログイン画面" filename="step3-1.png" />
+                  <ImagePlaceholder src="/manual/step4-1.png" alt="スマホログイン画面" filename="step4-1.png" />
                   <p className="text-xs text-slate-400 text-center mt-2">ログイン画面</p>
                 </div>
                 <div className="flex-1">
-                  <ImagePlaceholder src="/manual/step3-2.png" alt="スマホ入力画面" filename="step3-2.png" />
+                  <ImagePlaceholder src="/manual/step4-2.png" alt="スマホ入力画面" filename="step4-2.png" />
                   <p className="text-xs text-slate-400 text-center mt-2">入力画面</p>
                 </div>
               </div>
@@ -403,7 +413,7 @@ export default function ManualPage() {
                     <Receipt className="w-5 h-5 text-emerald-600" /> 対象月を選んで金額を入力
                   </h3>
                   <p className="text-slate-600 text-sm leading-relaxed mb-4">
-                    左メニューの **「月次全体経費の入力」** をクリックします。<br/>
+                    左メニューの **「月次全体経費(按分用)」** をクリックします。<br/>
                     該当する月の「動力光熱費」「機械・車両費」「その他経費」の合計金額を入力して保存します。
                   </p>
                   
@@ -420,9 +430,9 @@ export default function ManualPage() {
               </div>
               <div className="sticky top-20">
                 <ImagePlaceholder 
-                  src="/manual/step4.png" 
+                  src="/manual/step5.png" 
                   alt="月次経費入力画面" 
-                  filename="step4.png" 
+                  filename="step5.png" 
                 />
               </div>
             </div>
@@ -474,9 +484,9 @@ export default function ManualPage() {
               </div>
               <div className="sticky top-20">
                 <ImagePlaceholder 
-                  src="/manual/step5.png" 
+                  src="/manual/step6.png" 
                   alt="分析画面" 
-                  filename="step5.png" 
+                  filename="step6.png" 
                 />
               </div>
             </div>
