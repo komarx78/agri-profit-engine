@@ -293,29 +293,29 @@ export default function ManualPage() {
               <div className="space-y-6">
                 <div className="bg-emerald-50 p-5 rounded-2xl border border-emerald-100">
                   <h3 className="font-bold text-lg text-emerald-800 flex items-center gap-2 mb-3">
-                    <ClipboardList className="w-5 h-5" /> 新しい計画を作成する
+                    <ClipboardList className="w-5 h-5" /> 栽培計画を作成する手順
                   </h3>
-                  <ol className="list-decimal ml-5 space-y-3 text-slate-700 font-medium">
-                    <li>画面右上の <strong className="text-emerald-700">「新規計画を作成」</strong> ボタンを押します。</li>
-                    <li>「どの畑で」育てるかを選びます。</li>
-                    <li>「どの作物を」育てるかを選びます。</li>
-                    <li>「いつからいつまで」育てるのかを選んで保存します。</li>
+                  <ol className="list-decimal ml-5 space-y-3 text-slate-700 font-medium text-sm leading-relaxed">
+                    <li>カレンダー表の中から、計画を立てたい <strong>「畑（圃場）」</strong> と <strong>「開始月」</strong> のマス目にカーソルを合わせます。</li>
+                    <li>マス目に表示される <strong className="text-blue-600">「＋」マーク（またはマス目全体）</strong> をクリックします。</li>
+                    <li><strong>「育てる作物（作目）」</strong> と <strong>「終了月」</strong> を選択して「保存する」を押します。</li>
                   </ol>
-                  <div className="mt-4 p-3 bg-white rounded-xl text-sm text-slate-600 border border-emerald-100 shadow-sm mb-3">
-                    <strong className="text-amber-600 flex items-center gap-1 mb-1"><CheckCircle2 className="w-4 h-4" /> ここが便利！</strong>
-                    これだけで、ステップで登録したデータをもとに、「売上の目標」や「かかるであろう経費の予算」が自動で計算され、グラフが完成します！
+                  <div className="mt-4 p-3.5 bg-white rounded-xl text-xs text-slate-600 border border-emerald-100 shadow-sm space-y-1">
+                    <strong className="text-amber-600 flex items-center gap-1 mb-1 font-bold"><CheckCircle2 className="w-4 h-4" /> ここが便利！</strong>
+                    <p>保存するだけで、圃場の面積と作物の基準値から <strong>「必要苗数」「資材の予算」「売上目標」</strong> が自動計算され、カレンダー上に計画バーが表示されます。</p>
                   </div>
-                  <div className="p-3 bg-amber-50 rounded-xl text-xs text-amber-800 border border-amber-200">
-                    <strong className="flex items-center gap-1 mb-1"><AlertCircle className="w-4 h-4" /> TIPS（便利な小技）</strong>
-                    作付地図画面で、マップ上の「畑」をクリックして、そこから直接計画を作成することも可能です。
+                  <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-800 border border-blue-200 mt-3 space-y-1">
+                    <strong className="flex items-center gap-1 font-bold"><AlertCircle className="w-4 h-4" /> TIPS（便利な小技）</strong>
+                    <p>・<strong>作付地図からの作成:</strong> 「作付地図」画面で、マップ上の畑をクリックしてそこから直接計画を立てることもできます。</p>
+                    <p>・<strong>詳細・予実の確認:</strong> カレンダー上の計画バーをクリックすると、作業実績や売上、詳細な予実分析グラフを確認・入力できます。</p>
                   </div>
                 </div>
               </div>
               <div className="sticky top-20">
                 <ImagePlaceholder 
-                  src="/manual/step2.png" 
+                  src="/manual/step3.png" 
                   alt="栽培計画作成画面" 
-                  filename="step2.png" 
+                  filename="step3.png" 
                 />
               </div>
             </div>
