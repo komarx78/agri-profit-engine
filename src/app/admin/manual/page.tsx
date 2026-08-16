@@ -249,33 +249,50 @@ export default function ManualPage() {
                       <FileSpreadsheet className="w-6 h-6 text-emerald-600" /> データが多い時は「CSV一括追加」が便利！
                     </h3>
                     <p className="text-slate-600 leading-relaxed mb-4 text-sm">
-                      登録する作目・圃場・資材・販売単価がたくさんある場合は、Excel等を使ってまとめて一気に登録することができます。
+                      数十件の資材や農薬、販売価格がある場合、一つずつ入力するのは大変です。
+                      そんな時は、一覧画面右上にある <strong>「CSV一括追加」</strong> を使いましょう。
                     </p>
-
-                    <div className="space-y-2.5 bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm text-sm">
-                      <div className="flex items-start gap-2.5 text-slate-700">
-                        <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">1</span>
-                        <span>各カードの下にある <strong>「雛形DL」</strong> を押して、入力用テンプレート（CSV）をダウンロードします。</span>
-                      </div>
-                      <div className="flex items-start gap-2.5 text-slate-700">
-                        <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">2</span>
-                        <span>ダウンロードしたファイルをExcelで開き、資材名や単価などを入力して保存します。</span>
-                      </div>
-                      <div className="flex items-start gap-2.5 text-slate-700">
-                        <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">3</span>
-                        <span><strong>「CSVで一括追加」</strong> を押してファイルを選択するだけで、一瞬で登録完了です！</span>
-                      </div>
+                    <div className="bg-white p-4 rounded-2xl border border-emerald-100 text-xs text-slate-700 shadow-sm space-y-2">
+                      <div className="font-bold text-emerald-800 border-b border-slate-100 pb-2">CSV一括追加の手順</div>
+                      <ol className="list-decimal ml-4 space-y-1.5 text-slate-600">
+                        <li>「現在のデータをDL」ボタンからテンプレート（CSVファイル）をダウンロード</li>
+                        <li>Excelなどで開き、商品名や価格を一気にコピー＆ペーストで入力して保存</li>
+                        <li>「CSV一括追加」から保存したファイルを選択してアップロード</li>
+                      </ol>
                     </div>
-
-                    <p className="text-xs text-slate-500 mt-3 leading-relaxed">
-                      ※ <strong>「データDL」</strong> を押すと、現在登録されているデータをいつでもExcel形式（CSV）でパソコンに保存・バックアップできます。
-                    </p>
                   </div>
                   <div>
-                    <ImagePlaceholder src="/manual/step2-csv.png" alt="CSV一括追加とデータダウンロード" filename="step2-csv.png" />
+                    <ImagePlaceholder src="/manual/step2-csv.png" alt="CSV一括追加機能" filename="step2-csv.png" />
                   </div>
                 </div>
               </div>
+
+              {/* 5. 出荷先・メール設定と自社情報設定 */}
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div>
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2 mb-3">
+                      <Store className="w-6 h-6 text-emerald-600" /> 5. 出荷先・メール設定と自社情報設定
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed mb-3">
+                      月末の「請求書一括発行」に必要な準備を行います。<br/>
+                      左メニューの <strong>「自社情報設定」</strong> にて、自社のインボイス番号や振込先口座を登録します。
+                    </p>
+                    <div className="space-y-2 bg-white p-4 rounded-2xl border border-slate-200 text-sm mb-2 shadow-sm">
+                      <div className="text-xs font-bold text-blue-800 flex items-center gap-1">
+                        <Store className="w-3.5 h-3.5" /> 出荷先・メール設定
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        左メニューの <strong>「出荷先・メール設定」</strong> から、各出荷先（取引先）の「請求書の宛名」や「送付先メールアドレス」を登録します。ここで設定しておくと、後から請求書をボタン1つでメール送信できるようになります。
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <ImagePlaceholder src="/manual/step2-5.png" alt="出荷先メール設定" filename="step2-5.png" />
+                  </div>
+                </div>
+              </div>
+
             </div>
             
             <div className="flex justify-between pt-4 border-t border-slate-100 mt-8">
@@ -497,6 +514,65 @@ export default function ManualPage() {
                   </div>
                 </div>
               </div>
+
+              {/* 5. 出荷・売上を記録する */}
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div className="space-y-4">
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
+                      <PackageOpen className="w-6 h-6 text-emerald-600" /> 5. 出荷・売上を記録する
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed text-sm">
+                      野菜が採れて出荷したら、スマホの <strong>「出荷記録」</strong> モードから「いくつ出荷したか」「いくらで売れたか」を入力します。
+                    </p>
+                    
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 text-xs text-slate-700 space-y-2.5 shadow-sm">
+                      <div className="flex items-center gap-1.5 text-emerald-700 font-bold text-sm">
+                        <Banknote className="w-4 h-4 text-emerald-600" /> 売上の自動計算とマスタ連携
+                      </div>
+                      <ul className="space-y-1.5 list-disc ml-4 text-slate-600">
+                        <li>
+                          <strong>販売価格の自動連携:</strong> 【ステップ2】で登録した「販売価格・出荷規格マスタ」から、単価が自動で入力されます。
+                        </li>
+                        <li>
+                          <strong>利益の見える化:</strong> 日々の出荷記録をつけるだけで、システムが自動的に <strong>「この畑でいくら儲かったか？」</strong> <strong>「実質時給はいくらか？」</strong> を計算・分析してくれます！
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div>
+                    <ImagePlaceholder src="/manual/step4-5.png" alt="スマホ出荷記録画面" filename="step4-5.png" />
+                  </div>
+                </div>
+              </div>
+
+              {/* 6. 資材購入・直接経費を記録する */}
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div className="space-y-4">
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
+                      <Receipt className="w-6 h-6 text-emerald-600" /> 6. 【管理者】資材購入・直接経費を記録する
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed text-sm">
+                      種、肥料、農薬、梱包資材などを購入した際、または畑ごとの地代家賃などが発生した際に、管理者画面の <strong>「資材購入・直接経費」</strong> から入力します。
+                    </p>
+                    
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 text-xs text-slate-700 space-y-2.5 shadow-sm">
+                      <div className="flex items-center gap-1.5 text-emerald-700 font-bold text-sm">
+                        <Banknote className="w-4 h-4 text-emerald-600" /> 利益計算に直結
+                      </div>
+                      <p className="text-slate-600 leading-relaxed">
+                        ここで入力した経費は、対象となる畑（または全体）の原価として即座に計上されます。これにより、どの畑にどれだけの直接コストがかかっているかが正確に見える化されます。
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <ImagePlaceholder src="/manual/step4-6.png" alt="資材購入・直接経費入力画面" filename="step4-6.png" />
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-between pt-4 border-t border-slate-100 mt-8">
@@ -512,41 +588,91 @@ export default function ManualPage() {
         {activeTab === 5 && (
           <div className="space-y-8">
             <div className="border-b border-slate-100 pb-6">
-              <h2 className="text-2xl font-black text-slate-800 mb-2">【ステップ5】 月に1回の経費入力</h2>
+              <h2 className="text-2xl font-black text-slate-800 mb-2">【ステップ5】 月末・決算の経理作業</h2>
               <p className="text-slate-600 text-lg">
-                請求書が届いたら入力します。電気代、ハウスの燃料代、トラクターのガソリン代など、「農場全体にかかったお金」を月に1回入力します。
+                月末の請求書発行や、月に1回の経費入力、そして決算時の会計データ出力を行います。
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-              <div className="space-y-6">
-                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                  <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-3">
-                    <Receipt className="w-5 h-5 text-emerald-600" /> 対象月を選んで金額を入力
-                  </h3>
-                  <p className="text-slate-600 text-sm leading-relaxed mb-4">
-                    左メニューの **「月次全体経費(按分用)」** をクリックします。<br/>
-                    該当する月の「動力光熱費」「機械・車両費」「その他経費」の合計金額を入力して保存します。
-                  </p>
-                  
-                  <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100">
-                    <h4 className="font-black text-emerald-800 flex items-center gap-2 mb-2">
-                      ✨ 魔法の自動計算システム
-                    </h4>
-                    <p className="text-sm text-emerald-700 leading-relaxed">
-                      ここに金額を入力すると、システムが自動的に「いま稼働している畑の面積」に合わせて、<strong>経費をそれぞれの畑のレポートに公平に割り振ってくれます。</strong><br/>
-                      あなたが面倒な電卓叩きをする必要はありません！
+            <div className="space-y-8">
+              {/* 1. 請求書一括発行 */}
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div className="space-y-4">
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
+                      <FileText className="w-6 h-6 text-emerald-600" /> 1. 請求書の一括発行（月末）
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed text-sm">
+                      月末になったら、左メニューの <strong>「請求書一括発行」</strong> を開きます。その月に登録された「出荷記録」を自動集計し、取引先ごとの請求書を1クリックで作成できます。
                     </p>
+                    
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 text-xs text-slate-700 space-y-2.5 shadow-sm">
+                      <div className="flex items-center gap-1.5 text-blue-700 font-bold text-sm">
+                        <FileText className="w-4 h-4 text-blue-600" /> PDF保存・メール一括送信に対応
+                      </div>
+                      <p className="text-slate-600 leading-relaxed">
+                        インボイス制度に対応した請求書をPDFでダウンロードできるほか、ステップ2で設定した送付先へシステムから直接メール送信することも可能です。
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <ImagePlaceholder src="/manual/step5-1.png" alt="請求書一括発行画面" filename="step5-1.png" />
                   </div>
                 </div>
               </div>
-              <div className="sticky top-20">
-                <ImagePlaceholder 
-                  src="/manual/step5.png" 
-                  alt="月次経費入力画面" 
-                  filename="step5.png" 
-                />
+
+              {/* 2. 月次全体経費の入力 */}
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div className="space-y-4">
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
+                      <Calculator className="w-6 h-6 text-emerald-600" /> 2. 月次全体経費の入力（月に1回）
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed text-sm">
+                      左メニューの <strong>「月次全体経費(按分用)」</strong> から、電気代、ハウスの燃料代、トラクターのガソリン代など、「農場全体にかかったお金」を月に1回入力します。
+                    </p>
+                    
+                    <div className="bg-white p-4 rounded-2xl border border-emerald-100 text-xs text-slate-700 space-y-2.5 shadow-sm">
+                      <div className="flex items-center gap-1.5 text-emerald-700 font-bold text-sm">
+                        <Sparkles className="w-4 h-4 text-emerald-600" /> 魔法の自動按分（計算）システム
+                      </div>
+                      <p className="text-slate-600 leading-relaxed">
+                        ここに金額を入力すると、システムが自動的に「いま稼働している畑の面積」に合わせて、<strong>経費をそれぞれの畑のレポートに公平に割り振ってくれます。</strong>面倒な電卓叩きは不要です！
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <ImagePlaceholder src="/manual/step5-2.png" alt="月次経費入力画面" filename="step5-2.png" />
+                  </div>
+                </div>
               </div>
+
+              {/* 3. 会計データ出力 */}
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div className="space-y-4">
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
+                      <FileSpreadsheet className="w-6 h-6 text-emerald-600" /> 3. 会計データ出力（決算時）
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed text-sm">
+                      決算や確定申告の時期になったら、左メニューの <strong>「会計データ出力」</strong> を使います。
+                    </p>
+                    
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 text-xs text-slate-700 space-y-2.5 shadow-sm">
+                      <div className="flex items-center gap-1.5 text-slate-700 font-bold text-sm">
+                        <Database className="w-4 h-4 text-slate-600" /> 会計ソフトとのスムーズな連携
+                      </div>
+                      <p className="text-slate-600 leading-relaxed">
+                        日々入力した「売上」「資材購入・直接経費」「月次全体経費」のデータを、freeeやマネーフォワード等の会計ソフトにインポートできる形式（CSV）で一括ダウンロードできます。税理士さんへの提出も簡単です。
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <ImagePlaceholder src="/manual/step5-3.png" alt="会計データ出力画面" filename="step5-3.png" />
+                  </div>
+                </div>
+              </div>
+
             </div>
 
             <div className="flex justify-between pt-4 border-t border-slate-100 mt-8">
