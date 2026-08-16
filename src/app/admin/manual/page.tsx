@@ -349,86 +349,89 @@ export default function ManualPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-              <div className="space-y-6">
-                {/* 1. 現場画面と多言語ログイン */}
-                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-3">
-                  <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                    <Smartphone className="w-5 h-5 text-emerald-600" /> 1. 現場用画面を開いてログイン
-                  </h3>
-                  <p className="text-slate-600 text-sm leading-relaxed">
-                    管理者画面の左下にある <strong>「現場URL（作業者用）」</strong> のコピーボタンを押し、LINEなどでスマホに送ってアクセスします。
-                  </p>
-                  
-                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 text-xs text-slate-700 space-y-2">
-                    <div className="flex items-center gap-1 text-emerald-700 font-bold">
-                      <UserPlus className="w-3.5 h-3.5" /> ログインの手順
-                    </div>
-                    <ol className="list-decimal ml-4 space-y-1 text-slate-600">
-                      <li>作業者一覧から <strong>「自分の名前」</strong> を選択します。</li>
-                      <li>【ステップ2】で決めた <strong>「4桁のPINコード（暗証番号）」</strong> を入力してログインします。</li>
-                    </ol>
-                    <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5 text-blue-700 font-bold">
-                      <Globe className="w-4 h-4 text-blue-600 shrink-0" /> 
-                      <span>画面右上で言語（🇯🇵日本語・🇺🇸英語・🇻🇳ベトナム語・🇮🇩インドネシア語・🇨🇳中国語）をいつでも切り替え可能です！</span>
+            <div className="space-y-8">
+              {/* 1. 現場画面と多言語ログイン */}
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div className="space-y-4">
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
+                      <Smartphone className="w-6 h-6 text-emerald-600" /> 1. 現場用画面を開いてログイン
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed text-sm">
+                      管理者画面の左下にある <strong>「現場URL（作業者用）」</strong> のコピーボタンを押し、LINEなどでスマホに送ってアクセスします。
+                    </p>
+                    
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 text-xs text-slate-700 space-y-2.5 shadow-sm">
+                      <div className="flex items-center gap-1.5 text-emerald-700 font-bold text-sm">
+                        <UserPlus className="w-4 h-4" /> ログインの手順
+                      </div>
+                      <ol className="list-decimal ml-5 space-y-1.5 text-slate-600">
+                        <li>作業者一覧から <strong>「自分の名前」</strong> を選択します。</li>
+                        <li>【ステップ2】で決めた <strong>「4桁のPINコード（暗証番号）」</strong> を入力してログインします。</li>
+                      </ol>
+                      <div className="pt-2.5 border-t border-slate-100 flex items-center gap-2 text-blue-700 font-bold text-xs">
+                        <Globe className="w-4 h-4 text-blue-600 shrink-0" /> 
+                        <span>画面右上で言語（🇯🇵日本語・🇺🇸英語・🇻🇳ベトナム語・🇮🇩インドネシア語・🇨🇳中国語）をいつでも切り替え可能です！</span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* 2. スマート入力アシスト機能 */}
-                <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-3">
-                  <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                    <ClipboardList className="w-5 h-5 text-emerald-600" /> 2. 作業を記録する（スマート連携）
-                  </h3>
-                  
-                  <div className="space-y-3 text-sm">
-                    {/* 圃場と計画の自動連動 */}
-                    <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200 text-xs text-slate-700">
-                      <strong className="text-emerald-800 font-bold flex items-center gap-1 mb-1">
-                        <Sparkles className="w-4 h-4 text-emerald-600" /> 圃場を選ぶと「進行中の作物」を自動表示！
-                      </strong>
-                      <p className="leading-relaxed">
-                        作業する <strong>「畑（圃場）」</strong> を選ぶと、その畑で今まさに栽培中の作目・品種（ステップ3で立てた計画）が最優先で自動表示されるため、作物を探す手間なくワンタップで選択できます。（※計画外の作業も選択可能）
-                      </p>
-                    </div>
-
-                    {/* タイマー / 手入力 */}
-                    <div className="p-3.5 bg-white rounded-xl border border-slate-200 text-xs text-slate-700">
-                      <strong className="text-slate-800 font-bold block mb-1">
-                        ⏱️ 選べる2つの記録モード
-                      </strong>
-                      <ul className="space-y-1 list-disc ml-4 text-slate-600">
-                        <li><strong>タイマーモード:</strong> 「作業開始」を押すだけで秒単位で自動計測、「作業終了」で自動保存されます。</li>
-                        <li><strong>手入力モード:</strong> 「〇〇分作業した」と後からまとめて作業時間を手入力することも可能です。</li>
-                      </ul>
-                    </div>
-
-                    {/* 写真・動画添付 */}
-                    <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-200 text-xs text-slate-700">
-                      <strong className="text-blue-800 font-bold flex items-center gap-1 mb-1">
-                        <Camera className="w-4 h-4 text-blue-600" /> 写真や動画の添付機能
-                      </strong>
-                      <p className="leading-relaxed">
-                        カメラアイコンを押すと、スマホのカメラで野菜の生育状況や病害虫、畑の様子を撮影して日報に添付できます（自動圧縮で高速送信）。動画の添付にも対応しています。
-                      </p>
-                    </div>
-
-                    <div className="p-3 bg-amber-50 rounded-xl text-xs text-amber-800 border border-amber-200 leading-relaxed">
-                      <strong className="flex items-center gap-1 mb-0.5 font-bold"><AlertCircle className="w-4 h-4" /> 毎日の記録が経営を強くする！</strong>
-                      現場で入力された作業日報や収穫記録をもとに、システムが「畑ごとの利益や実質時給」をリアルタイムに自動計算し続けます。
-                    </div>
+                  <div>
+                    <ImagePlaceholder src="/manual/step4-1.png" alt="スマホログイン画面" filename="step4-1.png" />
                   </div>
                 </div>
               </div>
 
-              <div className="sticky top-20 flex gap-4">
-                <div className="flex-1">
-                  <ImagePlaceholder src="/manual/step4-1.png" alt="スマホログイン画面" filename="step4-1.png" />
-                  <p className="text-xs text-slate-400 text-center mt-2">ログイン画面（多言語切替）</p>
-                </div>
-                <div className="flex-1">
-                  <ImagePlaceholder src="/manual/step4-2.png" alt="スマホ入力画面" filename="step4-2.png" />
-                  <p className="text-xs text-slate-400 text-center mt-2">現場入力画面（計画自動連動・写真添付）</p>
+              {/* 2. スマート入力アシスト機能 */}
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div className="space-y-4">
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
+                      <ClipboardList className="w-6 h-6 text-emerald-600" /> 2. 作業を記録する（スマート連携）
+                    </h3>
+                    
+                    <div className="space-y-3">
+                      {/* 圃場と計画の自動連動 */}
+                      <div className="p-3.5 bg-emerald-50/70 rounded-2xl border border-emerald-200 text-xs text-slate-700">
+                        <strong className="text-emerald-800 font-bold flex items-center gap-1 mb-1 text-sm">
+                          <Sparkles className="w-4 h-4 text-emerald-600" /> 圃場を選ぶと「進行中の作物」を自動表示！
+                        </strong>
+                        <p className="leading-relaxed">
+                          作業する <strong>「畑（圃場）」</strong> を選ぶと、その畑で今まさに栽培中の作目・品種（ステップ3で立てた計画）が最優先で自動表示されるため、作物を探す手間なくワンタップで選択できます。（※計画外の作業も選択可能）
+                        </p>
+                      </div>
+
+                      {/* タイマー / 手入力 */}
+                      <div className="p-3.5 bg-white rounded-2xl border border-slate-200 text-xs text-slate-700 shadow-sm">
+                        <strong className="text-slate-800 font-bold block mb-1 text-sm">
+                          ⏱️ 選べる2つの記録モード
+                        </strong>
+                        <ul className="space-y-1 list-disc ml-4 text-slate-600">
+                          <li><strong>タイマーモード:</strong> 「作業開始」を押すだけで秒単位で自動計測、「作業終了」で自動保存されます。</li>
+                          <li><strong>手入力モード:</strong> 「〇〇分作業した」と後からまとめて作業時間を手入力することも可能です。</li>
+                        </ul>
+                      </div>
+
+                      {/* 写真・動画添付 */}
+                      <div className="p-3.5 bg-blue-50/60 rounded-2xl border border-blue-200 text-xs text-slate-700">
+                        <strong className="text-blue-800 font-bold flex items-center gap-1 mb-1 text-sm">
+                          <Camera className="w-4 h-4 text-blue-600" /> 写真や動画の添付機能
+                        </strong>
+                        <p className="leading-relaxed">
+                          カメラアイコンを押すと、スマホのカメラで野菜の生育状況や病害虫、畑の様子を撮影して日報に添付できます（自動圧縮で高速送信）。動画の添付にも対応しています。
+                        </p>
+                      </div>
+
+                      <div className="p-3 bg-amber-50 rounded-xl text-xs text-amber-800 border border-amber-200 leading-relaxed">
+                        <strong className="flex items-center gap-1 mb-0.5 font-bold"><AlertCircle className="w-4 h-4" /> 毎日の記録が経営を強くする！</strong>
+                        現場で入力された作業日報や収穫記録をもとに、システムが「畑ごとの利益や実質時給」をリアルタイムに自動計算し続けます。
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <ImagePlaceholder src="/manual/step4-2.png" alt="スマホ入力画面" filename="step4-2.png" />
+                  </div>
                 </div>
               </div>
             </div>
