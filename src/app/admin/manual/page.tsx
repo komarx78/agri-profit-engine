@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { BookOpen, UserPlus, Map, PackageOpen, Sprout, ClipboardList, Smartphone, Receipt, TrendingUp, AlertCircle, ArrowRight, CheckCircle2, RefreshCw, LayoutDashboard, MapPin, Pointer } from 'lucide-react';
+import { BookOpen, UserPlus, Map, PackageOpen, Sprout, ClipboardList, Smartphone, Receipt, TrendingUp, AlertCircle, ArrowRight, CheckCircle2, RefreshCw, LayoutDashboard, MapPin, Pointer, Banknote } from 'lucide-react';
 
 export default function ManualPage() {
   const [activeTab, setActiveTab] = useState<number>(1);
@@ -186,15 +186,32 @@ export default function ManualPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
                   <div>
                     <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2 mb-3">
-                      <PackageOpen className="w-6 h-6 text-emerald-600" /> 3. 資材・農薬と販売価格を登録しよう
+                      <PackageOpen className="w-6 h-6 text-emerald-600" /> 3. 資材・農薬を登録しよう
                     </h3>
                     <p className="text-slate-600 leading-relaxed mb-4">
-                      <strong>【資材・農薬】</strong> よく使う肥料や梱包材の「購入金額」を登録しておくと、現場で「1キロ使った」と入力するだけで自動計算されます。<br/><br/>
-                      <strong>【販売価格】</strong> 出荷先ごと（JA、直売所など）の販売単価を登録しておくと、出荷記録を入力した際の売上が自動計算されます。
+                      よく使う肥料や農薬、マルチ・ダンボール等の梱包材の「購入単価」や「単位」を登録します。<br/>
+                      <strong className="text-emerald-700">ポイント:</strong> 現場の入力画面で「1袋使った」「2本使った」と選ぶだけで、資材費が自動計算されます。
                     </p>
                   </div>
                   <div>
-                    <ImagePlaceholder src="/manual/step2-3.png" alt="資材と販売価格" filename="step2-3.png" />
+                    <ImagePlaceholder src="/manual/step2-3.png" alt="資材・農薬登録" filename="step2-3.png" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div>
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2 mb-3">
+                      <Banknote className="w-6 h-6 text-emerald-600" /> 4. 販売価格を登録しよう
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed mb-4">
+                      出荷先ごと（JA、直売所、各スーパーなど）の作目ごとの販売単価を設定します。<br/>
+                      <strong className="text-emerald-700">ポイント:</strong> 出荷記録を入力した際に売上が自動計算されます。「既存の販路から価格設定を一括コピー」を使えば、新しい出荷先の単価設定も一瞬で完了します。
+                    </p>
+                  </div>
+                  <div>
+                    <ImagePlaceholder src="/manual/step2-4.png" alt="販売価格登録" filename="step2-4.png" />
                   </div>
                 </div>
               </div>
