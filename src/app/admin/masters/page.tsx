@@ -25,6 +25,7 @@ export default function MastersPage() {
   const [materials, setMaterials] = useState<any[]>([]);
   const [salesPrices, setSalesPrices] = useState<any[]>([]);
   const [cropStandards, setCropStandards] = useState<any[]>([]);
+  const [channels, setChannels] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [uploadStatus, setUploadStatus] = useState<{type: string, message: string} | null>(null);
 
@@ -52,13 +53,14 @@ export default function MastersPage() {
   const fetchMasters = async () => {
     try {
       setIsLoading(true);
-      const [cRes, fRes, wRes, mRes, spRes, csRes] = await Promise.all([
+      const [cRes, fRes, wRes, mRes, spRes, csRes, chRes] = await Promise.all([
         supabase.from('crops').select('*').order('name'),
         supabase.from('fields').select('*').order('name'),
         supabase.from('workers').select('*').order('name'),
         supabase.from('materials').select('*').order('name'),
         supabase.from('sales_prices').select('*').order('crop_name'),
-        supabase.from('crop_standards').select('*')
+        supabase.from('crop_standards').select('*'),
+        supabase.from('sales_channels').select('*').order('name')
       ]);
       
       setCrops(cRes.data || []);
@@ -67,6 +69,7 @@ export default function MastersPage() {
       setMaterials(mRes.data || []);
       setSalesPrices(spRes.data || []);
       setCropStandards(csRes.data || []);
+      setChannels(chRes.data || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -167,6 +170,14 @@ export default function MastersPage() {
         delete dataToSave.materials_per_10a;
       }
 
+      // sales_prices 保存時、もし sales_channels に登録されていない販路名なら自動追加
+      if (table === 'sales_prices' && dataToSave.channel_name) {
+        const existsInChannels = channels.some(ch => ch.name === dataToSave.channel_name);
+        if (!existsInChannels) {
+          await supabase.from('sales_channels').insert([{ name: dataToSave.channel_name }]);
+        }
+      }
+
       let query;
       let insertedId = editingItem?.id;
       
@@ -263,6 +274,12 @@ export default function MastersPage() {
       // 一括追加
       const { error } = await supabase.from('sales_prices').insert(insertData);
       if (error) throw error;
+
+      // もし sales_channels に存在しなければ自動登録
+      const existsInChannels = channels.some(ch => ch.name === copyTarget);
+      if (!existsInChannels) {
+        await supabase.from('sales_channels').insert([{ name: copyTarget }]);
+      }
 
       setUploadStatus({ type: 'success', message: `${copyTarget} として一括追加しました！` });
       setTimeout(() => setUploadStatus(null), 3000);
@@ -958,23 +975,72 @@ export default function MastersPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1">販路名 (必須)</label>
-                    <select
-                      value={formData.channel_name || ''} 
-                      onChange={e => setFormData({...formData, channel_name: e.target.value})}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-slate-700"
-                    >
-                      <option value="">-- 販路を選択してください --</option>
-                      {channels.map(ch => {
-                        const isRegistered = formData.crop_name ? salesPrices.some(sp => sp.crop_name === formData.crop_name && sp.channel_name === ch.name) : false;
-                        const isCurrentEditing = editingItem && editingItem.crop_name === formData.crop_name && editingItem.channel_name === ch.name;
-                        const isDisabled = isRegistered && !isCurrentEditing;
+                    {(() => {
+                      const allChannelNames = Array.from(new Set([
+                        ...channels.map(c => c.name),
+                        ...salesPrices.map(sp => sp.channel_name)
+                      ])).filter(Boolean).sort();
+
+                      if (allChannelNames.length === 0) {
                         return (
-                          <option key={ch.id} value={ch.name} disabled={isDisabled}>
-                            {ch.name} {isDisabled ? '(この作目で登録済み)' : ''}
-                          </option>
+                          <div className="space-y-1">
+                            <input 
+                              type="text" 
+                              value={formData.channel_name || ''} 
+                              onChange={e => setFormData({...formData, channel_name: e.target.value})}
+                              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
+                              placeholder="例: JA、直売所、〇〇スーパー"
+                            />
+                            <p className="text-[11px] text-slate-400">※ 入力した販路名は自動的に出荷先マスタにも保存されます。</p>
+                          </div>
                         );
-                      })}
-                    </select>
+                      }
+
+                      const isCustom = formData.isCustomChannel || (formData.channel_name && !allChannelNames.includes(formData.channel_name));
+
+                      return (
+                        <div className="space-y-2">
+                          <select
+                            value={isCustom ? '__custom__' : (formData.channel_name || '')} 
+                            onChange={e => {
+                              if (e.target.value === '__custom__') {
+                                setFormData({...formData, channel_name: '', isCustomChannel: true});
+                              } else {
+                                setFormData({...formData, channel_name: e.target.value, isCustomChannel: false});
+                              }
+                            }}
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-slate-700"
+                          >
+                            <option value="">-- 販路を選択してください --</option>
+                            {allChannelNames.map(chName => {
+                              const isRegistered = formData.crop_name ? salesPrices.some(sp => sp.crop_name === formData.crop_name && sp.channel_name === chName) : false;
+                              const isCurrentEditing = editingItem && editingItem.crop_name === formData.crop_name && editingItem.channel_name === chName;
+                              const isDisabled = isRegistered && !isCurrentEditing;
+                              return (
+                                <option key={chName} value={chName} disabled={isDisabled}>
+                                  {chName} {isDisabled ? '(この作目で登録済み)' : ''}
+                                </option>
+                              );
+                            })}
+                            <option value="__custom__">＋ 新しい販路名を直接入力する...</option>
+                          </select>
+
+                          {isCustom && (
+                            <div className="space-y-1">
+                              <input
+                                type="text"
+                                value={formData.channel_name || ''}
+                                onChange={e => setFormData({...formData, channel_name: e.target.value, isCustomChannel: true})}
+                                placeholder="新しい販路名を入力（例: JA、直売所、〇〇スーパー）"
+                                className="w-full p-3 bg-white border-2 border-emerald-500 rounded-xl focus:outline-none font-bold text-slate-800"
+                                autoFocus
+                              />
+                              <p className="text-[11px] text-slate-400">※ 入力した販路名は自動的に出荷先マスタにも保存されます。</p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1">販売単価 (円)</label>
