@@ -406,20 +406,10 @@ export default function ManualPage() {
                         <strong className="text-slate-800 font-bold block mb-1 text-sm">
                           ⏱️ 選べる2つの記録モード
                         </strong>
-                        <ul className="space-y-1 list-disc ml-4 text-slate-600">
+                        <ul className="space-y-1.5 list-disc ml-4 text-slate-600">
                           <li><strong>タイマーモード:</strong> 「作業開始」を押すだけで秒単位で自動計測、「作業終了」で自動保存されます。</li>
                           <li><strong>手入力モード:</strong> 「〇〇分作業した」と後からまとめて作業時間を手入力することも可能です。</li>
                         </ul>
-                      </div>
-
-                      {/* 写真・動画添付 */}
-                      <div className="p-3.5 bg-blue-50/60 rounded-2xl border border-blue-200 text-xs text-slate-700">
-                        <strong className="text-blue-800 font-bold flex items-center gap-1 mb-1 text-sm">
-                          <Camera className="w-4 h-4 text-blue-600" /> 写真や動画の添付機能
-                        </strong>
-                        <p className="leading-relaxed">
-                          カメラアイコンを押すと、スマホのカメラで野菜の生育状況や病害虫、畑の様子を撮影して日報に添付できます（自動圧縮で高速送信）。動画の添付にも対応しています。
-                        </p>
                       </div>
 
                       <div className="p-3 bg-amber-50 rounded-xl text-xs text-amber-800 border border-amber-200 leading-relaxed">
@@ -430,17 +420,55 @@ export default function ManualPage() {
                   </div>
 
                   <div>
-                    <ImagePlaceholder src="/manual/step4-2.png" alt="スマホ入力画面" filename="step4-2.png" />
+                    <ImagePlaceholder src="/manual/step4-2.png" alt="スマホ作業入力画面" filename="step4-2.png" />
                   </div>
                 </div>
               </div>
 
-              {/* 3. 動画マニュアルの現場視聴 */}
+              {/* 3. 写真・動画の添付機能 */}
               <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
                   <div className="space-y-4">
                     <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
-                      <Video className="w-6 h-6 text-emerald-600" /> 3. 現場でいつでも「動画マニュアル」を確認！
+                      <Camera className="w-6 h-6 text-emerald-600" /> 3. 写真や動画を添付して日報を送信
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed text-sm">
+                      文字や数字だけでなく、現場の状況をリアルタイムに撮影して作業日報と一緒に保存・共有できます。
+                    </p>
+                    
+                    <div className="space-y-3">
+                      <div className="p-3.5 bg-white rounded-2xl border border-blue-100 text-xs text-slate-700 shadow-sm space-y-1.5">
+                        <strong className="text-blue-800 font-bold flex items-center gap-1 text-sm">
+                          📷 写真添付（自動圧縮でサクサク送信）
+                        </strong>
+                        <p className="leading-relaxed text-slate-600">
+                          カメラアイコンを押すと、スマホのカメラが起動。野菜の生育状態や病害虫の発生、畑の様子をその場で撮影して添付できます。画像は自動で最適サイズに圧縮されるため、現場の通信量を消費せず高速にアップロードされます。
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 bg-white rounded-2xl border border-purple-100 text-xs text-slate-700 shadow-sm space-y-1.5">
+                        <strong className="text-purple-800 font-bold flex items-center gap-1 text-sm">
+                          🎥 動画添付（プレミアムプラン）
+                        </strong>
+                        <p className="leading-relaxed text-slate-600">
+                          作業の様子や現場の細かな状態を50MBまでの動画として記録・添付できます。
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <ImagePlaceholder src="/manual/step4-3.png" alt="写真・動画添付画面" filename="step4-3.png" />
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. 動画マニュアルの現場視聴 */}
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div className="space-y-4">
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
+                      <Video className="w-6 h-6 text-emerald-600" /> 4. 現場でいつでも「動画マニュアル」を確認！
                     </h3>
                     <p className="text-slate-600 leading-relaxed text-sm">
                       管理者画面で登録された作業解説動画を、現場スタッフがスマホの <strong>「マニュアル」</strong> タブからいつでも再生できます。
@@ -465,7 +493,7 @@ export default function ManualPage() {
                   </div>
 
                   <div>
-                    <ImagePlaceholder src="/manual/step4-3.png" alt="スマホ動画マニュアル画面" filename="step4-3.png" />
+                    <ImagePlaceholder src="/manual/step4-4.png" alt="スマホ動画マニュアル画面" filename="step4-4.png" />
                   </div>
                 </div>
               </div>
