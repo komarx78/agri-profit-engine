@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { BookOpen, UserPlus, Map, PackageOpen, Sprout, ClipboardList, Smartphone, Receipt, TrendingUp, AlertCircle, ArrowRight, CheckCircle2, RefreshCw, LayoutDashboard, MapPin, Pointer, Banknote, FileSpreadsheet, Sparkles, Globe, Camera, Video } from 'lucide-react';
+import { BookOpen, UserPlus, Map, PackageOpen, Sprout, ClipboardList, Smartphone, Receipt, TrendingUp, AlertCircle, ArrowRight, CheckCircle2, RefreshCw, LayoutDashboard, MapPin, Pointer, Banknote, FileSpreadsheet, Sparkles, Globe, Camera, Video, Play } from 'lucide-react';
 
 export default function ManualPage() {
   const [activeTab, setActiveTab] = useState<number>(1);
@@ -431,6 +431,41 @@ export default function ManualPage() {
 
                   <div>
                     <ImagePlaceholder src="/manual/step4-2.png" alt="スマホ入力画面" filename="step4-2.png" />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. 動画マニュアルの現場視聴 */}
+              <div className="bg-slate-50 p-5 sm:p-8 rounded-3xl border border-slate-100">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <div className="space-y-4">
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
+                      <Video className="w-6 h-6 text-emerald-600" /> 3. 現場でいつでも「動画マニュアル」を確認！
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed text-sm">
+                      管理者画面で登録された作業解説動画を、現場スタッフがスマホの <strong>「マニュアル」</strong> タブからいつでも再生できます。
+                    </p>
+                    
+                    <div className="bg-white p-4 rounded-2xl border border-slate-200 text-xs text-slate-700 space-y-2.5 shadow-sm">
+                      <div className="flex items-center gap-1.5 text-rose-700 font-bold text-sm">
+                        <Play className="w-4 h-4 text-rose-600" /> 動画マニュアルのメリット
+                      </div>
+                      <ul className="space-y-1.5 list-disc ml-4 text-slate-600">
+                        <li>
+                          <strong>現場で迷わない:</strong> 収穫・出荷の規格や、農薬の希釈手順、機械の操作方法などをその場で動画で確認できます。
+                        </li>
+                        <li>
+                          <strong>指導の手間を削減:</strong> 新人スタッフや実習生にも動画を見てもらうだけでスムーズに作業指示が可能です。
+                        </li>
+                      </ul>
+                      <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-100">
+                        ※ 管理者画面の「動画マニュアル集」から動画ファイル（mp4など）を簡単にアップロード・追加できます。
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <ImagePlaceholder src="/manual/step4-3.png" alt="スマホ動画マニュアル画面" filename="step4-3.png" />
                   </div>
                 </div>
               </div>
