@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { FileText, Printer, Calculator, AlertCircle, RefreshCw, Mail, Users, Loader2, CheckCircle2 } from 'lucide-react';
+import { FileText, Printer, Calculator, AlertCircle, RefreshCw, Mail, Users, Loader2, CheckCircle2, Download, Send, ChevronRight, Share2 } from 'lucide-react';
 import Link from 'next/link';
 
 interface CompanySettings {

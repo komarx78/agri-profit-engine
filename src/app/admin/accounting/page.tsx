@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { FileSpreadsheet, Download, RefreshCw, Loader2, Info, AlertTriangle } from 'lucide-react';
+import { FileSpreadsheet, Download, RefreshCw, Loader2, Info, AlertTriangle, Calendar, Settings } from 'lucide-react';
 import Papa from 'papaparse';
 
 export default function AccountingPage() {
