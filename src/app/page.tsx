@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { WorkerGate } from '@/components/WorkerGate';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 
 interface MasterItem {
@@ -383,9 +384,12 @@ export default function WorkEntryPage() {
               {/* 手入力モード時の日付選択 */}
               {inputMode === 'manual' && (
                 <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
-                    <Clock className="w-4 h-4" />日付
-                  </h2>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
+                      <Clock className="w-4 h-4" />日付
+                    </h2>
+                    <HelpTooltip content="過去の作業を登録する場合は、作業を行った日付を選んでください。" />
+                  </div>
                   <input
                     type="date"
                     value={manualDate}
@@ -398,9 +402,12 @@ export default function WorkEntryPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
-                    <Sprout className="w-4 h-4" />{t('crop', language)}
-                  </h2>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
+                      <Sprout className="w-4 h-4" />{t('crop', language)}
+                    </h2>
+                    <HelpTooltip content="現在作業を行う対象の作物を選んでください。リストにない場合は管理者に連絡してください。" />
+                  </div>
                   <div className="flex flex-col gap-2">
                     {crops.map(c => (
                       <button
@@ -420,9 +427,12 @@ export default function WorkEntryPage() {
                 </section>
 
                 <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-teal-400 mb-2.5 flex items-center gap-2">
-                    <MapPin className="w-4 h-4" />{t('field', language)}
-                  </h2>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-teal-400 flex items-center gap-2">
+                      <MapPin className="w-4 h-4" />{t('field', language)}
+                    </h2>
+                    <HelpTooltip content="作業を行う圃場（畑）を選んでください。区画が分からない場合は周りに確認しましょう。" />
+                  </div>
                   <div className="flex flex-col gap-2">
                     {fields.map(f => (
                       <button
@@ -444,9 +454,12 @@ export default function WorkEntryPage() {
 
               {/* 作業内容 */}
               <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 mb-2.5 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4" />{t('workType', language)}
-                </h2>
+                <div className="flex items-center justify-between mb-2.5">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" />{t('workType', language)}
+                  </h2>
+                  <HelpTooltip content="今回行う作業の種類を1つ選んでください。該当するものが複数ある場合は、一番メインとなる作業を選びます。" />
+                </div>
                 <div className="grid grid-cols-3 gap-2">
                   {workTypes.map(tData => (
                     <button
@@ -467,9 +480,12 @@ export default function WorkEntryPage() {
 
               {/* 資材の使用 */}
               <section className="bg-purple-900/30 p-4 rounded-2xl border border-purple-800/40 shadow-sm">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-purple-400 mb-2.5 flex items-center gap-2">
-                  <Package className="w-4 h-4" />{t('material', language)}
-                </h2>
+                <div className="flex items-center justify-between mb-2.5">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-2">
+                    <Package className="w-4 h-4" />{t('material', language)}
+                  </h2>
+                  <HelpTooltip content="肥料や農薬などの資材を使う場合のみ入力します。使わない場合はそのまま未選択でOKです。" />
+                </div>
                 <div className="space-y-3">
                   <select 
                     value={selectedMaterial}
@@ -500,9 +516,12 @@ export default function WorkEntryPage() {
               {/* 手入力モード時の時間指定 */}
               {inputMode === 'manual' && (
                 <section className="bg-sky-900/30 p-4 rounded-2xl border border-sky-800/40 shadow-sm">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-sky-400 mb-2.5 flex items-center gap-2">
-                    <Clock className="w-4 h-4" />作業時間 ({t('minute', language)})
-                  </h2>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-2">
+                      <Clock className="w-4 h-4" />作業時間 ({t('minute', language)})
+                    </h2>
+                    <HelpTooltip content="すでに終わった作業の時間を手入力するモードです。かかった時間を『分単位』で入力してください（例: 1時間半なら 90 と入力）。" />
+                  </div>
                   <input
                     type="number"
                     value={duration}
