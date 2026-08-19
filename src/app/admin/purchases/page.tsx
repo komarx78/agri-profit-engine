@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Receipt, Plus, Search, Calendar, Store, Tag, Download, Camera, Check, AlertCircle, FileText, History, Image as ImageIcon, ExternalLink } from 'lucide-react';
+import { HelpTooltip } from '@/components/HelpTooltip';
+import { Receipt, Search, Image as ImageIcon, Camera, UploadCloud, Calendar, DollarSign, Store, Tag, Plus, Loader2, Sparkles, AlertCircle, TrendingUp, BarChart3, CheckCircle2, ChevronDown, Download, Check, MapPin, FileText, History, ExternalLink } from 'lucide-react';
 
 export default function PurchasesPage() {
   const [purchases, setPurchases] = useState<any[]>([]);
@@ -268,7 +269,10 @@ export default function PurchasesPage() {
       {/* ヘッダー */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b-2 border-slate-200 pb-6">
         <div>
-          <h1 className="text-2xl md:text-4xl font-black text-slate-800 tracking-tight mb-2">資材・経費管理</h1>
+          <h1 className="text-2xl md:text-4xl font-black text-slate-800 tracking-tight mb-2 flex items-center gap-2">
+            資材・経費管理
+            <HelpTooltip content="購入した資材や経費を記録し、レシート画像の保存も行えます。" className="ml-1" />
+          </h1>
           <p className="text-sm md:text-base text-slate-500 font-medium">日々の資材購入履歴を記録し、経費を可視化します。</p>
         </div>
         <div className="flex gap-2">

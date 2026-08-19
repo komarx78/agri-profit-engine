@@ -177,6 +177,8 @@ export default function MastersPage() {
         if (!existsInChannels) {
           await supabase.from('sales_channels').insert([{ name: dataToSave.channel_name }]);
         }
+        // UI用のフラグを削除
+        delete dataToSave.isCustomChannel;
       }
 
       let query;
