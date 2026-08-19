@@ -8,6 +8,7 @@ import {
   ComposedChart, Line, Area, AreaChart
 } from 'recharts';
 import { supabase } from '@/lib/supabase';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { Activity, Clock, Sprout, TrendingUp, Banknote, UserCheck, CalendarDays, MapPin, Calculator, Settings2 } from 'lucide-react';
 
 // --- 直感的なグラフ用の色設定 ---
@@ -411,7 +412,10 @@ export default function DashboardPage() {
                 <CalendarDays className="w-6 h-6" />
               </div>
               <div>
-                <h2 className="text-2xl font-black text-slate-800">経営推移トレンド</h2>
+                <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2">
+                  経営推移トレンド
+                  <HelpTooltip content="月ごとの売上・コスト・利益の推移を確認できます。累計利益がゼロを超えたタイミングが黒字転換の目安です。" />
+                </h2>
                 <p className="text-sm text-slate-500 font-medium">単月の売上・コストと、累計利益の推移（黒字転換のタイミング）</p>
               </div>
             </div>
@@ -451,7 +455,10 @@ export default function DashboardPage() {
                   <Sprout className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-slate-800">作目別 採算性</h3>
+                  <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                    作目別 採算性
+                    <HelpTooltip content="作目ごとの『売上 - コスト』を計算し、どの作目が一番儲かっているか（または赤字か）を可視化します。" />
+                  </h3>
                   <p className="text-sm text-slate-500">最も利益率が高い作目は？</p>
                 </div>
               </div>
@@ -483,7 +490,10 @@ export default function DashboardPage() {
                   <MapPin className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-slate-800">圃場別 採算性</h3>
+                  <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                    圃場別 採算性
+                    <HelpTooltip content="圃場（畑）ごとの収益性を確認できます。環境や土壌の違いによる利益の差を分析するのに役立ちます。" />
+                  </h3>
                   <p className="text-sm text-slate-500">収益性の高い畑を特定</p>
                 </div>
               </div>

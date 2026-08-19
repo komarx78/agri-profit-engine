@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { Video, Lock, Play, Loader2, Sparkles, Plus, X, CheckCircle2 } from 'lucide-react';
 
 export default function ManualsPage() {
@@ -174,6 +175,7 @@ export default function ManualsPage() {
           <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
             <Video className="w-8 h-8 text-rose-500" />
             動画マニュアル集
+            <HelpTooltip content="作業手順などの動画をアップロードして共有できます。（プレミアムプラン専用機能です）" className="ml-1" />
           </h1>
           <p className="text-slate-500 mt-2 font-medium">ここで登録したマニュアルは、従業員のスマホアプリからいつでも閲覧できます。</p>
         </div>

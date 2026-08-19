@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, use } from 'react';
 import { supabase } from '@/lib/supabase';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { Printer, Loader2, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 
@@ -256,7 +257,10 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
           <Link href="/admin/cultivation-schedule" className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">
             <ChevronLeft className="w-5 h-5" />
           </Link>
-          <h1 className="font-bold text-slate-700">経営指標レポート出力</h1>
+          <h1 className="font-bold text-slate-700 flex items-center gap-2">
+            経営指標レポート出力
+            <HelpTooltip content="作付ごとの実績データを集計し、経営分析用のレポート（10aあたりの労働時間や原価、利益）を出力します。" className="ml-1" />
+          </h1>
         </div>
         <button 
           onClick={handlePrint}

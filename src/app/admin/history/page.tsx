@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { History, Search, Download, CheckCircle2, Clock, Filter, User, MapPin, Sprout, Image as ImageIcon, FileText, X, Video, Play, Loader2 } from 'lucide-react';
 import Papa from 'papaparse';
 import { useSearchParams } from 'next/navigation';
@@ -133,6 +134,7 @@ function HistoryContent() {
           <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
             <History className="w-6 h-6 md:w-8 md:h-8 text-emerald-600 flex-shrink-0" />
             作業記録一覧
+            <HelpTooltip content="現場で記録された作業の履歴です。CSV形式でダウンロードできます。" />
           </h1>
           <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">現場で打刻・入力された作業の生データ一覧です。</p>
         </div>

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft } from 'lucide-react';
 import Papa from 'papaparse';
 import { autoTranslateMasterData } from '@/app/actions/translate';
@@ -406,20 +407,30 @@ export default function MastersPage() {
     URL.revokeObjectURL(url);
   };
 
-  const CardHeader = ({ icon: Icon, title, type }: { icon: any, title: string, type: MasterType }) => (
-    <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-      <div className="flex items-center gap-2 text-slate-800 font-bold text-lg">
-        <Icon className="w-5 h-5 text-emerald-600" />
-        {title}
+  const CardHeader = ({ icon: Icon, title, type }: { icon: any, title: string, type: MasterType }) => {
+    let helpContent = "";
+    if (type === 'materials') helpContent = "肥料や農薬などの資材を登録します。登録すると作業記録の際に選べるようになります。";
+    else if (type === 'sales_prices') helpContent = "作目ごとの販売価格（単価）を登録します。JAや直売所など、販路別に異なる単価を設定できます。";
+    else if (type === 'crops') helpContent = "栽培する作目を登録します。登録した作目は、作業記録や売上登録の際に選択肢として表示されます。";
+    else if (type === 'fields') helpContent = "農地（圃場）を登録します。面積を入力しておくと、ダッシュボードでの利益分析に活用できます。";
+    else if (type === 'workers') helpContent = "農作業を行うスタッフを登録します。時給を設定すると、ダッシュボードで人件費として自動計算されます。";
+
+    return (
+      <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+        <div className="flex items-center gap-2 text-slate-800 font-bold text-lg">
+          <Icon className="w-5 h-5 text-emerald-600" />
+          {title}
+          <HelpTooltip content={helpContent} />
+        </div>
+        <button 
+          onClick={() => handleOpenModal(type)}
+          className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-3 py-1 rounded-lg text-sm font-bold flex items-center gap-1 transition-colors"
+        >
+          <Plus className="w-4 h-4" />追加
+        </button>
       </div>
-      <button 
-        onClick={() => handleOpenModal(type)}
-        className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-3 py-1 rounded-lg text-sm font-bold flex items-center gap-1 transition-colors"
-      >
-        <Plus className="w-4 h-4" />追加
-      </button>
-    </div>
-  );
+    );
+  };
 
   const CsvActionButtons = ({ type, inputRef }: { type: MasterType, inputRef: React.RefObject<HTMLInputElement | null> }) => (
     <div className="pt-4 border-t border-slate-100 space-y-3 mt-auto">
@@ -621,6 +632,7 @@ export default function MastersPage() {
                 <div className="flex items-center gap-2 text-slate-800 font-bold text-lg">
                   <Banknote className="w-5 h-5 text-emerald-600" />
                   {`販売価格 (${salesPrices.length})`}
+                  <HelpTooltip content="作目ごとの販売価格（単価）を登録します。JAや直売所など、販路別に異なる単価を設定できます。" />
                 </div>
                 
                 {/* 状態切り替えトグル */}

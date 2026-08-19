@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { Truck, Download, Filter, Sprout, Store, Trash2 } from 'lucide-react';
 import Papa from 'papaparse';
 
@@ -134,6 +135,7 @@ export default function SalesHistoryPage() {
           <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
             <Truck className="w-6 h-6 md:w-8 md:h-8 text-amber-500 flex-shrink-0" />
             出荷記録一覧
+            <HelpTooltip content="出荷および売上の履歴データです。CSVでダウンロードして会計ソフト等と連携可能です。" />
           </h1>
           <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">現場で入力されたすべての出荷（売上）の履歴です。</p>
         </div>

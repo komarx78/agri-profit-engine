@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { Calendar, Save, Loader2, ChevronLeft, ChevronRight, Plus, Trash2, X, BarChart2, User } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 
@@ -235,6 +236,7 @@ export default function CultivationSchedulePage() {
           <h1 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
             <Calendar className="w-6 h-6 md:w-8 md:h-8 text-blue-600 flex-shrink-0" />
             栽培計画表 (作付カレンダー)
+            <HelpTooltip content="年度ごとの作付計画（いつ、どこで、何を育てるか）を登録します。この計画をもとに必要な苗や資材の量が自動計算されます。" className="ml-1" />
           </h1>
           <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">ここで作付計画を立てると、マスタの基準値に基づき必要な苗や資材の量が自動計算されます。</p>
         </div>

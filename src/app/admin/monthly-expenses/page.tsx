@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { Receipt, Save, Loader2, Calendar, TrendingDown, RefreshCw, AlertCircle, Edit2 } from 'lucide-react';
 
 type ExpenseType = 'fuel' | 'machinery' | 'other';
@@ -124,6 +125,7 @@ export default function MonthlyExpensesPage() {
           <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
             <Receipt className="w-6 h-6 text-emerald-600" />
             月次全体経費の入力
+            <HelpTooltip content="農場全体でかかった毎月の経費（光熱費や機械代など）を入力します。ここで入力した経費は、各作付の面積比に応じて自動で割り振られ、ダッシュボードの利益計算に使われます。" />
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             農場全体でかかった経費を月1回入力します。ここで入力した経費は、各作付の面積比に応じて自動で按分され、正確な原価計算に使用されます。

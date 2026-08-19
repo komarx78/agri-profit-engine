@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { FileText, Printer, Calculator, AlertCircle, RefreshCw, Mail, Users, Loader2, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -358,6 +359,7 @@ export default function InvoicesPage() {
           <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
             <FileText className="w-6 h-6 md:w-8 md:h-8 text-indigo-500 flex-shrink-0" />
             請求書の一括発行
+            <HelpTooltip content="選択した月の出荷データをもとに、各取引先ごとの請求書を自動生成します。メールでそのまま送信することも可能です。" className="ml-1" />
           </h1>
           <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">対象月を選ぶだけで、その月に出荷があったすべての取引先の請求書を一斉に作成します。</p>
         </div>

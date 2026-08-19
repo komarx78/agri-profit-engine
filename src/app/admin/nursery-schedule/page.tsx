@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Table, Sprout, Save, Loader2, Info, Paintbrush, Eraser } from 'lucide-react';
+import { HelpTooltip } from '@/components/HelpTooltip';
+import { Table, Sprout, Save, Loader2, Info, Paintbrush, Eraser, ChevronLeft, ChevronRight, Calculator, Calendar, RefreshCw, X, ChevronDown, Filter } from 'lucide-react';
 
 // 日付操作ユーティリティ
 const addWeeks = (date: Date, weeks: number) => {
@@ -203,6 +204,7 @@ export default function NurserySchedulePage() {
           <h1 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
             <Sprout className="w-6 h-6 md:w-8 md:h-8 text-emerald-600 flex-shrink-0" />
             育苗スケジュール表
+            <HelpTooltip content="栽培計画に紐づく育苗予定（種まきや定植のタイミング）を管理します。必要な苗の数が自動計算されます。" className="ml-1" />
           </h1>
           <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">栽培計画に基づいて「必要な苗リスト」が自動生成されます。日々の播種・定植の予定を入力してください。</p>
         </div>

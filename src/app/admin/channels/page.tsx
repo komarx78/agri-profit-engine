@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { Store, Plus, Save, Trash2, Mail, Loader2, AlertCircle } from 'lucide-react';
 
 interface Channel {
@@ -111,6 +112,7 @@ export default function ChannelsMasterPage() {
         <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
           <Store className="w-8 h-8 text-blue-500" />
           出荷先（請求先）マスタ
+          <HelpTooltip content="出荷先ごとの名称や、請求書をPDFで送信するためのメールアドレスを登録します。" className="ml-1" />
         </h1>
         <p className="text-slate-500 mt-2 font-medium">出荷先の名前や、請求書送付用のメールアドレスを管理します。</p>
       </div>

@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { FileSpreadsheet, Download, Calendar, Settings, Info, AlertTriangle } from 'lucide-react';
+import { HelpTooltip } from '@/components/HelpTooltip';
+import { FileSpreadsheet, Download, RefreshCw, Loader2, Info, AlertTriangle } from 'lucide-react';
 import Papa from 'papaparse';
 
 export default function AccountingPage() {
@@ -228,6 +229,7 @@ export default function AccountingPage() {
         <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
           <FileSpreadsheet className="w-6 h-6 md:w-8 md:h-8 text-blue-600 flex-shrink-0" />
           会計データ出力（仕訳CSV生成）
+          <HelpTooltip content="売上や経費のデータを、マネーフォワードなどの会計ソフトに取り込める仕訳形式のCSVで出力します。" className="ml-1" />
         </h1>
         <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">
           売上と作業記録（資材費）から、マネーフォワードクラウドの「仕訳帳」へ直接インポートできる全25項目のCSVを生成します。

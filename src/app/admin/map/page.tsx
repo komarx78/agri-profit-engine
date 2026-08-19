@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, Polygon, InfoWindow } from '@react-google-maps/api';
 import { supabase } from '@/lib/supabase';
+import { HelpTooltip } from '@/components/HelpTooltip';
 import { MapPin, Plus, Loader2, Save, X, Info, Search, Check, Trash2, Edit2, Palette, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 
@@ -442,6 +443,7 @@ export default function MapPage() {
           <h2 className="font-black text-slate-800 flex items-center gap-2">
             <MapPin className="w-5 h-5 text-emerald-600" />
             圃場・作付一覧
+            <HelpTooltip content="地図上で圃場を多角形で囲んで登録できます。面積が自動計算され、作付計画との連動も可能です。" />
           </h2>
         </div>
         
@@ -555,22 +557,35 @@ export default function MapPage() {
             </div>
           )}
           
+          {/* 拡大縮小・操作ヒント */}
+          {!isDrawingMode && !editingFieldId && (
+            <div className="bg-white/95 backdrop-blur border border-slate-200 text-slate-600 text-xs font-bold px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 w-fit">
+              <Info className="w-5 h-5 text-emerald-500 shrink-0" />
+              <div className="space-y-1">
+                <p className="hidden md:block">【拡大・縮小】Ctrlキーを押しながらマウスホイール または 右下の＋ーボタン</p>
+                <p className="md:hidden">【拡大・縮小】2本指でピンチ（広げる/閉じる）</p>
+                <p className="hidden md:block">【移動】地図をドラッグ</p>
+                <p className="md:hidden">【移動】1本指でスワイプ</p>
+              </div>
+            </div>
+          )}
+          
           {/* 住所・地名検索窓 */}
           {!isDrawingMode && (
             <form 
               onSubmit={handleSearch}
-              className="relative shadow-lg rounded-xl overflow-hidden bg-white border border-slate-200 flex items-center"
+              className="relative shadow-lg rounded-xl overflow-hidden bg-white border border-slate-200 flex items-center w-full max-w-sm"
             >
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="住所や地名で検索..."
-                className="px-4 py-2 w-48 md:w-64 outline-none font-bold text-slate-700"
+                className="px-4 py-2 w-full outline-none font-bold text-slate-700"
               />
               <button 
                 type="submit"
-                className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border-l border-slate-200 text-slate-500 hover:text-emerald-600 transition-colors"
+                className="px-4 py-2 bg-slate-50 hover:bg-slate-100 border-l border-slate-200 text-slate-500 hover:text-emerald-600 transition-colors shrink-0"
               >
                 <Search className="w-5 h-5" />
               </button>
