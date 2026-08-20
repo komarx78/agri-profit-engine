@@ -1,42 +1,76 @@
-"use client";
+﻿"use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Database, LogOut, Sprout, History, Menu, FileSpreadsheet, Truck, FileText, Settings, Store, Copy, Check, Table, Target, Receipt, Video, Calendar, Calculator, MapPin, BookOpen } from 'lucide-react';
-import { createClient } from '@/utils/supabase/client';
+import { 
+  Sprout, 
+  LayoutDashboard, 
+  Table, 
+  BookOpen, 
+  MapPin, 
+  Video, 
+  LogOut, 
+  Menu,
+  Database,
+  Store,
+  Settings,
+  Truck,
+  FileText,
+  Calendar,
+  Receipt,
+  FileSpreadsheet,
+  Calculator,
+  History,
+  Copy,
+  Check
+} from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
-export default function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
-  const [tenantId, setTenantId] = React.useState<string | null>(null);
-  const [copied, setCopied] = React.useState(false);
-  const supabase = createClient();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [tenantId, setTenantId] = useState<string>('');
+  const [copied, setCopied] = useState(false);
 
-  React.useEffect(() => {
-    const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) setTenantId(user.id);
-    };
-    getUser();
-  }, [supabase]);
+  useEffect(() => {
+    async function checkAuth() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/login');
+        return;
+      }
+      const tId = session.user.id;
+      setTenantId(tId);
+      
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', tId)
+        .single();
+        
+      if (profile?.role !== 'admin') {
+        router.push('/login');
+      }
+    }
+    checkAuth();
+  }, [router]);
 
-  const handleCopyUrl = () => {
+  const handleCopyUrl = async () => {
     if (!tenantId) return;
-    const url = `${window.location.origin}/farm/${tenantId}`;
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const url = `${window.location.origin}/work`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy', err);
+    }
   };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    // 現場のワーカーログイン情報もついでに消去
     if (tenantId) localStorage.removeItem(`agri_worker_${tenantId}`);
     router.push('/login');
   };
@@ -55,7 +89,7 @@ export default function AdminLayout({
     {
       title: '売上・経費管理',
       items: [
-        { name: '出荷記録一覧', path: '/admin/sales-history', icon: Truck },
+        { name: '出荷履歴一覧', path: '/admin/sales-history', icon: Truck },
         { name: '請求書一括発行', path: '/admin/invoices', icon: FileText },
         { name: '資材購入・直接経費', path: '/admin/purchases', icon: Receipt },
         { name: '月次全体経費(按分用)', path: '/admin/monthly-expenses', icon: Calculator },
@@ -122,7 +156,6 @@ export default function AdminLayout({
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans">
       
-      {/* モバイル用ヘッダー */}
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:hidden sticky top-0 z-50">
         <div className="flex items-center gap-2 text-emerald-700 font-black text-lg">
           <Sprout className="w-6 h-6" />
@@ -133,7 +166,6 @@ export default function AdminLayout({
         </button>
       </header>
 
-      {/* モバイル用ドロップダウンメニュー */}
       {isMobileMenuOpen && (
         <div className="md:hidden bg-white border-b border-slate-200 p-4 space-y-2 shadow-lg absolute top-16 left-0 right-0 w-full z-40">
           <NavLinks />
@@ -141,7 +173,7 @@ export default function AdminLayout({
             {tenantId && (
               <>
                 <Link 
-                  href={`/farm/${tenantId}`} 
+                  href="/work" 
                   className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 font-medium hover:bg-slate-100"
                 >
                   <Sprout className="w-5 h-5" />
@@ -167,7 +199,6 @@ export default function AdminLayout({
         </div>
       )}
 
-      {/* デスクトップ用サイドバー */}
       <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col sticky top-0 h-screen">
         <div className="h-16 flex items-center px-6 border-b border-slate-100">
           <div className="flex items-center gap-2 text-emerald-700 font-black text-lg tracking-tight">
@@ -184,7 +215,7 @@ export default function AdminLayout({
           {tenantId && (
             <>
               <Link 
-                href={`/farm/${tenantId}`} 
+                href="/work" 
                 className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 font-medium hover:bg-slate-100 transition-colors"
               >
                 <Sprout className="w-5 h-5" />
@@ -195,7 +226,7 @@ export default function AdminLayout({
                 className="w-full mt-2 flex items-center gap-3 px-4 py-3 rounded-xl text-emerald-600 font-bold bg-emerald-50 hover:bg-emerald-100 transition-colors text-left shadow-sm"
               >
                 {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-                従業員URLコピー
+                従業員用URLをコピー
               </button>
             </>
           )}
@@ -209,7 +240,6 @@ export default function AdminLayout({
         </div>
       </aside>
 
-      {/* メインコンテンツエリア */}
       <main className="flex-1 flex flex-col w-full md:h-screen md:overflow-auto relative">
         <div className="flex-1 p-4 md:p-8">
           {children}

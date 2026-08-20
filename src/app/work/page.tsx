@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -9,7 +9,6 @@ import {
 import { supabase } from '@/lib/supabase';
 import { WorkerGate } from '@/components/WorkerGate';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 
 interface MasterItem {
   id: string;
@@ -35,6 +34,16 @@ async function fetchWeather(lat: number, lng: number) {
     console.error(e);
   }
   return { temp: null, text: null };
+}
+
+async function fetchAddress(lat: number, lng: number) {
+  try {
+    const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=ja`);
+    const data = await res.json();
+    return `${data.principalSubdivision || ''}${data.locality || ''}${data.city || ''}` || '住所不明';
+  } catch(e) {
+    return '住所取得失敗';
+  }
 }
 
 function isPointInPolygon(point: {lat: number, lng: number}, vs: {lat: number, lng: number}[]) {
@@ -64,12 +73,12 @@ export default function WorkEntryPage() {
   const [crops, setCrops] = useState<MasterItem[]>([]);
   const [fields, setFields] = useState<MasterItem[]>([]);
   const [materials, setMaterials] = useState<MasterItem[]>([]);
-  const [language, setLanguage] = useState<LanguageCode>('ja');
 
   // --- タブと勤怠状態 ---
   const [activeTab, setActiveTab] = useState<'attendance' | 'work'>('attendance');
   const [attendanceLog, setAttendanceLog] = useState<any>(null);
   const [gpsStatus, setGpsStatus] = useState<string>('');
+  const [currentAddress, setCurrentAddress] = useState<string>('現在地を取得中...');
 
   // フォーム状態
   const [selectedCrop, setSelectedCrop] = useState<string>('');
@@ -98,13 +107,6 @@ export default function WorkEntryPage() {
     if (!savedUser) return;
     const parsedUser = JSON.parse(savedUser);
     setCurrentUser(parsedUser);
-
-    let loadedLang = 'ja' as LanguageCode;
-    const savedGlobalLang = localStorage.getItem('agri_lang_sales') as LanguageCode;
-    if (savedGlobalLang && LANGUAGES.some(l => l.code === savedGlobalLang)) {
-        loadedLang = savedGlobalLang;
-    }
-    setLanguage(loadedLang);
 
     async function fetchData() {
       try {
@@ -159,6 +161,17 @@ export default function WorkEntryPage() {
       }
     }
     fetchData();
+
+    // 初期マウント時にGPS住所を一度取得しておく
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        const addr = await fetchAddress(pos.coords.latitude, pos.coords.longitude);
+        setCurrentAddress(addr);
+      }, () => {
+        setCurrentAddress('位置情報がオフです');
+      });
+    }
+
   }, [router]);
 
   // GPSによる自動圃場選択
@@ -228,7 +241,6 @@ export default function WorkEntryPage() {
       let lat=0, lng=0;
       let weatherText = null, temp = null;
 
-      // 位置と天気の取得
       if (action === 'clock_in' && navigator.geolocation) {
         try {
           const pos = await new Promise<GeolocationPosition>((res, rej) => navigator.geolocation.getCurrentPosition(res, rej));
@@ -293,7 +305,6 @@ export default function WorkEntryPage() {
         const matId = materials.find(m => m.name === selectedMaterial)?.id;
         const startTime = new Date().toISOString();
 
-        // 記録時に天気も保存
         let weatherText = null, temp = null;
         if (navigator.geolocation) {
           try {
@@ -431,6 +442,11 @@ export default function WorkEntryPage() {
             <History className="w-4 h-4" />作業記録
           </button>
         </div>
+        
+        {/* GPS住所の表示 */}
+        <div className="max-w-md w-full mx-auto flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-400">
+          <MapPin className="w-3.5 h-3.5" /> {currentAddress}
+        </div>
       </header>
 
       <div className="max-w-md mx-auto px-4 pt-6">
@@ -439,7 +455,6 @@ export default function WorkEntryPage() {
         {activeTab === 'attendance' && (
           <div className="space-y-6">
             
-            {/* ステータス表示 */}
             <div className="bg-emerald-900/40 p-6 rounded-3xl border border-emerald-800/40 shadow-sm text-center">
               <p className="text-sm text-emerald-400 font-bold mb-1">{getJSTDate()}</p>
               <h2 className="text-3xl font-black text-white mb-4">
@@ -453,7 +468,6 @@ export default function WorkEntryPage() {
               )}
             </div>
 
-            {/* 打刻ボタン */}
             <div className="grid grid-cols-2 gap-4">
               <button 
                 onClick={() => handleAttendance('clock_in')}
