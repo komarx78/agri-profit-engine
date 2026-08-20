@@ -2,8 +2,11 @@ import { type NextRequest } from 'next/server'
 import { updateSession } from '@/utils/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
-  // `share/invoice/[id]` のような公開ルートは認証をスキップする
-  if (request.nextUrl.pathname.startsWith('/share')) {
+  // `share/invoice/[id]` や `farm/[tenant_id]` などの公開ルートは認証をスキップする
+  if (
+    request.nextUrl.pathname.startsWith('/share') ||
+    request.nextUrl.pathname.startsWith('/farm')
+  ) {
     return
   }
 

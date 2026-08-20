@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, use } from 'react';
-import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle, Building2, Video, Lock, X, FileText, Image as ImageIcon } from 'lucide-react';
-import { getFarmInfo, getFarmWorkers, verifyWorkerPin, getFarmMasters, submitWorkLog, TenantInfo } from '@/app/actions/farm';
+import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle, Building2, Video, Lock, X, FileText, Image as ImageIcon, LogIn } from 'lucide-react';
+import { getFarmInfo, getFarmWorkers, verifyWorkerPin, getFarmMasters, submitWorkLog, getTodayAttendance, submitAttendance, TenantInfo } from '@/app/actions/farm';
 import { supabase } from '@/lib/supabase';
 import imageCompression from 'browser-image-compression';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
@@ -56,6 +56,9 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   const [inputMode, setInputMode] = useState<'timer' | 'manual' | 'manuals'>('timer');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'attendance' | 'work'>('attendance');
+  const [attendanceLog, setAttendanceLog] = useState<any>(null);
+  const [currentAddress, setCurrentAddress] = useState<string>('現在地を取得中...');
 
   const [manuals, setManuals] = useState<any[]>([]);
   const [playingVideo, setPlayingVideo] = useState<string | null>(null);
@@ -150,6 +153,35 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     }
     return () => clearInterval(interval);
   }, [activeWorkStartTime]);
+
+  useEffect(() => {
+    if (currentUser) {
+      const fetchAttendance = async () => {
+        const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }); // YYYY-MM-DD
+        const res = await getTodayAttendance(tenantId, currentUser.id, today);
+        if (res.success && res.data) {
+          setAttendanceLog(res.data);
+        }
+      };
+      fetchAttendance();
+    }
+  }, [currentUser, tenantId]);
+
+  const handleAttendance = async (action: 'clock_in' | 'break_start' | 'break_end' | 'clock_out') => {
+    if (!currentUser) return;
+    setIsSubmitting(true);
+    try {
+      const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+      const now = new Date().toISOString();
+      const res = await submitAttendance(tenantId, currentUser.id, action, attendanceLog?.id || null, today, now, null, null);
+      if (res.success && res.data) {
+        setAttendanceLog(res.data);
+      } else {
+        alert(res.error || '打刻エラー');
+      }
+    } catch(e) { console.error(e); }
+    setIsSubmitting(false);
+  };
 
   const resetForm = () => {
     setSelectedTaskTarget('');
@@ -465,25 +497,102 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
         </div>
       </header>
 
-      <div className="max-w-md mx-auto px-4 pt-6">
-        <div className="flex bg-emerald-900/50 p-1 rounded-xl mb-6">
-          <button onClick={() => setInputMode('timer')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${inputMode === 'timer' ? 'bg-emerald-500 text-emerald-950' : 'text-emerald-300'}`}>{t('tabTimer', language)}</button>
-          <button onClick={() => setInputMode('manual')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${inputMode === 'manual' ? 'bg-emerald-500 text-emerald-950' : 'text-emerald-300'}`}>{t('tabManual', language)}</button>
-          {farmInfo?.plan_type === 'premium' && (
-            <button onClick={() => setInputMode('manuals')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${inputMode === 'manuals' ? 'bg-emerald-500 text-emerald-950' : 'text-emerald-300'}`}>{t('tabManuals', language)}</button>
-          )}
-        </div>
+      {/* タブ切り替え */}
+      <div className="max-w-md w-full mx-auto flex bg-emerald-900/50 p-1 rounded-xl mb-2 mt-4">
+        <button
+          onClick={() => setActiveTab('attendance')}
+          className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
+            activeTab === 'attendance' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70'
+          }`}
+        >
+          <Clock className="w-4 h-4" />出退勤
+        </button>
+        <button
+          onClick={() => setActiveTab('work')}
+          className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
+            activeTab === 'work' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70'
+          }`}
+        >
+          <History className="w-4 h-4" />作業記録
+        </button>
+      </div>
+      
+      {/* GPS住所の表示 */}
+      <div className="max-w-md w-full mx-auto flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-400 mb-2">
+        <MapPin className="w-3.5 h-3.5" /> {currentAddress}
+      </div>
 
-        {isSuccess ? (
-          <div className="my-12 p-8 bg-emerald-900/50 rounded-3xl border border-emerald-500 text-center space-y-4">
-            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6 mx-auto">
-              <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+      <div className="max-w-md mx-auto px-4 pt-4">
+        {/* ===================== 勤怠タブ ===================== */}
+        {activeTab === 'attendance' && (
+          <div className="space-y-6">
+            <div className="bg-emerald-900/40 p-6 rounded-3xl border border-emerald-800/40 shadow-sm text-center">
+              <p className="text-sm text-emerald-400 font-bold mb-1">{new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}</p>
+              <h2 className="text-3xl font-black text-white mb-4">
+                {new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+              </h2>
+              {attendanceLog && (
+                <div className="flex justify-center items-center gap-6 text-sm font-medium text-emerald-300/80">
+                  <div className="flex flex-col items-center">
+                    <span className="text-xs mb-1">出勤</span>
+                    <span className="font-bold text-white text-base">
+                      {attendanceLog.clock_in ? new Date(attendanceLog.clock_in).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                    </span>
+                  </div>
+                  <div className="w-px h-8 bg-emerald-800/50"></div>
+                  <div className="flex flex-col items-center">
+                    <span className="text-xs mb-1">退勤</span>
+                    <span className="font-bold text-white text-base">
+                      {attendanceLog.clock_out ? new Date(attendanceLog.clock_out).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
-            <h2 className="text-2xl font-black text-white">{t('recordingComplete', language)}</h2>
-            <p className="text-sm text-emerald-200">{t('goodJob', language)}</p>
+
+            <div className="grid grid-cols-2 gap-4">
+              <button 
+                onClick={() => handleAttendance('clock_in')}
+                disabled={!!attendanceLog || isSubmitting}
+                className="py-8 bg-gradient-to-br from-blue-500 to-indigo-600 disabled:opacity-50 disabled:grayscale rounded-3xl shadow-lg flex flex-col items-center justify-center gap-2 text-white transition-all active:scale-95"
+              >
+                <LogIn className="w-8 h-8" />
+                <span className="font-black">出勤</span>
+              </button>
+
+              <button 
+                onClick={() => handleAttendance('clock_out')}
+                disabled={!attendanceLog || !!attendanceLog.clock_out || isSubmitting}
+                className="py-8 bg-gradient-to-br from-rose-500 to-red-600 disabled:opacity-50 disabled:grayscale rounded-3xl shadow-lg flex flex-col items-center justify-center gap-2 text-white transition-all active:scale-95"
+              >
+                <LogOut className="w-8 h-8" />
+                <span className="font-black">退勤</span>
+              </button>
+            </div>
           </div>
-        ) : inputMode !== 'manuals' ? (
-          <form onSubmit={inputMode === 'timer' ? handleStartWork : handleManualSubmit} className="space-y-6">
+        )}
+
+        {/* ===================== 作業タブ ===================== */}
+        {activeTab === 'work' && (
+          <div className="w-full">
+            <div className="flex bg-emerald-900/50 p-1 rounded-xl mb-6">
+              <button onClick={() => setInputMode('timer')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${inputMode === 'timer' ? 'bg-emerald-500 text-emerald-950' : 'text-emerald-300'}`}>{t('tabTimer', language)}</button>
+              <button onClick={() => setInputMode('manual')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${inputMode === 'manual' ? 'bg-emerald-500 text-emerald-950' : 'text-emerald-300'}`}>{t('tabManual', language)}</button>
+              {farmInfo?.plan_type === 'premium' && (
+                <button onClick={() => setInputMode('manuals')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${inputMode === 'manuals' ? 'bg-emerald-500 text-emerald-950' : 'text-emerald-300'}`}>{t('tabManuals', language)}</button>
+              )}
+            </div>
+
+            {isSuccess ? (
+              <div className="my-12 p-8 bg-emerald-900/50 rounded-3xl border border-emerald-500 text-center space-y-4">
+                <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6 mx-auto">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+                </div>
+                <h2 className="text-2xl font-black text-white">{t('recordingComplete', language)}</h2>
+                <p className="text-sm text-emerald-200">{t('goodJob', language)}</p>
+              </div>
+            ) : inputMode !== 'manuals' ? (
+              <form onSubmit={inputMode === 'timer' ? handleStartWork : handleManualSubmit} className="space-y-6">
             {errorMsg && (
               <div className="p-4 bg-rose-500/20 border border-rose-500/50 text-rose-400 rounded-xl text-sm font-bold flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
@@ -720,6 +829,9 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
             )}
           </div>
         )}
+        </div>
+      )}
+      </div>
 
         {/* マニュアル再生モーダル */}
         {playingVideo && (
@@ -732,7 +844,6 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
             <video src={playingVideo} controls autoPlay playsInline className="w-full max-h-[80vh] object-contain" />
           </div>
         )}
-      </div>
     </main>
   );
 }

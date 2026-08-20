@@ -14,6 +14,7 @@ export default function SalesEntryPage() {
   const [selectedCrop, setSelectedCrop] = useState<string>('');
   const [selectedChannel, setSelectedChannel] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('');
+  const [unit, setUnit] = useState<string>('kg/箱');
   const [manualPrice, setManualPrice] = useState<string>('');
   const [salesDate, setSalesDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
 
@@ -83,7 +84,13 @@ export default function SalesEntryPage() {
     } else {
       setManualPrice('');
     }
-  }, [selectedCrop, selectedChannel, salesPrices]);
+
+    // Set unit based on selected crop
+    const currentCropObj = crops.find(c => c.name === selectedCrop);
+    if (currentCropObj && currentCropObj.unit) {
+      setUnit(currentCropObj.unit);
+    }
+  }, [selectedCrop, selectedChannel, salesPrices, crops]);
 
   // 手動入力された単価で計算
   const parsedPrice = parseFloat(manualPrice) || 0;
@@ -130,7 +137,7 @@ export default function SalesEntryPage() {
               channel_id: channelId || null,
               sales_date: salesDate,
               quantity: parseFloat(quantity) || 0,
-              unit: 'kg/箱',
+              unit: unit,
               total_sales: calculatedTotal > 0 ? calculatedTotal : null,
               status: 'completed'
             }
@@ -260,56 +267,65 @@ export default function SalesEntryPage() {
                 <div className="text-sm text-slate-500 p-2 text-center font-bold">{t('selectCropFirst', language)}</div>
               ) : (
                 <div className="grid grid-cols-2 gap-2.5">
-                  {/* salesPricesの中から、選んだ作目に紐づく販路だけを抽出 */}
-                  {salesPrices.filter(sp => sp.crop_name === selectedCrop).map(sp => {
-                    const channelObj = channels.find(c => c.name === sp.channel_name) || { name: sp.channel_name };
+                  <button
+                    type="button"
+                    onClick={() => setSelectedChannel('')}
+                    className={`py-3.5 px-3 rounded-xl font-bold text-base transition-all border text-center ${
+                      selectedChannel === ''
+                        ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-slate-950 border-blue-300 shadow-md'
+                        : 'bg-slate-950/60 text-slate-300 border-slate-800/80 hover:bg-slate-800/60'
+                    }`}
+                  >
+                    {t('unselected', language) || '未選択'}
+                  </button>
+                  {channels.map(channelObj => {
+                    const sp = salesPrices.find(sp => sp.crop_name === selectedCrop && sp.channel_name === channelObj.name);
                     return (
                       <button
-                        key={sp.id}
+                        key={channelObj.id}
                         type="button"
-                        onClick={() => setSelectedChannel(sp.channel_name)}
+                        onClick={() => setSelectedChannel(channelObj.name)}
                         className={`py-3.5 px-3 rounded-xl font-bold text-base transition-all border text-center ${
-                          selectedChannel === sp.channel_name
+                          selectedChannel === channelObj.name
                             ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-slate-950 border-blue-300 shadow-md'
                             : 'bg-slate-950/60 text-slate-300 border-slate-800/80 hover:bg-slate-800/60'
                         }`}
                       >
                         {getTranslatedName(channelObj, language)}
-                        <div className="text-[10px] font-medium opacity-80 mt-1">¥{sp.price_per_unit}</div>
+                        {sp && <div className="text-[10px] font-medium opacity-80 mt-1">¥{sp.price_per_unit}</div>}
                       </button>
                     );
                   })}
-                  {salesPrices.filter(sp => sp.crop_name === selectedCrop).length === 0 && (
-                    <div className="col-span-2 text-xs text-rose-400 p-2 text-center bg-rose-950/30 rounded-lg">
-                      {t('noPriceMaster', language)}
-                    </div>
-                  )}
                 </div>
               )}
             </section>
 
-            {/* 3. 数量 */}
+            {/* 3. 数量・単位 */}
             <section className="bg-amber-900/20 p-4 rounded-2xl border border-amber-900/40 shadow-sm">
               <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 mb-2.5 flex items-center gap-2">
                 <FileDigit className="w-4 h-4 text-amber-400" />{t('quantityRequired', language)}
               </h2>
-              <div className="relative">
+              <div className="flex gap-2 relative">
                 <input
                   type="number"
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
                   placeholder="0"
-                  className="w-full py-4 px-4 pr-16 text-3xl font-black text-right bg-slate-950/80 rounded-xl border-2 border-amber-700/50 text-white placeholder-slate-700 focus:border-amber-400 focus:outline-none transition-all shadow-inner"
+                  className="w-full py-4 px-4 text-3xl font-black text-right bg-slate-950/80 rounded-xl border-2 border-amber-700/50 text-white placeholder-slate-700 focus:border-amber-400 focus:outline-none transition-all shadow-inner"
                   required
                 />
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-amber-500 font-bold">
-                  kg / 箱
-                </div>
+                <input
+                  type="text"
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value)}
+                  className="w-24 text-center py-4 px-2 font-bold text-amber-500 bg-slate-950/80 rounded-xl border-2 border-amber-700/50 focus:border-amber-400 focus:outline-none transition-all"
+                  placeholder="単位"
+                />
               </div>
             </section>
 
             {/* 4. 売上計算 */}
-            {selectedCrop && selectedChannel && (
+            {selectedCrop && (
               <section className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50 flex flex-col gap-4">
                 <div className="flex justify-between items-center text-sm">
                   <div className="flex flex-col gap-1">
@@ -327,34 +343,37 @@ export default function SalesEntryPage() {
                     <span className="text-slate-400">/ {t('unit', language)}</span>
                   </div>
                 </div>
-                <div className="flex justify-between items-end border-t border-slate-700/50 pt-3 mt-1">
-                  <span className="text-emerald-400 font-bold text-sm">{t('actualSales', language)}</span>
-                  <span className="text-3xl font-black text-white">
-                    ¥{calculatedTotal.toLocaleString()}
-                  </span>
+                <div className="w-full h-px bg-slate-700/50 my-1" />
+                <div className="flex justify-between items-end">
+                  <span className="text-sm font-bold text-slate-300">{t('totalSalesEstimate', language)}</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-lg font-bold text-amber-500">¥</span>
+                    <span className="text-4xl font-black text-amber-400">{calculatedTotal.toLocaleString()}</span>
+                  </div>
                 </div>
               </section>
             )}
 
-            {/* 送信ボタン */}
-            <button
-              type="submit"
-              disabled={!selectedCrop || !selectedChannel || !quantity || isSubmitting}
-              className={`w-full py-5 rounded-2xl font-black text-xl shadow-xl transition-all duration-200 flex items-center justify-center gap-2 mt-4 ${
-                !selectedCrop || !selectedChannel || !quantity || isSubmitting
-                  ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 text-amber-950 hover:brightness-110 active:scale-[0.98] shadow-amber-500/20'
-              }`}
-            >
-              {isSubmitting ? (
-                <span>{t('loadingData', language)}</span>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-6 h-6" />
-                  <span>{t('saveSalesRecord', language)}</span>
-                </>
-              )}
-            </button>
+            <div className="pt-6">
+              <button
+                type="submit"
+                disabled={!selectedCrop || !quantity || isSubmitting}
+                className={`w-full py-5 rounded-2xl font-black text-xl shadow-xl transition-all duration-200 flex items-center justify-center gap-2 mt-4 ${
+                  !selectedCrop || !quantity || isSubmitting
+                    ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 text-amber-950 hover:brightness-110 active:scale-[0.98] shadow-amber-500/20'
+                }`}
+              >
+                {isSubmitting ? (
+                  <span>{t('loadingData', language)}</span>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-6 h-6" />
+                    <span>{t('saveSalesRecord', language)}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </form>
         )}
       </div>

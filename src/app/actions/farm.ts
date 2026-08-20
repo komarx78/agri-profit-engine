@@ -178,3 +178,63 @@ export async function submitSalesLog(tenantId: string, logData: any) {
     return { success: false, error: '出荷記録の保存に失敗しました。' };
   }
 }
+// 当日の勤怠データの取得
+export async function getTodayAttendance(tenantId: string, workerId: string, date: string) {
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase.from('attendance_logs')
+      .select('*')
+      .eq('worker_id', workerId)
+      .eq('date', date)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+    if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "not found"
+    return { success: true, data: data || null };
+  } catch (err: any) {
+    console.error('getTodayAttendance error:', err);
+    return { success: false, data: null };
+  }
+}
+
+// 勤怠打刻
+export async function submitAttendance(tenantId: string, workerId: string, action: string, logId: string | null, date: string, now: string, weather: string | null, temp: number | null) {
+  try {
+    const supabase = createAdminClient();
+    
+    if (action === 'clock_in') {
+      const { data, error } = await supabase.from('attendance_logs').insert([{
+        worker_id: workerId,
+        date: date,
+        clock_in: now,
+        weather: weather,
+        temperature: temp
+      }]).select().single();
+      if (error) throw error;
+      return { success: true, data };
+    } else if (logId) {
+      const updates: any = {};
+      if (action === 'break_start') updates.break_start_time = now;
+      if (action === 'break_end') {
+        updates.break_end_time = now;
+        // 休憩時間の計算
+        const { data: currentLog } = await supabase.from('attendance_logs').select('break_start_time, total_break_minutes').eq('id', logId).single();
+        if (currentLog?.break_start_time) {
+          const bStart = new Date(currentLog.break_start_time).getTime();
+          const bEnd = new Date(now).getTime();
+          const diffMins = Math.floor((bEnd - bStart) / 1000 / 60);
+          updates.total_break_minutes = (currentLog.total_break_minutes || 0) + diffMins;
+        }
+      }
+      if (action === 'clock_out') updates.clock_out = now;
+      
+      const { data, error } = await supabase.from('attendance_logs').update(updates).eq('id', logId).select().single();
+      if (error) throw error;
+      return { success: true, data };
+    }
+    return { success: false, error: 'Invalid action or missing logId' };
+  } catch (err: any) {
+    console.error('submitAttendance error:', err);
+    return { success: false, error: '打刻に失敗しました' };
+  }
+}
