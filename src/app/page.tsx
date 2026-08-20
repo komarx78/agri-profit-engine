@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState } from 'react';
 import Link from 'next/link';
@@ -22,7 +22,7 @@ import {
 export default function PortalPage() {
   const [currentDate] = useState(() => {
     const d = new Date();
-    return \\年\月\日\;
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
   });
 
   return (
