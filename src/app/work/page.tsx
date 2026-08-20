@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -412,8 +412,8 @@ export default function WorkEntryPage() {
           </div>
         </div>
 
-        {/* タブ切り替え（作業中は切り替え不可） */}
-        <div className={`max-w-md w-full mx-auto flex bg-emerald-900/50 p-1 rounded-xl ${activeWorkLog ? 'opacity-50 pointer-events-none' : ''}`}>
+        {/* タブ切り替え */}
+        <div className="max-w-md w-full mx-auto flex bg-emerald-900/50 p-1 rounded-xl mb-2">
           <button
             onClick={() => setActiveTab('attendance')}
             className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
