@@ -8,8 +8,8 @@ import { Clock, Truck, Settings } from 'lucide-react';
 export default function BottomNav() {
   const pathname = usePathname();
 
-  // /admin 配下やポータル画面(/)、ログイン画面ではボトムナビを表示しない
-  if (pathname === '/' || pathname?.startsWith('/admin') || pathname?.startsWith('/login') || pathname?.startsWith('/hr')) {
+  // /admin 配下やポータル画面(/)、ログイン画面、従業員画面(/farm)ではボトムナビを表示しない
+  if (pathname === '/' || pathname?.startsWith('/admin') || pathname?.startsWith('/login') || pathname?.startsWith('/hr') || pathname?.startsWith('/farm')) {
     return null;
   }
 

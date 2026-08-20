@@ -27,14 +27,15 @@ export default function DashboardPage() {
   const [workerProductivityData, setWorkerProductivityData] = useState<any[]>([]);
   const [monthlyTrendData, setMonthlyTrendData] = useState<any[]>([]);
   const [summary, setSummary] = useState({ sales: 0, laborCost: 0, materialCost: 0, profit: 0, margin: 0 });
+  const [tenantId, setTenantId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
         setIsLoading(true);
-        // Supabaseから作業ログと売上ログを取得 (statusを含める)
-        const [workRes, salesRes] = await Promise.all([
+        // Supabaseから作業ログと売上ログ、およびユーザー情報を取得
+        const [workRes, salesRes, userRes] = await Promise.all([
           supabase.from('work_logs').select(`
             work_date,
             duration_minutes,
@@ -51,8 +52,13 @@ export default function DashboardPage() {
             status,
             crops(name),
             sales_channels(name)
-          `)
+          `),
+          supabase.auth.getUser()
         ]);
+
+        if (userRes.data.user) {
+          setTenantId(userRes.data.user.id);
+        }
 
         const rawWorkLogs = workRes.data || [];
         const rawSalesLogs = salesRes.data || [];
@@ -305,9 +311,39 @@ export default function DashboardPage() {
       {/* ページヘッダー＆直感的なコントロールパネル */}
       <div className="flex flex-col gap-6 border-b-2 border-slate-200 pb-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-          <div>
+          <div className="flex-1 w-full md:w-auto">
             <h1 className="text-2xl md:text-4xl font-black text-slate-800 tracking-tight mb-2">経営ダッシュボード</h1>
             <p className="text-sm md:text-base text-slate-500 font-medium">作業・売上データから農園の健康状態（P&L）をリアルタイムに可視化します。</p>
+
+            {/* 現場用URL（従業員URL）の表示 */}
+            {tenantId && (
+              <div className="mt-4 bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm w-full md:max-w-2xl">
+                <div>
+                  <h3 className="font-black text-emerald-800 flex items-center gap-2 text-sm">
+                    <UserCheck className="w-4 h-4" /> 現場タブレット（従業員）用 URL
+                  </h3>
+                  <p className="text-xs text-emerald-600 mt-1 font-medium">※現場の端末で開く際は、必ず管理者アカウントからログアウトしてください。</p>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                  <input 
+                    type="text" 
+                    readOnly
+                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/farm/${tenantId}`}
+                    className="flex-1 sm:w-64 px-3 py-2 bg-white border border-emerald-200 rounded-lg text-xs font-mono text-slate-600 focus:outline-none"
+                    onClick={(e) => e.currentTarget.select()}
+                  />
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/farm/${tenantId}`);
+                      alert('URLをコピーしました！\n現場の端末で開く際は、必ずこのアカウントからログアウトするか、シークレットウィンドウをご利用ください。');
+                    }}
+                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors whitespace-nowrap shadow-sm"
+                  >
+                    コピー
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           
           {/* シンプルな経費率設定 */}
