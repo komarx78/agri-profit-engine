@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -41,18 +41,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         router.push('/login');
         return;
       }
-      const tId = session.user.id;
-      setTenantId(tId);
-      
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', tId)
-        .single();
-        
-      if (profile?.role !== 'admin') {
-        router.push('/login');
-      }
+      setTenantId(session.user.id);
     }
     checkAuth();
   }, [router]);

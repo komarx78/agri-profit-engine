@@ -9,6 +9,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { WorkerGate } from '@/components/WorkerGate';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 
 interface MasterItem {
   id: string;
@@ -69,6 +70,7 @@ export default function WorkEntryPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<{id: string, name: string, role: string} | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [language, setLanguage] = useState<LanguageCode>('ja');
 
   const [crops, setCrops] = useState<MasterItem[]>([]);
   const [fields, setFields] = useState<MasterItem[]>([]);
@@ -104,6 +106,9 @@ export default function WorkEntryPage() {
   useEffect(() => {
     setIsMounted(true);
     const savedUser = localStorage.getItem('agri_user');
+    const savedLang = localStorage.getItem('agri_lang') as LanguageCode;
+    if (savedLang) setLanguage(savedLang);
+
     if (!savedUser) return;
     const parsedUser = JSON.parse(savedUser);
     setCurrentUser(parsedUser);
@@ -172,7 +177,7 @@ export default function WorkEntryPage() {
       });
     }
 
-  }, [router]);
+  }, []);
 
   // GPSによる自動圃場選択
   useEffect(() => {
@@ -413,10 +418,23 @@ export default function WorkEntryPage() {
             </div>
             <div>
               <h1 className="text-xl font-black tracking-tight text-white">現場システム</h1>
-              <p className="text-xs font-medium text-emerald-400">{currentUser.name} さん</p>
+              <p className="text-xs font-medium text-emerald-400">{getTranslatedName(currentUser, language)} さん</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <select
+              value={language}
+              onChange={(e) => {
+                const newLang = e.target.value as LanguageCode;
+                setLanguage(newLang);
+                localStorage.setItem('agri_lang', newLang);
+              }}
+              className="bg-emerald-900 text-emerald-300 text-xs font-bold rounded-lg px-2 py-1.5 focus:outline-none border border-emerald-800"
+            >
+              {LANGUAGES.map(l => (
+                <option key={l.code} value={l.code}>{l.flag} {l.code.toUpperCase()}</option>
+              ))}
+            </select>
             <button onClick={handleLogout} className="p-2 bg-emerald-900 text-emerald-400 rounded-full hover:bg-emerald-800 transition-colors">
               <LogOut className="w-5 h-5" />
             </button>
@@ -439,7 +457,7 @@ export default function WorkEntryPage() {
               activeTab === 'work' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70'
             }`}
           >
-            <History className="w-4 h-4" />作業記録
+            <History className="w-4 h-4" />{t('workRecord', language)}
           </button>
         </div>
         
@@ -526,7 +544,7 @@ export default function WorkEntryPage() {
               <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
                 <div className="flex items-center justify-between mb-2.5">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-teal-400 flex items-center gap-2">
-                    <MapPin className="w-4 h-4" />圃場
+                    <MapPin className="w-4 h-4" />{t('field', language)}
                   </h2>
                   <span className="text-xs font-bold text-teal-300 bg-teal-950 px-2 py-1 rounded-lg">{gpsStatus}</span>
                 </div>
@@ -535,22 +553,22 @@ export default function WorkEntryPage() {
                   onChange={(e) => setSelectedField(e.target.value)}
                   className="w-full bg-emerald-950/80 text-white px-4 py-3 border border-teal-800/60 rounded-xl focus:outline-none focus:border-teal-400 font-bold"
                 >
-                  <option value="">選択してください</option>
-                  {fields.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
+                  <option value="">{t('selectField', language)}</option>
+                  {fields.map(f => <option key={f.id} value={f.name}>{getTranslatedName(f, language)}</option>)}
                 </select>
               </section>
 
               <div className="grid grid-cols-2 gap-4">
                 <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2 mb-2.5"><Sprout className="w-4 h-4" />作物</h2>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2 mb-2.5"><Sprout className="w-4 h-4" />{t('crop', language)}</h2>
                   <div className="flex flex-col gap-2">
                     {crops.map(c => (
-                      <button key={c.id} type="button" onClick={() => setSelectedCrop(c.name)} className={`py-2 px-1 rounded-lg font-bold text-xs border ${selectedCrop === c.name ? 'bg-emerald-500 text-emerald-950 border-emerald-300' : 'bg-emerald-950/60 text-slate-300 border-emerald-800'}`}>{c.name}</button>
+                      <button key={c.id} type="button" onClick={() => setSelectedCrop(c.name)} className={`py-2 px-1 rounded-lg font-bold text-xs border ${selectedCrop === c.name ? 'bg-emerald-500 text-emerald-950 border-emerald-300' : 'bg-emerald-950/60 text-slate-300 border-emerald-800'}`}>{getTranslatedName(c, language)}</button>
                     ))}
                   </div>
                 </section>
                 <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2 mb-2.5"><Sparkles className="w-4 h-4" />作業</h2>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2 mb-2.5"><Sparkles className="w-4 h-4" />{t('work', language)}</h2>
                   <div className="flex flex-col gap-2">
                     {workTypes.map(w => (
                       <button key={w} type="button" onClick={() => setWorkType(w)} className={`py-2 px-1 rounded-lg font-bold text-xs border ${workType === w ? 'bg-amber-500 text-amber-950 border-amber-300' : 'bg-emerald-950/60 text-slate-300 border-emerald-800'}`}>{w}</button>
@@ -572,12 +590,12 @@ export default function WorkEntryPage() {
                 <div className="text-emerald-400 font-bold mb-2">作業中</div>
                 <div className="text-6xl font-black text-white mb-4">{elapsedMinutes}<span className="text-2xl text-emerald-400 ml-1">分</span></div>
                 <button type="button" onClick={handleStopWork} disabled={isSubmitting} className="w-full py-5 rounded-2xl font-black text-xl flex items-center justify-center gap-3 bg-rose-500 text-white">
-                  {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : <><Square className="w-6 h-6 fill-white" />作業終了</>}
+                  {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : <><Square className="w-6 h-6 fill-white" />{t('stopWork', language)}</>}
                 </button>
               </div>
             ) : (
               <button type="submit" disabled={!selectedCrop || !selectedField || !workType || (inputMode === 'manual' && !duration) || isSubmitting} className="w-full py-5 rounded-2xl font-black text-xl bg-emerald-500 text-emerald-950 disabled:bg-slate-800 disabled:text-slate-500 mt-8 flex justify-center items-center gap-2">
-                {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : '記録する'}
+                {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : t('startWork', language)}
               </button>
             )}
           </form>
