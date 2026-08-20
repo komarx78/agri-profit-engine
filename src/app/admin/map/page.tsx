@@ -63,6 +63,10 @@ export default function MapPage() {
 
   // 選択された圃場の詳細（作付・履歴）用ステート
   const [selectedFieldDetails, setSelectedFieldDetails] = useState<{ plan: any, works: any[] } | null>(null);
+  
+  // 圃場名編集用のステート
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editName, setEditName] = useState('');
 
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
@@ -324,6 +328,27 @@ export default function MapPage() {
     }
   };
 
+  // 圃場の名前を保存する
+  const handleSaveFieldName = async () => {
+    if (!selectedField || !editName.trim()) return;
+    try {
+      const { error } = await supabase
+        .from('fields')
+        .update({ name: editName.trim() })
+        .eq('id', selectedField.id);
+        
+      if (error) throw error;
+      
+      // ローカルのステートも更新
+      setSelectedField({ ...selectedField, name: editName.trim() });
+      setIsEditingName(false);
+      fetchFieldsData(); // 全体の再取得
+    } catch (err) {
+      console.error(err);
+      alert('名前の保存に失敗しました。');
+    }
+  };
+
   // 既存の畑の形を保存する
   const handleUpdatePolygon = async () => {
     if (!editingFieldId) return;
@@ -389,6 +414,9 @@ export default function MapPage() {
     
     setSelectedField(field);
     setSelectedFieldDetails(null); // 以前の詳細をクリア
+    setIsEditingName(false);
+    setEditName(field.name);
+    
     if (e.latLng) {
       setInfoWindowPos({ lat: e.latLng.lat(), lng: e.latLng.lng() });
     }
@@ -661,7 +689,42 @@ export default function MapPage() {
               }}
             >
               <div className="p-2 min-w-[240px]">
-                <h3 className="font-black text-xl text-slate-800 mb-1">{selectedField.name}</h3>
+                {isEditingName ? (
+                  <div className="flex items-center gap-1 mb-2">
+                    <input 
+                      type="text" 
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="flex-1 px-2 py-1 border border-emerald-500 rounded font-bold text-slate-800 text-sm focus:outline-none"
+                      autoFocus
+                    />
+                    <button 
+                      onClick={handleSaveFieldName}
+                      className="p-1.5 bg-emerald-500 text-white rounded hover:bg-emerald-600 transition-colors"
+                      title="保存"
+                    >
+                      <Check className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => { setIsEditingName(false); setEditName(selectedField.name); }}
+                      className="p-1.5 bg-slate-100 text-slate-500 rounded hover:bg-slate-200 transition-colors"
+                      title="キャンセル"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <h3 className="font-black text-xl text-slate-800 mb-1 flex items-center gap-2 group">
+                    {selectedField.name}
+                    <button 
+                      onClick={() => setIsEditingName(true)}
+                      className="p-1 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 rounded transition-colors opacity-0 group-hover:opacity-100"
+                      title="名前を変更"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  </h3>
+                )}
                 <div className="text-sm text-slate-500 mb-3 border-b border-slate-100 pb-2">
                   面積: <span className="font-bold text-slate-700">{selectedField.area_size} a</span>
                 </div>
