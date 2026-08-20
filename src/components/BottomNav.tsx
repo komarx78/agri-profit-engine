@@ -8,8 +8,8 @@ import { Clock, Truck, Settings } from 'lucide-react';
 export default function BottomNav() {
   const pathname = usePathname();
 
-  // /admin 配下のページではボトムナビを表示しない
-  if (pathname?.startsWith('/admin')) {
+  // /admin 配下やポータル画面(/)、ログイン画面ではボトムナビを表示しない
+  if (pathname === '/' || pathname?.startsWith('/admin') || pathname?.startsWith('/login') || pathname?.startsWith('/hr')) {
     return null;
   }
 
@@ -18,15 +18,15 @@ export default function BottomNav() {
       <div className="max-w-md mx-auto px-6 h-20 flex items-center justify-between">
         
         <Link 
-          href="/"
+          href="/work"
           className={`flex flex-col items-center justify-center w-20 gap-1 transition-all duration-200 ${
-            pathname === '/' 
+            pathname === '/work' 
               ? 'text-emerald-400 scale-110' 
               : 'text-emerald-700 hover:text-emerald-500'
           }`}
         >
-          <div className={`p-1.5 rounded-xl ${pathname === '/' ? 'bg-emerald-900/50' : ''}`}>
-            <Clock className={`w-6 h-6 ${pathname === '/' ? 'stroke-[2.5]' : 'stroke-2'}`} />
+          <div className={`p-1.5 rounded-xl ${pathname === '/work' ? 'bg-emerald-900/50' : ''}`}>
+            <Clock className={`w-6 h-6 ${pathname === '/work' ? 'stroke-[2.5]' : 'stroke-2'}`} />
           </div>
           <span className="text-[10px] font-bold tracking-wider">作業記録</span>
         </Link>
