@@ -1,15 +1,26 @@
 "use client";
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Clock, Truck, Settings } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  // /admin 配下やポータル画面(/)、ログイン画面、従業員画面(/farm)ではボトムナビを表示しない
-  if (pathname === '/' || pathname?.startsWith('/admin') || pathname?.startsWith('/login') || pathname?.startsWith('/hr') || pathname?.startsWith('/farm')) {
+  useEffect(() => {
+    async function checkSession() {
+      const { data: { session } } = await supabase.auth.getSession();
+      // 管理者（オーナー）のセッションがあれば true
+      setIsAdmin(!!session);
+    }
+    checkSession();
+  }, [pathname]);
+
+  // /admin 配下やポータル画面(/)、ログイン画面ではボトムナビ全体を非表示
+  if (pathname === '/' || pathname?.startsWith('/admin') || pathname?.startsWith('/login') || pathname?.startsWith('/hr')) {
     return null;
   }
 
@@ -45,15 +56,18 @@ export default function BottomNav() {
           <span className="text-[10px] font-bold tracking-wider">出荷記録</span>
         </Link>
 
-        <Link 
-          href="/admin/dashboard"
-          className="flex flex-col items-center justify-center w-20 gap-1 text-slate-500 hover:text-slate-400 transition-all duration-200"
-        >
-          <div className="p-1.5">
-            <Settings className="w-6 h-6 stroke-2" />
-          </div>
-          <span className="text-[10px] font-bold tracking-wider">管理</span>
-        </Link>
+        {/* 従業員が見る画面では「管理」ボタンを隠す（オーナーログイン時のみ表示） */}
+        {isAdmin && (
+          <Link 
+            href="/admin/dashboard"
+            className="flex flex-col items-center justify-center w-20 gap-1 text-slate-500 hover:text-slate-400 transition-all duration-200"
+          >
+            <div className="p-1.5">
+              <Settings className="w-6 h-6 stroke-2" />
+            </div>
+            <span className="text-[10px] font-bold tracking-wider">管理</span>
+          </Link>
+        )}
 
       </div>
     </nav>
