@@ -10,6 +10,7 @@ export default function BottomNav() {
   const pathname = usePathname();
   const [isAdmin, setIsAdmin] = useState(false);
   const [tenantId, setTenantId] = useState<string | null>(null);
+  const [isWorkerLoggedIn, setIsWorkerLoggedIn] = useState(false);
 
   useEffect(() => {
     async function checkSession() {
@@ -18,24 +19,38 @@ export default function BottomNav() {
     }
     checkSession();
 
+    let currentTenant = null;
     // テナントIDをURLから抽出（/farm/XXX の場合）
     if (pathname && pathname.startsWith('/farm/')) {
       const parts = pathname.split('/');
       if (parts.length >= 3) {
-        setTenantId(parts[2]);
-        localStorage.setItem('agri_current_tenant', parts[2]); // sales等へ移動しても戻れるように保存
+        currentTenant = parts[2];
+        setTenantId(currentTenant);
+        localStorage.setItem('agri_current_tenant', currentTenant); // sales等へ移動しても戻れるように保存
       }
     } else {
       // URLにない場合はローカルストレージから復元
       const saved = localStorage.getItem('agri_current_tenant');
       if (saved) {
+        currentTenant = saved;
         setTenantId(saved);
       }
+    }
+
+    // 従業員のログイン状態を確認
+    if (currentTenant) {
+      const workerInfo = localStorage.getItem(`agri_worker_${currentTenant}`);
+      setIsWorkerLoggedIn(!!workerInfo);
     }
   }, [pathname]);
 
   // /admin 配下やポータル画面(/)、ログイン画面ではボトムナビ全体を非表示
   if (pathname === '/' || pathname?.startsWith('/admin') || pathname?.startsWith('/login') || pathname?.startsWith('/hr')) {
+    return null;
+  }
+
+  // 管理者でもなく、従業員としてもログインしていない場合は非表示 (PIN入力画面など)
+  if (!isAdmin && !isWorkerLoggedIn) {
     return null;
   }
 

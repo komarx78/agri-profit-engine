@@ -48,6 +48,20 @@ export default function SalesEntryPage() {
         setLanguage(loadedLang);
 
         const activeTenantId = localStorage.getItem('agri_current_tenant');
+        
+        // 従業員のログイン確認 (未ログインなら弾く)
+        if (activeTenantId) {
+          const workerInfo = localStorage.getItem(`agri_worker_${activeTenantId}`);
+          if (!workerInfo) {
+            window.location.href = `/farm/${activeTenantId}`;
+            return;
+          }
+        } else {
+          // テナント不明の場合は一旦ホームへ
+          window.location.href = '/login';
+          return;
+        }
+
         if (activeTenantId) {
           const res = await getSalesMasters(activeTenantId);
           if (res.success) {
@@ -55,6 +69,8 @@ export default function SalesEntryPage() {
             setChannels(res.channels || []);
             setSalesPrices(res.salesPrices || []);
             setIsConnected(true);
+          } else {
+            console.error("Master data load error:", res.error);
           }
         } else {
           // Fallback if no tenant is set (should not happen in normal workflow now)
