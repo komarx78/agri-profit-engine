@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Truck, Sprout, Store, CheckCircle2, AlertCircle, FileDigit, Calculator, LogOut } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
+import { getSalesMasters, submitSalesLog } from '@/app/actions/farm';
 
 export default function SalesEntryPage() {
   const [crops, setCrops] = useState<any[]>([]);
@@ -45,17 +46,27 @@ export default function SalesEntryPage() {
         }
         setLanguage(loadedLang);
 
-        const [cRes, chRes, spRes] = await Promise.all([
-          supabase.from('crops').select('*'),
-          supabase.from('sales_channels').select('*'),
-          supabase.from('sales_prices').select('*')
-        ]);
-
-        if (cRes.data) setCrops(cRes.data);
-        if (chRes.data) setChannels(chRes.data);
-        if (spRes.data) setSalesPrices(spRes.data);
-        
-        if (!cRes.error) setIsConnected(true);
+        const activeTenantId = localStorage.getItem('agri_current_tenant');
+        if (activeTenantId) {
+          const res = await getSalesMasters(activeTenantId);
+          if (res.success) {
+            setCrops(res.crops || []);
+            setChannels(res.channels || []);
+            setSalesPrices(res.salesPrices || []);
+            setIsConnected(true);
+          }
+        } else {
+          // Fallback if no tenant is set (should not happen in normal workflow now)
+          const [cRes, chRes, spRes] = await Promise.all([
+            supabase.from('crops').select('*'),
+            supabase.from('sales_channels').select('*'),
+            supabase.from('sales_prices').select('*')
+          ]);
+          if (cRes.data) setCrops(cRes.data);
+          if (chRes.data) setChannels(chRes.data);
+          if (spRes.data) setSalesPrices(spRes.data);
+          if (!cRes.error) setIsConnected(true);
+        }
       } catch (err) {
         console.log('Error fetching data', err);
       }
@@ -87,20 +98,11 @@ export default function SalesEntryPage() {
         let cropId = crops.find(c => c.name === selectedCrop)?.id;
         let channelId = channels.find(c => c.name === selectedChannel)?.id;
 
-        // 作目マスタに存在しない場合は自動登録
-        if (!cropId && selectedCrop) {
-          const { data: newCrop, error: cropErr } = await supabase.from('crops').insert([{ name: selectedCrop }]).select('id').single();
-          if (!cropErr && newCrop) cropId = newCrop.id;
-        }
+        const activeTenantId = localStorage.getItem('agri_current_tenant');
 
-        // 出荷先マスタに存在しない場合は自動登録
-        if (!channelId && selectedChannel) {
-          const { data: newChannel, error: channelErr } = await supabase.from('sales_channels').insert([{ name: selectedChannel }]).select('id').single();
-          if (!channelErr && newChannel) channelId = newChannel.id;
-        }
-
-        const { error } = await supabase.from('sales_logs').insert([
-          {
+        if (activeTenantId) {
+          // Use Server Action if tenant is known
+          const logData = {
             crop_id: cropId || null,
             channel_id: channelId || null,
             sales_date: salesDate,
@@ -108,9 +110,33 @@ export default function SalesEntryPage() {
             unit: 'kg/箱',
             total_sales: calculatedTotal > 0 ? calculatedTotal : null,
             status: 'completed'
+          };
+          const res = await submitSalesLog(activeTenantId, logData);
+          if (!res.success) throw new Error(res.error);
+        } else {
+          // Fallback
+          if (!cropId && selectedCrop) {
+            const { data: newCrop, error: cropErr } = await supabase.from('crops').insert([{ name: selectedCrop }]).select('id').single();
+            if (!cropErr && newCrop) cropId = newCrop.id;
           }
-        ]);
-        if (error) console.error('Insert error:', error);
+          if (!channelId && selectedChannel) {
+            const { data: newChannel, error: channelErr } = await supabase.from('sales_channels').insert([{ name: selectedChannel }]).select('id').single();
+            if (!channelErr && newChannel) channelId = newChannel.id;
+          }
+
+          const { error } = await supabase.from('sales_logs').insert([
+            {
+              crop_id: cropId || null,
+              channel_id: channelId || null,
+              sales_date: salesDate,
+              quantity: parseFloat(quantity) || 0,
+              unit: 'kg/箱',
+              total_sales: calculatedTotal > 0 ? calculatedTotal : null,
+              status: 'completed'
+            }
+          ]);
+          if (error) throw error;
+        }
       } else {
         await new Promise(r => setTimeout(r, 800));
       }

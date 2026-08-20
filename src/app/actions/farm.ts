@@ -146,3 +146,35 @@ export async function submitWorkLog(tenantId: string, workerId: string, logData:
     return { success: false, error: '作業記録の保存に失敗しました。' };
   }
 }
+// 出荷記録マスタの取得
+export async function getSalesMasters(tenantId: string) {
+  try {
+    const supabase = createAdminClient();
+    const [cRes, chRes, spRes] = await Promise.all([
+      supabase.from('crops').select('*').eq('user_id', tenantId),
+      supabase.from('sales_channels').select('*').eq('user_id', tenantId),
+      supabase.from('sales_prices').select('*').eq('user_id', tenantId)
+    ]);
+    return { success: true, crops: cRes.data || [], channels: chRes.data || [], salesPrices: spRes.data || [] };
+  } catch (error: any) {
+    console.error('getSalesMasters error:', error);
+    return { success: false, crops: [], channels: [], salesPrices: [] };
+  }
+}
+
+// 出荷記録の保存
+export async function submitSalesLog(tenantId: string, logData: any) {
+  try {
+    const supabase = createAdminClient();
+    const insertData = {
+      ...logData,
+      user_id: tenantId
+    };
+    const { error } = await supabase.from('sales_logs').insert([insertData]);
+    if (error) throw error;
+    return { success: true };
+  } catch (error: any) {
+    console.error('submitSalesLog error:', error);
+    return { success: false, error: '出荷記録の保存に失敗しました。' };
+  }
+}
