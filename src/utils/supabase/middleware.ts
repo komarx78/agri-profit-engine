@@ -32,11 +32,13 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   // ログインしていない場合で、保護されたルートにアクセスした場合
-  // （/login と /farm は未ログインでもアクセス可能）
+  // （/login, /farm, /sales, /work は未ログインでもアクセス可能）
   if (
     !user &&
     !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/farm')
+    !request.nextUrl.pathname.startsWith('/farm') &&
+    !request.nextUrl.pathname.startsWith('/sales') &&
+    !request.nextUrl.pathname.startsWith('/work')
   ) {
     // '/login' にリダイレクト
     const url = request.nextUrl.clone()
