@@ -219,6 +219,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     if (res.success && res.data) {
       setCurrentUser(res.data);
       localStorage.setItem(`agri_worker_${tenantId}`, JSON.stringify(res.data));
+      window.dispatchEvent(new Event('workerLoginStateChanged'));
       fetchMasters();
     } else {
       setErrorMsg(t('login', language) + 'に失敗しました');
@@ -230,6 +231,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   const handleLogout = () => {
     if(confirm('ログアウトしますか？')) {
       localStorage.removeItem(`agri_worker_${tenantId}`);
+      window.dispatchEvent(new Event('workerLoginStateChanged'));
       setCurrentUser(null);
       setPinCode('');
       setSelectedWorkerId('');

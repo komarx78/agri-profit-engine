@@ -37,11 +37,24 @@ export default function BottomNav() {
       }
     }
 
-    // 従業員のログイン状態を確認
-    if (currentTenant) {
-      const workerInfo = localStorage.getItem(`agri_worker_${currentTenant}`);
-      setIsWorkerLoggedIn(!!workerInfo);
-    }
+    // 従業員のログイン状態を確認する関数
+    const checkWorkerLogin = () => {
+      const activeTenant = currentTenant || localStorage.getItem('agri_current_tenant');
+      if (activeTenant) {
+        const workerInfo = localStorage.getItem(`agri_worker_${activeTenant}`);
+        setIsWorkerLoggedIn(!!workerInfo);
+      } else {
+        setIsWorkerLoggedIn(false);
+      }
+    };
+
+    checkWorkerLogin();
+
+    // 他コンポーネントからのログイン状態変更イベントをリッスン
+    window.addEventListener('workerLoginStateChanged', checkWorkerLogin);
+    return () => {
+      window.removeEventListener('workerLoginStateChanged', checkWorkerLogin);
+    };
   }, [pathname]);
 
   // /admin 配下やポータル画面(/)、ログイン画面ではボトムナビ全体を非表示
