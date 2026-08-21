@@ -1,4 +1,4 @@
-export type LanguageCode = 'ja' | 'en' | 'vi' | 'id' | 'zh';
+export type LanguageCode = 'ja' | 'en' | 'vi' | 'id' | 'zh' | 'si' | 'km';
 
 export const LANGUAGES = [
   { code: 'ja', name: '日本語', flag: '🇯🇵' },
@@ -6,9 +6,11 @@ export const LANGUAGES = [
   { code: 'vi', name: 'Tiếng Việt', flag: '🇻🇳' },
   { code: 'id', name: 'Bahasa Indonesia', flag: '🇮🇩' },
   { code: 'zh', name: '中文', flag: '🇨🇳' },
+  { code: 'si', name: 'සිංහල (Sinhala)', flag: '🇱🇰' },
+  { code: 'km', name: 'ភាសាខ្មែរ (Khmer)', flag: '🇰🇭' },
 ];
 
-export const TRANSLATIONS: Record<string, Record<LanguageCode, string>> = {
+export const TRANSLATIONS: Record<string, Record<string, string>> = {
   // 共通
   startWork: {
     ja: '作業を開始する',
@@ -319,7 +321,7 @@ export function t(key: string, lang: LanguageCode = 'ja'): string {
     console.warn(`Translation key missing: ${key}`);
     return key;
   }
-  return TRANSLATIONS[key][lang] || TRANSLATIONS[key]['ja'];
+  return TRANSLATIONS[key][lang] || TRANSLATIONS[key]['en'] || TRANSLATIONS[key]['ja'] || key;
 }
 
 export function getTranslatedName(item: any, lang: LanguageCode = 'ja'): string {
@@ -327,6 +329,6 @@ export function getTranslatedName(item: any, lang: LanguageCode = 'ja'): string 
   if (lang === 'ja') return item.name || '';
   
   const langKey = `name_${lang}`;
-  // 翻訳名が存在すればそれを返し、なければ日本語名をフォールバックとして返す
-  return item[langKey] || item.name || '';
+  // 翻訳名が存在すればそれを返し、なければ英語名、それでもなければ日本語名をフォールバックとして返す
+  return item[langKey] || item.name_en || item.name || '';
 }

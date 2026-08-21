@@ -36,15 +36,17 @@ async function translateTextFree(text: string, targetLanguage: string) {
 export async function autoTranslateMasterData(name: string) {
   try {
     if (!name) {
-      return { name_en: '', name_vi: '', name_id: '', name_zh: '' };
+      return { name_en: '', name_vi: '', name_id: '', name_zh: '', name_si: '', name_km: '' };
     }
     
-    // 4言語へ並列で翻訳リクエストを投げる
-    const [en, vi, id, zh] = await Promise.all([
+    // 6言語へ並列で翻訳リクエストを投げる
+    const [en, vi, id, zh, si, km] = await Promise.all([
       translateTextFree(name, 'en'),
       translateTextFree(name, 'vi'),
       translateTextFree(name, 'id'),
       translateTextFree(name, 'zh-CN'),
+      translateTextFree(name, 'si'),
+      translateTextFree(name, 'km'),
     ]);
 
     return {
@@ -52,9 +54,11 @@ export async function autoTranslateMasterData(name: string) {
       name_vi: vi,
       name_id: id,
       name_zh: zh,
+      name_si: si,
+      name_km: km,
     };
   } catch (error) {
     console.error("Auto translation failed:", error);
-    return { name_en: '', name_vi: '', name_id: '', name_zh: '' };
+    return { name_en: '', name_vi: '', name_id: '', name_zh: '', name_si: '', name_km: '' };
   }
 }

@@ -68,6 +68,8 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           name_vi: data.name_vi,
           name_id: data.name_id,
           name_zh: data.name_zh,
+          name_si: data.name_si,
+          name_km: data.name_km,
           role: data.role || 'staff'
         };
         localStorage.setItem('agri_user', JSON.stringify(user));

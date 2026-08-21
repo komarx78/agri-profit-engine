@@ -6,7 +6,6 @@ import { supabase } from '@/lib/supabase';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { MapPin, Plus, Loader2, Save, X, Info, Search, Check, Trash2, Edit2, Palette, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
-import { autoTranslateMasterData } from '@/app/actions/translate';
 
 const containerStyle = {
   width: '100%',
@@ -32,6 +31,30 @@ const polygonOptions = {
 
 // Google Maps API で読み込むライブラリ（再レンダリング防止のため外出し）
 const libraries: ("geometry")[] = ["geometry"];
+
+// 自動翻訳関数 (GAS職人ルールに従い、Google翻訳の非公式エンドポイントを使用)
+async function autoTranslate(text: string) {
+  if (!text) return { vi: '', id: '', zh: '', en: '', si: '', km: '' };
+  try {
+    const langs = ['vi', 'id', 'zh-CN', 'en', 'si', 'km'];
+    const results = await Promise.all(langs.map(async (lang) => {
+      const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=${lang}&dt=t&q=${encodeURIComponent(text)}`);
+      const data = await res.json();
+      return { lang, text: data[0][0][0] };
+    }));
+    return {
+      vi: results.find(r => r.lang === 'vi')?.text || '',
+      id: results.find(r => r.lang === 'id')?.text || '',
+      zh: results.find(r => r.lang === 'zh-CN')?.text || '',
+      en: results.find(r => r.lang === 'en')?.text || '',
+      si: results.find(r => r.lang === 'si')?.text || '',
+      km: results.find(r => r.lang === 'km')?.text || ''
+    };
+  } catch (error) {
+    console.error("Translation error:", error);
+    return { vi: '', id: '', zh: '', en: '', si: '', km: '' };
+  }
+}
 
 export default function MapPage() {
   const [fields, setFields] = useState<any[]>([]);
@@ -276,16 +299,18 @@ export default function MapPage() {
         error = res.error;
       } else {
         // 新規作成（Insert）
-        const tNames = await autoTranslateMasterData(newFieldName);
+        const tNames = await autoTranslate(newFieldName);
         const res = await supabase
           .from('fields')
           .insert([
             { 
               name: newFieldName,
-              name_vi: tNames.name_vi,
-              name_id: tNames.name_id,
-              name_zh: tNames.name_zh,
-              name_en: tNames.name_en,
+              name_vi: tNames.vi,
+              name_id: tNames.id,
+              name_zh: tNames.zh,
+              name_en: tNames.en,
+              name_si: tNames.si,
+              name_km: tNames.km,
               area_size: newArea,
               polygon_coordinates: newPolygonPath,
               color: newFieldColor
@@ -338,15 +363,17 @@ export default function MapPage() {
   const handleSaveFieldName = async () => {
     if (!selectedField || !editName.trim()) return;
     try {
-      const tNames = await autoTranslateMasterData(editName.trim());
+      const tNames = await autoTranslate(editName.trim());
       const { error } = await supabase
         .from('fields')
         .update({ 
           name: editName.trim(),
-          name_vi: tNames.name_vi,
-          name_id: tNames.name_id,
-          name_zh: tNames.name_zh,
-          name_en: tNames.name_en
+          name_vi: tNames.vi,
+          name_id: tNames.id,
+          name_zh: tNames.zh,
+          name_en: tNames.en,
+          name_si: tNames.si,
+          name_km: tNames.km
         })
         .eq('id', selectedField.id);
         
