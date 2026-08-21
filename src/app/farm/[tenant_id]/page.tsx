@@ -830,7 +830,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
           </div>
         )}
       </div>
-
+    )}
         {/* マニュアル再生モーダル */}
         {playingVideo && (
           <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black">

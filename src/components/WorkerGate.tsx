@@ -72,6 +72,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           name_km: data.name_km,
           role: data.role || 'staff'
         };
+
         localStorage.setItem('agri_user', JSON.stringify(user));
         onLogin(user);
       } else {
