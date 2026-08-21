@@ -14,7 +14,7 @@ export default function SalesEntryPage() {
   const [selectedCrop, setSelectedCrop] = useState<string>('');
   const [selectedChannel, setSelectedChannel] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('');
-  const [unit, setUnit] = useState<string>('kg/箱');
+  const [unit, setUnit] = useState<string>('kg/箱'); // 後でuseEffectで上書き
   const [manualPrice, setManualPrice] = useState<string>('');
   const [salesDate, setSalesDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
 
@@ -23,6 +23,13 @@ export default function SalesEntryPage() {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
+
+  // 言語が変わった際に単位の初期値も翻訳する
+  useEffect(() => {
+    if (!selectedCrop) {
+      setUnit(t('defaultUnit', language) || 'kg/箱');
+    }
+  }, [language, selectedCrop]);
 
   useEffect(() => {
     async function fetchData() {
@@ -219,7 +226,7 @@ export default function SalesEntryPage() {
             {/* 0. 日付選択 */}
             <section className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/60 shadow-sm">
               <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
-                日付
+                {t('date', language)}
               </h2>
               <input
                 type="date"

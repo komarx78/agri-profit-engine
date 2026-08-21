@@ -12,6 +12,7 @@ import {
   Video, 
   LogOut, 
   Menu,
+  ArrowUpRight,
   Database,
   Store,
   Settings,
@@ -23,7 +24,10 @@ import {
   Calculator,
   History,
   Copy,
-  Check
+  Check,
+  Users,
+  Coffee,
+  Cloud
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -94,6 +98,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       ]
     },
     {
+      title: '連携アプリ',
+      items: [
+        { name: '労務・人事システムへ', path: '/hr', icon: Users, external: true },
+      ]
+    },
+    {
       title: '設定・マスタ',
       items: [
         { name: 'マスタ管理全般', path: '/admin/masters', icon: Database },
@@ -117,13 +127,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             {group.title}
           </h3>
           <div className="space-y-1">
-            {group.items.map((item) => {
+            {group.items.map((item: any) => {
               const isActive = pathname === item.path;
               const Icon = item.icon;
               return (
                 <Link
                   key={item.path}
                   href={item.path}
+                  target={item.external ? "_blank" : undefined}
                   onClick={() => setIsMobileMenuOpen(false)}
                   className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-colors font-bold ${
                     isActive 
@@ -131,8 +142,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                   }`}
                 >
-                  <Icon className="w-5 h-5 flex-shrink-0" />
-                  <span className="truncate">{item.name}</span>
+                  <Icon className={`w-5 h-5 flex-shrink-0 ${item.external ? 'text-blue-500' : ''}`} />
+                  <span className={`truncate flex-1 ${item.external ? 'text-blue-700' : ''}`}>{item.name}</span>
+                  {item.external && <ArrowUpRight className="w-4 h-4 text-slate-400" />}
                 </Link>
               );
             })}
@@ -146,10 +158,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans">
       
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:hidden sticky top-0 z-50">
-        <div className="flex items-center gap-2 text-emerald-700 font-black text-lg">
-          <Sprout className="w-6 h-6" />
-          Agri-Profit Admin
-        </div>
+        <Link href="/" className="flex items-center gap-2 text-emerald-700 font-black text-lg">
+          <Cloud className="w-6 h-6" />
+          Cloud Portal
+        </Link>
         <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-slate-600">
           <Menu className="w-6 h-6" />
         </button>
@@ -190,10 +202,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col sticky top-0 h-screen">
         <div className="h-16 flex items-center px-6 border-b border-slate-100">
-          <div className="flex items-center gap-2 text-emerald-700 font-black text-lg tracking-tight">
-            <Sprout className="w-6 h-6" />
-            Agri-Profit Admin
-          </div>
+          <Link href="/" className="flex items-center gap-2 text-emerald-700 font-black text-lg tracking-tight hover:text-emerald-800 transition-colors">
+            <Cloud className="w-6 h-6" />
+            <span>Cloud Portal<span className="text-sm text-emerald-500/80 ml-2">ホーム</span></span>
+          </Link>
         </div>
         
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">

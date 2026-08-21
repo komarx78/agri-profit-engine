@@ -130,7 +130,7 @@ export default function PortalPage() {
           </Link>
 
           {/* 勤怠管理 */}
-          <div className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-blue-300 transition-all flex flex-col cursor-pointer">
+          <Link href="/hr" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-blue-300 transition-all flex flex-col cursor-pointer">
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
                 <Users className="w-6 h-6" />
@@ -141,7 +141,7 @@ export default function PortalPage() {
             <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
               従業員の出退勤管理、有給休暇の付与・申請承認、シフト作成などを行います。
             </p>
-          </div>
+          </Link>
 
           {/* 請求書・販売管理 */}
           <Link href="/sales" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-indigo-300 transition-all flex flex-col">

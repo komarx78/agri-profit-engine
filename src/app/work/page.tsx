@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -177,16 +177,16 @@ export default function WorkEntryPage() {
         const addr = await fetchAddress(pos.coords.latitude, pos.coords.longitude);
         setCurrentAddress(addr);
       }, () => {
-        setCurrentAddress('位置情報がオフです');
+        setCurrentAddress(t('locationOff', language));
       });
     }
 
-  }, [currentUser?.id]);
+  }, [currentUser?.id, language]); // languageを依存配列に追加
 
   // GPSによる自動圃場選択
   useEffect(() => {
     if (activeTab === 'work' && fields.length > 0 && !selectedField && navigator.geolocation) {
-      setGpsStatus('GPS判定中...');
+      setGpsStatus(t('gpsChecking', language));
       navigator.geolocation.getCurrentPosition((pos) => {
         const myPoint = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         let foundField = '';
@@ -200,15 +200,15 @@ export default function WorkEntryPage() {
         }
         if (foundField) {
           setSelectedField(foundField);
-          setGpsStatus(`📍 自動選択: ${foundField}`);
+          setGpsStatus(`${t('gpsAutoSelect', language)} ${foundField}`);
         } else {
-          setGpsStatus('📍 圃場外');
+          setGpsStatus(t('outOfField', language));
         }
       }, () => {
-        setGpsStatus('⚠️ GPS取得失敗');
+        setGpsStatus(t('gpsFailed', language));
       });
     }
-  }, [activeTab, fields]);
+  }, [activeTab, fields, language]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -422,7 +422,7 @@ export default function WorkEntryPage() {
             </div>
             <div>
               <h1 className="text-xl font-black tracking-tight text-white">{t('systemTitle', language)}</h1>
-              <p className="text-xs font-medium text-emerald-400">{getTranslatedName(currentUser, language)} さん</p>
+              <p className="text-xs font-medium text-emerald-400">{language === 'ja' ? `${getTranslatedName(currentUser, language)} さん` : getTranslatedName(currentUser, language)}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">

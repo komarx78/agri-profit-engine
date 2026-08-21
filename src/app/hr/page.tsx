@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -11,10 +11,13 @@ export default function HrDashboardPage() {
   const [workers, setWorkers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 編集用
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editBreakMinutes, setEditBreakMinutes] = useState<number>(0);
   const [isSaving, setIsSaving] = useState(false);
+
+  // 一括編集用
+  const [bulkBreakMinutes, setBulkBreakMinutes] = useState<number>(60);
+  const [isBulkSaving, setIsBulkSaving] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -65,6 +68,31 @@ export default function HrDashboardPage() {
     }
   };
 
+  const handleBulkSaveBreak = async () => {
+    if (attendanceLogs.length === 0) return;
+    if (!confirm(`本日の出勤者全員の休憩時間を一括で ${bulkBreakMinutes} 分に変更します。よろしいですか？`)) return;
+
+    setIsBulkSaving(true);
+    try {
+      const ids = attendanceLogs.map(l => l.id);
+      
+      const { error } = await supabase
+        .from('attendance_logs')
+        .update({ total_break_minutes: bulkBreakMinutes })
+        .in('id', ids);
+
+      if (error) throw error;
+      
+      setAttendanceLogs(prev => prev.map(log => ({ ...log, total_break_minutes: bulkBreakMinutes })));
+      alert('全員の休憩時間を一括変更しました。');
+    } catch(err) {
+      console.error(err);
+      alert('一括保存に失敗しました');
+    } finally {
+      setIsBulkSaving(false);
+    }
+  };
+
   const calculateTotalMinutes = (start?: string, end?: string) => {
     if (!start || !end) return 0;
     const diff = new Date(end).getTime() - new Date(start).getTime();
@@ -94,10 +122,33 @@ export default function HrDashboardPage() {
 
       <main className="max-w-6xl mx-auto px-4 py-8">
         
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
           <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
             <CalendarIcon className="w-6 h-6 text-blue-500" /> 本日の出退勤状況
           </h1>
+
+          <div className="flex items-center gap-3 bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm self-start md:self-auto">
+            <span className="text-sm font-bold text-slate-600 flex items-center gap-1">
+              <Users className="w-4 h-4 text-blue-500" /> 全員一括
+            </span>
+            <div className="flex items-center gap-1">
+              <input 
+                type="number"
+                value={bulkBreakMinutes}
+                onChange={e => setBulkBreakMinutes(Number(e.target.value))}
+                className="w-16 px-2 py-1.5 border border-slate-200 rounded-lg text-right font-bold text-slate-700 focus:border-blue-500 focus:outline-none"
+              />
+              <span className="text-sm font-bold text-slate-500">分</span>
+            </div>
+            <button
+              onClick={handleBulkSaveBreak}
+              disabled={isBulkSaving || attendanceLogs.length === 0}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors disabled:opacity-50 ml-2"
+            >
+              {isBulkSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              適用
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">

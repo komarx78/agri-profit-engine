@@ -5,11 +5,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Clock, Truck, Settings } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { t, LanguageCode } from '@/lib/i18n';
 
 export default function BottomNav() {
   const pathname = usePathname();
   const [isAdmin, setIsAdmin] = useState(false);
   const [tenantId, setTenantId] = useState<string | null>(null);
+  const [language, setLanguage] = useState<LanguageCode>('ja');
 
   useEffect(() => {
     async function checkSession() {
@@ -32,6 +34,18 @@ export default function BottomNav() {
         setTenantId(saved);
       }
     }
+
+    // 言語設定の読み込み
+    const loadLang = () => {
+      const savedLang = localStorage.getItem('agri_lang') || localStorage.getItem('agri_lang_sales');
+      if (savedLang) setLanguage(savedLang as LanguageCode);
+    };
+    loadLang();
+    
+    // 他のコンポーネントで言語が切り替わったことを検知するためタイマーで監視(簡易的)
+    const interval = setInterval(loadLang, 1000);
+    return () => clearInterval(interval);
+    
   }, [pathname]);
 
   // /admin 配下やポータル画面(/)、ログイン画面ではボトムナビ全体を非表示
@@ -58,7 +72,7 @@ export default function BottomNav() {
           <div className={`p-1.5 rounded-xl ${isWorkActive ? 'bg-emerald-900/50' : ''}`}>
             <Clock className={`w-6 h-6 ${isWorkActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
           </div>
-          <span className="text-[10px] font-bold tracking-wider">作業記録</span>
+          <span className="text-[10px] font-bold tracking-wider whitespace-nowrap">{t('navWork', language)}</span>
         </Link>
 
         <Link 
@@ -72,7 +86,7 @@ export default function BottomNav() {
           <div className={`p-1.5 rounded-xl ${pathname === '/sales' ? 'bg-amber-900/30' : ''}`}>
             <Truck className={`w-6 h-6 ${pathname === '/sales' ? 'stroke-[2.5]' : 'stroke-2'}`} />
           </div>
-          <span className="text-[10px] font-bold tracking-wider">出荷記録</span>
+          <span className="text-[10px] font-bold tracking-wider whitespace-nowrap">{t('navSales', language)}</span>
         </Link>
 
         {/* 従業員が見る画面では「管理」ボタンを隠す（オーナーログイン時のみ表示） */}
@@ -84,7 +98,7 @@ export default function BottomNav() {
             <div className="p-1.5">
               <Settings className="w-6 h-6 stroke-2" />
             </div>
-            <span className="text-[10px] font-bold tracking-wider">管理</span>
+            <span className="text-[10px] font-bold tracking-wider whitespace-nowrap">{t('navAdmin', language)}</span>
           </Link>
         )}
 

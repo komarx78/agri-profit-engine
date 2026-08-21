@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Settings, Save, CheckCircle2, Building, MapPin, Phone, FileText, Landmark } from 'lucide-react';
+import { Settings, Save, CheckCircle2, Building, MapPin, Phone, FileText, Landmark, Clock } from 'lucide-react';
 
 export default function SettingsPage() {
   const [settingsId, setSettingsId] = useState<string | null>(null);
