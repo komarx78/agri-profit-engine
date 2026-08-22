@@ -79,6 +79,7 @@ export default function WorkEntryPage() {
   // --- タブと勤怠状態 ---
   const [activeTab, setActiveTab] = useState<'attendance' | 'work'>('attendance');
   const [attendanceLog, setAttendanceLog] = useState<any>(null);
+  const [workerProfile, setWorkerProfile] = useState<any>(null);
   const [gpsStatus, setGpsStatus] = useState<string>('');
   const [currentAddress, setCurrentAddress] = useState<string>('現在地を取得中...');
 
@@ -103,12 +104,14 @@ export default function WorkEntryPage() {
 
   const workTypes = ['収穫', '播種', '定植', '水やり', '肥料・農薬', '草刈り', '片付け・メンテ'];
 
+  // 初回マウント確認
   useEffect(() => {
     setIsMounted(true);
-    const savedUser = localStorage.getItem('agri_user');
-    const savedLang = localStorage.getItem('agri_lang') as LanguageCode;
-    if (savedLang) setLanguage(savedLang);
-
+    const savedUser = localStorage.getItem('agri_current_worker');
+    const savedLang = localStorage.getItem('agri_language') as LanguageCode;
+    if (savedLang && LANGUAGES[savedLang]) {
+      setLanguage(savedLang);
+    }
     if (savedUser) {
       setCurrentUser(JSON.parse(savedUser));
     }
@@ -119,14 +122,16 @@ export default function WorkEntryPage() {
 
     async function fetchData() {
       try {
-        const [cRes, fRes, mRes] = await Promise.all([
+        const [cRes, fRes, mRes, wRes] = await Promise.all([
           supabase.from('crops').select('*'),
           supabase.from('fields').select('*'),
-          supabase.from('materials').select('*')
+          supabase.from('materials').select('*'),
+          supabase.from('workers').select('*').eq('id', currentUser.id).single()
         ]);
         if (cRes.data) setCrops(cRes.data);
         if (fRes.data) setFields(fRes.data);
         if (mRes.data) setMaterials(mRes.data);
+        if (wRes.data) setWorkerProfile(wRes.data);
         if (!cRes.error) setIsConnected(true);
 
         if (!cRes.error && currentUser) {
@@ -527,6 +532,54 @@ export default function WorkEntryPage() {
                   <Coffee className="w-6 h-6" />
                   <span className="font-black text-lg">{t('breakEnd', language)}</span>
                 </button>
+              )}
+            </div>
+
+            {/* LINE連携・通知設定エリア */}
+            <div className="mt-12 bg-slate-800/50 border border-slate-700 p-6 rounded-3xl shadow-inner">
+              <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+                <svg viewBox="0 0 24 24" className="w-6 h-6 fill-[#06C755]"><path d="M22.2 10.3c0-4.4-4.5-8-10.1-8s-10.1 3.6-10.1 8c0 4 3.7 7.4 8.6 7.9.4 0 .9.1 1 .5.1.3.1.5-.1 1-.1.4-.4 1.3-.4 1.3s-.1.4.1.5c.2.1.5 0 .5 0 2.9-1.8 5.7-4 7.6-6 1.8-1.7 2.9-3.4 2.9-5.2zm-12.7 3c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h2.3c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3.3h-1.4v.9h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3.3h-1.4v.9h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3zM7.3 13.3c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v4.2c0 .2-.1.3-.3.3h-.8zm-3 0c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v3h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3.3h-2.8zm13.1-.3c0 .2-.1.3-.3.3h-.8c-.2 0-.3-.1-.3-.3v-3l-1.9 3c-.1.1-.2.2-.3.2h-.8c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v3l1.9-3c.1-.1.2-.2.3-.2h.8c.2 0 .3.1.3.3v4.2z"/></svg>
+                打刻忘れ防止アラート（LINE通知）
+              </h3>
+              
+              {!workerProfile?.line_user_id ? (
+                <div className="bg-slate-900/80 p-4 rounded-2xl border border-slate-700">
+                  <p className="text-sm text-slate-300 font-bold mb-4">
+                    退勤の押し忘れ時に、LINEへお知らせを送ります。<br/>
+                    まずは公式アカウントを友だち追加し、以下の連携コードをトークに送信してください。
+                  </p>
+                  <div className="flex flex-col items-center gap-3">
+                    <a href="https://lin.ee/your_bot_id" target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-[#06C755] hover:bg-[#05b34c] text-white font-black rounded-xl text-center flex items-center justify-center gap-2">
+                      友だち追加する
+                    </a>
+                    <div className="text-xs text-slate-400 font-bold mt-2">あなたの連携コード</div>
+                    <div className="bg-slate-950 border border-slate-800 text-emerald-400 text-xl font-black px-6 py-2 rounded-lg tracking-widest">
+                      {workerProfile?.pin_code || '---'}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between bg-slate-900/80 p-4 rounded-2xl border border-emerald-900/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500">
+                      <CheckCircle2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="text-emerald-400 font-bold text-sm">LINE連携済み</div>
+                      <div className="text-xs text-slate-400 mt-1">退勤忘れ時に通知が届きます</div>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={async () => {
+                      const newVal = !workerProfile.is_line_notification_enabled;
+                      await supabase.from('workers').update({ is_line_notification_enabled: newVal }).eq('id', workerProfile.id);
+                      setWorkerProfile({...workerProfile, is_line_notification_enabled: newVal});
+                    }}
+                    className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${workerProfile.is_line_notification_enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                  >
+                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${workerProfile.is_line_notification_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
               )}
             </div>
 

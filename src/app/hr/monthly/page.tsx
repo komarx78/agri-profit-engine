@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Calendar, Download, ChevronLeft, ChevronRight, Clock, Users, Loader2, Save, FileText, Settings } from 'lucide-react';
+import { Calendar, Download, ChevronLeft, ChevronRight, Clock, Users, Loader2, Save, FileText, Settings, ArrowLeft } from 'lucide-react';
 
 export default function MonthlyTimecardPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -11,8 +11,10 @@ export default function MonthlyTimecardPage() {
   const [companySettings, setCompanySettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  // viewMode: 'summary' (月次集計) or 'details' (日別明細)
-  const [viewMode, setViewMode] = useState<'summary' | 'details'>('summary');
+  // viewMode: 'summary' (月次集計), 'details' (全員の日別明細), 'worker_details' (個人別タイムカード)
+  const [viewMode, setViewMode] = useState<'summary' | 'details' | 'worker_details'>('summary');
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
+  
   const [editingRestMinutes, setEditingRestMinutes] = useState<Record<string, number>>({});
   const [isSaving, setIsSaving] = useState(false);
 
@@ -28,15 +30,13 @@ export default function MonthlyTimecardPage() {
       const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
       const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
 
-      // 会社基本設定を取得
       const { data: cData } = await supabase.from('company_settings').select('*').order('created_at', { ascending: false }).limit(1).single();
       if (cData) setCompanySettings(cData);
 
-      // 従業員マスタを取得
+      // ★ 全従業員を取得
       const { data: wData } = await supabase.from('workers').select('*');
       if (wData) setWorkers(wData);
 
-      // 対象月の打刻ログを取得
       const { data: lData, error } = await supabase
         .from('attendance_logs')
         .select('*')
@@ -47,7 +47,6 @@ export default function MonthlyTimecardPage() {
       if (error) throw error;
       setLogs(lData || []);
 
-      // 編集用ステートの初期化
       const editState: Record<string, number> = {};
       lData?.forEach(log => {
         editState[log.id] = log.actual_rest_minutes !== null ? log.actual_rest_minutes : (log.total_break_minutes || 0);
@@ -78,7 +77,6 @@ export default function MonthlyTimecardPage() {
       const { error } = await supabase.from('attendance_logs').update({ actual_rest_minutes: val }).eq('id', logId);
       if (error) throw error;
       
-      // ローカルステートも更新
       setLogs(prev => prev.map(l => l.id === logId ? { ...l, actual_rest_minutes: val } : l));
       alert('休憩時間を保存しました');
     } catch (err: any) {
@@ -88,17 +86,14 @@ export default function MonthlyTimecardPage() {
     }
   };
 
-  // 勤怠計算エンジン（丸め・定時補正）
   const calculateWorkHours = (log: any) => {
     if (!log.clock_in || !log.clock_out) return { totalMinutes: 0, roundedIn: null, roundedOut: null, restMins: 0 };
 
-    // 該当従業員と会社設定から定時を取得
+    // workerの特定（UUIDの一致、または worker_id == pin_code などのレガシー互換を考慮）
+    // とりあえず id == worker_id で探す。
     const worker = workers.find(w => w.id === log.worker_id) || {};
-    
-    // YYYY-MM-DD に合わせてパース用文字列作成
     const logDate = log.date; 
     
-    // 定時設定の決定（従業員設定優先、なければ会社設定、なければデフォルト）
     const stdStartStr = worker.standard_start_time || companySettings?.default_start_time || '08:00:00';
     const stdEndStr = worker.standard_end_time || companySettings?.default_end_time || '17:00:00';
     const stdRest = worker.standard_rest_minutes ?? companySettings?.default_rest_minutes ?? 60;
@@ -110,37 +105,31 @@ export default function MonthlyTimecardPage() {
     let actualIn = new Date(log.clock_in);
     let actualOut = new Date(log.clock_out);
 
-    // 出勤補正：定時前に打刻した場合は、定時を出勤時刻とする
     let calcIn = actualIn;
-    if (actualIn < stdStart) {
-      calcIn = stdStart;
-    }
+    if (actualIn < stdStart) calcIn = stdStart;
 
-    // 退勤補正：丸め設定がONで、定時以降に打刻した場合は、定時を退勤時刻とする
     let calcOut = actualOut;
-    if (autoRoundOut && actualOut > stdEnd) {
-      calcOut = stdEnd;
-    }
+    if (autoRoundOut && actualOut > stdEnd) calcOut = stdEnd;
 
     let diffMins = Math.floor((calcOut.getTime() - calcIn.getTime()) / 60000);
-    
-    // 休憩時間を引く（手修正されたactual_rest_minutes優先、なければシステム打刻のbreak、なければ定時休憩）
-    const restMins = log.actual_rest_minutes !== null 
-                     ? log.actual_rest_minutes 
-                     : (log.total_break_minutes || stdRest);
+    const restMins = log.actual_rest_minutes !== null ? log.actual_rest_minutes : (log.total_break_minutes || stdRest);
 
     diffMins = Math.max(0, diffMins - restMins);
 
     return { totalMinutes: diffMins, roundedIn: calcIn, roundedOut: calcOut, restMins };
   };
 
-  // 従業員ごとの集計
+  const formatTime = (d: Date | null) => d ? d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+
+  // サマリー計算（打刻ログベース）
   const summaryByWorker = logs.reduce((acc, log) => {
-    const worker = workers.find(w => w.id === log.worker_id) || { name: '不明' };
-    const workerId = worker.id || log.worker_id;
+    // 古いテストデータなどで worker_id が無い・一致しない場合は「不明」になる。
+    const worker = workers.find(w => w.id === log.worker_id);
+    const workerId = worker ? worker.id : log.worker_id; // idがない場合は生のworker_idを使う
+    const workerName = worker ? worker.name : `不明 (ID: ${log.worker_id.substring(0,8)}...)`;
     
     if (!acc[workerId]) {
-      acc[workerId] = { workerId, name: worker.name, days: 0, totalMinutes: 0, breakMinutes: 0 };
+      acc[workerId] = { workerId, name: workerName, days: 0, totalMinutes: 0, breakMinutes: 0 };
     }
     
     if (log.clock_in && log.clock_out) {
@@ -154,13 +143,34 @@ export default function MonthlyTimecardPage() {
 
   const summaryArray = Object.values(summaryByWorker);
 
+  // カレンダー形式の個人別タイムカード生成
+  const generateWorkerCalendar = (workerId: string) => {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const calendar = [];
+
+    const workerLogs = logs.filter(l => l.worker_id === workerId);
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
+      const log = workerLogs.find(l => l.date === dateStr);
+      calendar.push({
+        date: dateStr,
+        day: d,
+        log: log || null
+      });
+    }
+    return calendar;
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
             <Calendar className="w-6 h-6 text-blue-600" />
-            月次タイムカード集計
+            月次タイムカード
           </h1>
           <p className="text-sm font-bold text-slate-500 mt-1">
             定時丸め・休憩時間補正が適用された労働時間の集計です。
@@ -168,21 +178,29 @@ export default function MonthlyTimecardPage() {
         </div>
         
         <div className="flex items-center gap-2">
-          {/* タブ切り替え */}
-          <div className="bg-slate-200 p-1 rounded-xl flex items-center mr-4">
+          {viewMode === 'worker_details' ? (
             <button 
-              onClick={() => setViewMode('summary')}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${viewMode === 'summary' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              onClick={() => { setViewMode('summary'); setSelectedWorkerId(null); }}
+              className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-slate-700 transition-colors"
             >
-              月次集計
+              <ArrowLeft className="w-4 h-4" /> 一覧へ戻る
             </button>
-            <button 
-              onClick={() => setViewMode('details')}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${viewMode === 'details' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              日別明細・休憩編集
-            </button>
-          </div>
+          ) : (
+            <div className="bg-slate-200 p-1 rounded-xl flex items-center mr-4">
+              <button 
+                onClick={() => setViewMode('summary')}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${viewMode === 'summary' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                月次集計
+              </button>
+              <button 
+                onClick={() => setViewMode('details')}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${viewMode === 'details' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                全社明細
+              </button>
+            </div>
+          )}
 
           <button className="flex items-center gap-2 bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-lg font-bold text-sm hover:bg-slate-50 transition-colors">
             <Download className="w-4 h-4" /> CSV出力
@@ -198,8 +216,17 @@ export default function MonthlyTimecardPage() {
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <div className="font-black text-lg text-slate-700">
-            {currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月
+          <div className="font-black text-lg text-slate-700 flex items-center gap-4">
+            <span>{currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月</span>
+            {viewMode === 'worker_details' && selectedWorkerId && (
+              <>
+                <span className="text-slate-300">|</span>
+                <span className="text-blue-600 flex items-center gap-2">
+                  <Users className="w-5 h-5" />
+                  {summaryByWorker[selectedWorkerId]?.name || '退職者・不明'} さんのタイムカード
+                </span>
+              </>
+            )}
           </div>
           <button 
             onClick={() => changeMonth(1)}
@@ -213,8 +240,7 @@ export default function MonthlyTimecardPage() {
           <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
         ) : (
           <div className="overflow-x-auto">
-            {viewMode === 'summary' ? (
-              // ▼ 月次集計ビュー
+            {viewMode === 'summary' && (
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-sm font-bold text-slate-500">
@@ -222,11 +248,12 @@ export default function MonthlyTimecardPage() {
                     <th className="p-4 text-center">出勤日数</th>
                     <th className="p-4 text-center">総休憩時間</th>
                     <th className="p-4 text-center">総労働時間（補正後）</th>
+                    <th className="p-4 text-center">詳細</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {summaryArray.length === 0 && (
-                    <tr><td colSpan={4} className="p-8 text-center text-slate-400 font-bold">打刻データがありません</td></tr>
+                    <tr><td colSpan={5} className="p-8 text-center text-slate-400 font-bold">打刻データがありません</td></tr>
                   )}
                   {summaryArray.map((worker: any) => (
                     <tr key={worker.workerId} className="hover:bg-slate-50">
@@ -245,12 +272,93 @@ export default function MonthlyTimecardPage() {
                       <td className="p-4 text-center font-black text-blue-600 text-xl">
                         {Math.floor(worker.totalMinutes/60)}時間 {worker.totalMinutes%60}分
                       </td>
+                      <td className="p-4 text-center">
+                        <button 
+                          onClick={() => { setSelectedWorkerId(worker.workerId); setViewMode('worker_details'); }}
+                          className="px-4 py-2 bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-600 font-bold text-sm rounded-lg transition-colors"
+                        >
+                          タイムカードを開く
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            ) : (
-              // ▼ 日別明細・休憩編集ビュー
+            )}
+
+            {viewMode === 'worker_details' && selectedWorkerId && (
+              <table className="w-full text-left border-collapse min-w-[800px]">
+                <thead>
+                  <tr className="bg-blue-50 border-b border-blue-100 text-sm font-bold text-blue-800">
+                    <th className="p-4 w-32">日付</th>
+                    <th className="p-4 text-center">打刻時刻</th>
+                    <th className="p-4 text-center">計算上(補正後)</th>
+                    <th className="p-4 text-center w-48">休憩時間(分)</th>
+                    <th className="p-4 text-center">労働時間</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {generateWorkerCalendar(selectedWorkerId).map(({ date, day, log }) => {
+                    const dt = new Date(date);
+                    const isWeekend = dt.getDay() === 0 || dt.getDay() === 6;
+                    
+                    if (!log) {
+                      return (
+                        <tr key={date} className={`hover:bg-slate-50 ${isWeekend ? 'bg-slate-50/50' : ''}`}>
+                          <td className={`p-4 font-bold ${dt.getDay() === 0 ? 'text-rose-500' : dt.getDay() === 6 ? 'text-blue-500' : 'text-slate-700'}`}>
+                            {day}日 ({['日','月','火','水','木','金','土'][dt.getDay()]})
+                          </td>
+                          <td className="p-4 text-center text-slate-300">-</td>
+                          <td className="p-4 text-center text-slate-300">-</td>
+                          <td className="p-4 text-center text-slate-300">-</td>
+                          <td className="p-4 text-center text-slate-300">-</td>
+                        </tr>
+                      );
+                    }
+
+                    const { totalMinutes, roundedIn, roundedOut } = calculateWorkHours(log);
+                    return (
+                      <tr key={log.id} className="hover:bg-blue-50/30 group">
+                        <td className={`p-4 font-bold ${dt.getDay() === 0 ? 'text-rose-500' : dt.getDay() === 6 ? 'text-blue-500' : 'text-slate-700'}`}>
+                          {day}日 ({['日','月','火','水','木','金','土'][dt.getDay()]})
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="text-sm text-slate-400 font-bold">
+                            {formatTime(log.clock_in ? new Date(log.clock_in) : null)} 〜 {formatTime(log.clock_out ? new Date(log.clock_out) : null)}
+                          </div>
+                        </td>
+                        <td className="p-4 text-center font-bold text-blue-600">
+                          {formatTime(roundedIn)} 〜 {formatTime(roundedOut)}
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <input
+                              type="number"
+                              value={editingRestMinutes[log.id] ?? ''}
+                              onChange={(e) => handleRestMinutesChange(log.id, Number(e.target.value))}
+                              className="w-16 p-1.5 border border-slate-200 rounded-md text-center font-bold focus:border-blue-500 focus:outline-none"
+                            />
+                            <button 
+                              onClick={() => saveRestMinutes(log.id)}
+                              disabled={isSaving}
+                              className="p-1.5 bg-slate-100 hover:bg-blue-100 text-slate-400 hover:text-blue-600 rounded-md transition-colors"
+                              title="休憩時間を保存"
+                            >
+                              <Save className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="p-4 text-center font-black text-slate-700 text-lg">
+                          {Math.floor(totalMinutes/60)}h {totalMinutes%60}m
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+
+            {viewMode === 'details' && (
               <table className="w-full text-left border-collapse min-w-[800px]">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-sm font-bold text-slate-500">
@@ -267,11 +375,8 @@ export default function MonthlyTimecardPage() {
                     <tr><td colSpan={6} className="p-8 text-center text-slate-400 font-bold">打刻データがありません</td></tr>
                   )}
                   {logs.map((log: any) => {
-                    const worker = workers.find(w => w.id === log.worker_id) || { name: '不明' };
+                    const worker = workers.find(w => w.id === log.worker_id) || { name: `不明 (ID: ${log.worker_id.substring(0,8)})` };
                     const { totalMinutes, roundedIn, roundedOut } = calculateWorkHours(log);
-                    
-                    const formatTime = (d: Date | null) => d ? d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--';
-                    
                     return (
                       <tr key={log.id} className="hover:bg-slate-50 group">
                         <td className="p-4 font-bold text-slate-700">{log.date}</td>
@@ -296,7 +401,6 @@ export default function MonthlyTimecardPage() {
                               onClick={() => saveRestMinutes(log.id)}
                               disabled={isSaving}
                               className="p-1.5 bg-slate-100 hover:bg-blue-100 text-slate-400 hover:text-blue-600 rounded-md transition-colors"
-                              title="休憩時間を保存"
                             >
                               <Save className="w-4 h-4" />
                             </button>
