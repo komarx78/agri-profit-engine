@@ -33,11 +33,13 @@ export async function POST(req: Request) {
       const pinCode = text;
 
       // Supabaseから一致するPINコードを持つworkerを検索
-      const { data: worker, error } = await supabase
+      const { data: workers, error } = await supabase
         .from('workers')
         .select('*')
         .eq('pin_code', pinCode)
-        .single();
+        .limit(1);
+
+      const worker = workers && workers.length > 0 ? workers[0] : null;
 
       if (error || !worker) {
         await replyMessage(replyToken, `入力されたPINコード（${pinCode}）が見つかりませんでした。\nマイページに表示されている4桁のコードを送信してください。`);
