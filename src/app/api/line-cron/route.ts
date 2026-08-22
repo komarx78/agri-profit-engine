@@ -49,7 +49,7 @@ export async function GET(req: Request) {
 
     if (error) {
       console.error('DB Error:', error);
-      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+      return NextResponse.json({ error: 'Database error', details: error }, { status: 500 });
     }
 
     if (!logs || logs.length === 0) {
