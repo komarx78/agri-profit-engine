@@ -21,23 +21,30 @@ export default function BottomNav() {
     checkSession();
 
     // テナントIDをURLから抽出（/farm/XXX の場合）
-    if (pathname && pathname.startsWith('/farm/')) {
+    let currentTenantId = tenantId;
+    if (pathname && pathname.startsWith('/farm/') && !pathname.startsWith('/farm/pesticide-check')) {
       const parts = pathname.split('/');
       if (parts.length >= 3) {
-        setTenantId(parts[2]);
-        localStorage.setItem('agri_current_tenant', parts[2]); // sales等へ移動しても戻れるように保存
+        currentTenantId = parts[2];
+        setTenantId(currentTenantId);
+        localStorage.setItem('agri_current_tenant', currentTenantId); // sales等へ移動しても戻れるように保存
       }
     } else {
       // URLにない場合はローカルストレージから復元
       const saved = localStorage.getItem('agri_current_tenant');
-      if (saved) {
-        setTenantId(saved);
+      if (saved && saved !== 'pesticide-check') {
+        currentTenantId = saved;
+        setTenantId(currentTenantId);
       }
     }
 
     // 言語設定の読み込み
     const loadLang = () => {
-      const savedLang = localStorage.getItem('agri_lang') || localStorage.getItem('agri_lang_sales');
+      // tenant_id があれば優先して読む、次に全ページ共通設定を読む
+      const tenantKey = currentTenantId ? `agri_lang_${currentTenantId}` : null;
+      const savedLang = (tenantKey ? localStorage.getItem(tenantKey) : null) 
+                        || localStorage.getItem('agri_lang') 
+                        || localStorage.getItem('agri_lang_sales');
       if (savedLang) setLanguage(savedLang as LanguageCode);
     };
     loadLang();

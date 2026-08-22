@@ -25,8 +25,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        {children}
-        <BottomNav />
+        <div className="flex-1 flex flex-col w-full h-full">
+          {children}
+          <BottomNav />
+        </div>
       </body>
     </html>
   );

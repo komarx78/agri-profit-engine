@@ -54,7 +54,11 @@ export default function SalesEntryPage() {
         }
         setLanguage(loadedLang);
 
-        const activeTenantId = localStorage.getItem('agri_current_tenant');
+        let activeTenantId = localStorage.getItem('agri_current_tenant');
+        if (activeTenantId === 'pesticide-check') {
+          activeTenantId = null; // 無効なテナントIDを無視
+        }
+        
         if (activeTenantId) {
           const res = await getSalesMasters(activeTenantId);
           if (res.success) {
@@ -112,7 +116,8 @@ export default function SalesEntryPage() {
         let cropId = crops.find(c => c.name === selectedCrop)?.id;
         let channelId = channels.find(c => c.name === selectedChannel)?.id;
 
-        const activeTenantId = localStorage.getItem('agri_current_tenant');
+        let activeTenantId = localStorage.getItem('agri_current_tenant');
+        if (activeTenantId === 'pesticide-check') activeTenantId = null;
 
         if (activeTenantId) {
           // Use Server Action if tenant is known
@@ -196,9 +201,10 @@ export default function SalesEntryPage() {
                 
                 // 確実に保存するため共通キーにセット
                 localStorage.setItem('agri_lang_sales', newLang);
+                localStorage.setItem('agri_lang', newLang);
                 
                 // すべての agri_lang_ キーを更新する（どの農園の画面でも反映されるように）
-                const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang_'));
+                const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang'));
                 langKeys.forEach(key => localStorage.setItem(key, newLang));
               }}
               className="bg-amber-900/50 text-white text-xs font-bold rounded-lg px-2 py-1 focus:outline-none"

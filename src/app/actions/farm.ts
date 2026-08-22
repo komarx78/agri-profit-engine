@@ -146,6 +146,33 @@ export async function submitWorkLog(tenantId: string, workerId: string, logData:
     return { success: false, error: '作業記録の保存に失敗しました。' };
   }
 }
+
+// カスタム作業内容の取得（過去のログから抽出）
+export async function getCustomWorkTypes(tenantId: string) {
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from('work_logs')
+      .select('work_type')
+      .eq('user_id', tenantId);
+      
+    if (error) return { success: false, data: [] };
+    
+    const allTypes = data.map(d => d.work_type).filter(Boolean);
+    const uniqueTypes = Array.from(new Set(allTypes));
+    
+    const defaultTypes = [
+      '播種', '定植', '水やり・追肥', '草引き・防除', '収穫・調整', '片付け・その他',
+      '収穫', '水やり', '肥料・農薬', '草刈り', '片付け・メンテ', '定植・播種', '播種・定植'
+    ];
+    const customTypes = uniqueTypes.filter(t => !defaultTypes.includes(t));
+    
+    return { success: true, data: customTypes };
+  } catch (err) {
+    return { success: false, data: [] };
+  }
+}
+
 // 出荷記録マスタの取得
 export async function getSalesMasters(tenantId: string) {
   try {

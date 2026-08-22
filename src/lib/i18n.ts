@@ -248,6 +248,15 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   navSales: { ja: '出荷記録', en: 'Sales Log', vi: 'Ghi nhận xuất hàng', id: 'Catatan Pengiriman', zh: '发货记录', si: 'නැව්ගත කිරීමේ වාර්තාව', km: 'កំណត់ត្រាការដឹកជញ្ជូន' },
   navAdmin: { ja: '管理', en: 'Admin', vi: 'Quản lý', id: 'Admin', zh: '管理', si: 'කළමනාකරණය', km: 'ការគ្រប់គ្រង' },
   defaultUnit: { ja: 'kg/箱', en: 'kg/box', vi: 'kg/hộp', id: 'kg/kotak', zh: 'kg/箱', si: 'kg/පෙට්ටිය', km: 'kg/ប្រអប់' },
+  
+  // LINE通知関連
+  lineAlertTitle: { ja: '打刻忘れ防止アラート（LINE通知）', en: 'Clock-out Alert (LINE)', vi: 'Cảnh báo quên chấm công (LINE)', id: 'Peringatan Lupa Absen (LINE)', zh: '下班打卡提醒 (LINE)', si: 'පැමිණීම අමතක වීමේ අනතුරු ඇඟවීම (LINE)', km: 'ការជូនដំណឹងភ្លេចថត (LINE)' },
+  lineAlertDesc1: { ja: '退勤の押し忘れ時に、LINEへお知らせをお届けします。', en: 'You will receive a LINE message if you forget to clock out.', vi: 'Bạn sẽ nhận được tin nhắn LINE nếu quên chấm công ra.', id: 'Anda akan menerima pesan LINE jika lupa absen pulang.', zh: '如果您忘记打卡下班，将收到LINE通知。', si: 'ඔබට වැඩ නිම කිරීම සටහන් කිරීමට අමතක වුවහොත් LINE පණිවිඩයක් ලැබෙනු ඇත.', km: 'អ្នកនឹងទទួលបានសារ LINE ប្រសិនបើអ្នកភ្លេចថតម៉ោងចេញ។' },
+  lineAlertDesc2: { ja: '下のボタンを押すと、自動的に連携用キーがコピーされてLINEが開きます。', en: 'Press the button below to auto-copy your key and open LINE.', vi: 'Nhấn nút bên dưới để tự động sao chép mã của bạn và mở LINE.', id: 'Tekan tombol di bawah untuk menyalin otomatis kunci Anda dan membuka LINE.', zh: '点击下方按钮将自动复制您的密钥并打开LINE。', si: 'ඔබගේ යතුර ස්වයංක්‍රීයව පිටපත් කර LINE විවෘත කිරීමට පහත බොත්තම ඔබන්න.', km: 'ចុចប៊ូតុងខាងក្រោមដើម្បីចម្លងកូដរបស់អ្នកដោយស្វ័យប្រវត្តិហើយបើក LINE ។' },
+  lineAlertDesc3: { ja: 'トークの入力欄に「ペースト（貼り付け）」して送信してください。', en: 'Please paste it into the chat input and send it.', vi: 'Vui lòng dán nó vào khung chat và gửi.', id: 'Silakan tempel di kotak obrolan dan kirim.', zh: '请将其粘贴到聊天输入框并发送。', si: 'කරුණාකර එය චැට් එකට පේස්ට් කර යවන්න.', km: 'សូមបិទភ្ជាប់វាទៅក្នុងការបញ្ចូលជជែកហើយផ្ញើវា។' },
+  lineConnectBtn: { ja: 'システムとLINEを連携する', en: 'Link System with LINE', vi: 'Liên kết hệ thống với LINE', id: 'Tautkan Sistem dengan LINE', zh: '将系统与LINE关联', si: 'LINE සමඟ පද්ධතිය සම්බන්ධ කරන්න', km: 'ភ្ជាប់ប្រព័ន្ធជាមួយ LINE' },
+  lineLinked: { ja: 'LINE連携済み', en: 'LINE Linked', vi: 'Đã liên kết LINE', id: 'LINE Taut', zh: 'LINE已关联', si: 'LINE සම්බන්ධ කර ඇත', km: 'បានភ្ជាប់ LINE' },
+  lineNotifyDesc: { ja: '退勤忘れ時に通知が届きます', en: 'You will be notified if you forget to clock out', vi: 'Bạn sẽ được thông báo nếu quên chấm công ra', id: 'Anda akan diberitahu jika lupa absen pulang', zh: '如果您忘记下班打卡将会收到通知', si: 'වැඩ නිම කිරීමට අමතක වුවහොත් දැනුම් දෙනු ලැබේ', km: 'អ្នកនឹងត្រូវបានជូនដំណឹងប្រសិនបើអ្នកភ្លេចថតម៉ោងចេញ' }
 };
 
 export function t(key: string, lang: LanguageCode = 'ja'): string {

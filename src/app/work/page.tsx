@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, 
-  History, LogOut, Loader2, AlertCircle, Coffee, LogIn, LogOut as LogOutIcon, Sun, CloudRain 
+  History, LogOut, Loader2, AlertCircle, Coffee, LogIn, LogOut as LogOutIcon, Sun, CloudRain, Plus, X
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { WorkerGate } from '@/components/WorkerGate';
@@ -101,6 +101,9 @@ export default function WorkEntryPage() {
 
   const [activeWorkLog, setActiveWorkLog] = useState<any>(null);
   const [elapsedMinutes, setElapsedMinutes] = useState<number>(0);
+  const [customWorkTypes, setCustomWorkTypes] = useState<string[]>([]);
+  const [isAddingWorkType, setIsAddingWorkType] = useState(false);
+  const [newWorkType, setNewWorkType] = useState('');
 
   const workTypes = ['収穫', '播種', '定植', '水やり', '肥料・農薬', '草刈り', '片付け・メンテ'];
 
@@ -108,9 +111,9 @@ export default function WorkEntryPage() {
   useEffect(() => {
     setIsMounted(true);
     const savedUser = localStorage.getItem('agri_current_worker');
-    const savedLang = localStorage.getItem('agri_language') as LanguageCode;
+    const savedLang = localStorage.getItem('agri_lang') || localStorage.getItem('agri_lang_sales') as LanguageCode;
     if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
-      setLanguage(savedLang);
+      setLanguage(savedLang as LanguageCode);
     }
     if (savedUser) {
       setCurrentUser(JSON.parse(savedUser));
@@ -154,6 +157,28 @@ export default function WorkEntryPage() {
               setSelectedMaterial(log.materials.name);
               if (log.material_quantity) setMaterialQuantity(String(log.material_quantity));
             }
+          }
+
+          // カスタム作業内容取得（農園全体で共有）
+          const { data: farmWorkers } = await supabase
+            .from('workers')
+            .select('id')
+            .eq('user_id', wRes.data.user_id);
+          const workerIds = farmWorkers?.map(w => w.id) || [currentUser.id];
+
+          const { data: pastLogs } = await supabase
+            .from('work_logs')
+            .select('work_type')
+            .in('worker_id', workerIds);
+          if (pastLogs) {
+            const allTypes = pastLogs.map(l => l.work_type).filter(Boolean);
+            const uniqueTypes = Array.from(new Set(allTypes));
+            const allDefaults = [
+              ...workTypes, 
+              '定植・播種', '播種・定植', '水やり・追肥', '草引き・防除', '収穫・調整', '片付け・その他'
+            ];
+            const cTypes = uniqueTypes.filter(t => !allDefaults.includes(t));
+            setCustomWorkTypes(cTypes);
           }
 
           // 本日の勤怠ログ取得
@@ -231,6 +256,7 @@ export default function WorkEntryPage() {
 
   const resetForm = () => {
     setSelectedCrop('');
+    setSelectedField('');
     setWorkType('');
     setDuration('');
     setManualDate(getJSTDate());
@@ -238,6 +264,8 @@ export default function WorkEntryPage() {
     setSelectedMaterial('');
     setMaterialQuantity('');
     setErrorMsg('');
+    setIsAddingWorkType(false);
+    setNewWorkType('');
   };
 
   const handleLogout = () => {
@@ -330,6 +358,8 @@ export default function WorkEntryPage() {
         }
 
         const { data, error } = await supabase.from('work_logs').insert([{
+          user_id: workerProfile?.user_id || null,
+          farm_id: workerProfile?.farm_id || null,
           worker_id: currentUser.id,
           crop_id: cropId || null,
           field_id: fieldId || null,
@@ -393,6 +423,8 @@ export default function WorkEntryPage() {
         const matId = materials.find(m => m.name === selectedMaterial)?.id;
 
         const { error } = await supabase.from('work_logs').insert([{
+          user_id: workerProfile?.user_id || null,
+          farm_id: workerProfile?.farm_id || null,
           worker_id: currentUser.id,
           crop_id: cropId || null,
           field_id: fieldId || null,
@@ -437,6 +469,9 @@ export default function WorkEntryPage() {
                 const newLang = e.target.value as LanguageCode;
                 setLanguage(newLang);
                 localStorage.setItem('agri_lang', newLang);
+                localStorage.setItem('agri_lang_sales', newLang);
+                const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang'));
+                langKeys.forEach(key => localStorage.setItem(key, newLang));
               }}
               className="bg-emerald-900 text-emerald-300 text-xs font-bold rounded-lg px-2 py-1.5 focus:outline-none border border-emerald-800"
             >
@@ -538,16 +573,16 @@ export default function WorkEntryPage() {
             {/* LINE連携・通知設定エリア */}
             <div className="mt-12 bg-slate-800/50 border border-slate-700 p-6 rounded-3xl shadow-inner">
               <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                <svg viewBox="0 0 24 24" className="w-6 h-6 fill-[#06C755]"><path d="M22.2 10.3c0-4.4-4.5-8-10.1-8s-10.1 3.6-10.1 8c0 4 3.7 7.4 8.6 7.9.4 0 .9.1 1 .5.1.3.1.5-.1 1-.1.4-.4 1.3-.4 1.3s-.1.4.1.5c.2.1.5 0 .5 0 2.9-1.8 5.7-4 7.6-6 1.8-1.7 2.9-3.4 2.9-5.2zm-12.7 3c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h2.3c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3.3h-1.4v.9h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3.3h-1.4v.9h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3zM7.3 13.3c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v4.2c0 .2-.1.3-.3.3h-.8zm-3 0c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v3h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3.3h-2.8zm13.1-.3c0 .2-.1.3-.3.3h-.8c-.2 0-.3-.1-.3-.3v-3l-1.9 3c-.1.1-.2.2-.3.2h-.8c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v3l1.9-3c.1-.1.2-.2.3-.2h.8c.2 0 .3.1.3.3v4.2z"/></svg>
-                打刻忘れ防止アラート（LINE通知）
+                <svg viewBox="0 0 24 24" className="w-6 h-6 fill-[#06C755]"><path d="M22.2 10.3c0-4.4-4.5-8-10.1-8s-10.1 3.6-10.1 8c0 4 3.7 7.4 8.6 7.9.4 0 .9.1 1 .5.1.3.1.5-.1 1-.1.4-.4 1.3-.4 1.3s-.1.4.1.5c.2.1.5 0 .5 0 2.9-1.8 5.7-4 7.6-6 1.8-1.7 2.9-3.4 2.9-5.2zm-12.7 3c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h2.3c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3h-1.4v.9h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3h-1.4v.9h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3zM7.3 13.3c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v4.2c0 .2-.1.3-.3.3h-.8zm-3 0c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v3h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3.3h-2.8zm13.1-.3c0 .2-.1.3-.3.3h-.8c-.2 0-.3-.1-.3-.3v-3l-1.9 3c-.1.1-.2.2-.3.2h-.8c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v3l1.9-3c.1-.1.2-.2.3-.2h.8c.2 0 .3.1.3.3v4.2z"/></svg>
+                {t('lineAlertTitle', language)}
               </h3>
               
               {!workerProfile?.line_user_id ? (
                 <div className="bg-slate-900/80 p-4 rounded-2xl border border-slate-700">
                   <p className="text-sm text-slate-300 font-bold mb-4">
-                    退勤の押し忘れ時に、LINEへお知らせをお届けします。<br/>
-                    下のボタンを押すと、自動的に連携用キーがコピーされてLINEが開きます。<br/>
-                    トークの入力欄に「ペースト（貼り付け）」して送信してください。
+                    {t('lineAlertDesc1', language)}<br/>
+                    {t('lineAlertDesc2', language)}<br/>
+                    {t('lineAlertDesc3', language)}
                   </p>
                   <div className="flex flex-col items-center gap-3">
                     <button 
@@ -560,7 +595,7 @@ export default function WorkEntryPage() {
                       }}
                       className="w-full py-4 bg-[#06C755] hover:bg-[#05b34c] text-white font-black rounded-xl text-center flex items-center justify-center gap-2 mt-2"
                     >
-                      システムとLINEを連携する
+                      {t('lineConnectBtn', language)}
                     </button>
                   </div>
                 </div>
@@ -571,8 +606,8 @@ export default function WorkEntryPage() {
                       <CheckCircle2 className="w-6 h-6" />
                     </div>
                     <div>
-                      <div className="text-emerald-400 font-bold text-sm">LINE連携済み</div>
-                      <div className="text-xs text-slate-400 mt-1">退勤忘れ時に通知が届きます</div>
+                      <div className="text-emerald-400 font-bold text-sm">{t('lineLinked', language)}</div>
+                      <div className="text-xs text-slate-400 mt-1">{t('lineNotifyDesc', language)}</div>
                     </div>
                   </div>
                   <button 
@@ -595,7 +630,9 @@ export default function WorkEntryPage() {
         {/* ===================== 作業タブ ===================== */}
         {activeTab === 'work' && (
           <form onSubmit={inputMode === 'timer' ? handleStartWork : handleManualSubmit} className="space-y-6">
-            {errorMsg && <div className="p-4 bg-rose-500/20 border border-rose-500/50 text-rose-400 rounded-xl text-sm font-bold flex items-start gap-3"><AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" /><span>{errorMsg}</span></div>}
+            <div>
+              {errorMsg && <div className="p-4 bg-rose-500/20 border border-rose-500/50 text-rose-400 rounded-xl text-sm font-bold flex items-start gap-3"><AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" /><span>{errorMsg}</span></div>}
+            </div>
 
             <div className={`flex bg-emerald-950/80 p-1 rounded-xl mb-4 border border-emerald-800`}>
               <button type="button" onClick={() => setInputMode('timer')} className={`flex-1 py-1.5 text-xs font-bold rounded-lg ${inputMode === 'timer' ? 'bg-emerald-600 text-white' : 'text-emerald-500'}`}>{t('realtimeRecord', language)}</button>
@@ -634,8 +671,82 @@ export default function WorkEntryPage() {
                   <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2 mb-2.5"><Sparkles className="w-4 h-4" />{t('workType', language)}</h2>
                   <div className="flex flex-col gap-2">
                     {workTypes.map(w => (
-                      <button key={w} type="button" onClick={() => setWorkType(w)} className={`py-2 px-1 rounded-lg font-bold text-xs border ${workType === w ? 'bg-amber-500 text-amber-950 border-amber-300' : 'bg-emerald-950/60 text-slate-300 border-emerald-800'}`}>{t(w, language)}</button>
+                      <button key={`default-${w}`} type="button" onClick={() => setWorkType(w)} className={`py-2 px-1 rounded-lg font-bold text-xs border transition-all ${workType === w ? 'bg-amber-500 text-amber-950 border-amber-300' : 'bg-emerald-950/60 text-slate-300 border-emerald-800'}`}>{t(w, language)}</button>
                     ))}
+                    {customWorkTypes.map(cw => (
+                      <div key={`custom-${cw}`} className="relative flex group">
+                        <button 
+                          type="button" 
+                          onClick={() => setWorkType(cw)} 
+                          className={`flex-1 py-2 px-1 rounded-lg font-bold text-xs border transition-all flex items-center justify-center gap-1 ${workType === cw ? 'bg-amber-500 text-amber-950 border-amber-300' : 'bg-emerald-900/20 text-emerald-200 border-emerald-700/50'}`}
+                        >
+                          <Sparkles className="w-3 h-3 text-amber-500/70" /> {cw}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (confirm(`独自作業「${cw}」をリストから削除しますか？\n※この作業で保存された過去の記録は『片付け・メンテ』に名称統合されます。`)) {
+                              setIsSubmitting(true);
+                              try {
+                                const { data: farmWorkers } = await supabase.from('workers').select('id').eq('user_id', workerProfile?.user_id);
+                                const workerIds = farmWorkers?.map(w => w.id) || [currentUser.id];
+                                await supabase.from('work_logs').update({ work_type: '片付け・メンテ' }).in('worker_id', workerIds).eq('work_type', cw);
+                                setCustomWorkTypes(customWorkTypes.filter(t => t !== cw));
+                                if (workType === cw) setWorkType('');
+                              } catch(err) {
+                                alert('削除に失敗しました');
+                              } finally {
+                                setIsSubmitting(false);
+                              }
+                            }
+                          }}
+                          className="absolute right-1 top-1/2 -translate-y-1/2 p-2 text-emerald-500 hover:text-red-400 hover:bg-red-500/10 rounded-full transition-colors opacity-70 hover:opacity-100"
+                          title="この独自作業を削除"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      key="add-new-btn"
+                      type="button"
+                      onClick={() => setIsAddingWorkType(!isAddingWorkType)}
+                      className="py-2 px-1 rounded-lg font-bold text-xs border border-dashed border-emerald-500/50 text-emerald-400 hover:bg-emerald-900/40 flex items-center justify-center gap-1 transition-all"
+                    >
+                      <Plus className="w-3 h-3" /> 新規追加
+                    </button>
+                  </div>
+
+                  <div>
+                    {isAddingWorkType && (
+                      <div className="mt-3 flex gap-2 animate-in slide-in-from-top-2">
+                        <input
+                          type="text"
+                          value={newWorkType}
+                          onChange={(e) => setNewWorkType(e.target.value)}
+                          placeholder="作業内容を入力"
+                          className="flex-1 bg-emerald-950/60 border border-emerald-800/60 text-white rounded-lg px-2 py-1.5 text-xs font-bold focus:outline-none focus:border-emerald-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = newWorkType.trim();
+                            if (val) {
+                              setWorkType(val);
+                              if (!customWorkTypes.includes(val) && !workTypes.includes(val)) {
+                                setCustomWorkTypes([...customWorkTypes, val]);
+                              }
+                              setNewWorkType('');
+                              setIsAddingWorkType(false);
+                            }
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg px-3 py-1.5 text-xs transition-colors"
+                        >
+                          決定
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </section>
               </div>

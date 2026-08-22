@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, use } from 'react';
-import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle, Building2, Video, Lock, X, FileText, Image as ImageIcon, LogIn } from 'lucide-react';
-import { getFarmInfo, getFarmWorkers, verifyWorkerPin, getFarmMasters, submitWorkLog, getTodayAttendance, submitAttendance, TenantInfo } from '@/app/actions/farm';
+import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle, Building2, Video, Lock, X, FileText, Image as ImageIcon, LogIn, Plus } from 'lucide-react';
+import { getFarmInfo, getFarmWorkers, verifyWorkerPin, getFarmMasters, getCustomWorkTypes, submitWorkLog, getTodayAttendance, submitAttendance, TenantInfo } from '@/app/actions/farm';
 import { supabase } from '@/lib/supabase';
 import imageCompression from 'browser-image-compression';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
@@ -40,6 +40,9 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   const [fields, setFields] = useState<MasterItem[]>([]);
   const [materials, setMaterials] = useState<MasterItem[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
+  const [customWorkTypes, setCustomWorkTypes] = useState<string[]>([]);
+  const [isAddingWorkType, setIsAddingWorkType] = useState(false);
+  const [newWorkType, setNewWorkType] = useState('');
 
   const [selectedTaskTarget, setSelectedTaskTarget] = useState(''); // 'plan_UUID' or 'crop_UUID'
   const [selectedField, setSelectedField] = useState('');
@@ -122,6 +125,10 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
       setMaterials(res.data.materials);
       setPlans(res.data.plans || []);
     }
+    const customRes = await getCustomWorkTypes(tenantId);
+    if (customRes.success && customRes.data) {
+      setCustomWorkTypes(customRes.data);
+    }
   };
 
   const fetchManuals = async () => {
@@ -196,15 +203,18 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     setPhotoPreview(null);
     setVideoFile(null);
     setErrorMsg('');
+    setIsAddingWorkType(false);
+    setNewWorkType('');
   };
 
   const handleLanguageChange = (code: LanguageCode) => {
     setLanguage(code);
     localStorage.setItem(`agri_lang_${tenantId}`, code);
     localStorage.setItem('agri_lang_sales', code); // 共通キーにも保存
+    localStorage.setItem('agri_lang', code); // BottomNav等で参照するベースキーも更新
     
     // 出荷記録など他のページとも同期するため、存在するすべてのキーを更新
-    const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang_'));
+    const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang'));
     langKeys.forEach(key => localStorage.setItem(key, code));
   };
 
@@ -593,12 +603,14 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
               </div>
             ) : inputMode !== 'manuals' ? (
               <form onSubmit={inputMode === 'timer' ? handleStartWork : handleManualSubmit} className="space-y-6">
+            <div>
             {errorMsg && (
-              <div className="p-4 bg-rose-500/20 border border-rose-500/50 text-rose-400 rounded-xl text-sm font-bold flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                <span>{errorMsg}</span>
+              <div className="mb-6 p-4 bg-red-950/50 border border-red-500/50 rounded-xl flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                <p className="text-sm font-bold text-red-200">{errorMsg}</p>
               </div>
             )}
+          </div>
 
             <div className={`space-y-6 transition-all duration-300 ${activeWorkStartTime ? 'opacity-60 pointer-events-none grayscale-[30%]' : ''}`}>
               
@@ -663,7 +675,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                 <div className="grid grid-cols-2 gap-2">
                   {workTypes.map(tData => (
                     <button
-                      key={tData.ja}
+                      key={`default-${tData.ja}`}
                       type="button"
                       onClick={() => setWorkType(tData.ja)}
                       className={`py-2 px-2 rounded-xl font-bold text-xs transition-all border text-center ${
@@ -675,6 +687,83 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                       {(tData as any)[language] || tData.ja}
                     </button>
                   ))}
+                  {customWorkTypes.map(cw => (
+                    <div key={`custom-${cw}`} className="relative flex group">
+                      <button
+                        type="button"
+                        onClick={() => setWorkType(cw)}
+                        className={`flex-1 py-2 px-2 rounded-xl font-bold text-xs transition-all border text-center flex items-center justify-center gap-1 ${
+                          workType === cw
+                            ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 border-amber-200'
+                            : 'bg-emerald-900/20 text-emerald-200 border-emerald-700/50'
+                        }`}
+                      >
+                        <Sparkles className="w-3 h-3 text-amber-500/70" /> {cw}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (confirm(`独自作業「${cw}」をリストから削除しますか？\n※この作業で保存された過去の記録は『片付け・その他』に名称統合されます。`)) {
+                            setIsSubmitting(true);
+                            try {
+                              await supabase.from('work_logs').update({ work_type: '片付け・その他' }).eq('user_id', farmInfo?.id).eq('work_type', cw);
+                              setCustomWorkTypes(customWorkTypes.filter(t => t !== cw));
+                              if (workType === cw) setWorkType('');
+                            } catch(err) {
+                              alert('削除に失敗しました');
+                            } finally {
+                              setIsSubmitting(false);
+                            }
+                          }
+                        }}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 p-2 text-emerald-500 hover:text-red-400 hover:bg-red-500/10 rounded-full transition-colors opacity-70 hover:opacity-100"
+                        title="この独自作業を削除"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    key="add-new-btn"
+                    type="button"
+                    onClick={() => setIsAddingWorkType(!isAddingWorkType)}
+                    className="py-2 px-2 rounded-xl font-bold text-xs transition-all border text-center border-dashed border-emerald-500/50 text-emerald-400 hover:bg-emerald-900/40 flex items-center justify-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> 新規追加
+                  </button>
+                </div>
+
+                <div>
+                  {isAddingWorkType && (
+                    <div className="mt-3 flex gap-2 animate-in slide-in-from-top-2">
+                      <input
+                        type="text"
+                        value={newWorkType}
+                        onChange={(e) => setNewWorkType(e.target.value)}
+                        placeholder="新しい作業内容を入力"
+                        className="flex-1 bg-emerald-950/60 border border-emerald-800/60 text-white rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:border-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const val = newWorkType.trim();
+                          if (val) {
+                            setWorkType(val);
+                            const isDefault = workTypes.some(t => t.ja === val);
+                            if (!customWorkTypes.includes(val) && !isDefault) {
+                              setCustomWorkTypes([...customWorkTypes, val]);
+                            }
+                            setNewWorkType('');
+                            setIsAddingWorkType(false);
+                          }
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl px-4 py-2 text-sm transition-colors"
+                      >
+                        決定
+                      </button>
+                    </div>
+                  )}
                 </div>
               </section>
 
