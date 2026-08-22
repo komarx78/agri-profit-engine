@@ -545,17 +545,13 @@ export default function WorkEntryPage() {
               {!workerProfile?.line_user_id ? (
                 <div className="bg-slate-900/80 p-4 rounded-2xl border border-slate-700">
                   <p className="text-sm text-slate-300 font-bold mb-4">
-                    退勤の押し忘れ時に、LINEへお知らせを送ります。<br/>
-                    まずは公式アカウントを友だち追加し、以下の連携コードをトークに送信してください。
+                    退勤の押し忘れ時に、LINEへお知らせをお届けします。<br/>
+                    下のボタンを押して、LINEの送信ボタンを「そのまま」押すだけで自動連携が完了します。
                   </p>
                   <div className="flex flex-col items-center gap-3">
-                    <a href="https://lin.ee/RD1vp8c" target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-[#06C755] hover:bg-[#05b34c] text-white font-black rounded-xl text-center flex items-center justify-center gap-2">
-                      友だち追加する
+                    <a href={`https://line.me/R/oaMessage/@543tdbfc/?${workerProfile?.pin_code || ''}`} target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-[#06C755] hover:bg-[#05b34c] text-white font-black rounded-xl text-center flex items-center justify-center gap-2">
+                      LINEとシステムを自動連携する
                     </a>
-                    <div className="text-xs text-slate-400 font-bold mt-2">あなたの連携コード</div>
-                    <div className="bg-slate-950 border border-slate-800 text-emerald-400 text-xl font-black px-6 py-2 rounded-lg tracking-widest">
-                      {workerProfile?.pin_code || '---'}
-                    </div>
                   </div>
                 </div>
               ) : (
