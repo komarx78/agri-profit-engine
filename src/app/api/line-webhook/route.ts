@@ -27,22 +27,22 @@ export async function POST(req: Request) {
     const lineUserId = event.source.userId;
     const replyToken = event.replyToken;
 
-    // もしメッセージがPINコード（例: 4桁の数字）だったら連携処理を行う
-    // 現場の運用に合わせて、「連携 1234」などにしても良い
-    if (/^\d{4}$/.test(text)) {
-      const pinCode = text;
+    // もしメッセージが連携用のUUID（長い英数字）だったら連携処理を行う
+    // 形式: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    
+    if (uuidRegex.test(text)) {
+      const workerId = text;
 
-      // Supabaseから一致するPINコードを持つworkerを検索
-      const { data: workers, error } = await supabase
+      // Supabaseから一致するIDを持つworkerを検索
+      const { data: worker, error } = await supabase
         .from('workers')
         .select('*')
-        .eq('pin_code', pinCode)
-        .limit(1);
-
-      const worker = workers && workers.length > 0 ? workers[0] : null;
+        .eq('id', workerId)
+        .single();
 
       if (error || !worker) {
-        await replyMessage(replyToken, `入力されたPINコード（${pinCode}）が見つかりませんでした。\nマイページに表示されている4桁のコードを送信してください。`);
+        await replyMessage(replyToken, `入力された連携キーが無効です。\nマイページから再度「システムとLINEを連携する」ボタンを押してやり直してください。`);
         return NextResponse.json({ status: 'not_found' }, { status: 200 });
       }
 

@@ -546,23 +546,21 @@ export default function WorkEntryPage() {
                 <div className="bg-slate-900/80 p-4 rounded-2xl border border-slate-700">
                   <p className="text-sm text-slate-300 font-bold mb-4">
                     退勤の押し忘れ時に、LINEへお知らせをお届けします。<br/>
-                    下のボタンを押すと、自動的に連携コードがコピーされてLINEが開きます。<br/>
+                    下のボタンを押すと、自動的に連携用キーがコピーされてLINEが開きます。<br/>
                     トークの入力欄に「ペースト（貼り付け）」して送信してください。
                   </p>
                   <div className="flex flex-col items-center gap-3">
-                    <div className="text-xs text-slate-400 font-bold">あなたの連携コード</div>
-                    <div className="text-2xl font-black text-emerald-400 tracking-widest">{workerProfile?.pin_code || '---'}</div>
                     <button 
                       type="button"
                       onClick={() => {
-                        if(workerProfile?.pin_code) {
-                          navigator.clipboard.writeText(workerProfile.pin_code);
+                        if(workerProfile?.id) {
+                          navigator.clipboard.writeText(workerProfile.id);
                         }
                         window.open("https://lin.ee/RD1vp8c", "_blank");
                       }}
                       className="w-full py-4 bg-[#06C755] hover:bg-[#05b34c] text-white font-black rounded-xl text-center flex items-center justify-center gap-2 mt-2"
                     >
-                      コードをコピーしてLINEを開く
+                      システムとLINEを連携する
                     </button>
                   </div>
                 </div>
