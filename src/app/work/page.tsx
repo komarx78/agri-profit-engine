@@ -549,7 +549,7 @@ export default function WorkEntryPage() {
                     まずは公式アカウントを友だち追加し、以下の連携コードをトークに送信してください。
                   </p>
                   <div className="flex flex-col items-center gap-3">
-                    <a href="https://lin.ee/your_bot_id" target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-[#06C755] hover:bg-[#05b34c] text-white font-black rounded-xl text-center flex items-center justify-center gap-2">
+                    <a href="https://lin.ee/RD1vp8c" target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-[#06C755] hover:bg-[#05b34c] text-white font-black rounded-xl text-center flex items-center justify-center gap-2">
                       友だち追加する
                     </a>
                     <div className="text-xs text-slate-400 font-bold mt-2">あなたの連携コード</div>
