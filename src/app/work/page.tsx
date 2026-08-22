@@ -81,7 +81,7 @@ export default function WorkEntryPage() {
   const [attendanceLog, setAttendanceLog] = useState<any>(null);
   const [workerProfile, setWorkerProfile] = useState<any>(null);
   const [gpsStatus, setGpsStatus] = useState<string>('');
-  const [currentAddress, setCurrentAddress] = useState<string>('現在地を取得中...');
+  const [currentAddress, setCurrentAddress] = useState<string>('');
 
   // フォーム状態
   const [selectedCrop, setSelectedCrop] = useState<string>('');
@@ -109,7 +109,7 @@ export default function WorkEntryPage() {
     setIsMounted(true);
     const savedUser = localStorage.getItem('agri_current_worker');
     const savedLang = localStorage.getItem('agri_language') as LanguageCode;
-    if (savedLang && LANGUAGES[savedLang]) {
+    if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
       setLanguage(savedLang);
     }
     if (savedUser) {
