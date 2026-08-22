@@ -20,7 +20,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
 
   useEffect(() => {
     let loadedLang = 'ja' as LanguageCode;
-    const savedGlobalLang = localStorage.getItem('agri_lang_sales') as LanguageCode;
+    const savedGlobalLang = localStorage.getItem('agri_language') as LanguageCode;
     if (savedGlobalLang && LANGUAGES.some(l => l.code === savedGlobalLang)) {
         loadedLang = savedGlobalLang;
     }
@@ -73,7 +73,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           role: data.role || 'staff'
         };
 
-        localStorage.setItem('agri_user', JSON.stringify(user));
+        localStorage.setItem('agri_current_worker', JSON.stringify(user));
         onLogin(user);
       } else {
         setErrorMsg(t('incorrectPin', language));
@@ -100,7 +100,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           onChange={e => {
             const newLang = e.target.value as LanguageCode;
             setLanguage(newLang);
-            localStorage.setItem('agri_lang_sales', newLang);
+            localStorage.setItem('agri_language', newLang);
             const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang_'));
             langKeys.forEach(key => localStorage.setItem(key, newLang));
           }}

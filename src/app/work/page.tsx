@@ -241,9 +241,9 @@ export default function WorkEntryPage() {
   };
 
   const handleLogout = () => {
-    if(confirm('ログアウトしますか？')) {
-      localStorage.removeItem('agri_user');
-      router.push('/login');
+    if(confirm(t('confirmLogout', language) || 'ログアウトしますか？')) {
+      localStorage.removeItem('agri_current_worker');
+      setCurrentUser(null);
     }
   };
 

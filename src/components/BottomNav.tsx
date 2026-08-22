@@ -89,19 +89,6 @@ export default function BottomNav() {
           <span className="text-[10px] font-bold tracking-wider whitespace-nowrap">{t('navSales', language)}</span>
         </Link>
 
-        {/* 従業員が見る画面では「管理」ボタンを隠す（オーナーログイン時のみ表示） */}
-        {isAdmin && (
-          <Link 
-            href="/admin/dashboard"
-            className="flex flex-col items-center justify-center w-20 gap-1 text-slate-500 hover:text-slate-400 transition-all duration-200"
-          >
-            <div className="p-1.5">
-              <Settings className="w-6 h-6 stroke-2" />
-            </div>
-            <span className="text-[10px] font-bold tracking-wider whitespace-nowrap">{t('navAdmin', language)}</span>
-          </Link>
-        )}
-
       </div>
     </nav>
   );
