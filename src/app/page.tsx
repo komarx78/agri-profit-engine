@@ -115,6 +115,20 @@ export default function PortalPage() {
             </p>
           </Link>
 
+          {/* 農薬・防除AIチェッカー */}
+          <Link href="/farm/pesticide-check" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-teal-300 transition-all flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-teal-100 text-teal-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-teal-500 transition-colors" />
+            </div>
+            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-teal-700 transition-colors">農薬・防除AIチェッカー</h3>
+            <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
+              MAFFの登録基準を参照し、対象の作物に対して指定した農薬や希釈倍率が適切かAIで自動チェックします。
+            </p>
+          </Link>
+
           {/* 現場作業・スマホ打刻 */}
           <Link href="/work" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-amber-300 transition-all flex flex-col">
             <div className="flex items-center justify-between mb-4">
