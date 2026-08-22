@@ -29,7 +29,7 @@ export async function GET(req: Request) {
 
     // 今日の打刻ログのうち、出勤済みで未退勤のもの（かつLINE連携がONのワーカー）を取得
     const { data: logs, error } = await supabase
-      .from('attendance_logs')
+      .from('attendance_records')
       .select(`
         id,
         clock_in,
@@ -53,7 +53,7 @@ export async function GET(req: Request) {
     }
 
     if (!logs || logs.length === 0) {
-      return NextResponse.json({ status: 'success', message: '未退勤者はいませんでした' }, { status: 200 });
+      return NextResponse.json({ status: 'success', message: '未退勤者はおりませんでした' }, { status: 200 });
     }
 
     // 抽出されたワーカーに対してLINEプッシュ通知を送信
@@ -63,7 +63,7 @@ export async function GET(req: Request) {
       const worker = Array.isArray(log.workers) ? log.workers[0] : log.workers;
       if (!worker || !worker.line_user_id) continue;
 
-      const messageText = `お疲れ様です！\n本日 ${worker.name} さんの「退勤」がまだ打刻されていないようです。\n\n作業が終了している場合は、マイページから退勤処理をお願いいたします！\nhttps://your-app-domain.vercel.app/work`;
+      const messageText = `お疲れ様です！\n本日 ${worker.name} さんの「退勤」がまだ打刻されていないようです。\n作業が終了している場合は、マイページから退勤処理をお願いいたします！\nhttps://agri-profit-engine.vercel.app/work`;
 
       try {
         const response = await fetch('https://api.line.me/v2/bot/message/push', {
