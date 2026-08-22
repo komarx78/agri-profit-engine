@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { Calendar, Save, Loader2, ChevronLeft, ChevronRight, Plus, Trash2, X, BarChart2, User } from 'lucide-react';
+import { Calendar, Save, Loader2, ChevronLeft, ChevronRight, Plus, Trash2, X, BarChart2, User, ChevronDown, ChevronUp, PieChart as PieChartIcon, Sprout } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 
 export default function CultivationSchedulePage() {
@@ -12,6 +12,11 @@ export default function CultivationSchedulePage() {
   const [cropStandards, setCropStandards] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
   const [monthlyExpenses, setMonthlyExpenses] = useState<any[]>([]);
+  
+  // 分析用ステート
+  const [allWorkLogs, setAllWorkLogs] = useState<any[]>([]);
+  const [allSalesLogs, setAllSalesLogs] = useState<any[]>([]);
+  const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
   
   const [isLoading, setIsLoading] = useState(true);
   const [year, setYear] = useState(new Date().getFullYear());
@@ -42,7 +47,7 @@ export default function CultivationSchedulePage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [fRes, cRes, csRes, pRes, expRes] = await Promise.all([
+      const [fRes, cRes, csRes, pRes, expRes, workRes, salesRes] = await Promise.all([
         supabase.from('fields').select('*').order('name'),
         supabase.from('crops').select('*').order('name'),
         supabase.from('crop_standards').select('*'),
@@ -50,13 +55,17 @@ export default function CultivationSchedulePage() {
           *,
           crops ( * )
         `).eq('year', year),
-        supabase.from('monthly_expenses').select('*')
+        supabase.from('monthly_expenses').select('*'),
+        supabase.from('work_logs').select('*, workers(name), materials(default_price)'),
+        supabase.from('sales_logs').select('*')
       ]);
       
       setFields(fRes.data || []);
       setCrops(cRes.data || []);
       setCropStandards(csRes.data || []);
       setMonthlyExpenses(expRes.data || []);
+      setAllWorkLogs(workRes.data || []);
+      setAllSalesLogs(salesRes.data || []);
       
       if (pRes.error && pRes.error.code !== '42P01') {
         console.error("Plans fetch error:", pRes.error);
@@ -228,6 +237,89 @@ export default function CultivationSchedulePage() {
       return monthIndex >= startIndex || monthIndex <= endIndex;
     }
   };
+
+  // 作目別サマリーの計算
+  const cropStats = useMemo(() => {
+    const stats: Record<string, any> = {};
+    crops.forEach(c => {
+      stats[c.id] = {
+        id: c.id,
+        name: c.name,
+        plannedSales: 0,
+        actualSales: 0,
+        plannedWorkHours: 0,
+        actualWorkHours: 0,
+        plannedMaterialCost: 0,
+        actualMaterialCost: 0,
+      };
+    });
+    
+    allSalesLogs.forEach(s => {
+      if (s.crop_id && stats[s.crop_id]) {
+        if (s.status === 'planned') stats[s.crop_id].plannedSales += (s.total_sales || 0);
+        else if (s.status === 'completed') stats[s.crop_id].actualSales += (s.total_sales || 0);
+      }
+    });
+    
+    allWorkLogs.forEach(w => {
+      if (w.crop_id && stats[w.crop_id]) {
+        const hours = (w.duration_minutes || 0) / 60;
+        const matCost = (w.material_quantity || 0) * (w.materials?.default_price || 0);
+        
+        if (w.status === 'planned') {
+          stats[w.crop_id].plannedWorkHours += hours;
+          stats[w.crop_id].plannedMaterialCost += matCost;
+        } else if (w.status === 'completed') {
+          stats[w.crop_id].actualWorkHours += hours;
+          stats[w.crop_id].actualMaterialCost += matCost;
+        }
+      }
+    });
+
+    const baseHourlyWage = 1000;
+    const estimateCostRate = 20;
+
+    return Object.values(stats).map(stat => {
+      const plannedMatCost = stat.plannedMaterialCost || Math.round(stat.plannedSales * (estimateCostRate / 100));
+      const plannedLaborCost = stat.plannedWorkHours * baseHourlyWage;
+      const plannedCost = plannedLaborCost + plannedMatCost;
+      const plannedProfit = stat.plannedSales - plannedCost;
+
+      const actualMatCost = stat.actualMaterialCost || Math.round(stat.actualSales * (estimateCostRate / 100));
+      const actualLaborCost = stat.actualWorkHours * baseHourlyWage;
+      const actualCost = actualLaborCost + actualMatCost;
+      const actualProfit = stat.actualSales - actualCost;
+
+      const progressRate = stat.plannedSales > 0 ? Math.round((stat.actualSales / stat.plannedSales) * 100) : 0;
+
+      return {
+        ...stat,
+        plannedCost, plannedProfit, actualCost, actualProfit, progressRate
+      };
+    }).filter(s => s.plannedSales > 0 || s.actualSales > 0 || s.plannedWorkHours > 0 || s.actualWorkHours > 0)
+      .sort((a, b) => b.plannedSales - a.plannedSales);
+  }, [crops, allSalesLogs, allWorkLogs]);
+
+  // 作業者別の実績稼働時間の集計
+  const workerTimeStats = useMemo(() => {
+    const stats: Record<string, { name: string; actualHours: number }> = {};
+    
+    allWorkLogs.forEach(w => {
+      if (w.status === 'completed') {
+        const workerName = w.workers?.name || '未定/その他';
+        if (!stats[workerName]) {
+          stats[workerName] = { name: workerName, actualHours: 0 };
+        }
+        stats[workerName].actualHours += (w.duration_minutes || 0) / 60;
+      }
+    });
+    
+    return Object.values(stats)
+      .filter(w => w.actualHours > 0)
+      .sort((a, b) => b.actualHours - a.actualHours);
+  }, [allWorkLogs]);
+
+  const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 
   return (
     <div className="max-w-[95vw] mx-auto space-y-6 pb-12 relative">
@@ -662,6 +754,7 @@ export default function CultivationSchedulePage() {
                         
                         // 作業タイプ別時間割合
                         const workTypeHours: Record<string, number> = {};
+                        const workerTypeHours: Record<string, number> = {};
                         
                         workLogs.forEach(log => {
                           const durationH = (Number(log.duration_minutes) || 0) / 60;
@@ -669,6 +762,10 @@ export default function CultivationSchedulePage() {
                           // 作業タイプ集計
                           const wType = log.work_type || 'その他';
                           workTypeHours[wType] = (workTypeHours[wType] || 0) + durationH;
+                          
+                          // 作業者集計
+                          const wName = log.workers?.name || '不明';
+                          workerTypeHours[wName] = (workerTypeHours[wName] || 0) + durationH;
                           
                           // 人件費
                           const wage = log.workers?.hourly_wage || 1000;
@@ -756,13 +853,20 @@ export default function CultivationSchedulePage() {
                         const laborHours10a = totalWorkHours * multiplier;
                         const profitPerHour = laborHours10a > 0 ? profit10a / laborHours10a : 0;
                         
-                        // 円グラフデータ
+                        // 円グラフデータ (作業別)
                         const pieData = Object.keys(workTypeHours).map(k => ({
                           name: k,
                           value: Number((workTypeHours[k] * multiplier).toFixed(1))
                         })).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
+
+                        // 円グラフデータ (作業者別)
+                        const workerPieData = Object.keys(workerTypeHours).map(k => ({
+                          name: k,
+                          value: Number((workerTypeHours[k] * multiplier).toFixed(1))
+                        })).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
                         
                         const PIE_COLORS = ['#fb7185', '#f43f5e', '#e11d48', '#fda4af', '#be123c', '#9f1239', '#ffe4e6'];
+                        const WORKER_COLORS = ['#3b82f6', '#60a5fa', '#2563eb', '#93c5fd', '#1d4ed8', '#bfdbfe', '#1e3a8a'];
                         
                         return (
                           <>
@@ -820,35 +924,68 @@ export default function CultivationSchedulePage() {
                               </table>
                             </div>
                             
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                <h4 className="text-sm font-black text-slate-700 mb-4 text-center">10a当たり作業別時間割合</h4>
+                                {pieData.length > 0 ? (
+                                  <div className="h-64">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <PieChart margin={{ top: 10, right: 40, bottom: 10, left: 40 }}>
+                                        <Pie
+                                          data={pieData}
+                                          cx="50%"
+                                          cy="50%"
+                                          innerRadius={35}
+                                          outerRadius={60}
+                                          paddingAngle={2}
+                                          dataKey="value"
+                                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                          labelLine={true}
+                                        >
+                                          {pieData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                                          ))}
+                                        </Pie>
+                                        <RechartsTooltip formatter={(value: number) => [`${value} 時間/10a`, '時間']} />
+                                      </PieChart>
+                                    </ResponsiveContainer>
+                                  </div>
+                                ) : (
+                                  <p className="text-center text-sm text-slate-400 py-8">作業記録がありません</p>
+                                )}
+                              </div>
+                              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                <h4 className="text-sm font-black text-slate-700 mb-4 text-center">10a当たり作業者別割合</h4>
+                                {workerPieData.length > 0 ? (
+                                  <div className="h-64">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <PieChart margin={{ top: 10, right: 40, bottom: 10, left: 40 }}>
+                                        <Pie
+                                          data={workerPieData}
+                                          cx="50%"
+                                          cy="50%"
+                                          innerRadius={35}
+                                          outerRadius={60}
+                                          paddingAngle={2}
+                                          dataKey="value"
+                                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                          labelLine={true}
+                                        >
+                                          {workerPieData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={WORKER_COLORS[index % WORKER_COLORS.length]} />
+                                          ))}
+                                        </Pie>
+                                        <RechartsTooltip formatter={(value: number) => [`${value} 時間/10a`, '時間']} />
+                                      </PieChart>
+                                    </ResponsiveContainer>
+                                  </div>
+                                ) : (
+                                  <p className="text-center text-sm text-slate-400 py-8">作業記録がありません</p>
+                                )}
+                              </div>
+                            </div>
+                            
                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                              <h4 className="text-sm font-black text-slate-700 mb-4 text-center">10a当たり作業別時間割合</h4>
-                              {pieData.length > 0 ? (
-                                <div className="h-64">
-                                  <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart margin={{ top: 10, right: 40, bottom: 10, left: 40 }}>
-                                      <Pie
-                                        data={pieData}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={35}
-                                        outerRadius={60}
-                                        paddingAngle={2}
-                                        dataKey="value"
-                                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                        labelLine={true}
-                                      >
-                                        {pieData.map((entry, index) => (
-                                          <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                                        ))}
-                                      </Pie>
-                                      <RechartsTooltip formatter={(value: number) => [`${value} 時間/10a`, '時間']} />
-                                    </PieChart>
-                                  </ResponsiveContainer>
-                                </div>
-                              ) : (
-                                <p className="text-center text-sm text-slate-400 py-8">作業記録がありません</p>
-                              )}
-                              
                               <table className="w-full text-sm mt-4 border-collapse">
                                 <thead>
                                   <tr className="border-b-2 border-slate-200 text-slate-500">

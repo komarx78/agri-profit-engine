@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Calendar, Sprout, Store, Calculator, CheckCircle2, Clock, Truck, MapPin, Loader2, Target, ChevronLeft, ChevronRight, Plus, X, User, FileText, Image as ImageIcon } from 'lucide-react';
+import { Calendar, Sprout, Store, Calculator, CheckCircle2, Clock, Truck, MapPin, Loader2, Target, ChevronLeft, ChevronRight, Plus, X, User, FileText, Image as ImageIcon, ChevronDown, ChevronUp, PieChart as PieChartIcon } from 'lucide-react';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export default function PlansPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -169,6 +170,91 @@ export default function PlansPage() {
       plannedWorkHours
     };
   }, [allSalesLogs, allWorkLogs, baseHourlyWage, costCalculationMode, estimateCostRate]);
+  
+  // 分析セクションの開閉状態
+  const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
+
+  // 作目別サマリーの計算
+  const cropStats = useMemo(() => {
+    const stats: Record<string, any> = {};
+    crops.forEach(c => {
+      stats[c.id] = {
+        id: c.id,
+        name: c.name,
+        plannedSales: 0,
+        actualSales: 0,
+        plannedWorkHours: 0,
+        actualWorkHours: 0,
+        plannedMaterialCost: 0,
+        actualMaterialCost: 0,
+      };
+    });
+    
+    allSalesLogs.forEach(s => {
+      if (s.crop_id && stats[s.crop_id]) {
+        if (s.status === 'planned') stats[s.crop_id].plannedSales += (s.total_sales || 0);
+        else if (s.status === 'completed') stats[s.crop_id].actualSales += (s.total_sales || 0);
+      }
+    });
+    
+    allWorkLogs.forEach(w => {
+      if (w.crop_id && stats[w.crop_id]) {
+        const hours = (w.duration_minutes || 0) / 60;
+        const matCost = (w.material_quantity || 0) * (w.materials?.default_price || 0);
+        
+        if (w.status === 'planned') {
+          stats[w.crop_id].plannedWorkHours += hours;
+          stats[w.crop_id].plannedMaterialCost += matCost;
+        } else if (w.status === 'completed') {
+          stats[w.crop_id].actualWorkHours += hours;
+          stats[w.crop_id].actualMaterialCost += matCost;
+        }
+      }
+    });
+
+    return Object.values(stats).map(stat => {
+      const estMatCost = Math.round(stat.plannedSales * (estimateCostRate / 100));
+      const plannedMatCost = costCalculationMode === 'detailed' ? stat.plannedMaterialCost : estMatCost;
+      const plannedLaborCost = stat.plannedWorkHours * baseHourlyWage;
+      const plannedCost = plannedLaborCost + plannedMatCost;
+      const plannedProfit = stat.plannedSales - plannedCost;
+
+      const actEstMatCost = Math.round(stat.actualSales * (estimateCostRate / 100));
+      const actualMatCost = costCalculationMode === 'detailed' ? stat.actualMaterialCost : actEstMatCost;
+      const actualLaborCost = stat.actualWorkHours * baseHourlyWage;
+      const actualCost = actualLaborCost + actualMatCost;
+      const actualProfit = stat.actualSales - actualCost;
+
+      const progressRate = stat.plannedSales > 0 ? Math.round((stat.actualSales / stat.plannedSales) * 100) : 0;
+
+      return {
+        ...stat,
+        plannedCost, plannedProfit, actualCost, actualProfit, progressRate
+      };
+    }).filter(s => s.plannedSales > 0 || s.actualSales > 0 || s.plannedWorkHours > 0 || s.actualWorkHours > 0)
+      .sort((a, b) => b.plannedSales - a.plannedSales);
+  }, [crops, allSalesLogs, allWorkLogs, baseHourlyWage, costCalculationMode, estimateCostRate]);
+
+  // 作業者別の実績稼働時間の集計
+  const workerTimeStats = useMemo(() => {
+    const stats: Record<string, { name: string; actualHours: number }> = {};
+    
+    allWorkLogs.forEach(w => {
+      if (w.status === 'completed') {
+        const workerName = w.workers?.name || '未定/その他';
+        if (!stats[workerName]) {
+          stats[workerName] = { name: workerName, actualHours: 0 };
+        }
+        stats[workerName].actualHours += (w.duration_minutes || 0) / 60;
+      }
+    });
+    
+    return Object.values(stats)
+      .filter(w => w.actualHours > 0)
+      .sort((a, b) => b.actualHours - a.actualHours);
+  }, [allWorkLogs]);
+
+  const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
@@ -498,6 +584,115 @@ export default function PlansPage() {
           </div>
         </div>
       </div>
+      
+      {/* 分析セクショントグル */}
+      <div className="flex justify-center -mt-4 mb-2 relative z-10">
+        <button
+          onClick={() => setIsAnalysisOpen(!isAnalysisOpen)}
+          className="bg-white hover:bg-slate-50 text-slate-600 px-6 py-2 rounded-full font-bold text-sm shadow-sm border border-slate-200 flex items-center gap-2 transition-all"
+        >
+          <PieChartIcon className="w-4 h-4 text-emerald-500" />
+          作目別・作業者別の詳細分析を{isAnalysisOpen ? '閉じる' : '見る'}
+          {isAnalysisOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+      </div>
+
+      {/* 分析セクション本体 */}
+      {isAnalysisOpen && (
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 animate-in slide-in-from-top-4 fade-in duration-300">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            {/* 作目別 予実分析一覧 */}
+            <div className="lg:col-span-2 space-y-4">
+              <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                <Sprout className="w-5 h-5 text-emerald-500" />
+                作目別 予実分析（今月）
+              </h3>
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-slate-500 bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-3 font-bold border-b border-slate-200">作目</th>
+                      <th className="px-4 py-3 font-bold border-b border-slate-200 text-right">売上(予/実)</th>
+                      <th className="px-4 py-3 font-bold border-b border-slate-200 text-right">コスト(予/実)</th>
+                      <th className="px-4 py-3 font-bold border-b border-slate-200 text-right">粗利(予/実)</th>
+                      <th className="px-4 py-3 font-bold border-b border-slate-200 text-center">達成率</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cropStats.length > 0 ? cropStats.map((stat) => (
+                      <tr key={stat.id} className="bg-white border-b border-slate-100 hover:bg-slate-50">
+                        <td className="px-4 py-3 font-bold text-slate-700">{stat.name}</td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="text-slate-400 text-xs">¥{stat.plannedSales.toLocaleString()}</div>
+                          <div className="font-bold text-slate-800">¥{stat.actualSales.toLocaleString()}</div>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="text-slate-400 text-xs">¥{stat.plannedCost.toLocaleString()}</div>
+                          <div className="font-bold text-rose-500">¥{stat.actualCost.toLocaleString()}</div>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="text-slate-400 text-xs">¥{stat.plannedProfit.toLocaleString()}</div>
+                          <div className="font-bold text-emerald-600">¥{stat.actualProfit.toLocaleString()}</div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold ${stat.progressRate >= 100 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {stat.progressRate}%
+                          </div>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-slate-400">データがありません</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 作業者別の実績稼働時間グラフ */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                <User className="w-5 h-5 text-blue-500" />
+                作業者別 実績稼働時間
+              </h3>
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 h-[300px]">
+                {workerTimeStats.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={workerTimeStats}
+                        dataKey="actualHours"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={2}
+                      >
+                        {workerTimeStats.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        formatter={(value: number) => [`${value.toFixed(1)} 時間`, '稼働時間']}
+                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                      />
+                      <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center text-slate-400 text-sm">
+                    作業実績データがありません
+                  </div>
+                )}
+              </div>
+            </div>
+            
+          </div>
+        </div>
+      )}
 
       {/* コントロールパネル */}
       <div className="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">

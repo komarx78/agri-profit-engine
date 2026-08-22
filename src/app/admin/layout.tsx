@@ -27,7 +27,8 @@ import {
   Check,
   Users,
   Coffee,
-  Cloud
+  Cloud,
+  PieChart
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -74,6 +75,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       items: [
         { name: 'ダッシュボード', path: '/admin/dashboard', icon: LayoutDashboard },
         { name: '作付地図', path: '/admin/map', icon: MapPin },
+        { name: '作目別 分析', path: '/admin/crop-analysis', icon: PieChart },
         { name: '栽培・予実管理表', path: '/admin/cultivation-schedule', icon: Calendar },
         { name: '育苗スケジュール', path: '/admin/nursery-schedule', icon: Table },
         { name: '必要資材自動集計', path: '/admin/material-requirements', icon: Calculator },
