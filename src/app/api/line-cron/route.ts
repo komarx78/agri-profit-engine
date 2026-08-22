@@ -27,38 +27,40 @@ export async function GET(req: Request) {
     today.setHours(today.getHours() + 9);
     const dateStr = today.toISOString().split('T')[0];
 
-    // 今日の打刻ログのうち、出勤済みで未退勤のもの（かつLINE連携がONのワーカー）を取得
-    const { data: logs, error } = await supabase
+    // 1. 今日の打刻ログを取得（ジョインせずに単独で取得）
+    const { data: logs, error: logsError } = await supabase
       .from('attendance_logs')
-      .select(`
-        id,
-        clock_in,
-        clock_out,
-        workers (
-          id,
-          name,
-          line_user_id,
-          is_line_notification_enabled
-        )
-      `)
+      .select('id, worker_id, clock_in, clock_out')
       .eq('date', dateStr)
       .not('clock_in', 'is', null)
       .is('clock_out', null);
 
-    if (error) {
-      console.error('DB Error:', error);
-      return NextResponse.json({ error: 'Database error', details: error }, { status: 500 });
+    if (logsError) {
+      console.error('DB Error (logs):', logsError);
+      return NextResponse.json({ error: 'Database error', details: logsError }, { status: 500 });
     }
 
     if (!logs || logs.length === 0) {
       return NextResponse.json({ status: 'success', message: '未退勤者はおりませんでした' }, { status: 200 });
     }
 
-    // 抽出されたワーカーに対してLINEプッシュ通知を送信
+    // 2. 抽出されたworker_idを使ってワーカー情報を取得
+    const workerIds = logs.map(l => l.worker_id);
+    const { data: workers, error: workersError } = await supabase
+      .from('workers')
+      .select('id, name, line_user_id, is_line_notification_enabled')
+      .in('id', workerIds);
+
+    if (workersError) {
+      console.error('DB Error (workers):', workersError);
+      return NextResponse.json({ error: 'Database error', details: workersError }, { status: 500 });
+    }
+
+    // 3. 抽出されたワーカーに対してLINEプッシュ通知を送信
     const pushResults = [];
     
     for (const log of logs) {
-      const worker = Array.isArray(log.workers) ? log.workers[0] : log.workers;
+      const worker = workers?.find(w => w.id === log.worker_id);
       
       // LINE連携がOFF、またはIDがない場合はスキップ
       if (!worker || !worker.line_user_id || !worker.is_line_notification_enabled) continue;
