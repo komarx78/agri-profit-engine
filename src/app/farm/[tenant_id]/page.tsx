@@ -578,6 +578,26 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                 <LogOut className="w-8 h-8" />
                 <span className="font-black">退勤</span>
               </button>
+
+              <button 
+                onClick={() => handleAttendance('break_start')}
+                disabled={!attendanceLog || !!attendanceLog.clock_out || (attendanceLog.break_start_time && !attendanceLog.break_end_time) || isSubmitting}
+                className="col-span-2 py-6 bg-emerald-800 disabled:opacity-50 disabled:grayscale border-2 border-emerald-600 rounded-3xl shadow-lg flex items-center justify-center gap-3 text-white transition-all active:scale-95"
+              >
+                <Coffee className="w-6 h-6" />
+                <span className="font-bold text-lg">休憩開始</span>
+              </button>
+
+              {(attendanceLog?.break_start_time && !attendanceLog?.break_end_time) && (
+                <button 
+                  onClick={() => handleAttendance('break_end')}
+                  disabled={isSubmitting}
+                  className="col-span-2 py-6 bg-amber-500 rounded-3xl shadow-lg flex items-center justify-center gap-3 text-amber-950 transition-all active:scale-95 animate-pulse"
+                >
+                  <Coffee className="w-6 h-6" />
+                  <span className="font-black text-lg">休憩終了</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -800,9 +820,10 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                     <ImageIcon className="w-4 h-4" />{t('photo', language)}
                   </h2>
                   {!photoPreview ? (
-                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-700 border-dashed rounded-xl cursor-pointer bg-slate-800/50">
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-700 border-dashed rounded-xl cursor-pointer bg-slate-800/50 hover:bg-slate-800 transition-colors">
                       <span className="text-3xl mb-2">📷</span>
-                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoChange} />
+                      <span className="text-xs text-slate-400 font-bold">撮影 または ファイルを選択</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
                     </label>
                   ) : (
                     <div className="relative w-full rounded-xl overflow-hidden border-2 border-emerald-500/50">

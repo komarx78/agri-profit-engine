@@ -4,12 +4,14 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, 
-  History, LogOut, Loader2, AlertCircle, Coffee, LogIn, LogOut as LogOutIcon, Sun, CloudRain, Plus, X
+  History, LogOut, Loader2, AlertCircle, Coffee, LogIn, LogOut as LogOutIcon, Sun, CloudRain, Plus, X,
+  ImageIcon, FileText, Video
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { WorkerGate } from '@/components/WorkerGate';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
+import imageCompression from 'browser-image-compression';
 
 interface MasterItem {
   id: string;
@@ -104,6 +106,10 @@ export default function WorkEntryPage() {
   const [customWorkTypes, setCustomWorkTypes] = useState<string[]>([]);
   const [isAddingWorkType, setIsAddingWorkType] = useState(false);
   const [newWorkType, setNewWorkType] = useState('');
+  
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
 
   const workTypes = ['収穫', '播種', '定植', '水やり', '肥料・農薬', '草刈り', '片付け・メンテ'];
 
@@ -266,6 +272,21 @@ export default function WorkEntryPage() {
     setErrorMsg('');
     setIsAddingWorkType(false);
     setNewWorkType('');
+    clearPhoto();
+  };
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setPhotoFile(file);
+      const previewUrl = URL.createObjectURL(file);
+      setPhotoPreview(previewUrl);
+    }
+  };
+
+  const clearPhoto = () => {
+    setPhotoFile(null);
+    setPhotoPreview(null);
   };
 
   const handleLogout = () => {
@@ -357,6 +378,25 @@ export default function WorkEntryPage() {
           } catch(e) {}
         }
 
+        let uploadedPhotoUrl = null;
+        let uploadedVideoUrl = null;
+
+        if (photoFile) {
+            const options = { maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true };
+            const compressedFile = await imageCompression(photoFile, options);
+            const fileName = `${workerProfile?.user_id || 'unknown'}/${currentUser.id}/${Date.now()}.jpg`;
+            const { error: uploadError } = await supabase.storage.from('work_photos').upload(fileName, compressedFile);
+            if (uploadError) throw uploadError;
+            uploadedPhotoUrl = supabase.storage.from('work_photos').getPublicUrl(fileName).data.publicUrl;
+        }
+
+        if (videoFile) {
+            const fileName = `${workerProfile?.user_id || 'unknown'}/${currentUser.id}/${Date.now()}_video.mp4`;
+            const { error: uploadError } = await supabase.storage.from('work_videos').upload(fileName, videoFile);
+            if (uploadError) throw uploadError;
+            uploadedVideoUrl = fileName;
+        }
+
         const { data, error } = await supabase.from('work_logs').insert([{
           user_id: workerProfile?.user_id || null,
           farm_id: workerProfile?.farm_id || null,
@@ -371,6 +411,8 @@ export default function WorkEntryPage() {
           material_id: matId || null,
           material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,
           memo: memo || null,
+          photo_url: uploadedPhotoUrl,
+          video_url: uploadedVideoUrl,
           weather: weatherText,
           temperature: temp
         }]).select(`*, crops(name), fields(name), materials(name)`);
@@ -422,6 +464,25 @@ export default function WorkEntryPage() {
         const fieldId = fields.find(f => f.name === selectedField)?.id;
         const matId = materials.find(m => m.name === selectedMaterial)?.id;
 
+        let uploadedPhotoUrl = null;
+        let uploadedVideoUrl = null;
+
+        if (photoFile) {
+            const options = { maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true };
+            const compressedFile = await imageCompression(photoFile, options);
+            const fileName = `${workerProfile?.user_id || 'unknown'}/${currentUser.id}/${Date.now()}.jpg`;
+            const { error: uploadError } = await supabase.storage.from('work_photos').upload(fileName, compressedFile);
+            if (uploadError) throw uploadError;
+            uploadedPhotoUrl = supabase.storage.from('work_photos').getPublicUrl(fileName).data.publicUrl;
+        }
+
+        if (videoFile) {
+            const fileName = `${workerProfile?.user_id || 'unknown'}/${currentUser.id}/${Date.now()}_video.mp4`;
+            const { error: uploadError } = await supabase.storage.from('work_videos').upload(fileName, videoFile);
+            if (uploadError) throw uploadError;
+            uploadedVideoUrl = fileName;
+        }
+
         const { error } = await supabase.from('work_logs').insert([{
           user_id: workerProfile?.user_id || null,
           farm_id: workerProfile?.farm_id || null,
@@ -434,6 +495,9 @@ export default function WorkEntryPage() {
           work_date: manualDate,
           material_id: matId || null,
           material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,
+          memo: memo || null,
+          photo_url: uploadedPhotoUrl,
+          video_url: uploadedVideoUrl
         }]);
         if (error) throw error;
       }
@@ -750,6 +814,74 @@ export default function WorkEntryPage() {
                   </div>
                 </section>
               </div>
+
+              <section className="bg-slate-900/40 p-4 rounded-2xl border border-slate-700/50 shadow-sm space-y-4">
+                <div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
+                    <Package className="w-4 h-4" />{t('material', language)}
+                  </h2>
+                  <div className="space-y-3">
+                    <select value={selectedMaterial} onChange={(e) => setSelectedMaterial(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-700 text-sm font-bold">
+                        <option value="">--</option>
+                        {materials.map(m => <option key={m.id} value={m.name}>{getTranslatedName(m, language)}</option>)}
+                    </select>
+                    {selectedMaterial && (
+                      <div className="flex items-center gap-3">
+                        <input type="number" value={materialQuantity} onChange={(e) => setMaterialQuantity(e.target.value)} placeholder="使用量" className="flex-1 px-3 py-3 bg-slate-950 border border-slate-700 text-white rounded-xl font-bold" />
+                        <div className="text-sm font-bold text-slate-400">{materials.find(m => m.name === selectedMaterial)?.unit}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4" />{t('photo', language)}
+                  </h2>
+                  {!photoPreview ? (
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-700 border-dashed rounded-xl cursor-pointer bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                      <span className="text-3xl mb-2">📷</span>
+                      <span className="text-xs text-slate-400 font-bold">撮影 または ファイルを選択</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                    </label>
+                  ) : (
+                    <div className="relative w-full rounded-xl overflow-hidden border-2 border-emerald-500/50">
+                      <img src={photoPreview} alt="Preview" className="w-full h-48 object-cover" />
+                      <button type="button" onClick={clearPhoto} className="absolute top-2 right-2 bg-black/70 text-white w-8 h-8 rounded-full">×</button>
+                    </div>
+                  )}
+                </div>
+                
+                <div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
+                    <FileText className="w-4 h-4" />メモ
+                  </h2>
+                  <textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="作業メモ..." className="w-full h-24 p-3 bg-slate-950 border border-slate-700 text-white rounded-xl text-sm" />
+                </div>
+
+                <div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
+                    <Video className="w-4 h-4" />動画
+                  </h2>
+                  <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                    <input 
+                      type="file" 
+                      accept="video/mp4,video/quicktime,video/webm" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file && file.size > 50 * 1024 * 1024) {
+                          alert('動画のサイズは50MB以下にしてください。');
+                          e.target.value = '';
+                          setVideoFile(null);
+                        } else {
+                          setVideoFile(file || null);
+                        }
+                      }}
+                      className="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-emerald-500/20 file:text-emerald-400"
+                    />
+                  </div>
+                </div>
+              </section>
 
               {inputMode === 'manual' && (
                 <section className="bg-sky-900/30 p-4 rounded-2xl border border-sky-800/40">

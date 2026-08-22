@@ -28,7 +28,8 @@ import {
   Users,
   Coffee,
   Cloud,
-  PieChart
+  PieChart,
+  FlaskConical
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -103,6 +104,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       title: '連携アプリ',
       items: [
         { name: '労務・人事システムへ', path: '/hr', icon: Users, external: true },
+        { name: '農薬検索・管理システムへ', path: '/pesticides', icon: FlaskConical, external: true },
       ]
     },
     {

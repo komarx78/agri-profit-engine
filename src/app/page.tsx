@@ -16,7 +16,8 @@ import {
   Building,
   CreditCard,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Truck
 } from 'lucide-react';
 
 export default function PortalPage() {
@@ -157,17 +158,31 @@ export default function PortalPage() {
             </p>
           </Link>
 
-          {/* 請求書・販売管理 */}
-          <Link href="/sales" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-indigo-300 transition-all flex flex-col">
+          {/* 販売・受注・請求管理 (管理者用) */}
+          <Link href="/sales-management" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-indigo-300 transition-all flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
                 <FileText className="w-6 h-6" />
               </div>
               <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-indigo-500 transition-colors" />
             </div>
-            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-indigo-700 transition-colors">請求書・販売管理</h3>
+            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-indigo-700 transition-colors">販売・受注・請求管理</h3>
             <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
-              取引先への請求書の一括発行、入金消込、出荷伝票の作成などを一元管理します。
+              取引先からの受注管理、納品スケジュール可視化、請求書の自動生成などを一元管理します。
+            </p>
+          </Link>
+
+          {/* 出荷・納品ハブ (現場用) */}
+          <Link href="/sales" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-emerald-300 transition-all flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Truck className="w-6 h-6" />
+              </div>
+              <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-emerald-500 transition-colors" />
+            </div>
+            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors">出荷・納品ハブ (現場用)</h3>
+            <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
+              本日の配達予定（受注分）の確認・消込と、JA等への都度出荷を記録します。
             </p>
           </Link>
 

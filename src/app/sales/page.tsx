@@ -1,394 +1,201 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Truck, Sprout, Store, CheckCircle2, AlertCircle, FileDigit, Calculator, LogOut } from 'lucide-react';
+import { Truck, Sprout, Store, CheckCircle2, AlertCircle, FileDigit, Calculator, Calendar, ArrowRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
-import { getSalesMasters, submitSalesLog } from '@/app/actions/farm';
+import { getB2BOrders, updateB2BOrderStatus } from '@/app/actions/b2b';
 
-export default function SalesEntryPage() {
+export default function SalesEntryHubPage() {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+
+  // 都度出荷用
   const [crops, setCrops] = useState<any[]>([]);
   const [channels, setChannels] = useState<any[]>([]);
-  const [salesPrices, setSalesPrices] = useState<any[]>([]);
-  
-  const [selectedCrop, setSelectedCrop] = useState<string>('');
-  const [selectedChannel, setSelectedChannel] = useState<string>('');
-  const [quantity, setQuantity] = useState<string>('');
-  const [unit, setUnit] = useState<string>('kg/箱'); // 後でuseEffectで上書き
-  const [manualPrice, setManualPrice] = useState<string>('');
-  const [salesDate, setSalesDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
-
-  const [language, setLanguage] = useState<LanguageCode>('ja');
-  
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [isSuccess, setIsSuccess] = useState<boolean>(false);
-  const [isConnected, setIsConnected] = useState<boolean>(false);
-
-  // 言語が変わった際に単位の初期値も翻訳する
-  useEffect(() => {
-    if (!selectedCrop) {
-      setUnit(t('defaultUnit', language) || 'kg/箱');
-    }
-  }, [language, selectedCrop]);
+  const [selectedCrop, setSelectedCrop] = useState('');
+  const [selectedChannel, setSelectedChannel] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        // tenant_id を localStorage から取得し、言語設定をロード
-        let loadedLang = 'ja' as LanguageCode;
-        
-        // まず共通キーを探す
-        const savedGlobalLang = localStorage.getItem('agri_lang_sales') as LanguageCode;
-        if (savedGlobalLang && LANGUAGES.some(l => l.code === savedGlobalLang)) {
-            loadedLang = savedGlobalLang;
-        } else {
-            // なければ他のキーを探す
-            const tenantIds = Object.keys(localStorage).filter(k => k.startsWith('agri_lang_')).map(k => k.replace('agri_lang_', ''));
-            const tenantId = tenantIds.length > 0 ? tenantIds[0] : null;
-            if (tenantId) {
-              const savedLang = localStorage.getItem(`agri_lang_${tenantId}`) as LanguageCode;
-              if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
-                loadedLang = savedLang;
-              }
-            }
-        }
-        setLanguage(loadedLang);
-
-        let activeTenantId = localStorage.getItem('agri_current_tenant');
-        if (activeTenantId === 'pesticide-check') {
-          activeTenantId = null; // 無効なテナントIDを無視
-        }
-        
-        if (activeTenantId) {
-          const res = await getSalesMasters(activeTenantId);
-          if (res.success) {
-            setCrops(res.crops || []);
-            setChannels(res.channels || []);
-            setSalesPrices(res.salesPrices || []);
-            setIsConnected(true);
-          }
-        } else {
-          // Fallback if no tenant is set (should not happen in normal workflow now)
-          const [cRes, chRes, spRes] = await Promise.all([
-            supabase.from('crops').select('*'),
-            supabase.from('sales_channels').select('*'),
-            supabase.from('sales_prices').select('*')
-          ]);
-          if (cRes.data) setCrops(cRes.data);
-          if (chRes.data) setChannels(chRes.data);
-          if (spRes.data) setSalesPrices(spRes.data);
-          if (!cRes.error) setIsConnected(true);
-        }
-      } catch (err) {
-        console.log('Error fetching data', err);
-      }
-    }
-    fetchData();
+    loadData();
   }, []);
 
-  useEffect(() => {
-    const currentPriceObj = salesPrices.find(
-      sp => sp.crop_name === selectedCrop && sp.channel_name === selectedChannel
-    );
-    if (currentPriceObj) {
-      setManualPrice(String(currentPriceObj.price_per_unit));
-    } else {
-      setManualPrice('');
+  async function loadData() {
+    setLoadingOrders(true);
+    // 1. Load today's orders
+    const oRes = await getB2BOrders(null);
+    if (oRes.success) {
+      const todayStr = new Date().toISOString().split('T')[0];
+      setOrders(oRes.orders.filter((o: any) => o.delivery_date === todayStr && o.status === 'pending'));
     }
 
-    // Set unit based on selected crop
-    const currentCropObj = crops.find(c => c.name === selectedCrop);
-    if (currentCropObj && currentCropObj.unit) {
-      setUnit(currentCropObj.unit);
-    }
-  }, [selectedCrop, selectedChannel, salesPrices, crops]);
+    // 2. Load crops & channels for ad-hoc
+    const [cRes, chRes] = await Promise.all([
+      supabase.from('crops').select('*'),
+      supabase.from('sales_channels').select('*')
+    ]);
+    if (cRes.data) setCrops(cRes.data);
+    if (chRes.data) setChannels(chRes.data);
 
-  // 手動入力された単価で計算
-  const parsedPrice = parseFloat(manualPrice) || 0;
-  const calculatedTotal = quantity && parsedPrice ? parseFloat(quantity) * parsedPrice : 0;
+    setLoadingOrders(false);
+  }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleCompleteOrder = async (orderId: string) => {
+    const confirm = window.confirm("この注文を「納品済」として記録しますか？");
+    if (!confirm) return;
+    
+    await updateB2BOrderStatus(orderId, 'delivered');
+    loadData(); // reload
+  };
+
+  const handleAdHocSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-
     try {
-      if (isConnected) {
-        let cropId = crops.find(c => c.name === selectedCrop)?.id;
-        let channelId = channels.find(c => c.name === selectedChannel)?.id;
-
-        let activeTenantId = localStorage.getItem('agri_current_tenant');
-        if (activeTenantId === 'pesticide-check') activeTenantId = null;
-
-        if (activeTenantId) {
-          // Use Server Action if tenant is known
-          const logData = {
-            crop_id: cropId || null,
-            channel_id: channelId || null,
-            sales_date: salesDate,
-            quantity: parseFloat(quantity) || 0,
-            unit: 'kg/箱',
-            total_sales: calculatedTotal > 0 ? calculatedTotal : null,
-            status: 'completed'
-          };
-          const res = await submitSalesLog(activeTenantId, logData);
-          if (!res.success) throw new Error(res.error);
-        } else {
-          // Fallback
-          if (!cropId && selectedCrop) {
-            const { data: newCrop, error: cropErr } = await supabase.from('crops').insert([{ name: selectedCrop }]).select('id').single();
-            if (!cropErr && newCrop) cropId = newCrop.id;
-          }
-          if (!channelId && selectedChannel) {
-            const { data: newChannel, error: channelErr } = await supabase.from('sales_channels').insert([{ name: selectedChannel }]).select('id').single();
-            if (!channelErr && newChannel) channelId = newChannel.id;
-          }
-
-          const { error } = await supabase.from('sales_logs').insert([
-            {
-              crop_id: cropId || null,
-              channel_id: channelId || null,
-              sales_date: salesDate,
-              quantity: parseFloat(quantity) || 0,
-              unit: unit,
-              total_sales: calculatedTotal > 0 ? calculatedTotal : null,
-              status: 'completed'
-            }
-          ]);
-          if (error) throw error;
-        }
-      } else {
-        await new Promise(r => setTimeout(r, 800));
-      }
-
-      setIsSubmitting(false);
-      setIsSuccess(true);
+      const cropId = crops.find(c => c.name === selectedCrop)?.id;
+      const channelId = channels.find(c => c.name === selectedChannel)?.id;
       
-      setTimeout(() => {
-        setIsSuccess(false);
-        setSelectedCrop('');
-        setSelectedChannel('');
-        setQuantity('');
-        setManualPrice('');
-        setSalesDate(new Date().toISOString().split('T')[0]);
-      }, 2500);
-    } catch (err) {
-      console.error(err);
-      setIsSubmitting(false);
+      const { error } = await supabase.from('sales_logs').insert([
+        {
+          crop_id: cropId || null,
+          channel_id: channelId || null,
+          sales_date: new Date().toISOString().split('T')[0],
+          quantity: parseFloat(quantity) || 0,
+          status: 'completed'
+        }
+      ]);
+      if (error) throw error;
+      
+      alert("都度出荷を記録しました。");
+      setSelectedCrop('');
+      setSelectedChannel('');
+      setQuantity('');
+    } catch (err: any) {
+      alert("エラー: " + err.message);
     }
+    setIsSubmitting(false);
   };
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-32">
-      <header className="sticky top-0 z-10 backdrop-blur-md bg-slate-950/80 border-b border-amber-900/50 px-4 py-4 shadow-lg">
-        <div className="max-w-md mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-tr from-amber-500 to-orange-400 rounded-xl shadow-md text-amber-950">
-              <Truck className="w-6 h-6 stroke-[2.5]" />
-            </div>
-            <div>
-              <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
-                {t('salesRecord', language)}
-              </h1>
-              <p className="text-xs font-medium text-amber-300/80">{t('autoCalcDesc', language)}</p>
-            </div>
+      <header className="sticky top-0 z-10 backdrop-blur-md bg-slate-950/80 border-b border-emerald-900/50 px-4 py-4 shadow-lg">
+        <div className="max-w-md mx-auto flex items-center gap-3">
+          <div className="p-2.5 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-xl shadow-md text-emerald-950">
+            <Truck className="w-6 h-6 stroke-[2.5]" />
           </div>
-          <div className="flex items-center gap-3">
-            <select 
-              value={language}
-              onChange={e => {
-                const newLang = e.target.value as LanguageCode;
-                setLanguage(newLang);
-                
-                // 確実に保存するため共通キーにセット
-                localStorage.setItem('agri_lang_sales', newLang);
-                localStorage.setItem('agri_lang', newLang);
-                
-                // すべての agri_lang_ キーを更新する（どの農園の画面でも反映されるように）
-                const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang'));
-                langKeys.forEach(key => localStorage.setItem(key, newLang));
-              }}
-              className="bg-amber-900/50 text-white text-xs font-bold rounded-lg px-2 py-1 focus:outline-none"
-            >
-              {LANGUAGES.map(l => (
-                <option key={l.code} value={l.code}>{l.flag} {l.code.toUpperCase()}</option>
-              ))}
-            </select>
+          <div>
+            <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
+              出荷・納品ハブ
+            </h1>
+            <p className="text-xs font-medium text-emerald-300/80">本日の納品予定と都度出荷を記録</p>
           </div>
         </div>
       </header>
 
-      <div className="max-w-md mx-auto px-4 pt-6">
-        {isSuccess ? (
-          <div className="my-12 p-8 bg-gradient-to-b from-amber-900/90 to-orange-950/90 rounded-3xl border border-amber-500/40 shadow-2xl text-center flex flex-col items-center justify-center space-y-4 animate-in fade-in zoom-in duration-300">
-            <div className="w-20 h-20 bg-amber-500/20 rounded-full flex items-center justify-center border border-amber-400/40 shadow-inner">
-              <CheckCircle2 className="w-12 h-12 text-amber-400" />
+      <div className="max-w-md mx-auto px-4 pt-6 space-y-8">
+        
+        {/* 上段：本日の納品予定（受注分） */}
+        <section className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/60 shadow-sm relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
+          <h2 className="text-sm font-black text-indigo-400 mb-4 flex items-center gap-2">
+            <Calendar className="w-4 h-4" /> 本日の配達予定 (受注分)
+          </h2>
+          
+          {loadingOrders ? (
+            <div className="text-center py-4 text-slate-500 font-bold text-sm">読み込み中...</div>
+          ) : orders.length === 0 ? (
+            <div className="text-center py-8 bg-slate-950/50 rounded-xl border border-slate-800/50">
+              <CheckCircle2 className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+              <div className="text-slate-400 font-bold text-sm">本日の未納品はありません</div>
             </div>
-            <h2 className="text-2xl font-black text-white">{t('salesCompleted', language)}</h2>
-            <p className="text-sm text-amber-200">{t('salesAutoCalculated', language)}</p>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-6">
-            
-            {/* 0. 日付選択 */}
-            <section className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/60 shadow-sm">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
-                {t('date', language)}
-              </h2>
-              <input
-                type="date"
-                value={salesDate}
-                onChange={(e) => setSalesDate(e.target.value)}
-                className="w-full bg-slate-950/60 text-slate-300 px-4 py-3 border border-slate-800/60 rounded-xl focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-bold"
-                required
-              />
-            </section>
-
-            {/* 1. 作目選択 */}
-            <section className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/60 shadow-sm">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
-                <Sprout className="w-4 h-4 text-emerald-400" />{t('crop', language)}
-              </h2>
-              <div className="grid grid-cols-2 gap-2.5">
-                {crops.length > 0 ? crops.map(crop => (
-                  <button
-                    key={crop.id}
-                    type="button"
-                    onClick={() => setSelectedCrop(crop.name)}
-                    className={`py-3.5 px-3 rounded-xl font-bold text-base transition-all border text-center ${
-                      selectedCrop === crop.name
-                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-emerald-950 border-emerald-300 shadow-md'
-                        : 'bg-slate-950/60 text-slate-300 border-slate-800/80'
-                    }`}
+          ) : (
+            <div className="space-y-3">
+              {orders.map(order => (
+                <div key={order.id} className="bg-slate-800/40 border border-slate-700/50 p-3 rounded-xl flex items-center justify-between">
+                  <div>
+                    <div className="font-black text-white text-base mb-1">{order.customer?.name}</div>
+                    <div className="text-xs font-bold text-slate-400">
+                      {order.items?.map((i: any) => `${i.crop?.name} ${i.quantity}${i.unit}`).join(' / ')}
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => handleCompleteOrder(order.id)}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2 px-4 rounded-lg transition-colors flex items-center gap-1 shadow-md shadow-indigo-900/50"
                   >
-                    {getTranslatedName(crop, language)}
+                    納品完了 <ArrowRight className="w-3 h-3" />
                   </button>
-                )) : (
-                  <div className="col-span-2 text-sm text-slate-500 p-2 text-center">{t('loadingData', language)}</div>
-                )}
-              </div>
-            </section>
-
-            {/* 2. 出荷先・販路 (選んだ作目に登録されている販路だけを表示) */}
-            <section className={`p-4 rounded-2xl border shadow-sm transition-all duration-300 ${
-              selectedCrop ? 'bg-slate-900/60 border-slate-800/60' : 'bg-slate-950/30 border-slate-900/30 opacity-50'
-            }`}>
-              <h2 className="text-xs font-bold uppercase tracking-wider text-blue-400 mb-2.5 flex items-center gap-2">
-                <Store className="w-4 h-4 text-blue-400" />{t('salesChannel', language)}
-              </h2>
-              
-              {!selectedCrop ? (
-                <div className="text-sm text-slate-500 p-2 text-center font-bold">{t('selectCropFirst', language)}</div>
-              ) : (
-                <div className="grid grid-cols-2 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedChannel('')}
-                    className={`py-3.5 px-3 rounded-xl font-bold text-base transition-all border text-center ${
-                      selectedChannel === ''
-                        ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-slate-950 border-blue-300 shadow-md'
-                        : 'bg-slate-950/60 text-slate-300 border-slate-800/80 hover:bg-slate-800/60'
-                    }`}
-                  >
-                    {t('unselected', language) || '未選択'}
-                  </button>
-                  {channels.map(channelObj => {
-                    const sp = salesPrices.find(sp => sp.crop_name === selectedCrop && sp.channel_name === channelObj.name);
-                    return (
-                      <button
-                        key={channelObj.id}
-                        type="button"
-                        onClick={() => setSelectedChannel(channelObj.name)}
-                        className={`py-3.5 px-3 rounded-xl font-bold text-base transition-all border text-center ${
-                          selectedChannel === channelObj.name
-                            ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-slate-950 border-blue-300 shadow-md'
-                            : 'bg-slate-950/60 text-slate-300 border-slate-800/80 hover:bg-slate-800/60'
-                        }`}
-                      >
-                        {getTranslatedName(channelObj, language)}
-                        {sp && <div className="text-[10px] font-medium opacity-80 mt-1">¥{sp.price_per_unit}</div>}
-                      </button>
-                    );
-                  })}
                 </div>
-              )}
-            </section>
+              ))}
+            </div>
+          )}
+        </section>
 
-            {/* 3. 数量・単位 */}
-            <section className="bg-amber-900/20 p-4 rounded-2xl border border-amber-900/40 shadow-sm">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 mb-2.5 flex items-center gap-2">
-                <FileDigit className="w-4 h-4 text-amber-400" />{t('quantityRequired', language)}
-              </h2>
-              <div className="flex gap-2 relative">
+        {/* 下段：JA等への都度出荷フォーム */}
+        <section className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800/60 shadow-sm relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+          <h2 className="text-sm font-black text-emerald-400 mb-4 flex items-center gap-2">
+            <Truck className="w-4 h-4" /> 都度出荷の記録 (JA等)
+          </h2>
+          
+          <form onSubmit={handleAdHocSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-1">出荷先 (販路)</label>
+              <select 
+                value={selectedChannel}
+                onChange={e => setSelectedChannel(e.target.value)}
+                className="w-full bg-slate-950/60 text-white px-4 py-3 border border-slate-800/60 rounded-xl focus:outline-none focus:border-emerald-500"
+                required
+              >
+                <option value="">選択してください</option>
+                {channels.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-1">作目</label>
+              <select 
+                value={selectedCrop}
+                onChange={e => setSelectedCrop(e.target.value)}
+                className="w-full bg-slate-950/60 text-white px-4 py-3 border border-slate-800/60 rounded-xl focus:outline-none focus:border-emerald-500"
+                required
+              >
+                <option value="">選択してください</option>
+                {crops.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-1">数量</label>
+              <div className="flex gap-2">
                 <input
                   type="number"
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
                   placeholder="0"
-                  className="w-full py-4 px-4 text-3xl font-black text-right bg-slate-950/80 rounded-xl border-2 border-amber-700/50 text-white placeholder-slate-700 focus:border-amber-400 focus:outline-none transition-all shadow-inner"
+                  className="w-full bg-slate-950/60 text-white text-2xl font-black px-4 py-3 border border-slate-800/60 rounded-xl focus:outline-none focus:border-emerald-500 text-right"
                   required
                 />
-                <input
-                  type="text"
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value)}
-                  className="w-24 text-center py-4 px-2 font-bold text-amber-500 bg-slate-950/80 rounded-xl border-2 border-amber-700/50 focus:border-amber-400 focus:outline-none transition-all"
-                  placeholder="単位"
-                />
+                <div className="w-20 bg-slate-800/60 flex items-center justify-center rounded-xl font-bold text-slate-400 border border-slate-800/60">
+                  kg
+                </div>
               </div>
-            </section>
-
-            {/* 4. 売上計算 */}
-            {selectedCrop && (
-              <section className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50 flex flex-col gap-4">
-                <div className="flex justify-between items-center text-sm">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-slate-400 flex items-center gap-1"><Calculator className="w-4 h-4" /> {t('appliedPrice', language)} <span className="text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded ml-1">{t('editable', language)}</span></span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-400">¥</span>
-                    <input
-                      type="number"
-                      value={manualPrice}
-                      onChange={(e) => setManualPrice(e.target.value)}
-                      placeholder="0"
-                      className="w-24 px-2 py-1.5 bg-slate-900 border border-slate-700 rounded text-right font-bold text-white focus:outline-none focus:border-amber-500"
-                    />
-                    <span className="text-slate-400">/ {t('unit', language)}</span>
-                  </div>
-                </div>
-                <div className="w-full h-px bg-slate-700/50 my-1" />
-                <div className="flex justify-between items-end">
-                  <span className="text-sm font-bold text-slate-300">{t('totalSalesEstimate', language)}</span>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold text-amber-500">¥</span>
-                    <span className="text-4xl font-black text-amber-400">{calculatedTotal.toLocaleString()}</span>
-                  </div>
-                </div>
-              </section>
-            )}
-
-            <div className="pt-6">
-              <button
-                type="submit"
-                disabled={!selectedCrop || !quantity || isSubmitting}
-                className={`w-full py-5 rounded-2xl font-black text-xl shadow-xl transition-all duration-200 flex items-center justify-center gap-2 mt-4 ${
-                  !selectedCrop || !quantity || isSubmitting
-                    ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 text-amber-950 hover:brightness-110 active:scale-[0.98] shadow-amber-500/20'
-                }`}
-              >
-                {isSubmitting ? (
-                  <span>{t('loadingData', language)}</span>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-6 h-6" />
-                    <span>{t('saveSalesRecord', language)}</span>
-                  </>
-                )}
-              </button>
             </div>
+
+            <button
+              type="submit"
+              disabled={isSubmitting || !selectedChannel || !selectedCrop || !quantity}
+              className={`w-full py-4 rounded-xl font-black text-lg transition-all flex items-center justify-center gap-2 mt-2 ${
+                isSubmitting || !selectedChannel || !selectedCrop || !quantity
+                  ? 'bg-slate-800 text-slate-500'
+                  : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-lg shadow-emerald-900/50'
+              }`}
+            >
+              {isSubmitting ? '保存中...' : '出荷を記録する'}
+            </button>
           </form>
-        )}
+        </section>
+
       </div>
     </main>
   );
