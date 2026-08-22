@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, use } from 'react';
-import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle, Building2, Video, Lock, X, FileText, Image as ImageIcon, LogIn, Plus } from 'lucide-react';
+import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle, Building2, Video, Lock, X, FileText, Image as ImageIcon, LogIn, Plus, Coffee } from 'lucide-react';
 import { getFarmInfo, getFarmWorkers, verifyWorkerPin, getFarmMasters, getCustomWorkTypes, submitWorkLog, getTodayAttendance, submitAttendance, TenantInfo } from '@/app/actions/farm';
 import { supabase } from '@/lib/supabase';
 import imageCompression from 'browser-image-compression';
