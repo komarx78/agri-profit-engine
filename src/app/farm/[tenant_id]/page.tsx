@@ -26,6 +26,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   const [farmInfo, setFarmInfo] = useState<TenantInfo | null>(null);
   const [workers, setWorkers] = useState<{id: string, name: string}[]>([]);
   const [currentUser, setCurrentUser] = useState<{id: string, name: string, role: string} | null>(null);
+  const [workerProfile, setWorkerProfile] = useState<any>(null);
   
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -140,6 +141,16 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
         
     if (!error && data) setManuals(data);
   };
+
+  useEffect(() => {
+    if (currentUser) {
+      const getWorker = async () => {
+        const { data } = await supabase.from('workers').select('*').eq('id', currentUser.id).single();
+        if (data) setWorkerProfile(data);
+      };
+      getWorker();
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     if (tenantId) fetchManuals();
