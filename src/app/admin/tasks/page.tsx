@@ -21,10 +21,10 @@ export default function TasksPage() {
     work_date: new Date().toISOString().split('T')[0],
     task_title: '',
     crop_id: '',
-    field_id: '',
-    worker_id: '',
-    worker_ids: [] as string[],
-    department_id: ''
+    department_id: '',
+    field_assignments: [
+      { field_id: '', worker_ids: [] as string[] }
+    ]
   });
 
   // UI State
@@ -71,29 +71,16 @@ export default function TasksPage() {
     if (!formData.work_date || !formData.task_title) return;
     setIsSaving(true);
     try {
-      const { worker_ids, ...restFormData } = formData;
-      const baseDataToSave = {
-        user_id: tenantId,
-        work_date: formData.work_date,
-        task_title: formData.task_title,
-        work_type: formData.task_title,
-        crop_id: formData.crop_id || null,
-        field_id: formData.field_id || null,
-        department_id: formData.department_id || null,
-        status: 'planned',
-        duration_minutes: 0,
-        approval_status: null
-      };
-
       if (editingTaskId) {
-        // 編集保存
+        // 編集保存（単一タスク更新）
+        const assignment = formData.field_assignments[0] || { field_id: '', worker_ids: [] };
         const updatePayload = {
           work_date: formData.work_date,
           task_title: formData.task_title,
           work_type: formData.task_title,
           crop_id: formData.crop_id || null,
-          field_id: formData.field_id || null,
-          worker_id: (worker_ids && worker_ids.length > 0) ? worker_ids[0] : null,
+          field_id: assignment.field_id || null,
+          worker_id: (assignment.worker_ids && assignment.worker_ids.length > 0) ? assignment.worker_ids[0] : null,
           department_id: formData.department_id || null
         };
 
@@ -108,29 +95,69 @@ export default function TasksPage() {
           setTasks(prev => prev.map(t => t.id === editingTaskId ? data[0] : t).sort((a, b) => a.work_date.localeCompare(b.work_date)));
         }
       } else {
-        // 新規作成（複数担当者への複製対応）
-        let insertData = [];
-        if (worker_ids && worker_ids.length > 0) {
-          insertData = worker_ids.map(id => ({
-            ...baseDataToSave,
-            worker_id: id
-          }));
-        } else {
-          insertData = [{
-            ...baseDataToSave,
-            worker_id: null
-          }];
-        }
+        // 新規作成（複数圃場 × 複数担当者の組み合わせを一括展開）
+        const insertData: any[] = [];
+        const assignments = formData.field_assignments && formData.field_assignments.length > 0
+          ? formData.field_assignments
+          : [{ field_id: '', worker_ids: [] }];
 
-        const { data, error } = await supabase.from('work_logs').insert(insertData).select('id, work_date, task_title, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(name), fields(name), workers(name), departments(name)');
+        assignments.forEach((assignment: { field_id: string, worker_ids: string[] }) => {
+          const fId = assignment.field_id || null;
+          const wIds = assignment.worker_ids || [];
+
+          if (wIds.length > 0) {
+            wIds.forEach(wId => {
+              insertData.push({
+                user_id: tenantId,
+                work_date: formData.work_date,
+                task_title: formData.task_title,
+                work_type: formData.task_title,
+                crop_id: formData.crop_id || null,
+                field_id: fId,
+                worker_id: wId,
+                department_id: formData.department_id || null,
+                status: 'planned',
+                duration_minutes: 0,
+                approval_status: null
+              });
+            });
+          } else {
+            insertData.push({
+              user_id: tenantId,
+              work_date: formData.work_date,
+              task_title: formData.task_title,
+              work_type: formData.task_title,
+              crop_id: formData.crop_id || null,
+              field_id: fId,
+              worker_id: null,
+              department_id: formData.department_id || null,
+              status: 'planned',
+              duration_minutes: 0,
+              approval_status: null
+            });
+          }
+        });
+
+        const { data, error } = await supabase
+          .from('work_logs')
+          .insert(insertData)
+          .select('id, work_date, task_title, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(name), fields(name), workers(name), departments(name)');
+        
         if (error) throw error;
         if (data) {
           setTasks(prev => [...prev, ...data].sort((a, b) => a.work_date.localeCompare(b.work_date)));
         }
       }
+
       setIsModalOpen(false);
       setEditingTaskId(null);
-      setFormData({ work_date: new Date().toISOString().split('T')[0], task_title: '', crop_id: '', field_id: '', worker_id: '', worker_ids: [], department_id: '' });
+      setFormData({
+        work_date: new Date().toISOString().split('T')[0],
+        task_title: '',
+        crop_id: '',
+        department_id: '',
+        field_assignments: [{ field_id: '', worker_ids: [] }]
+      });
     } catch (err) {
       console.error(err);
       alert('保存に失敗しました');
@@ -155,10 +182,13 @@ export default function TasksPage() {
       work_date: dateStr || new Date().toISOString().split('T')[0],
       task_title: '',
       crop_id: cropId || '',
-      field_id: fieldId || '',
-      worker_id: workerId || '',
-      worker_ids: workerId ? [workerId] : [],
-      department_id: ''
+      department_id: '',
+      field_assignments: [
+        {
+          field_id: fieldId || '',
+          worker_ids: workerId ? [workerId] : []
+        }
+      ]
     });
     setIsModalOpen(true);
   };
@@ -169,10 +199,13 @@ export default function TasksPage() {
       work_date: task.work_date,
       task_title: task.task_title || '',
       crop_id: task.crop_id || '',
-      field_id: task.field_id || '',
-      worker_id: task.worker_id || '',
-      worker_ids: task.worker_id ? [task.worker_id] : [],
-      department_id: task.department_id || ''
+      department_id: task.department_id || '',
+      field_assignments: [
+        {
+          field_id: task.field_id || '',
+          worker_ids: task.worker_id ? [task.worker_id] : []
+        }
+      ]
     });
     setIsModalOpen(true);
   };
@@ -519,59 +552,128 @@ export default function TasksPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">対象の圃場</label>
-                  <select value={formData.field_id} onChange={e => setFormData({...formData, field_id: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold">
-                    <option value="">(指定なし)</option>
-                    {fields.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-2">担当部署</label>
-                  <select value={formData.department_id} onChange={e => setFormData({...formData, department_id: e.target.value})} className="w-full p-2 bg-white border border-slate-200 rounded-lg font-bold">
+                  <label className="block text-xs font-bold text-slate-500 mb-1">担当部署</label>
+                  <select value={formData.department_id} onChange={e => setFormData({...formData, department_id: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold">
                     <option value="">(全社・指定なし)</option>
                     {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-2">担当者（複数選択可）</label>
-                  <div className="flex flex-wrap gap-2">
-                    {workers.map(w => {
-                      const isSelected = formData.worker_ids && formData.worker_ids.includes(w.id);
-                      return (
-                        <button
-                          key={w.id}
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            if (isSelected) {
-                              setFormData({...formData, worker_ids: formData.worker_ids.filter((id) => id !== w.id)});
-                            } else {
-                              setFormData({...formData, worker_ids: [...(formData.worker_ids || []), w.id]});
-                            }
-                          }}
-                          className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${isSelected ? 'bg-emerald-500 text-white border-emerald-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-                        >
-                          {w.name}
-                        </button>
-                      );
-                    })}
-                    {(!workers || workers.length === 0) && (
-                      <span className="text-xs text-slate-400">登録されている担当者がいません</span>
-                    )}
-                  </div>
+              </div>
+
+              {/* 圃場と担当者の割り当て（複数圃場スロット） */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-emerald-600" />
+                    圃場と担当者の割り当て
+                  </label>
+                  {!editingTaskId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({
+                          ...formData,
+                          field_assignments: [
+                            ...formData.field_assignments,
+                            { field_id: '', worker_ids: [] }
+                          ]
+                        });
+                      }}
+                      className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> 圃場を追加
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                  {formData.field_assignments?.map((assignment: any, idx: number) => (
+                    <div key={idx} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 relative group">
+                      
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex-1">
+                          <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                            圃場 {formData.field_assignments.length > 1 ? `#${idx + 1}` : ''}
+                          </label>
+                          <select
+                            value={assignment.field_id}
+                            onChange={(e) => {
+                              const newAssignments = [...formData.field_assignments];
+                              newAssignments[idx].field_id = e.target.value;
+                              setFormData({ ...formData, field_assignments: newAssignments });
+                            }}
+                            className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
+                          >
+                            <option value="">(圃場を選択 / 指定なし)</option>
+                            {fields.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                          </select>
+                        </div>
+
+                        {!editingTaskId && formData.field_assignments.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newAssignments = formData.field_assignments.filter((_: any, i: number) => i !== idx);
+                              setFormData({ ...formData, field_assignments: newAssignments });
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors mt-4"
+                            title="この圃場を削除"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-500 mb-1.5">
+                          この圃場の担当者（複数選択可）
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {workers.map(w => {
+                            const isSelected = assignment.worker_ids?.includes(w.id);
+                            return (
+                              <button
+                                key={w.id}
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  const newAssignments = [...formData.field_assignments];
+                                  const currentWorkers = newAssignments[idx].worker_ids || [];
+                                  if (isSelected) {
+                                    newAssignments[idx].worker_ids = currentWorkers.filter((id: string) => id !== w.id);
+                                  } else {
+                                    newAssignments[idx].worker_ids = [...currentWorkers, w.id];
+                                  }
+                                  setFormData({ ...formData, field_assignments: newAssignments });
+                                }}
+                                className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all border ${
+                                  isSelected
+                                    ? 'bg-emerald-500 text-white border-emerald-600 shadow-xs'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                }`}
+                              >
+                                {w.name}
+                              </button>
+                            );
+                          })}
+                          {(!workers || workers.length === 0) && (
+                            <span className="text-[11px] text-slate-400">担当者が登録されていません</span>
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
 
-            <div className="p-4 bg-slate-50 flex gap-3">
-              <button onClick={() => setIsModalOpen(false)} className="flex-1 py-3 font-bold bg-white border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50">
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button onClick={() => setIsModalOpen(false)} className="flex-1 py-2.5 font-bold text-xs bg-white border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50">
                 キャンセル
               </button>
-              <button onClick={handleSave} disabled={isSaving} className="flex-1 py-3 font-bold bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 flex items-center justify-center gap-2">
-                {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : 'タスクを保存'}
+              <button onClick={handleSave} disabled={isSaving} className="flex-1 py-2.5 font-bold text-xs bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 flex items-center justify-center gap-2 shadow-xs">
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'タスクを一括保存'}
               </button>
             </div>
           </div>
