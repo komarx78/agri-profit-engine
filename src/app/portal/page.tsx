@@ -48,15 +48,15 @@ export default function PortalPage() {
   useEffect(() => {
     const init = async () => {
       try {
-        let currentRole = 'worker';
-        let profile = null;
-        let userIdForFetch = null;
-
-        // 1. まずAdminセッションを確認
         const { data: { session } } = await supabase.auth.getSession();
         
+        let currentRole = 'worker';
+        let profile = null;
+        let ownerId = '';
+
         if (session) {
-          // --- 管理者(またはAuth登録されたユーザー)の場合 ---
+          // --- 管理者(またはAuth登録されたユーザー) ---
+          ownerId = session.user.id;
           const { data: userData } = await supabase.from('users').select('*').eq('id', session.user.id).single();
           const { data: companyData } = await supabase.from('company_settings').select('company_name').limit(1).single();
           
@@ -72,7 +72,6 @@ export default function PortalPage() {
             currentRole = 'admin';
             setRole('admin');
             setCurrentUser(userData);
-            userIdForFetch = userData.id;
           } else {
             const { data: workerData } = await supabase.from('workers').select('*').eq('user_id', session.user.id).single();
             if (workerData) {
@@ -81,15 +80,10 @@ export default function PortalPage() {
               profile = workerData;
               setWorkerProfile(workerData);
               setCurrentUser(workerData);
-              userIdForFetch = workerData.id;
-            } else {
-              // 権限なし
-              router.push('/login');
-              return;
             }
           }
         } else {
-          // --- セッションがない場合はローカルストレージ（PINログイン履歴）を確認 ---
+          // --- セッションなし（現場スタッフのPINログイン確認） ---
           const savedUser = localStorage.getItem('agri_current_worker');
           if (savedUser) {
             const workerData = JSON.parse(savedUser);
@@ -98,59 +92,32 @@ export default function PortalPage() {
             profile = workerData;
             setWorkerProfile(workerData);
             setCurrentUser(workerData);
-            userIdForFetch = workerData.id;
+            ownerId = workerData.user_id; // ワーカーは所属するオーナーのIDを持っている
             
-            // 会社名は一旦デフォルト（WorkerGateには会社名取得がないため）
-            // 必要に応じてDBから引くことも可能だが、今回は簡易的にハードコード
-            setCompanyName('Cocotte');
+            // ワーカー用に会社名を取得 (ownerIdから)
+            const { data: companyData } = await supabase.from('company_settings').select('company_name').eq('user_id', ownerId).maybeSingle();
+            if (companyData && companyData.company_name) {
+              setCompanyName(companyData.company_name);
+            } else {
+              setCompanyName('Cocotte');
+            }
           } else {
-            // PINログインもしていなければ、WorkerGateを表示する
+            // ローカルストレージにもなければ、WorkerGateを表示する
             setShowWorkerGate(true);
             setIsLoading(false);
             return;
           }
         }
-
-        // --- データフェッチ ---
-        // Tasks
-        if (currentRole === 'admin') {
-          const { data: tData } = await supabase.from('tasks').select('*').order('due_date', { ascending: true }).limit(5);
-          if (tData) setTasks(tData);
-        } else if (profile) {
-          const { data: tData } = await supabase.from('tasks').select('*').or(`assignee_id.eq.${profile.id},assignee_id.is.null`).order('due_date', { ascending: true }).limit(5);
-          if (tData) setTasks(tData);
-        }
-
-        // Approvals (Admin only)
-        if (currentRole === 'admin') {
-          const { data: aData } = await supabase.from('hr_requests').select('*, workers(name)').eq('status', 'pending').limit(3);
-          if (aData) setPendingApprovals(aData);
-        }
-
-        // Board Posts
-        const { data: bData } = await supabase.from('board_posts').select('*, workers(name)').order('created_at', { ascending: false }).limit(5);
-        if (bData) setBoardPosts(bData);
-
-        // Attendance (Worker only)
-        if (currentRole === 'worker' && profile) {
-          const today = getJSTDate();
-          const { data: attData } = await supabase
-            .from('attendance_logs')
-            .select('*')
-            .eq('worker_id', profile.id)
-            .eq('date', today)
-            .single();
-          if (attData) setAttendance(attData);
-        }
-
-      } catch (error) {
-        console.error('Error fetching portal data:', error);
+        
+        await fetchPortalData(ownerId, currentRole, profile);
+      } catch (err) {
+        console.error(err);
       } finally {
         setIsLoading(false);
       }
     };
     init();
-  }, [router, showWorkerGate]); // showWorkerGateも依存配列に入れておく
+  }, [router]);
 
   const fetchPortalData = async (userId: string, currentRole: string, profile: any) => {
     const today = getJSTDate();
@@ -163,7 +130,7 @@ export default function PortalPage() {
       .eq('status', 'planned');
     if (taskData) setTasks(taskData);
 
-    // 2. 承認待ち (管理者の場合はテナント全体)
+    // 2. 承認待ち (管理者の場合はテナントの全員)
     if (currentRole === 'admin') {
       const { data: appData } = await supabase.from('work_logs')
         .select('id, task_title, work_date, workers(name)')
@@ -180,7 +147,7 @@ export default function PortalPage() {
     if (boardData) setBoardPosts(boardData);
 
     // 4. 今日の打刻状態
-    const workerId = profile ? profile.id : userId; // 仮
+    const workerId = profile ? profile.id : userId;
     if (workerId) {
       const { data: aLog } = await supabase.from('attendance_logs')
         .select('*')
@@ -197,9 +164,9 @@ export default function PortalPage() {
     const today = getJSTDate();
     const time = getJSTTime();
     
-    // workerProfile.id (UUID of workers table) が必須
+    // workerProfile.id (UUID of workers table) が必要
     if (!workerProfile || !workerProfile.id) {
-      alert('打刻エラー: あなたのアカウントは現場スタッフとして「スタッフマスタ」に登録されていません。\n管理者画面からご自身をスタッフ登録してください。');
+      alert('打刻エラー: あなたのアカウントは現場スタッフとして「スタッフマスタ」に登録されていません。\n管理画面からご自身をスタッフ登録してください。');
       return;
     }
     const workerId = workerProfile.id;
@@ -231,11 +198,26 @@ export default function PortalPage() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push('/login');
+    localStorage.removeItem('agri_current_worker');
+    setCurrentUser(null);
+    setWorkerProfile(null);
+    setRole('worker');
+    setShowWorkerGate(true);
   };
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-10 h-10 text-blue-500 animate-spin" /></div>;
+  }
+
+  if (showWorkerGate) {
+    return (
+      <WorkerGate 
+        onLogin={(user) => {
+          setShowWorkerGate(false);
+          window.location.reload();
+        }} 
+      />
+    );
   }
 
   const calendarEvents = tasks.map(t => ({
@@ -245,16 +227,13 @@ export default function PortalPage() {
     color: '#10B981'
   }));
 
-  
-  
-    
   const hasClockedIn = attendance && attendance.clock_in;
   const hasClockedOut = attendance && attendance.clock_out;
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 font-sans">
       
-      {/* 統合ヘッダー */}
+      {/* ヘッダー */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -263,7 +242,7 @@ export default function PortalPage() {
             </div>
             <h1 className="text-xl font-black text-slate-800 tracking-tight">{companyName} {t("portalName", language)}</h1>
             <span className="ml-4 px-2.5 py-1 bg-slate-100 text-slate-500 text-xs font-bold rounded-lg border border-slate-200">
-              {role === 'admin' ? t('adminMode') : t('workerMode')}
+              {role === 'admin' ? t('adminMode', language) : t('workerMode', language)}
             </span>
           </div>
           <div className="flex items-center gap-4">
@@ -290,10 +269,10 @@ export default function PortalPage() {
         
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
-          {/* 左側：アクション系＆インフォメーション */}
+          {/* 左側カラム */}
           <div className="lg:col-span-4 space-y-6">
             
-            {/* ウィジェット：打刻・出退勤 */}
+            {/* 出退勤 */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 relative overflow-hidden">
               <div className="absolute top-0 right-0 p-4 opacity-5">
                 <Clock className="w-24 h-24" />
@@ -312,7 +291,7 @@ export default function PortalPage() {
                       : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-100 shadow-sm'
                   }`}
                 >
-                  <span className="text-2xl">🏃</span>
+                  <span className="text-2xl">🏃‍♂️</span>
                   <span>{t('portal_clockIn', language)}</span>
                   {hasClockedIn && <span className="text-[10px] bg-slate-200 px-2 py-0.5 rounded mt-1">{attendance.clock_in}</span>}
                 </button>
@@ -339,7 +318,7 @@ export default function PortalPage() {
               </button>
             </div>
 
-            {/* ウィジェット：{t('manualVideo', language)} */}
+            {/* マニュアル動画 */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
               <h2 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2">
                 <PlayCircle className="w-5 h-5 text-rose-500" /> {t('manualVideo', language)}
@@ -352,7 +331,7 @@ export default function PortalPage() {
               </button>
             </div>
 
-            {/* ウィジェット：{t('approvalInbox', language)} (管理者のみ) */}
+            {/* 承認待ち */}
             {role === 'admin' && (
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
                 <div className="flex items-center justify-between mb-4">
@@ -366,7 +345,7 @@ export default function PortalPage() {
                 
                 <div className="space-y-3 mb-4">
                   {pendingApprovals.length === 0 ? (
-                    <p className="text-xs text-slate-400 text-center py-4">承認待ちのデータはありません</p>
+                    <p className="text-xs text-slate-400 text-center py-4">承認待ちの項目はありません</p>
                   ) : (
                     pendingApprovals.slice(0,3).map(app => (
                       <div key={app.id} className="text-sm p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
@@ -386,7 +365,7 @@ export default function PortalPage() {
               </div>
             )}
 
-            {/* ウィジェット：{t('noticeBoard', language)} */}
+            {/* 社内掲示板 */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
               <h2 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2">
                 <FileText className="w-5 h-5 text-purple-500" /> {t('noticeBoard', language)}
@@ -413,7 +392,7 @@ export default function PortalPage() {
             
           </div>
 
-          {/* 右側：カレンダーメイン */}
+          {/* 右側カラム カレンダー */}
           <div className="lg:col-span-8">
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 h-full min-h-[600px]">
               <div className="flex items-center justify-between mb-6">
