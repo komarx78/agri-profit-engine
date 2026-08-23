@@ -40,11 +40,34 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           return;
         }
 
-        // 指定された農園のワーカーのみをAPI経由で取得
-        const res = await fetch(`/api/workers?ownerId=${encodeURIComponent(ownerId)}`);
-        const json = await res.json();
-        
-        const workerList = json.workers || [];
+        let workerList: any[] = [];
+
+        // 1. まずクライアントSDKで直接取得
+        try {
+          const { data, error } = await supabase
+            .from('workers')
+            .select('id, name, name_en, name_vi, name_id, name_zh, name_si, name_km, role, pin_code, user_id')
+            .eq('user_id', ownerId)
+            .order('name');
+          if (!error && data && data.length > 0) {
+            workerList = data;
+          }
+        } catch (e) {
+          console.warn('Client SDK fetch failed, trying API:', e);
+        }
+
+        // 2. クライアントで取れなかった場合はAPI経由で取得
+        if (workerList.length === 0) {
+          try {
+            const res = await fetch(`/api/workers?ownerId=${encodeURIComponent(ownerId)}`);
+            const json = await res.json();
+            if (json.workers && json.workers.length > 0) {
+              workerList = json.workers;
+            }
+          } catch (e) {
+            console.error('API fetch failed:', e);
+          }
+        }
 
         if (workerList.length > 0) {
           setErrorMsg('');
