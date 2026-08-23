@@ -142,7 +142,7 @@ export default function PortalPage() {
     // 1. タスク (カレンダー用)
     const targetUserId = userId; // userId には既に ownerId が渡されている
     const { data: taskData } = await supabase.from('work_logs')
-      .select('id, task_title, work_date, status, crops(name), fields(name), workers(name)')
+      .select('id, task_title, work_date, status, crops(name), fields(name), workers(id, name)')
       .eq('user_id', targetUserId)
       .eq('status', 'planned');
     if (taskData) setTasks(taskData);
@@ -466,6 +466,7 @@ export default function PortalPage() {
     id: t.id,
     title: t.task_title || '作業',
     date: t.work_date,
+    workerId: t.workers?.id || '',
     workerName: t.workers ? t.workers.name : '全体',
     fieldName: t.fields ? t.fields.name : '',
     cropName: t.crops ? t.crops.name : '',
@@ -739,7 +740,13 @@ export default function PortalPage() {
                 )}
               </div>
               
-              <CalendarWrapper events={calendarEvents} t={t} language={language} />
+              <CalendarWrapper 
+                events={calendarEvents} 
+                t={t} 
+                language={language}
+                currentWorkerId={workerProfile?.id}
+                currentWorkerName={currentUser?.name}
+              />
               
             </div>
           </div>
