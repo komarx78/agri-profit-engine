@@ -43,10 +43,10 @@ export default function TasksPage() {
 
         const [tasksRes, cropsRes, fieldsRes, workersRes, deptsRes] = await Promise.all([
           supabase.from('work_logs').select('id, work_date, task_title, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(name), fields(name), workers(name), departments(name)').eq('user_id', ownerId).eq('status', 'planned').order('work_date', { ascending: true }),
-          supabase.from('crops').select('*').eq('user_id', ownerId),
-          supabase.from('fields').select('*').eq('user_id', ownerId),
+          supabase.from('crops').select('*').order('name'),
+          supabase.from('fields').select('*').order('name'),
           supabase.from('workers').select('*').eq('user_id', ownerId).order('name'),
-          supabase.from('departments').select('*').eq('user_id', ownerId)
+          supabase.from('departments').select('*').order('name')
         ]);
 
         if (tasksRes.data) setTasks(tasksRes.data);
