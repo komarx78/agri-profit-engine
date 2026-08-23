@@ -82,7 +82,7 @@ export default function TasksPage() {
         department_id: formData.department_id || null,
         status: 'planned',
         duration_minutes: 0,
-        approval_status: 'pending'
+        approval_status: null
       };
 
       if (editingTaskId) {

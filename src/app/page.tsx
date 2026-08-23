@@ -39,7 +39,15 @@ export default function PortalPage() {
             </div>
             <span className="font-black text-xl text-slate-800 tracking-tight">Cloud Portal</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <Link 
+              href="/portal"
+              className="flex items-center gap-2 px-3.5 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-xl font-bold text-sm transition-colors shadow-sm"
+            >
+              <Layout className="w-4 h-4 text-blue-600" />
+              <span>現場ポータルへ</span>
+              <ArrowUpRight className="w-3.5 h-3.5 text-blue-400" />
+            </Link>
             <button className="relative p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
               <Bell className="w-5 h-5" />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>

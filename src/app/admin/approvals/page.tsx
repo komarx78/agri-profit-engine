@@ -20,12 +20,13 @@ export default function ApprovalsPage() {
       }
       setTenantId(userTenantId);
 
-      // approval_status が pending のもの（承認待ち）を取得
+      // 現場から上がってきた作業完了報告（status: completed かつ approval_status: pending）を取得
       const { data, error } = await supabase.from('work_logs').select(`
         id, work_date, task_title, duration_minutes, created_at, status, approval_status,
         crops(name), fields(name), workers(name), departments(name)
       `)
       .eq('user_id', userTenantId)
+      .eq('status', 'completed')
       .eq('approval_status', 'pending')
       .order('created_at', { ascending: false });
 

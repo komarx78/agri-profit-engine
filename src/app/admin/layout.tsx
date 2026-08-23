@@ -31,7 +31,8 @@ import {
   PieChart,
   FlaskConical,
   CheckSquare,
-  Inbox
+  Inbox,
+  Layout
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -123,6 +124,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     {
       title: '連携アプリ',
       items: [
+        { name: '出退勤・現場ポータルへ', path: '/portal', icon: Layout, external: true },
         { name: '販売管理システムへ', path: '/sales-management/orders', icon: Truck, external: true },
         { name: '労務・人事システムへ', path: '/hr', icon: Users, external: true },
         { name: '農薬検索・管理システムへ', path: '/pesticides', icon: FlaskConical, external: true },
@@ -199,15 +201,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             {tenantId && (
               <>
                 <Link 
+                  href="/portal" 
+                  className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-blue-700 font-bold bg-blue-50 hover:bg-blue-100 transition-colors mb-1.5"
+                >
+                  <Layout className="w-5 h-5 text-blue-600" />
+                  現場ポータルへ行く
+                </Link>
+                <Link 
                   href="/work" 
-                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 font-medium hover:bg-slate-100"
+                  className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 font-bold hover:bg-slate-100"
                 >
                   <Sprout className="w-5 h-5" />
-                  現場画面へ行く
+                  現場打刻画面へ行く
                 </Link>
                 <button 
                   onClick={handleCopyUrl}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-emerald-600 font-bold bg-emerald-50 hover:bg-emerald-100 transition-colors text-left mt-2"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-emerald-600 font-bold bg-emerald-50 hover:bg-emerald-100 transition-colors text-left mt-1.5"
                 >
                   {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
                   従業員用URLをコピー
@@ -241,15 +250,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {tenantId && (
             <>
               <Link 
+                href="/portal" 
+                className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-blue-700 font-bold bg-blue-50 hover:bg-blue-100 transition-colors mb-2 shadow-sm"
+              >
+                <Layout className="w-5 h-5 text-blue-600" />
+                現場ポータルへ行く
+              </Link>
+              <Link 
                 href="/work" 
-                className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 font-medium hover:bg-slate-100 transition-colors"
+                className="flex items-center gap-3 px-4 py-2 rounded-xl text-slate-600 font-bold hover:bg-slate-100 transition-colors"
               >
                 <Sprout className="w-5 h-5" />
-                現場画面へ行く
+                現場打刻画面へ行く
               </Link>
               <button 
                 onClick={handleCopyUrl}
-                className="w-full mt-2 flex items-center gap-3 px-4 py-3 rounded-xl text-emerald-600 font-bold bg-emerald-50 hover:bg-emerald-100 transition-colors text-left shadow-sm"
+                className="w-full mt-1.5 flex items-center gap-3 px-4 py-2.5 rounded-xl text-emerald-600 font-bold bg-emerald-50 hover:bg-emerald-100 transition-colors text-left shadow-sm"
               >
                 {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
                 従業員用URLをコピー

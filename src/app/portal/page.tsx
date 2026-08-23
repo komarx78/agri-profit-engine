@@ -121,11 +121,12 @@ export default function PortalPage() {
       .eq('status', 'planned');
     if (taskData) setTasks(taskData);
 
-    // 2. 承認待ち (管理者の場合はテナントの全員)
+    // 2. 承認待ち (現場スタッフが完了報告した作業: status='completed' かつ approval_status='pending')
     if (currentRole === 'admin') {
       const { data: appData } = await supabase.from('work_logs')
         .select('id, task_title, work_date, workers(name)')
         .eq('user_id', userId)
+        .eq('status', 'completed')
         .eq('approval_status', 'pending');
       if (appData) setPendingApprovals(appData);
     }
