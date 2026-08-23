@@ -97,6 +97,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       items: [
         { name: 'ダッシュボード', path: '/admin/dashboard', icon: LayoutDashboard },
         { name: '作付け・作業 統合司令塔', path: '/admin/cultivations', icon: Sprout },
+        { name: 'タスク・スケジュール管理', path: '/admin/tasks', icon: Calendar },
+        { name: '💊 農薬検索・防除AI', path: '/pesticides', icon: FlaskConical },
         { name: '作業承認インボックス', path: '/admin/approvals', icon: Inbox },
       ]
     },
