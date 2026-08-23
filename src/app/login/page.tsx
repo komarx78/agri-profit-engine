@@ -29,8 +29,8 @@ export default function LoginPage() {
       
       if (error) throw error;
       
-      // ログイン成功時は管理ダッシュボードへ
-      router.push('/portal');
+      // ログイン成功時は管理ダッシュボード（ルート画面）へ
+      router.push('/');
       router.refresh();
     } catch (err: any) {
       console.error(err);
