@@ -77,8 +77,9 @@ export default function PortalPage() {
           const savedUser = localStorage.getItem('agri_current_worker');
           if (savedUser) {
             const workerData = JSON.parse(savedUser);
-            currentRole = 'worker';
-            setRole('worker');
+            const isWorkerAdmin = workerData.role === 'admin';
+            currentRole = isWorkerAdmin ? 'admin' : 'worker';
+            setRole(isWorkerAdmin ? 'admin' : 'worker');
             profile = workerData;
             setWorkerProfile(workerData);
             setCurrentUser(workerData);
