@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
+  ArrowRight, Calendar,
   Truck, Layout, Home,
   Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, 
   History, LogOut, Loader2, AlertCircle, Coffee, LogIn, LogOut as LogOutIcon, Sun, CloudRain, Plus, X,
@@ -156,12 +157,24 @@ export default function WorkEntryPage() {
 
     async function fetchData() {
       try {
-        const [cRes, fRes, mRes, wRes] = await Promise.all([
+        const [cRes, fRes, mRes, wRes, chRes] = await Promise.all([
           supabase.from('crops').select('*'),
           supabase.from('fields').select('*'),
           supabase.from('materials').select('*'),
-          supabase.from('workers').select('*').eq('id', currentUser.id).single()
+          supabase.from('workers').select('*').eq('id', currentUser.id).single(),
+          supabase.from('sales_channels').select('*')
         ]);
+        if (chRes.data) setSalesChannels(chRes.data);
+
+        try {
+          const oRes = await getB2BOrders(null);
+          if (oRes && oRes.success) {
+            const todayStr = getJSTDate();
+            setB2bOrders(oRes.orders.filter((o: any) => o.delivery_date === todayStr && o.status === 'pending'));
+          }
+        } catch (oErr) {
+          console.error(oErr);
+        }
           // tasks取得
           let dId = null;
           if (wRes.data && wRes.data.department_id) dId = wRes.data.department_id;
@@ -1139,102 +1152,110 @@ export default function WorkEntryPage() {
         )}
 
         {/* ===================== 掲示板セクション ===================== */}
-        {activeTab === 'board' && (
-          <div className="space-y-6 pb-20">
-            {/* 投稿フォーム */}
-            <form onSubmit={handlePostBoard} className="bg-slate-800/60 p-4 rounded-3xl border border-slate-700 shadow-sm">
-              <textarea
-                value={newPostContent}
-                onChange={e => setNewPostContent(e.target.value)}
-                placeholder={t('boardPostPlaceholder', language)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 mb-3"
-                rows={3}
-                required
-              />
-              <div className="flex items-center justify-between gap-3">
-                <select
-                  value={newPostCategory}
-                  onChange={e => setNewPostCategory(e.target.value)}
-                  className="bg-slate-900 text-sm font-bold text-slate-300 border border-slate-700 rounded-xl px-3 py-2 focus:outline-none"
-                >
-                  <option value="life">🛒 {t('boardFilterLife', language)}</option>
-                  <option value="work">🚜 {t('boardFilterWork', language)}</option>
-                  <option value="general">💬 {t('boardFilterGeneral', language)}</option>
-                </select>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : t('boardSend', language)}
-                </button>
+        {activeTab === 'sales' && (
+          <div className="space-y-6 pb-20 animate-in fade-in duration-200">
+            
+            {/* 上段：本日の配達予定（受注分） */}
+            <section className="bg-emerald-900/40 p-5 rounded-3xl border border-emerald-800/40 shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-black text-emerald-400 flex items-center gap-2">
+                  <Calendar className="w-4 h-4" /> 本日の配達予定 (受注分)
+                </h2>
+                <span className="text-xs font-bold text-emerald-300/60">{getJSTDate()}</span>
               </div>
-            </form>
-
-            {/* フィルターUI */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              <button
-                onClick={() => setBoardFilter('all')}
-                className={`flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${boardFilter === 'all' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-              >{t('boardFilterAll', language)}</button>
-              <button
-                onClick={() => setBoardFilter('work')}
-                className={`flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${boardFilter === 'work' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-              >🚜 {t('boardFilterWork', language)}</button>
-              <button
-                onClick={() => setBoardFilter('life')}
-                className={`flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${boardFilter === 'life' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-              >🛒 {t('boardFilterLife', language)}</button>
-              <button
-                onClick={() => setBoardFilter('general')}
-                className={`flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${boardFilter === 'general' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-              >💬 {t('boardFilterGeneral', language)}</button>
-            </div>
-
-            {/* タイムライン */}
-            <div className="space-y-4">
-              {boardPosts.filter(p => boardFilter === 'all' || p.category === boardFilter).map(post => (
-                <div key={post.id} className="bg-slate-800/40 p-5 rounded-3xl border border-slate-700/50">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-black border border-blue-500/30">
-                        {post.workers?.name?.charAt(0) || '?'}
-                      </div>
-                      <span className="text-white font-bold text-sm">{post.workers?.name}</span>
-                    </div>
-                    <span className="text-xs font-bold text-slate-500 bg-slate-900 px-2 py-1 rounded-lg">
-                      {new Date(post.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                  
-                  <div className="mb-4 text-slate-200 text-sm leading-relaxed whitespace-pre-wrap">
-                    {(language !== 'ja' && post.translations && post.translations[language]) 
-                      ? post.translations[language] 
-                      : post.content}
-                  </div>
-
-                  <div className="flex items-center justify-between pt-3 border-t border-slate-700/50">
-                    <span className="text-xs font-bold text-slate-500 px-2 py-1 rounded-md bg-slate-900/50">
-                      {post.category === 'life' ? `🛒 ${t('boardFilterLife', language)}` : post.category === 'work' ? `🚜 ${t('boardFilterWork', language)}` : `💬 ${t('boardFilterGeneral', language)}`}
-                    </span>
-                    {currentUser?.role === 'admin' && (
-                      <button
-                        onClick={() => handleDeletePost(post.id)}
-                        className="text-xs font-bold text-rose-500 hover:text-rose-400 p-1.5 hover:bg-rose-500/10 rounded-lg transition-colors flex items-center gap-1"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" /> {t('boardDelete', language)}
-                      </button>
-                    )}
-                  </div>
+              
+              {b2bOrders.length === 0 ? (
+                <div className="text-center py-8 bg-emerald-950/50 rounded-2xl border border-emerald-900/50">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-500/50 mx-auto mb-2" />
+                  <div className="text-emerald-400/80 font-bold text-sm">本日の未納品はありません</div>
                 </div>
-              ))}
-              {boardPosts.filter(p => boardFilter === 'all' || p.category === boardFilter).length === 0 && (
-                <div className="text-center py-12 text-slate-500 font-bold flex flex-col items-center">
-                  <MessageCircle className="w-10 h-10 mb-3 opacity-20" />
-                  {t('boardNoPosts', language)}
+              ) : (
+                <div className="space-y-3">
+                  {b2bOrders.map(order => (
+                    <div key={order.id} className="bg-emerald-950/70 border border-emerald-800/60 p-4 rounded-2xl flex items-center justify-between shadow-sm">
+                      <div>
+                        <div className="font-black text-white text-base mb-1">{order.customer?.name}</div>
+                        <div className="text-xs font-bold text-emerald-300/80">
+                          {order.items?.map((i: any) => `${i.crops?.name || i.crop?.name || '作物'} ${i.quantity}${i.unit}`).join(' / ')}
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => handleCompleteB2BOrder(order.id)}
+                        className="bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black text-xs py-2 px-3.5 rounded-xl transition-colors flex items-center gap-1 shadow-md"
+                      >
+                        納品完了 <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
-            </div>
+            </section>
+
+            {/* 下段：JA等への都度出荷フォーム */}
+            <section className="bg-emerald-900/40 p-5 rounded-3xl border border-emerald-800/40 shadow-sm relative overflow-hidden">
+              <h2 className="text-sm font-black text-emerald-400 mb-4 flex items-center gap-2">
+                <Truck className="w-4 h-4" /> 都度出荷の記録 (JA・直売所等)
+              </h2>
+              
+              <form onSubmit={handleAdHocSalesSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-emerald-300 mb-1.5">出荷先 (販路)</label>
+                  <select 
+                    value={selectedSalesChannel}
+                    onChange={e => setSelectedSalesChannel(e.target.value)}
+                    className="w-full bg-emerald-950 border border-emerald-800 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-emerald-400 font-bold"
+                    required
+                  >
+                    <option value="">選択してください</option>
+                    {salesChannels.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-bold text-emerald-300 mb-1.5">作目</label>
+                  <select 
+                    value={selectedSalesCrop}
+                    onChange={e => setSelectedSalesCrop(e.target.value)}
+                    className="w-full bg-emerald-950 border border-emerald-800 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-emerald-400 font-bold"
+                    required
+                  >
+                    <option value="">選択してください</option>
+                    {crops.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-bold text-emerald-300 mb-1.5">数量 (kg)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="any"
+                      value={salesQuantity}
+                      onChange={(e) => setSalesQuantity(e.target.value)}
+                      placeholder="0"
+                      className="w-full bg-emerald-950 text-white text-2xl font-black px-4 py-3 border border-emerald-800 rounded-xl focus:outline-none focus:border-emerald-400 text-right"
+                      required
+                    />
+                    <div className="w-20 bg-emerald-900/60 flex items-center justify-center rounded-xl font-bold text-emerald-300 border border-emerald-800">
+                      kg
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmittingSales || !selectedSalesChannel || !selectedSalesCrop || !salesQuantity}
+                  className={`w-full py-4 rounded-xl font-black text-base transition-all flex items-center justify-center gap-2 mt-2 ${
+                    isSubmittingSales || !selectedSalesChannel || !selectedSalesCrop || !salesQuantity
+                      ? 'bg-emerald-950 text-emerald-700 border border-emerald-900'
+                      : 'bg-emerald-500 text-emerald-950 hover:bg-emerald-400 shadow-lg'
+                  }`}
+                >
+                  {isSubmittingSales ? '記録中...' : '出荷を記録する'}
+                </button>
+              </form>
+            </section>
+
           </div>
         )}
       </div>
