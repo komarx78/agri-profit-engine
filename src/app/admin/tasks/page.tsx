@@ -28,7 +28,7 @@ export default function TasksPage() {
 
   // UI State
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
-  const [groupMode, setGroupMode] = useState<'worker' | 'field'>('worker');
+  const [groupMode, setGroupMode] = useState<'worker' | 'field'>('field');
   const [calendarDays, setCalendarDays] = useState<number>(7); // 2 = Today/Tomorrow, 7 = Week
   const [startDate, setStartDate] = useState(new Date());
 
