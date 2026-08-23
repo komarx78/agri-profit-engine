@@ -7,13 +7,18 @@ import { Calendar, CheckCircle2, Clock, MapPin, Sprout, Loader2, Plus, Trash2, E
 export default function ApprovalsPage() {
   const [logs, setLogs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [tenantId, setTenantId] = useState<string>('');
 
   const fetchData = async () => {
     try {
       setIsLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const userTenantId = session.user.id;
+      const userTenantId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
+      if (!userTenantId) {
+        setIsLoading(false);
+        return;
+      }
+      setTenantId(userTenantId);
 
       // approval_status が pending のもの（承認待ち）を取得
       const { data, error } = await supabase.from('work_logs').select(`

@@ -38,8 +38,11 @@ export default function TasksPage() {
       setIsLoading(true);
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
-        const ownerId = session.user.id;
+        const ownerId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
+        if (!ownerId) {
+          setIsLoading(false);
+          return;
+        }
         setTenantId(ownerId);
 
         const [tasksRes, cropsRes, fieldsRes, workersRes, deptsRes] = await Promise.all([
