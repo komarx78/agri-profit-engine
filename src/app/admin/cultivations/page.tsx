@@ -386,7 +386,11 @@ function CultivationsHubContent() {
       const racCodes = selectedPesticides.map(p => p.racCode).join(', ');
       const timestamp = new Date().toISOString();
 
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUserId = authData?.user?.id || null;
+
       const recordsToInsert = selectedSprayFieldIds.map(fId => ({
+        user_id: currentUserId,
         field_id: fId,
         crop_id: selectedSprayCropId || null,
         work_date: sprayDate,

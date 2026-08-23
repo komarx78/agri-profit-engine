@@ -68,10 +68,13 @@ export default function MonthlyExpensesPage() {
     setIsSaving(true);
     
     try {
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUserId = authData?.user?.id || null;
+
       const inserts = [
-        { month: selectedMonth, expense_type: 'fuel', amount: Number(formData.fuel) || 0 },
-        { month: selectedMonth, expense_type: 'machinery', amount: Number(formData.machinery) || 0 },
-        { month: selectedMonth, expense_type: 'other', amount: Number(formData.other) || 0 }
+        { user_id: currentUserId, month: selectedMonth, expense_type: 'fuel', amount: Number(formData.fuel) || 0 },
+        { user_id: currentUserId, month: selectedMonth, expense_type: 'machinery', amount: Number(formData.machinery) || 0 },
+        { user_id: currentUserId, month: selectedMonth, expense_type: 'other', amount: Number(formData.other) || 0 }
       ];
 
       const { error } = await supabase

@@ -190,12 +190,17 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       const isRecord = activeTab === 'record';
       const timestamp = new Date().toISOString();
 
+      // ログイン中のユーザーIDを取得（マルチテナント会社分離用）
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUserId = authData?.user?.id || null;
+
       if (activeCategory === 'fertilizer') {
         // 肥料（施肥）の登録: work_logs と material_costs に連動
         const fertMemoText = `[施肥:${fertilizerType}] ${selectedFertilizerName} ${fertCalculation.totalWeightKg}kg (${fertCalculation.bagsCount}袋) | N:${fertCalculation.nPer10a}kg P:${fertCalculation.pPer10a}kg K:${fertCalculation.kPer10a}kg/10a | 費用:¥${fertCalculation.totalCost.toLocaleString()} ${memo}`.trim();
 
         // 1. work_logs へ Insert
         const workRecords = selectedCultivations.map(c => ({
+          user_id: currentUserId,
           field_id: c.fieldId || null,
           crop_id: c.cropId || null,
           work_date: formDate,
@@ -212,6 +217,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
         if (isRecord && fertCalculation.totalCost > 0) {
           const costPerField = fertCalculation.totalCost / selectedCultivations.length;
           const costRecords = selectedCultivations.map(c => ({
+            user_id: currentUserId,
             crop_id: c.cropId || null,
             expense_date: formDate,
             item_name: `肥料: ${selectedFertilizerName} (${fertilizerType}) - ${c.fieldName}`,
@@ -225,6 +231,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       } else if (activeCategory === 'shipment' || activeCategory === 'sales') {
         // sales_logs に一括登録
         const recordsToInsert = selectedCultivations.map(c => ({
+          user_id: currentUserId,
           field_id: c.fieldId || null,
           crop_id: c.cropId || null,
           sales_date: formDate,
@@ -247,6 +254,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
         };
 
         const recordsToInsert = selectedCultivations.map(c => ({
+          user_id: currentUserId,
           field_id: c.fieldId || null,
           crop_id: c.cropId || null,
           work_date: formDate,

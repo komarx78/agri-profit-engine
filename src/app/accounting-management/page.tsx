@@ -76,7 +76,11 @@ export default function AccountingPurchasesPage() {
     setSubmitSuccess(false);
 
     try {
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUserId = authData?.user?.id || null;
+
       const { error } = await supabase.from('material_purchases').insert([{
+        user_id: currentUserId,
         purchase_date: formData.purchase_date,
         material_id: formData.material_id || null,
         supplier: formData.supplier,
