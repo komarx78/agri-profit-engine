@@ -57,6 +57,7 @@ export default function PortalPage() {
         if (session) {
           // --- 管理者(またはAuth登録されたユーザー) ---
           ownerId = session.user.id;
+          localStorage.setItem('agri_owner_id', ownerId);
           const { data: userData } = await supabase.from('users').select('*').eq('id', session.user.id).single();
           const { data: companyData } = await supabase.from('company_settings').select('company_name').limit(1).single();
           

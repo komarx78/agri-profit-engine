@@ -30,11 +30,18 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
   useEffect(() => {
     async function fetchWorkers() {
       try {
-        // 現在のテナント（オーナー）に紐づくワーカーのみを取得する
-        // ※ workersテーブルにも user_id を追加してRLSをかけることが前提
-        const { data, error } = await supabase.from('workers').select('id, name').order('name');
-        if (data) setWorkers(data);
-        if (error) throw error;
+        const ownerId = localStorage.getItem('agri_owner_id');
+        if (!ownerId) {
+          setErrorMsg('タブレットが設定されていません。一度管理者でログインしてください。');
+          setIsLoading(false);
+          return;
+        }
+
+        const res = await fetch(`/api/workers?ownerId=${ownerId}`);
+        const data = await res.json();
+        
+        if (data.error) throw new Error(data.error);
+        if (data.workers) setWorkers(data.workers);
       } catch (err) {
         console.error(err);
       } finally {
@@ -50,13 +57,9 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
     setIsSubmitting(true);
 
     try {
-      const { data, error } = await supabase
-        .from('workers')
-        .select('*')
-        .eq('id', selectedWorkerId)
-        .single();
-        
-      if (error) throw error;
+      const data = workers.find(w => w.id === selectedWorkerId);
+      
+      if (!data) throw new Error('Worker not found');
       
       const expectedPin = data.pin_code || '0000';
       
