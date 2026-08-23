@@ -4,10 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { 
-  MessageSquare, Plus, Trash2, X, Send, Sparkles,
   Calendar as CalendarIcon, Clock, CheckCircle2, Inbox, 
   MapPin, LogOut, LayoutDashboard, Briefcase, FileText,
-  AlertCircle, Loader2, ArrowRight, PlayCircle, Globe2
+  AlertCircle, Loader2, ArrowRight, ArrowLeft, PlayCircle, Globe2,
+  MessageSquare, Plus, Trash2, X, Send, Sparkles, CornerDownRight, RefreshCw
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
