@@ -3,11 +3,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft, Coffee } from 'lucide-react';
+import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft, Coffee, Briefcase } from 'lucide-react';
 import Papa from 'papaparse';
 import { autoTranslateMasterData } from '@/app/actions/translate';
 
-type MasterType = 'materials' | 'sales_prices' | 'crops' | 'fields' | 'workers';
+type MasterType = 'materials' | 'sales_prices' | 'crops' | 'fields' | 'workers' | 'departments';
 
 const MATERIAL_CATEGORIES = [
   '種苗費',
@@ -23,6 +23,7 @@ export default function MastersPage() {
   const [crops, setCrops] = useState<any[]>([]);
   const [fields, setFields] = useState<any[]>([]);
   const [workers, setWorkers] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [salesPrices, setSalesPrices] = useState<any[]>([]);
   const [cropStandards, setCropStandards] = useState<any[]>([]);
@@ -54,19 +55,21 @@ export default function MastersPage() {
   const fetchMasters = async () => {
     try {
       setIsLoading(true);
-      const [cRes, fRes, wRes, mRes, spRes, csRes, chRes] = await Promise.all([
+      const [cRes, fRes, wRes, mRes, spRes, csRes, chRes, dRes] = await Promise.all([
         supabase.from('crops').select('*').order('name'),
         supabase.from('fields').select('*').order('name'),
         supabase.from('workers').select('*').order('name'),
         supabase.from('materials').select('*').order('name'),
         supabase.from('sales_prices').select('*').order('crop_name'),
         supabase.from('crop_standards').select('*'),
-        supabase.from('sales_channels').select('*').order('name')
+        supabase.from('sales_channels').select('*').order('name'),
+        supabase.from('departments').select('*').order('name')
       ]);
       
       setCrops(cRes.data || []);
       setFields(fRes.data || []);
       setWorkers(wRes.data || []);
+      setDepartments(dRes.data || []);
       setMaterials(mRes.data || []);
       setSalesPrices(spRes.data || []);
       setCropStandards(csRes.data || []);
@@ -159,6 +162,13 @@ export default function MastersPage() {
       // ユーザーが手動で更新した場合でも、必ず最新の翻訳を強制的に取得する
       let dataToSave = { ...formData };
       
+
+      // セッションからユーザーID (テナントID) を取得してセット
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session && session.user) {
+        dataToSave.tenant_id = session.user.id;
+      }
+
       if (['crops', 'fields', 'materials'].includes(table) && dataToSave.name) {
         setUploadStatus({ type: 'info', message: '多言語翻訳を生成中...' });
         const translations = await autoTranslateMasterData(dataToSave.name);
@@ -587,7 +597,38 @@ export default function MastersPage() {
               </div>
               <CsvActionButtons type="workers" inputRef={fileInputRefWorkers} />
             </div>
+
+            {/* 部署 */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[420px]">
+              <CardHeader icon={Briefcase} title={`部署 (${departments.length})`} type="departments" />
+              <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
+                {departments.length === 0 ? <p className="text-slate-400 text-sm">データなし</p> : null}
+                {departments.map(d => (
+                  <div key={d.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
+                    <span className="font-bold text-slate-700">{d.name}</span>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => handleOpenModal('departments', d)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDelete('departments', d.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <CsvActionButtons type="departments" inputRef={undefined as any} />
+            </div>
           </div>
+
+              
+
+
+              
+
+
+              
+
 
           {/* 単価・計算用マスタ */}
           <div className="flex items-center justify-between mt-12 mb-4">
@@ -894,6 +935,20 @@ export default function MastersPage() {
               )}
 
               {/* 作業者専用 */}
+              
+              {modalType === 'departments' && (
+                <div className="mb-4">
+                  <label className="block text-xs font-bold text-slate-500 mb-1">部署名 <span className="text-rose-500">*</span></label>
+                  <input 
+                    type="text" 
+                    value={formData.name || ''} 
+                    onChange={e => setFormData({...formData, name: e.target.value})}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
+                    placeholder="例: 栽培部"
+                  />
+                </div>
+              )}
+
               {modalType === 'workers' && (
                 <>
                   <div className="grid grid-cols-2 gap-4">
@@ -918,6 +973,33 @@ export default function MastersPage() {
                       />
                     </div>
                   </div>
+                    <div className="col-span-2 mt-4">
+                      <label className="block text-xs font-bold text-slate-500 mb-1">権限 (Role)</label>
+                      <select
+                        value={formData.role || 'worker'}
+                        onChange={e => setFormData({...formData, role: e.target.value})}
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
+                      >
+                        <option value="worker">一般スタッフ</option>
+                        <option value="admin">管理者 (admin)</option>
+                      </select>
+                    </div>
+
+                    <div className="col-span-2 mt-4">
+                      <label className="block text-xs font-bold text-slate-500 mb-1">所属部署</label>
+                      <select
+                        value={formData.department_id || ''}
+                        onChange={e => setFormData({...formData, department_id: e.target.value})}
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-slate-700"
+                      >
+                        <option value="">未所属</option>
+                        {departments.map(d => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+
                 </>
               )}
 

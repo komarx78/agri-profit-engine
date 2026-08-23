@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { 
   Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, 
   History, LogOut, Loader2, AlertCircle, Coffee, LogIn, LogOut as LogOutIcon, Sun, CloudRain, Plus, X,
-  ImageIcon, FileText, Video
+  ImageIcon, FileText, Video, MessageSquare, Globe2, MessageCircle, Trash2
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { WorkerGate } from '@/components/WorkerGate';
@@ -79,11 +79,18 @@ export default function WorkEntryPage() {
   const [materials, setMaterials] = useState<MasterItem[]>([]);
 
   // --- タブと勤怠状態 ---
-  const [activeTab, setActiveTab] = useState<'attendance' | 'work'>('attendance');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'work' | 'board'>('attendance');
+  const [tasks, setTasks] = useState<any[]>([]);
   const [attendanceLog, setAttendanceLog] = useState<any>(null);
   const [workerProfile, setWorkerProfile] = useState<any>(null);
   const [gpsStatus, setGpsStatus] = useState<string>('');
   const [currentAddress, setCurrentAddress] = useState<string>('');
+
+  // --- 掲示板用状態 ---
+  const [boardPosts, setBoardPosts] = useState<any[]>([]);
+  const [newPostContent, setNewPostContent] = useState('');
+  const [newPostCategory, setNewPostCategory] = useState('life');
+  const [boardFilter, setBoardFilter] = useState<'all' | 'work' | 'life' | 'general'>('all');
 
   // フォーム状態
   const [selectedCrop, setSelectedCrop] = useState<string>('');
@@ -144,6 +151,26 @@ export default function WorkEntryPage() {
           supabase.from('materials').select('*'),
           supabase.from('workers').select('*').eq('id', currentUser.id).single()
         ]);
+          // tasks取得
+          let dId = null;
+          if (wRes.data && wRes.data.department_id) dId = wRes.data.department_id;
+          
+          const { data: tData } = await supabase.from('work_logs')
+            .select('id, task_title, departments(name), crops(name), fields(name)')
+            .eq('user_id', wRes.data?.user_id || 'unknown')
+            .eq('status', 'planned')
+            .eq('work_date', getJSTDate());
+          
+          if (tData) {
+            // 全体、自分の部署、自分個人のいずれかに宛てられたタスクをフィルタ
+            const myTasks = tData.filter((t:any) => 
+              (!t.department_id && !t.worker_id) || 
+              (t.department_id === dId) || 
+              (t.worker_id === currentUser.id)
+            );
+            setTasks(myTasks);
+          }
+
         if (cRes.data) setCrops(cRes.data);
         if (fRes.data) setFields(fRes.data);
         if (mRes.data) setMaterials(mRes.data);
@@ -227,6 +254,14 @@ export default function WorkEntryPage() {
           if (attLogs && attLogs.length > 0) {
             setAttendanceLog(attLogs[0]);
           }
+
+          // 掲示板データ取得
+          const { data: bPosts } = await supabase
+            .from('board_posts')
+            .select(`*, workers(name)`)
+            .order('created_at', { ascending: false })
+            .limit(50);
+          if (bPosts) setBoardPosts(bPosts);
         }
       } catch (err) {
         console.log(err);
@@ -320,6 +355,53 @@ export default function WorkEntryPage() {
     if(confirm(t('confirmLogout', language) || 'ログアウトしますか？')) {
       localStorage.removeItem('agri_current_worker');
       setCurrentUser(null);
+    }
+  };
+
+  const handlePostBoard = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !newPostContent.trim()) return;
+    setIsSubmitting(true);
+    try {
+      // 投稿時に全言語（英語、ベトナム語、インドネシア語、中国語、シンハラ語、クメール語）へ一括翻訳
+      const res = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          text: newPostContent, 
+          targetLanguages: ['en', 'vi', 'id', 'zh', 'si', 'km'] 
+        })
+      });
+      const tData = await res.json();
+      const translations = tData.translations || {};
+
+      const { data, error } = await supabase.from('board_posts').insert([{
+        worker_id: currentUser.id,
+        category: newPostCategory,
+        content: newPostContent,
+        translations: translations
+      }]).select('*, workers(name)').single();
+      
+      if (error) throw error;
+      setBoardPosts([data, ...boardPosts]);
+      setNewPostContent('');
+    } catch (err) {
+      console.error(err);
+      alert('投稿または翻訳に失敗しました');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    if (!confirm('この投稿を削除しますか？')) return;
+    try {
+      const { error } = await supabase.from('board_posts').delete().eq('id', postId);
+      if (error) throw error;
+      setBoardPosts(boardPosts.filter(p => p.id !== postId));
+    } catch (err) {
+      console.error(err);
+      alert('削除に失敗しました');
     }
   };
 
@@ -550,7 +632,8 @@ export default function WorkEntryPage() {
           material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,
           memo: memo || null,
           photo_url: uploadedPhotoUrl,
-          video_url: uploadedVideoUrl
+          video_url: uploadedVideoUrl,
+          approval_status: 'pending'
         }]);
         if (error) throw error;
       }
@@ -619,6 +702,14 @@ export default function WorkEntryPage() {
             }`}
           >
             <History className="w-4 h-4" />{t('workRecord', language)}
+          </button>
+          <button
+            onClick={() => setActiveTab('board')}
+            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
+              activeTab === 'board' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />{t('board', language)}
           </button>
         </div>
         
@@ -783,6 +874,28 @@ export default function WorkEntryPage() {
             <div>
               {errorMsg && <div className="p-4 bg-rose-500/20 border border-rose-500/50 text-rose-400 rounded-xl text-sm font-bold flex items-start gap-3"><AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" /><span>{errorMsg}</span></div>}
             </div>
+
+            
+            {tasks.length > 0 && (
+              <div className="bg-emerald-950/80 p-4 rounded-2xl border border-emerald-500/30 mb-6 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+                <h3 className="text-sm font-black text-emerald-400 mb-3 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" /> 本日の指示・タスク ({tasks.length})
+                </h3>
+                <div className="space-y-2">
+                  {tasks.map(t => (
+                    <div key={t.id} className="bg-emerald-900/40 border border-emerald-800/50 p-3 rounded-xl flex flex-col gap-1.5">
+                      <div className="text-white font-bold text-sm flex items-center gap-2">
+                        {t.task_title}
+                      </div>
+                      <div className="flex gap-3 text-xs font-medium text-emerald-300/80">
+                        {t.crops && <span>🌱 {t.crops.name}</span>}
+                        {t.fields && <span>📍 {t.fields.name}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className={`flex bg-emerald-950/80 p-1 rounded-xl mb-4 border border-emerald-800`}>
               <button type="button" onClick={() => setInputMode('timer')} className={`flex-1 py-1.5 text-xs font-bold rounded-lg ${inputMode === 'timer' ? 'bg-emerald-600 text-white' : 'text-emerald-500'}`}>{t('realtimeRecord', language)}</button>
@@ -991,6 +1104,106 @@ export default function WorkEntryPage() {
               </button>
             )}
           </form>
+        )}
+
+        {/* ===================== 掲示板セクション ===================== */}
+        {activeTab === 'board' && (
+          <div className="space-y-6 pb-20">
+            {/* 投稿フォーム */}
+            <form onSubmit={handlePostBoard} className="bg-slate-800/60 p-4 rounded-3xl border border-slate-700 shadow-sm">
+              <textarea
+                value={newPostContent}
+                onChange={e => setNewPostContent(e.target.value)}
+                placeholder={t('boardPostPlaceholder', language)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 mb-3"
+                rows={3}
+                required
+              />
+              <div className="flex items-center justify-between gap-3">
+                <select
+                  value={newPostCategory}
+                  onChange={e => setNewPostCategory(e.target.value)}
+                  className="bg-slate-900 text-sm font-bold text-slate-300 border border-slate-700 rounded-xl px-3 py-2 focus:outline-none"
+                >
+                  <option value="life">🛒 {t('boardFilterLife', language)}</option>
+                  <option value="work">🚜 {t('boardFilterWork', language)}</option>
+                  <option value="general">💬 {t('boardFilterGeneral', language)}</option>
+                </select>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : t('boardSend', language)}
+                </button>
+              </div>
+            </form>
+
+            {/* フィルターUI */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+              <button
+                onClick={() => setBoardFilter('all')}
+                className={`flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${boardFilter === 'all' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+              >{t('boardFilterAll', language)}</button>
+              <button
+                onClick={() => setBoardFilter('work')}
+                className={`flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${boardFilter === 'work' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+              >🚜 {t('boardFilterWork', language)}</button>
+              <button
+                onClick={() => setBoardFilter('life')}
+                className={`flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${boardFilter === 'life' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+              >🛒 {t('boardFilterLife', language)}</button>
+              <button
+                onClick={() => setBoardFilter('general')}
+                className={`flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all ${boardFilter === 'general' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+              >💬 {t('boardFilterGeneral', language)}</button>
+            </div>
+
+            {/* タイムライン */}
+            <div className="space-y-4">
+              {boardPosts.filter(p => boardFilter === 'all' || p.category === boardFilter).map(post => (
+                <div key={post.id} className="bg-slate-800/40 p-5 rounded-3xl border border-slate-700/50">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-black border border-blue-500/30">
+                        {post.workers?.name?.charAt(0) || '?'}
+                      </div>
+                      <span className="text-white font-bold text-sm">{post.workers?.name}</span>
+                    </div>
+                    <span className="text-xs font-bold text-slate-500 bg-slate-900 px-2 py-1 rounded-lg">
+                      {new Date(post.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  
+                  <div className="mb-4 text-slate-200 text-sm leading-relaxed whitespace-pre-wrap">
+                    {(language !== 'ja' && post.translations && post.translations[language]) 
+                      ? post.translations[language] 
+                      : post.content}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-700/50">
+                    <span className="text-xs font-bold text-slate-500 px-2 py-1 rounded-md bg-slate-900/50">
+                      {post.category === 'life' ? `🛒 ${t('boardFilterLife', language)}` : post.category === 'work' ? `🚜 ${t('boardFilterWork', language)}` : `💬 ${t('boardFilterGeneral', language)}`}
+                    </span>
+                    {currentUser?.role === 'admin' && (
+                      <button
+                        onClick={() => handleDeletePost(post.id)}
+                        className="text-xs font-bold text-rose-500 hover:text-rose-400 p-1.5 hover:bg-rose-500/10 rounded-lg transition-colors flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> {t('boardDelete', language)}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {boardPosts.filter(p => boardFilter === 'all' || p.category === boardFilter).length === 0 && (
+                <div className="text-center py-12 text-slate-500 font-bold flex flex-col items-center">
+                  <MessageCircle className="w-10 h-10 mb-3 opacity-20" />
+                  {t('boardNoPosts', language)}
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </div>
 

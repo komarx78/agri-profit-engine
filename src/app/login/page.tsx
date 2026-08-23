@@ -30,7 +30,7 @@ export default function LoginPage() {
       if (error) throw error;
       
       // ログイン成功時は管理ダッシュボードへ
-      router.push('/admin/dashboard');
+      router.push('/portal');
       router.refresh();
     } catch (err: any) {
       console.error(err);

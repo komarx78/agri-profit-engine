@@ -29,7 +29,9 @@ import {
   Coffee,
   Cloud,
   PieChart,
-  FlaskConical
+  FlaskConical,
+  CheckSquare,
+  Inbox
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -93,8 +95,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       ]
     },
     {
-      title: '作業履歴・記録',
+      title: 'タスク・作業記録',
       items: [
+        { name: 'タスク・スケジュール', path: '/admin/tasks', icon: CheckSquare },
+        { name: '承認インボックス', path: '/admin/approvals', icon: Inbox },
         { name: '作業記録一覧', path: '/admin/history', icon: History },
         { name: '作業内容台帳 (集計)', path: '/admin/work-ledger', icon: Table },
       ]
