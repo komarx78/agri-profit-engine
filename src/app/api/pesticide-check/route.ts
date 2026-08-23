@@ -161,7 +161,7 @@ export async function POST(request: Request) {
          }
        }
 
-       const pesticides = usages.map((u: any) => {
+       let pesticides = usages.map((u: any) => {
           const pInfo = pestMap.get(u.registration_no) || {};
           return {
             name: pInfo.pesticide_name || '名称不明',
@@ -176,9 +176,21 @@ export async function POST(request: Request) {
           };
        });
 
+       const cleanPesticideName = pesticideName?.trim() || '';
+       if (cleanPesticideName) {
+         pesticides = pesticides.filter((p: any) => 
+           p.name.includes(cleanPesticideName) ||
+           toKatakana(p.name).includes(toKatakana(cleanPesticideName)) ||
+           toHiragana(p.name).includes(toHiragana(cleanPesticideName))
+         );
+       }
+
        return NextResponse.json({
           judgment: 'DB検索完了',
-          message: `FAMICデータベースより、作物「${cleanCropName}」に関連する農薬の検索結果です。`,
+          status: pesticides.length > 0 ? 'success' : 'warning',
+          message: cleanPesticideName 
+            ? `作物「${cleanCropName}」× 農薬「${cleanPesticideName}」の適用検索結果です。（該当: ${pesticides.length}件）`
+            : `作物「${cleanCropName}」に登録されている適用農薬一覧です。（該当: ${pesticides.length}件）`,
           pesticides: pesticides
        });
     } else {

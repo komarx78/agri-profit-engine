@@ -204,12 +204,11 @@ export default function PesticidesHubPage() {
 
                 <div>
                   <label className="block text-xs font-black text-slate-600 mb-1.5">
-                    使用する農薬名（商品名） <span className="text-rose-500">*</span>
+                    使用する農薬名（商品名） <span className="text-slate-400 font-normal">(任意 - 空欄で全件検索)</span>
                   </label>
                   <input
                     type="text"
-                    required
-                    placeholder="例: ダコニール、アファーム、コロマイト"
+                    placeholder="例: ダコニール、アファーム、コロマイト（空欄可）"
                     value={pesticideName}
                     onChange={(e) => setPesticideName(e.target.value)}
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white transition-all shadow-inner"
@@ -247,11 +246,11 @@ export default function PesticidesHubPage() {
                 <div className="pt-2">
                   <button
                     type="submit"
-                    disabled={loading || !cropName.trim() || !pesticideName.trim()}
+                    disabled={loading || !cropName.trim()}
                     className="w-full py-4 bg-teal-600 hover:bg-teal-500 disabled:bg-slate-200 text-white font-black text-base rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95"
                   >
                     {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
-                    <span>適正使用を判定・検索する</span>
+                    <span>{pesticideName.trim() ? '適正使用を判定・検索する' : `「${cropName || '作物'}」の登録農薬を検索する`}</span>
                   </button>
                 </div>
               </form>
@@ -281,8 +280,8 @@ export default function PesticidesHubPage() {
             {!result && !loading && !error && (
               <div className="bg-white rounded-3xl border border-slate-200 border-dashed p-16 text-center text-slate-400 space-y-3">
                 <FlaskConical className="w-12 h-12 mx-auto text-slate-300" />
-                <p className="font-black text-base text-slate-600">判定したい作物と農薬名を入力してください</p>
-                <p className="text-xs font-bold text-slate-400">適用基準や希釈倍数、収穫前日数がここに詳細表示されます</p>
+                <p className="font-black text-base text-slate-600">判定したい作物名を入力してください</p>
+                <p className="text-xs font-bold text-slate-400">農薬名が空欄の場合は、その作付けに使える農薬が一覧表示されます</p>
               </div>
             )}
 
@@ -319,30 +318,32 @@ export default function PesticidesHubPage() {
                         result.status === 'warning' ? 'bg-amber-100 text-amber-800' :
                         'bg-rose-100 text-rose-800'
                       }`}>
-                        {result.status === 'success' ? '使用可能（適用あり）' : result.status === 'warning' ? '要確認（条件不一致の可能性）' : '適用外 / 未登録'}
+                        {result.status === 'success' ? (pesticideName.trim() ? '使用可能（適用あり）' : '検索完了') : result.status === 'warning' ? '要確認（条件不一致の可能性）' : '適用外 / 未登録'}
                       </span>
                       <h2 className="text-lg font-black text-slate-800 leading-tight">
-                        {cropName} × {pesticideName}
+                        {pesticideName.trim() ? `${cropName} × ${pesticideName}` : `${cropName} の登録農薬一覧`}
                       </h2>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 self-start sm:self-center">
-                    {adoptedPesticideNames.includes(pesticideName) ? (
-                      <span className="text-xs font-black bg-emerald-100 text-emerald-800 px-3 py-1.5 rounded-xl flex items-center gap-1 border border-emerald-200">
-                        <Check className="w-4 h-4 text-emerald-600" />
-                        自社マスタ採用済み
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={isAdopting === pesticideName}
-                        onClick={() => handleAdoptPesticide(result.pesticides?.[0] || { name: pesticideName })}
-                        className="text-xs font-black bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 text-white px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
-                      >
-                        {isAdopting === pesticideName ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                        <span>自社農薬マスタに登録</span>
-                      </button>
+                    {pesticideName.trim() && (
+                      adoptedPesticideNames.includes(pesticideName) ? (
+                        <span className="text-xs font-black bg-emerald-100 text-emerald-800 px-3 py-1.5 rounded-xl flex items-center gap-1 border border-emerald-200">
+                          <Check className="w-4 h-4 text-emerald-600" />
+                          自社マスタ採用済み
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isAdopting === pesticideName}
+                          onClick={() => handleAdoptPesticide(result.pesticides?.[0] || { name: pesticideName })}
+                          className="text-xs font-black bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 text-white px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                        >
+                          {isAdopting === pesticideName ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                          <span>自社農薬マスタに登録</span>
+                        </button>
+                      )
                     )}
                   </div>
                 </div>
