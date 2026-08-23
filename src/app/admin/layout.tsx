@@ -95,6 +95,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       title: '計画・予実管理',
       items: [
         { name: 'ダッシュボード', path: '/admin/dashboard', icon: LayoutDashboard },
+        { name: '作付け一覧・一括日誌', path: '/admin/cultivations', icon: Sprout },
         { name: '作付地図', path: '/admin/map', icon: MapPin },
         { name: '作目別 分析', path: '/admin/crop-analysis', icon: PieChart },
         { name: '栽培・予実管理表', path: '/admin/cultivation-schedule', icon: Calendar },
