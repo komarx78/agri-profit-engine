@@ -83,8 +83,20 @@ export async function GET(req: Request) {
       if (!worker || !worker.line_user_id || !worker.is_line_notification_enabled) continue;
 
       // そのワーカーの通知時間を決定 (残業申請があればそれを優先)
+      let targetTime = defaultMasterTime;
       const ot = overtimes?.find(o => o.worker_id === worker.id);
-      const targetTime = ot ? ot.scheduled_end_time.substring(0, 5) : defaultMasterTime;
+      
+      if (ot) {
+        // 残業予定時刻（例: "19:00:00"）に30分の猶予（バッファ）を足す
+        const [hours, minutes] = ot.scheduled_end_time.split(':').map(Number);
+        const dateObj = new Date();
+        dateObj.setHours(hours);
+        dateObj.setMinutes(minutes + 30);
+        
+        const newHours = String(dateObj.getHours()).padStart(2, '0');
+        const newMinutes = String(dateObj.getMinutes()).padStart(2, '0');
+        targetTime = `${newHours}:${newMinutes}`;
+      }
 
       // 現在時刻と一致しているか、またはforceRun指定時のみ送信
       if (forceRun || targetTime === currentHourMin) {

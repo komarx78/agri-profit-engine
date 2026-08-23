@@ -1022,7 +1022,7 @@ export default function WorkEntryPage() {
                   className="w-full p-4 bg-slate-900 border border-slate-700 rounded-2xl text-white font-black text-xl text-center focus:outline-none focus:border-amber-500"
                 />
                 <p className="text-xs text-emerald-400 mt-2 font-bold">
-                  ※承認されると、この予定時刻に合わせてLINEの退勤忘れ通知が遅らせて送信されます。
+                  ※承認されると、LINEの退勤忘れアラートは「この予定時刻の30分後」に自動で延長されます。
                 </p>
               </div>
               <div>
