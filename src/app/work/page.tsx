@@ -176,25 +176,17 @@ export default function WorkEntryPage() {
         } catch (oErr) {
           console.error(oErr);
         }
-          // tasks取得
-          let dId = null;
-          if (wRes.data && wRes.data.department_id) dId = wRes.data.department_id;
-          
-          const { data: tData } = await supabase.from('work_logs')
-            .select('id, task_title, departments(name), crops(name), fields(name)')
-            .eq('user_id', wRes.data?.user_id || 'unknown')
-            .eq('status', 'planned')
-            .eq('work_date', getJSTDate());
-          
-          if (tData) {
-            // 全体、自分の部署、自分個人のいずれかに宛てられたタスクをフィルタ
-            const myTasks = tData.filter((t:any) => 
-              (!t.department_id && !t.worker_id) || 
-              (t.department_id === dId) || 
-              (t.worker_id === currentUser.id)
-            );
-            setTasks(myTasks);
-          }
+        // ログイン中の作業者本人の本日の予定タスクのみを取得
+        const { data: tData } = await supabase
+          .from('work_logs')
+          .select('*, crops(name), fields(name), workers(name)')
+          .eq('status', 'planned')
+          .eq('work_date', getJSTDate())
+          .eq('worker_id', currentUser.id);
+        
+        if (tData) {
+          setTasks(tData);
+        }
 
         if (cRes.data) setCrops(cRes.data);
         if (fRes.data) setFields(fRes.data);
