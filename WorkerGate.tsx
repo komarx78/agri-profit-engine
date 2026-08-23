@@ -30,14 +30,19 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
   useEffect(() => {
     async function fetchWorkers() {
       try {
-        // 直接Supabaseからスタッフマスタを取得
-        const { data, error } = await supabase
-          .from('workers')
-          .select('id, name, name_en, name_vi, name_id, name_zh, name_si, name_km, pin_code, role')
-          .order('name');
-          
-        if (error) throw error;
-        if (data) setWorkers(data);
+        const ownerId = localStorage.getItem('agri_owner_id');
+        if (!ownerId) {
+          setErrorMsg('タブレットが設定されていません。一度管理者でログインしてください。');
+          setIsLoading(false);
+          return;
+        }
+
+        // 安全なAPIルート経由で、ownerIdに紐づくスタッフのみを取得
+        const res = await fetch(`/api/workers?ownerId=${ownerId}`);
+        const data = await res.json();
+        
+        if (data.error) throw new Error(data.error);
+        if (data.workers) setWorkers(data.workers);
       } catch (err) {
         console.error(err);
       } finally {
