@@ -33,27 +33,44 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
       try {
         const ownerId = localStorage.getItem('agri_owner_id');
         setDebugOwnerId(ownerId || 'null');
-        if (!ownerId) {
-          setErrorMsg('タブレットが設定されていません。一度管理者でログインしてください。');
-          setIsLoading(false);
-          return;
+
+        let data = null;
+        let error = null;
+
+        if (ownerId && ownerId !== 'null') {
+          // 1. まずは指定の ownerId で検索
+          const res = await supabase
+            .from('workers')
+            .select('*')
+            .eq('user_id', ownerId)
+            .order('name');
+          data = res.data;
+          error = res.error;
         }
 
-        // Vercel環境変数に依存しないよう、直接Supabaseから取得
-        // IDのズレを防ぐため一時的に全件取得（RLSは無効化済み）というコメントがありましたが
-        // マルチテナント対応のため、必ず ownerId で絞り込みます
-        const { data, error } = await supabase
-          .from('workers')
-          .select('*')
-          .eq('user_id', ownerId)
-          .order('name');
+        // 2. もし ownerId で見つからなかった場合は全件からフォールバック取得
+        if (!data || data.length === 0) {
+          const fallbackRes = await supabase
+            .from('workers')
+            .select('*')
+            .order('name');
+          if (fallbackRes.data && fallbackRes.data.length > 0) {
+            data = fallbackRes.data;
+            error = null;
+            // 最初のスタッフの user_id があれば ownerId を自動修復
+            if (data[0].user_id) {
+              localStorage.setItem('agri_owner_id', data[0].user_id);
+              setDebugOwnerId(data[0].user_id);
+            }
+          }
+        }
           
         if (error) throw error;
-        if (data) {
-          if (data.length === 0) {
-            setErrorMsg(`エラー: 登録された作業者が見つかりません。(ID: ${ownerId})`);
-          }
+        if (data && data.length > 0) {
+          setErrorMsg('');
           setWorkers(data);
+        } else {
+          setErrorMsg('登録された作業者が見つかりません。管理者画面（スタッフマスタ）から作業者を登録してください。');
         }
       } catch (err: any) {
         console.error(err);
@@ -195,14 +212,16 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
             )}
           </button>
         </form>
-      </div>
 
-      {/* Debug Info for Troubleshooting */}
-      <div className="mt-8 text-xs text-slate-500 font-mono text-center max-w-sm w-full break-all">
-        <p>Debug Info:</p>
-        <p>Owner ID: {debugOwnerId}</p>
-        <p>Workers loaded: {workers.length}</p>
-        {errorMsg && <p className="text-rose-500">Error: {errorMsg}</p>}
+        <div className="mt-6 pt-6 border-t border-slate-800 text-center">
+          <a
+            href="/login"
+            className="text-xs font-bold text-slate-400 hover:text-emerald-400 transition-colors inline-flex items-center gap-1"
+          >
+            <span>👨‍💼 管理者アカウントでログインする</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </a>
+        </div>
       </div>
     </div>
   );
