@@ -331,14 +331,24 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
 
               {(activeCategory === 'fertilizer' || activeCategory === 'pesticide' || activeCategory === 'pest' || activeCategory === 'growth' || activeCategory === 'shipment' || activeCategory === 'sales') && (
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    {activeCategory === 'fertilizer' && '肥料・資材名'}
-                    {activeCategory === 'pesticide' && '農薬名'}
-                    {activeCategory === 'pest' && '病害虫・雑草名'}
-                    {activeCategory === 'growth' && '調査項目'}
-                    {activeCategory === 'shipment' && '出荷先 / 販路'}
-                    {activeCategory === 'sales' && '販売先・用途'}
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-slate-700">
+                      {activeCategory === 'fertilizer' && '肥料・資材名'}
+                      {activeCategory === 'pesticide' && '農薬名'}
+                      {activeCategory === 'pest' && '病害虫・雑草名'}
+                      {activeCategory === 'growth' && '調査項目'}
+                      {activeCategory === 'shipment' && '出荷先 / 販路'}
+                      {activeCategory === 'sales' && '販売先・用途'}
+                    </label>
+                    {activeCategory === 'pesticide' && (
+                      <a
+                        href="/admin/spray-management"
+                        className="text-[11px] font-bold text-rose-600 hover:text-rose-800 underline flex items-center gap-1"
+                      >
+                        残回数・RAC管理画面を開く ➔
+                      </a>
+                    )}
+                  </div>
                   <input
                     type="text"
                     required

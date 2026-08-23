@@ -117,6 +117,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       title: 'タスク・作業記録',
       items: [
         { name: 'タスク・スケジュール', path: '/admin/tasks', icon: CheckSquare },
+        { name: '散布管理 (残回数・RAC)', path: '/admin/spray-management', icon: FlaskConical },
         { name: '承認インボックス', path: '/admin/approvals', icon: Inbox },
         { name: '作業記録一覧', path: '/admin/history', icon: History },
         { name: '作業内容台帳 (集計)', path: '/admin/work-ledger', icon: Table },
