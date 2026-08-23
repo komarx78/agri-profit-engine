@@ -9,6 +9,7 @@ import {
   ImageIcon, FileText, Video, MessageSquare, Globe2, MessageCircle, Trash2
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getB2BOrders, updateB2BOrderStatus } from '@/app/actions/b2b';
 import { WorkerGate } from '@/components/WorkerGate';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
@@ -80,7 +81,16 @@ export default function WorkEntryPage() {
   const [materials, setMaterials] = useState<MasterItem[]>([]);
 
   // --- タブと勤怠状態 ---
-  const [activeTab, setActiveTab] = useState<'attendance' | 'work' | 'board'>('attendance');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'work' | 'sales'>('attendance');
+  
+  // --- 出荷・納品用ステート ---
+  const [b2bOrders, setB2bOrders] = useState<any[]>([]);
+  const [loadingB2bOrders, setLoadingB2bOrders] = useState(false);
+  const [salesChannels, setSalesChannels] = useState<any[]>([]);
+  const [selectedSalesChannel, setSelectedSalesChannel] = useState('');
+  const [selectedSalesCrop, setSelectedSalesCrop] = useState('');
+  const [salesQuantity, setSalesQuantity] = useState('');
+  const [isSubmittingSales, setIsSubmittingSales] = useState(false);
   const [tasks, setTasks] = useState<any[]>([]);
   const [attendanceLog, setAttendanceLog] = useState<any>(null);
   const [workerProfile, setWorkerProfile] = useState<any>(null);
@@ -699,7 +709,7 @@ export default function WorkEntryPage() {
           <button
             onClick={() => setActiveTab('attendance')}
             className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'attendance' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70'
+              activeTab === 'attendance' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70 hover:text-white'
             }`}
           >
             <Clock className="w-4 h-4" />{t('attendance', language)}
@@ -707,16 +717,18 @@ export default function WorkEntryPage() {
           <button
             onClick={() => setActiveTab('work')}
             className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'work' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70'
+              activeTab === 'work' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70 hover:text-white'
             }`}
           >
             <History className="w-4 h-4" />{t('workRecord', language)}
           </button>
           <button
-            onClick={() => router.push('/sales')}
-            className="flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 text-emerald-300/70 hover:text-white"
+            onClick={() => setActiveTab('sales')}
+            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
+              activeTab === 'sales' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70 hover:text-white'
+            }`}
           >
-            <Truck className="w-4 h-4 text-emerald-400" />出荷・納品
+            <Truck className="w-4 h-4" />出荷・納品
           </button>
         </div>
         
