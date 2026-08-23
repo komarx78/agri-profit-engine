@@ -46,7 +46,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
         try {
           const { data, error } = await supabase
             .from('workers')
-            .select('id, name, name_en, name_vi, name_id, name_zh, name_si, name_km, role, pin_code, user_id')
+            .select('*')
             .eq('user_id', ownerId)
             .order('name');
           if (!error && data && data.length > 0) {
