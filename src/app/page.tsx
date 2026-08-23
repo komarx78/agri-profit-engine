@@ -18,7 +18,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Truck,
-  Video
+  Video,
+  Layout
 } from 'lucide-react';
 
 export default function PortalPage() {
@@ -103,6 +104,21 @@ export default function PortalPage() {
         {/* サービスパネルグリッド */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           
+          {/* 統合ポータル (新機能) */}
+          <Link href="/portal" className="group bg-gradient-to-br from-indigo-50 to-white rounded-2xl p-6 shadow-sm border border-indigo-100 hover:shadow-md hover:border-indigo-300 transition-all flex flex-col relative overflow-hidden">
+            <div className="absolute -right-6 -top-6 w-24 h-24 bg-indigo-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+            <div className="flex items-center justify-between mb-4 relative z-10">
+              <div className="w-12 h-12 bg-indigo-600 text-white rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm">
+                <Layout className="w-6 h-6" />
+              </div>
+              <ArrowUpRight className="w-5 h-5 text-indigo-300 group-hover:text-indigo-600 transition-colors" />
+            </div>
+            <h3 className="text-lg font-black text-indigo-900 mb-2 group-hover:text-indigo-700 transition-colors relative z-10">出退勤・統合ポータル</h3>
+            <p className="text-sm font-bold text-indigo-700/70 flex-1 leading-relaxed relative z-10">
+              出退勤の打刻、直近のスケジュール・タスク確認、社内掲示板、各種マニュアル等を1つの画面で確認できる統合ポータルです。
+            </p>
+          </Link>
+
           {/* 農業経営管理 */}
           <Link href="/admin/dashboard" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-emerald-300 transition-all flex flex-col">
             <div className="flex items-center justify-between mb-4">

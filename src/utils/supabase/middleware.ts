@@ -38,7 +38,9 @@ export async function updateSession(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/login') &&
     !request.nextUrl.pathname.startsWith('/farm') &&
     !request.nextUrl.pathname.startsWith('/sales') &&
-    !request.nextUrl.pathname.startsWith('/work')
+    !request.nextUrl.pathname.startsWith('/work') &&
+    !request.nextUrl.pathname.startsWith('/portal') &&
+    request.nextUrl.pathname !== '/'
   ) {
     // '/login' にリダイレクト
     const url = request.nextUrl.clone()
