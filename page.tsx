@@ -1,1242 +1,466 @@
+
 "use client";
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { HelpTooltip } from '@/components/HelpTooltip';
-import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft, Coffee, Briefcase } from 'lucide-react';
-import Papa from 'papaparse';
-import { autoTranslateMasterData } from '@/app/actions/translate';
+import { Calendar, CheckCircle2, Clock, MapPin, Sprout, Loader2, Plus, Trash2, Edit2, Users, Briefcase, X, List, LayoutGrid, ChevronLeft, ChevronRight } from 'lucide-react';
 
-type MasterType = 'materials' | 'sales_prices' | 'crops' | 'fields' | 'workers' | 'departments';
-
-const MATERIAL_CATEGORIES = [
-  '種苗費',
-  '肥料費',
-  '農薬費',
-  '動力光熱費',
-  '諸材料費',
-  '機械・車両費',
-  'その他経費'
-];
-
-export default function MastersPage() {
+export default function TasksPage() {
+  const [tasks, setTasks] = useState<any[]>([]);
   const [crops, setCrops] = useState<any[]>([]);
   const [fields, setFields] = useState<any[]>([]);
   const [workers, setWorkers] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
-  const [materials, setMaterials] = useState<any[]>([]);
-  const [salesPrices, setSalesPrices] = useState<any[]>([]);
-  const [cropStandards, setCropStandards] = useState<any[]>([]);
-  const [channels, setChannels] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [uploadStatus, setUploadStatus] = useState<{type: string, message: string} | null>(null);
+  const [tenantId, setTenantId] = useState<string>('');
 
-  // モーダル・CRUD状態管理
-  const [modalType, setModalType] = useState<MasterType | null>(null);
-  const [editingItem, setEditingItem] = useState<any>(null); // null = 新規作成
-  const [formData, setFormData] = useState<any>({});
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [formData, setFormData] = useState<any>({
+    work_date: new Date().toISOString().split('T')[0],
+    task_title: '',
+    crop_id: '',
+    field_id: '',
+    worker_id: '',
+    department_id: ''
+  });
 
-  // コピー機能用ステート
-  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
-  const [copySource, setCopySource] = useState("");
-  const [copyTarget, setCopyTarget] = useState("");
-  const [isCopying, setIsCopying] = useState(false);
-
-  // 販売価格マスタの表示モード ('byCrop' | 'byChannel')
-  const [priceViewMode, setPriceViewMode] = useState<'byCrop' | 'byChannel'>('byCrop');
-
-  const fileInputRefMats = useRef<HTMLInputElement>(null);
-  const fileInputRefPrices = useRef<HTMLInputElement>(null);
-  const fileInputRefCrops = useRef<HTMLInputElement>(null);
-  const fileInputRefFields = useRef<HTMLInputElement>(null);
-  const fileInputRefWorkers = useRef<HTMLInputElement>(null);
-
-  const fetchMasters = async () => {
-    try {
-      setIsLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id;
-      
-      const [cRes, fRes, wRes, mRes, spRes, csRes, chRes, dRes] = await Promise.all([
-        supabase.from('crops').select('*').eq('user_id', userId).order('name'),
-        supabase.from('fields').select('*').eq('user_id', userId).order('name'),
-        supabase.from('workers').select('*').eq('user_id', userId).order('name'),
-        supabase.from('materials').select('*').eq('user_id', userId).order('name'),
-        supabase.from('sales_prices').select('*').eq('user_id', userId).order('crop_name'),
-        supabase.from('crop_standards').select('*'), // Assuming standards linked via crop_id?
-        supabase.from('sales_channels').select('*').order('name'), // If sales_channels is global or tenant? Assuming it might not have user_id if it's empty, we leave it for now.
-        supabase.from('departments').select('*').eq('tenant_id', userId).order('name')
-      ]);
-      
-      setCrops(cRes.data || []);
-      setFields(fRes.data || []);
-      setWorkers(wRes.data || []);
-      setDepartments(dRes.data || []);
-      setMaterials(mRes.data || []);
-      setSalesPrices(spRes.data || []);
-      setCropStandards(csRes.data || []);
-      setChannels(chRes.data || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // UI State
+  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
+  const [groupMode, setGroupMode] = useState<'worker' | 'field'>('worker');
+  const [calendarDays, setCalendarDays] = useState<number>(7); // 2 = Today/Tomorrow, 7 = Week
+  const [startDate, setStartDate] = useState(new Date());
 
   useEffect(() => {
-    fetchMasters();
+    async function fetchData() {
+      setIsLoading(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        const ownerId = session.user.id;
+        setTenantId(ownerId);
+
+        const [tasksRes, cropsRes, fieldsRes, workersRes, deptsRes] = await Promise.all([
+          supabase.from('work_tasks').select('*, crops(*), fields(*), workers(*), departments(*)').eq('tenant_id', ownerId).order('work_date', { ascending: true }),
+          supabase.from('crops').select('*').eq('tenant_id', ownerId),
+          supabase.from('fields').select('*').eq('tenant_id', ownerId),
+          supabase.from('workers').select('*').eq('user_id', ownerId).order('name'),
+          supabase.from('departments').select('*').eq('tenant_id', ownerId)
+        ]);
+
+        if (tasksRes.data) setTasks(tasksRes.data);
+        if (cropsRes.data) setCrops(cropsRes.data);
+        if (fieldsRes.data) setFields(fieldsRes.data);
+        if (workersRes.data) setWorkers(workersRes.data);
+        if (deptsRes.data) setDepartments(deptsRes.data);
+
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchData();
   }, []);
 
-  // --- CRUD (モーダル) 処理 ---
-  // defaultValues: 新規作成時にあらかじめセットしておきたい値
-  const handleOpenModal = (type: MasterType, item: any = null, defaultValues: any = {}) => {
-    setModalType(type);
-    setEditingItem(item);
-    if (item) {
-      let initial = { ...item };
-      // 作目の場合は基準値も合わせて読み込む
-      if (type === 'crops') {
-        const standard = cropStandards.find(s => s.crop_id === item.id);
-        if (standard) {
-          initial.seedlings_per_10a = standard.seedlings_per_10a;
-          initial.materials_per_10a = standard.materials_per_10a || [];
-        } else {
-          initial.materials_per_10a = [];
-        }
-      }
-      setFormData(initial);
-    } else {
-      // 新規作成時の初期値 ＋ 渡されたdefaultValuesをマージ
-      const initial: any = { ...defaultValues };
-      if (type === 'workers') {
-        initial.name = initial.name || '';
-        initial.hourly_wage = initial.hourly_wage || 1000;
-        initial.pin_code = initial.pin_code || '0000';
-      }
-      else if (type === 'materials') {
-        initial.name = initial.name || '';
-        initial.unit = initial.unit || '';
-        initial.default_price = initial.default_price || 0;
-        initial.category = initial.category || '諸材料費';
-      }
-      else if (type === 'sales_prices') {
-        initial.crop_name = initial.crop_name || '';
-        initial.channel_name = initial.channel_name || '';
-        initial.price_per_unit = initial.price_per_unit || 0;
-      }
-      else if (type === 'crops') {
-        initial.name = initial.name || '';
-        initial.seedlings_per_10a = initial.seedlings_per_10a || 0;
-        initial.materials_per_10a = initial.materials_per_10a || [];
-        initial.est_fuel_cost_10a = initial.est_fuel_cost_10a || 0;
-        initial.est_machinery_cost_10a = initial.est_machinery_cost_10a || 0;
-        initial.est_other_cost_10a = initial.est_other_cost_10a || 0;
-      }
-      else {
-        initial.name = initial.name || '';
-      }
-      setFormData(initial);
-    }
-  };
-
-  const handleCloseModal = () => {
-    setModalType(null);
-    setEditingItem(null);
-    setFormData({});
-  };
-
   const handleSave = async () => {
-    if (!modalType) return;
+    if (!formData.work_date || !formData.task_title) return;
     setIsSaving(true);
-    
     try {
-      const table = modalType;
-      
-      // Validation
-      if (['crops', 'fields', 'workers', 'materials'].includes(table) && !formData.name) {
-        throw new Error('名前は必須です');
-      }
-      if (table === 'sales_prices' && (!formData.crop_name || !formData.channel_name)) {
-        throw new Error('作目名と販路名は必須です');
-      }
+      const dataToSave = {
+        ...formData,
+        tenant_id: tenantId,
+        crop_id: formData.crop_id || null,
+        field_id: formData.field_id || null,
+        worker_id: formData.worker_id || null,
+        department_id: formData.department_id || null
+      };
 
-      // 自動翻訳処理（作目、圃場、資材のみ）
-      // ユーザーが手動で更新した場合でも、必ず最新の翻訳を強制的に取得する
-      let dataToSave = { ...formData };
-      
-
-      // セッションからユーザーID (テナントID) を取得してセット
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session && session.user) {
-        dataToSave.tenant_id = session.user.id;
-        dataToSave.user_id = session.user.id;
-      }
-
-      if (['crops', 'fields', 'materials'].includes(table) && dataToSave.name) {
-        setUploadStatus({ type: 'info', message: '多言語翻訳を生成中...' });
-        const translations = await autoTranslateMasterData(dataToSave.name);
-        dataToSave = { ...dataToSave, ...translations };
-      }
-
-      // cropsテーブルには存在しないカラムを除外する
-      if (table === 'crops') {
-        delete dataToSave.seedlings_per_10a;
-        delete dataToSave.materials_per_10a;
-      }
-
-      // sales_prices 保存時、もし sales_channels に登録されていない販路名なら自動追加
-      if (table === 'sales_prices' && dataToSave.channel_name) {
-        const existsInChannels = channels.some(ch => ch.name === dataToSave.channel_name);
-        if (!existsInChannels) {
-          await supabase.from('sales_channels').insert([{ name: dataToSave.channel_name }]);
-        }
-        // UI用のフラグを削除
-        delete dataToSave.isCustomChannel;
-      }
-
-      let query;
-      let insertedId = editingItem?.id;
-      
-      if (editingItem) {
-        query = supabase.from(table).update(dataToSave).eq('id', editingItem.id).select();
-      } else {
-        const { id, created_at, ...insertData } = dataToSave;
-        query = supabase.from(table).insert([insertData]).select();
-      }
-
-      const { data: savedData, error } = await query;
+      const { data, error } = await supabase.from('work_tasks').insert([dataToSave]).select('*, crops(*), fields(*), workers(*), departments(*)');
       if (error) throw error;
-      
-      if (!insertedId && savedData && savedData.length > 0) {
-        insertedId = savedData[0].id;
-      }
-      
-      // 作目の場合は基準値も保存
-      if (table === 'crops' && insertedId) {
-        // formData.seedlings_per_10a が入力されていれば保存、なければ削除
-        if (formData.seedlings_per_10a || formData.seedlings_per_10a === 0 || formData.materials_per_10a) {
-          const standardData = {
-            crop_id: insertedId,
-            variety: formData.variety || null,
-            seedlings_per_10a: Number(formData.seedlings_per_10a) || 0,
-            materials_per_10a: formData.materials_per_10a || []
-          };
-          
-          // 一旦既存の基準があるか確認
-          const { data: existingStandard } = await supabase
-            .from('crop_standards')
-            .select('id')
-            .eq('crop_id', insertedId)
-            .is('variety', null) // シンプル化のため一旦variety=nullの基本基準として扱う
-            .single();
-            
-          if (existingStandard) {
-            await supabase.from('crop_standards').update(standardData).eq('id', existingStandard.id);
-          } else {
-            await supabase.from('crop_standards').insert([standardData]);
-          }
-        }
-      }
-      
-      setUploadStatus({ type: 'success', message: '保存・翻訳完了しました！' });
-      setTimeout(() => setUploadStatus(null), 3000);
-      handleCloseModal();
-      fetchMasters(); // 再取得
-    } catch (err: any) {
-      alert(`保存エラー: ${err.message}`);
+      if (data) setTasks([...tasks, data[0]].sort((a, b) => a.work_date.localeCompare(b.work_date)));
+      setIsModalOpen(false);
+      setFormData({ work_date: new Date().toISOString().split('T')[0], task_title: '', crop_id: '', field_id: '', worker_id: '', department_id: '' });
+    } catch (err) {
+      console.error(err);
+      alert('保存に失敗しました');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleDelete = async (type: MasterType, id: string) => {
-    if (!confirm('本当に削除しますか？\n（このマスタを使用している過去の作業記録がある場合、削除できないことがあります）')) return;
-    
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('本当に削除しますか？')) return;
     try {
-      setUploadStatus({ type: 'info', message: '削除中...' });
-      const { error } = await supabase.from(type).delete().eq('id', id);
-      if (error) throw error;
-      
-      setUploadStatus({ type: 'success', message: '削除しました' });
-      setTimeout(() => setUploadStatus(null), 3000);
-      fetchMasters();
-    } catch (err: any) {
-      alert(`削除エラー: ${err.message}`);
-      setUploadStatus(null);
+      await supabase.from('work_tasks').delete().eq('id', id);
+      setTasks(tasks.filter(t => t.id !== id));
+    } catch (err) {
+      console.error(err);
     }
   };
 
-  const handleCopyChannel = async () => {
-    if (!copySource || !copyTarget) {
-      alert('コピー元と新しい販路名の両方を入力してください');
-      return;
-    }
-    
-    setIsCopying(true);
-    try {
-      // コピー元のデータを取得
-      const sourceData = salesPrices.filter(sp => sp.channel_name === copySource);
-      if (sourceData.length === 0) {
-        throw new Error('指定されたコピー元のデータが見つかりません');
-      }
-
-      // コピー先のデータを作成
-      const insertData = sourceData.map(sp => ({
-        crop_name: sp.crop_name,
-        channel_name: copyTarget,
-        price_per_unit: sp.price_per_unit
-      }));
-
-      // 一括追加
-      const { error } = await supabase.from('sales_prices').insert(insertData);
-      if (error) throw error;
-
-      // もし sales_channels に存在しなければ自動登録
-      const existsInChannels = channels.some(ch => ch.name === copyTarget);
-      if (!existsInChannels) {
-        await supabase.from('sales_channels').insert([{ name: copyTarget }]);
-      }
-
-      setUploadStatus({ type: 'success', message: `${copyTarget} として一括追加しました！` });
-      setTimeout(() => setUploadStatus(null), 3000);
-      setIsCopyModalOpen(false);
-      setCopySource("");
-      setCopyTarget("");
-      fetchMasters();
-    } catch (err: any) {
-      alert(`コピーエラー: ${err.message}`);
-    } finally {
-      setIsCopying(false);
-    }
-  };
-
-  // --- CSVアップロード処理 ---
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, type: MasterType) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setUploadStatus({ type: 'info', message: '読み込み中...' });
-
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: async (results) => {
-        try {
-          const data = results.data;
-          let insertData = [];
-
-          if (type === 'materials') {
-            insertData = data.map((row: any) => ({
-              name: row['資材名'] || row.name,
-              category: row['カテゴリ'] || row.category || '未設定',
-              specification: row['規格'] || row.specification || null,
-              unit: row['単位'] || row.unit,
-              default_price: parseFloat(row['単価']) || parseFloat(row.price) || 0
-            }));
-            const { error } = await supabase.from('materials').insert(insertData);
-            if (error) throw error;
-          } else if (type === 'sales_prices') {
-            insertData = data.map((row: any) => ({
-              crop_name: row['作目名'] || row.crop_name,
-              channel_name: row['販路名'] || row.channel_name,
-              price_per_unit: parseFloat(row['単価']) || parseFloat(row.price) || 0
-            }));
-            const { error } = await supabase.from('sales_prices').insert(insertData);
-            if (error) throw error;
-          } else if (type === 'crops') {
-            insertData = data.map((row: any) => ({ name: row['作目名'] || row.name }));
-            const { error } = await supabase.from('crops').insert(insertData);
-            if (error) throw error;
-          } else if (type === 'fields') {
-            insertData = data.map((row: any) => ({ 
-              name: row['圃場名'] || row.name,
-              area_size: parseFloat(row['面積(a)']) || parseFloat(row.area_size) || null
-            }));
-            const { error } = await supabase.from('fields').insert(insertData);
-            if (error) throw error;
-          } else if (type === 'workers') {
-            const { data: { session } } = await supabase.auth.getSession();
-            const userId = session?.user?.id;
-            insertData = data.map((row: any) => ({
-              user_id: userId,
-              name: row['作業者名'] || row.name,
-              hourly_wage: parseFloat(row['時給']) || parseFloat(row.hourly_wage) || 1000,
-              pin_code: String(row['暗証番号'] || row.pin_code || '0000').padStart(4, '0').slice(0,4)
-            }));
-            const { error } = await supabase.from('workers').insert(insertData);
-            if (error) throw error;
-          }
-
-          setUploadStatus({ type: 'success', message: '一括登録が完了しました！' });
-          fetchMasters(); // 再取得
-          
-          setTimeout(() => setUploadStatus(null), 3000);
-        } catch (error: any) {
-          console.error(error);
-          setUploadStatus({ type: 'error', message: `エラーが発生しました: ${error.message}` });
-        }
-        
-        event.target.value = '';
-      },
-      error: (error) => {
-        setUploadStatus({ type: 'error', message: `CSVの読み込みに失敗しました: ${error.message}` });
-      }
+  const handleOpenModal = (dateStr?: string, workerId?: string, fieldId?: string) => {
+    setFormData({
+      work_date: dateStr || new Date().toISOString().split('T')[0],
+      task_title: '',
+      crop_id: '',
+      field_id: fieldId || '',
+      worker_id: workerId || '',
+      department_id: ''
     });
+    setIsModalOpen(true);
   };
 
-  // --- CSVダウンロード・エクスポート処理 ---
-  const handleDownloadTemplate = (type: MasterType) => {
-    let content = "";
-    if (type === 'materials') content = "資材名,カテゴリ,規格,単位,単価\n苦土石灰,肥料費,20kg袋,袋,1500\n化成肥料(8-8-8),肥料費,20kg袋,袋,2500\n液肥アミノ酸,肥料費,1L,L,800";
-    else if (type === 'sales_prices') content = "作目名,販路名,単価\n伏見唐辛子,JA,500\n伏見唐辛子,直売所,650\n米（キヌヒカリ）,JA,12000";
-    else if (type === 'crops') content = "作目名\n伏見唐辛子\n米\n九条ネギ";
-    else if (type === 'fields') content = "圃場名,面積(a)\nA-1 ハウス,10\n北側 第2農地,24\n南側 露地,14";
-    else if (type === 'workers') content = "作業者名,時給,暗証番号\n京都 太郎,1000,1234\n農場 花子,1100,5678";
-    
-    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), content], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `template_${type}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleExportData = (type: MasterType) => {
-    let data: Record<string, any>[] = [];
-    if (type === 'materials') data = materials.map(m => ({ '資材名': m.name, 'カテゴリ': m.category || '未設定', '規格': m.specification || '', '単位': m.unit, '単価': m.default_price }));
-    else if (type === 'sales_prices') data = salesPrices.map(s => ({ '作目名': s.crop_name, '販路名': s.channel_name, '単価': s.price_per_unit }));
-    else if (type === 'crops') data = crops.map(c => ({ '作目名': c.name }));
-    else if (type === 'fields') data = fields.map(f => ({ '圃場名': f.name, '面積(a)': f.area_size || '' }));
-    else if (type === 'workers') data = workers.map(w => ({ '作業者名': w.name, '時給': w.hourly_wage, '暗証番号': w.pin_code || '0000' }));
-      
-    if (data.length === 0) {
-      alert("エクスポートするデータがありません。");
-      return;
+  // Calendar Logic
+  const dates = useMemo(() => {
+    const arr = [];
+    for (let i = 0; i < calendarDays; i++) {
+      const d = new Date(startDate);
+      d.setDate(d.getDate() + i);
+      arr.push(d);
     }
-    
-    const csv = Papa.unparse(data);
-    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `export_current_${type}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    return arr;
+  }, [startDate, calendarDays]);
+
+  const handlePrev = () => {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() - calendarDays);
+    setStartDate(d);
+  };
+  
+  const handleNext = () => {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + calendarDays);
+    setStartDate(d);
   };
 
-  const CardHeader = ({ icon: Icon, title, type }: { icon: any, title: string, type: MasterType }) => {
-    let helpContent = "";
-    if (type === 'materials') helpContent = "肥料や農薬などの資材を登録します。登録すると作業記録の際に選べるようになります。";
-    else if (type === 'sales_prices') helpContent = "作目ごとの販売価格（単価）を登録します。JAや直売所など、販路別に異なる単価を設定できます。";
-    else if (type === 'crops') helpContent = "栽培する作目を登録します。登録した作目は、作業記録や売上登録の際に選択肢として表示されます。";
-    else if (type === 'fields') helpContent = "農地（圃場）を登録します。面積を入力しておくと、ダッシュボードでの利益分析に活用できます。";
-    else if (type === 'workers') helpContent = "農作業を行うスタッフを登録します。時給を設定すると、ダッシュボードで人件費として自動計算されます。";
-
-    return (
-      <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-        <div className="flex items-center gap-2 text-slate-800 font-bold text-lg">
-          <Icon className="w-5 h-5 text-emerald-600" />
-          {title}
-          <HelpTooltip content={helpContent} />
-        </div>
-        <button 
-          onClick={() => handleOpenModal(type)}
-          className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-3 py-1 rounded-lg text-sm font-bold flex items-center gap-1 transition-colors"
-        >
-          <Plus className="w-4 h-4" />追加
-        </button>
-      </div>
-    );
+  const handleToday = () => {
+    setStartDate(new Date());
   };
 
-  const CsvActionButtons = ({ type, inputRef }: { type: MasterType, inputRef: React.RefObject<HTMLInputElement | null> }) => (
-    <div className="pt-4 border-t border-slate-100 space-y-3 mt-auto">
-      <div className="flex gap-2">
-        <button 
-          onClick={() => handleDownloadTemplate(type)}
-          className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg text-xs flex items-center justify-center gap-2 transition-colors"
-        >
-          <Download className="w-3 h-3" />雛形DL
-        </button>
-        <button 
-          onClick={() => handleExportData(type)}
-          className="flex-1 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg text-xs flex items-center justify-center gap-2 transition-colors"
-        >
-          <Download className="w-3 h-3" />データDL
-        </button>
-      </div>
-      <input 
-        type="file" 
-        accept=".csv" 
-        className="hidden" 
-        ref={inputRef as React.RefObject<HTMLInputElement>}
-        onChange={(e) => handleFileUpload(e, type)}
-      />
-      <button 
-        onClick={() => inputRef.current?.click()}
-        className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-colors"
-      >
-        <Upload className="w-4 h-4" />CSVで一括追加
-      </button>
-    </div>
-  );
+  const getWeekDayStr = (d: Date) => ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
 
-  // 販売価格マスタのグルーピング処理
-  const getGroupedSalesPrices = () => {
-    const groups: { [key: string]: any[] } = {};
-    
-    salesPrices.forEach(sp => {
-      const groupKey = priceViewMode === 'byCrop' ? sp.crop_name : sp.channel_name;
-      if (!groups[groupKey]) {
-        groups[groupKey] = [];
-      }
-      groups[groupKey].push(sp);
-    });
-    
-    return groups;
-  };
-  const groupedSalesPrices = getGroupedSalesPrices();
+  // グループ化されたデータ (Worker or Field)
+  const groupedItems = useMemo(() => {
+    if (groupMode === 'worker') {
+      const items = [...workers];
+      items.push({ id: 'unassigned', name: '(担当者未定 / 全員)' });
+      return items;
+    } else {
+      const items = [...fields];
+      items.push({ id: 'unassigned', name: '(圃場指定なし)' });
+      return items;
+    }
+  }, [workers, fields, groupMode]);
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-12 relative">
-      <div>
-        <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-          <Database className="w-8 h-8 text-emerald-600" />
-          マスタ管理
-        </h1>
-        <p className="text-slate-500 mt-2 font-medium">現場の入力画面に表示される選択肢や、計算用の単価データの一覧です。画面から直接追加・編集できます。</p>
-      </div>
-
-      {uploadStatus && (
-        <div className={`p-4 rounded-xl flex items-center justify-center gap-3 font-bold sticky top-20 z-10 shadow-lg ${
-          uploadStatus.type === 'success' ? 'bg-emerald-500 text-white' :
-          uploadStatus.type === 'error' ? 'bg-red-500 text-white' :
-          'bg-blue-500 text-white'
-        }`}>
-          {uploadStatus.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <Loader2 className="w-5 h-5 animate-spin" />}
-          {uploadStatus.message}
+    <div className="max-w-[95vw] mx-auto space-y-6 pb-12 relative">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
+            <Calendar className="w-6 h-6 md:w-8 md:h-8 text-emerald-600 flex-shrink-0" />
+            タスク・スケジュール管理
+          </h1>
+          <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">誰がどこで何の作業をするか、日々のスケジュールを管理します。</p>
         </div>
-      )}
-
-      {isLoading ? (
-        <div className="p-12 flex justify-center text-emerald-600">
-          <Loader2 className="w-8 h-8 animate-spin" />
-        </div>
-      ) : (
-        <>
-          <h2 className="text-xl font-bold text-slate-700 mt-8 mb-4 border-b-2 border-slate-200 inline-block pb-1">基本マスタ</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            {/* 作目一覧 */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[420px]">
-              <CardHeader icon={Sprout} title={`作目 (${crops.length})`} type="crops" />
-              <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
-                {crops.length === 0 ? <p className="text-slate-400 text-sm">データなし</p> : null}
-                {crops.map(c => (
-                  <div key={c.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
-                    <span className="font-bold text-slate-700">{c.name}</span>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleOpenModal('crops', c)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => handleDelete('crops', c.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <CsvActionButtons type="crops" inputRef={fileInputRefCrops} />
-            </div>
-
-            {/* 圃場一覧 */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[420px]">
-              <CardHeader icon={MapPin} title={`圃場 (${fields.length})`} type="fields" />
-              <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
-                {fields.length === 0 ? <p className="text-slate-400 text-sm">データなし</p> : null}
-                {fields.map(f => (
-                  <div key={f.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
-                    <div>
-                      <span className="font-bold text-slate-700">{f.name}</span>
-                      {f.area_size && <span className="text-[10px] text-slate-500 ml-2 font-bold">{f.area_size}a</span>}
-                      {f.polygon_coordinates && <span className="text-[10px] bg-emerald-100 text-emerald-700 ml-2 px-1.5 py-0.5 rounded font-bold border border-emerald-200">マップ連携済</span>}
-                    </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleOpenModal('fields', f)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => handleDelete('fields', f.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <CsvActionButtons type="fields" inputRef={fileInputRefFields} />
-            </div>
-
-            {/* 作業者一覧 */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[420px]">
-              <CardHeader icon={User} title={`作業者 (${workers.length})`} type="workers" />
-              <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
-                {workers.length === 0 ? <p className="text-slate-400 text-sm">データなし</p> : null}
-                {workers.map(w => (
-                  <div key={w.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-700">{w.name}</span>
-                        <span className="text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded font-bold">PIN: {w.pin_code || '0000'}</span>
-                      </div>
-                      <div className="text-xs text-slate-400 mt-1">時給: ¥{w.hourly_wage}</div>
-                    </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleOpenModal('workers', w)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => handleDelete('workers', w.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <CsvActionButtons type="workers" inputRef={fileInputRefWorkers} />
-            </div>
-
-            {/* 部署 */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[420px]">
-              <CardHeader icon={Briefcase} title={`部署 (${departments.length})`} type="departments" />
-              <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
-                {departments.length === 0 ? <p className="text-slate-400 text-sm">データなし</p> : null}
-                {departments.map(d => (
-                  <div key={d.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
-                    <span className="font-bold text-slate-700">{d.name}</span>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleOpenModal('departments', d)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => handleDelete('departments', d.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <CsvActionButtons type="departments" inputRef={undefined as any} />
-            </div>
-          </div>
-
-              
-
-
-              
-
-
-              
-
-
-          {/* 単価・計算用マスタ */}
-          <div className="flex items-center justify-between mt-12 mb-4">
-            <h2 className="text-xl font-bold text-slate-700 border-b-2 border-slate-200 pb-1">単価・計算用マスタ</h2>
+        
+        <div className="flex flex-wrap items-center gap-2 md:gap-4">
+          <div className="flex bg-slate-100 p-1 rounded-xl">
+            <button 
+              onClick={() => setViewMode('calendar')} 
+              className={`px-3 py-1.5 text-sm font-bold rounded-lg flex items-center gap-2 transition-all ${viewMode === 'calendar' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}
+            >
+              <LayoutGrid className="w-4 h-4" /> カレンダー
+            </button>
+            <button 
+              onClick={() => setViewMode('list')} 
+              className={`px-3 py-1.5 text-sm font-bold rounded-lg flex items-center gap-2 transition-all ${viewMode === 'list' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}
+            >
+              <List className="w-4 h-4" /> リスト
+            </button>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* 資材マスタ */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
-              <CardHeader icon={Package} title={`資材・農薬 (${materials.length})`} type="materials" />
-              
-              <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
-                {materials.length === 0 ? <p className="text-slate-400 text-sm">データなし</p> : null}
-                {materials.map(m => (
-                  <div key={m.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
-                    <div>
-                      <div className="font-bold text-slate-700">{m.name}</div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">{m.category || '未設定'}</span>
-                        <span className="text-xs text-slate-400">{m.specification ? `${m.specification} ` : ''}({m.unit})</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="font-bold text-emerald-600">¥{m.default_price}</div>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => handleOpenModal('materials', m)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => handleDelete('materials', m.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <CsvActionButtons type="materials" inputRef={fileInputRefMats} />
-            </div>
+          <button 
+            onClick={() => handleOpenModal()}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-xl flex items-center gap-2 transition-colors shadow-sm text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            新規追加
+          </button>
+        </div>
+      </header>
 
-            {/* 販売価格マスタ (ツリー表示対応) */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
-              <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2 text-slate-800 font-bold text-lg">
-                  <Banknote className="w-5 h-5 text-emerald-600" />
-                  {`販売価格 (${salesPrices.length})`}
-                  <HelpTooltip content="作目ごとの販売価格（単価）を登録します。JAや直売所など、販路別に異なる単価を設定できます。" />
-                </div>
-                
-                {/* 状態切り替えトグル */}
-                <div className="flex bg-slate-100 p-1 rounded-lg">
-                  <button 
-                    onClick={() => setPriceViewMode('byCrop')}
-                    className={`px-3 py-1 text-xs font-bold rounded-md flex items-center gap-1 transition-all ${priceViewMode === 'byCrop' ? 'bg-white shadow-sm text-emerald-700' : 'text-slate-500 hover:text-slate-700'}`}
-                  >
-                    <ListTree className="w-3 h-3" />作目別
-                  </button>
-                  <button 
-                    onClick={() => setPriceViewMode('byChannel')}
-                    className={`px-3 py-1 text-xs font-bold rounded-md flex items-center gap-1 transition-all ${priceViewMode === 'byChannel' ? 'bg-white shadow-sm text-emerald-700' : 'text-slate-500 hover:text-slate-700'}`}
-                  >
-                    <AlignLeft className="w-3 h-3" />販路別
-                  </button>
-                </div>
-              </div>
-
-              <div className="overflow-y-auto flex-1 mb-4 pr-1 space-y-4">
-                
-                {/* 完全に新しいカテゴリの追加を一番上に移動 */}
-                <div className="pb-2">
-                  <button 
-                    onClick={() => handleOpenModal('sales_prices')}
-                    className="w-full py-2.5 border-2 border-dashed border-emerald-200 hover:border-emerald-400 bg-emerald-50/30 text-emerald-700 font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all"
-                  >
-                    <Plus className="w-4 h-4" />新しい販売価格を追加
-                  </button>
-                </div>
-
-                {Object.keys(groupedSalesPrices).length === 0 ? (
-                  <p className="text-slate-400 text-sm text-center pt-8">販売価格データがありません</p>
-                ) : (
-                  Object.keys(groupedSalesPrices).map(groupKey => (
-                    <div key={groupKey} className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
-                      <div className="bg-slate-100 px-4 py-2 border-b border-slate-200 font-black text-slate-700 flex items-center gap-2">
-                        {priceViewMode === 'byCrop' ? '📦' : '🚚'} {groupKey}
-                      </div>
-                      <div className="divide-y divide-slate-100">
-                        {groupedSalesPrices[groupKey].map(s => (
-                          <div key={s.id} className="p-3 pl-6 flex justify-between items-center group hover:bg-slate-100 transition-colors">
-                            <div className="text-sm font-bold text-slate-600 flex items-center gap-2">
-                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
-                              {priceViewMode === 'byCrop' ? s.channel_name : s.crop_name}
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <div className="font-black text-blue-600">¥{s.price_per_unit}</div>
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => handleOpenModal('sales_prices', s)} className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md">
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button onClick={() => handleDelete('sales_prices', s.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md">
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      
-                      {/* 子要素としての追加ボタン */}
-                      <button 
-                        onClick={() => handleOpenModal(
-                          'sales_prices', 
-                          null, 
-                          priceViewMode === 'byCrop' ? { crop_name: groupKey } : { channel_name: groupKey }
-                        )}
-                        className="w-full py-2 px-4 text-xs font-bold text-emerald-600 bg-emerald-50/50 hover:bg-emerald-100 flex items-center gap-1 transition-colors"
-                      >
-                        <Plus className="w-3 h-3" /> 
-                        {priceViewMode === 'byCrop' ? 'この作目の販路を追加' : 'この販路の商品を追加'}
-                      </button>
-                    </div>
-                  ))
-                )}
-                {/* 既存の販路から一括コピーなどのボタン群 */}
-                <div className="pt-2 space-y-2">
-                  <button 
-                    onClick={() => setIsCopyModalOpen(true)}
-                    className="w-full py-2.5 border-2 border-dashed border-blue-200 hover:border-blue-400 bg-blue-50/30 text-blue-700 font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all"
-                  >
-                    <AlignLeft className="w-4 h-4" />既存の販路から価格設定を一括コピー追加
-                  </button>
-                </div>
-              </div>
-              
-              <CsvActionButtons type="sales_prices" inputRef={fileInputRefPrices} />
-            </div>
-
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+        {isLoading ? (
+          <div className="flex justify-center p-20">
+            <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
           </div>
-        </>
-      )}
-
-      {/* --- モーダルダイアログ --- */}
-      {modalType && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <h3 className="text-lg font-black text-slate-800">
-                {editingItem ? 'データを編集' : '新規追加'}
-              </h3>
-              <button onClick={handleCloseModal} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="p-6 space-y-4">
-              {/* 作目 / 圃場 / 資材 / 作業者 共通 */}
-              {['crops', 'fields', 'materials', 'workers'].includes(modalType) && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">名前 (必須)</label>
-                  <input 
-                    type="text" 
-                    value={formData.name || ''} 
-                    onChange={e => setFormData({...formData, name: e.target.value})}
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
-                    placeholder={modalType === 'crops' ? '例: カリフラワー' : '例: 伏見唐辛子'}
-                  />
-                </div>
-              )}
-
-              {/* 作目専用 */}
-              {modalType === 'crops' && (
-                <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="text-sm font-black text-slate-700 mb-3">栽培基準 (自動計算用)</div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">10aあたりの必要苗数 (株/本)</label>
-                    <input 
-                      type="number" 
-                      value={formData.seedlings_per_10a || ''} 
-                      onChange={e => setFormData({...formData, seedlings_per_10a: Number(e.target.value)})}
-                      className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
-                      placeholder="例: 4000"
-                    />
-                    <p className="text-xs text-slate-400 mt-1">※ 栽培計画入力時に、圃場面積×この値で必要苗数が自動計算されます。</p>
-                  </div>
-                  
-                  <div className="mt-4 pt-4 border-t border-slate-200">
-                    <label className="block text-xs font-bold text-slate-500 mb-2">10aあたりの必要資材 (肥料・農薬など)</label>
-                    <div className="space-y-2 mb-2">
-                      {(formData.materials_per_10a || []).map((m: any, idx: number) => {
-                        const mat = materials.find(x => x.id === m.material_id);
-                        return (
-                          <div key={idx} className="flex items-center gap-2 bg-white p-2 border border-slate-200 rounded-lg">
-                            <span className="flex-1 text-sm font-bold text-slate-700">{mat ? mat.name : '不明な資材'}</span>
-                            <input 
-                              type="number" 
-                              value={m.amount || ''}
-                              onChange={(e) => {
-                                const newMats = [...formData.materials_per_10a];
-                                newMats[idx].amount = Number(e.target.value);
-                                setFormData({...formData, materials_per_10a: newMats});
-                              }}
-                              className="w-20 p-1.5 border border-slate-200 rounded focus:outline-none focus:border-emerald-500 text-right text-sm"
-                              placeholder="数量"
-                            />
-                            <span className="text-xs text-slate-500 w-8">{mat ? mat.unit : ''}</span>
-                            <button 
-                              onClick={() => {
-                                const newMats = formData.materials_per_10a.filter((_: any, i: number) => i !== idx);
-                                setFormData({...formData, materials_per_10a: newMats});
-                              }}
-                              className="p-1 text-slate-400 hover:text-red-500 transition-colors"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="flex gap-2">
-                      <select 
-                        id="addMaterialSelect"
-                        className="flex-1 p-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 font-bold"
-                      >
-                        <option value="">資材を選択して追加</option>
-                        {materials.map(m => (
-                          <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>
-                        ))}
-                      </select>
-                      <button 
-                        onClick={(e) => {
-                          e.preventDefault();
-                          const select = document.getElementById('addMaterialSelect') as HTMLSelectElement;
-                          if (select.value) {
-                            const newMats = [...(formData.materials_per_10a || []), { material_id: select.value, amount: 0 }];
-                            setFormData({...formData, materials_per_10a: newMats});
-                            select.value = "";
-                          }
-                        }}
-                        className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-sm font-bold flex items-center gap-1 transition-colors"
-                      >
-                        <Plus className="w-4 h-4" /> 追加
-                      </button>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-2">※ 必要な資材を追加し、10aあたりの使用量を設定してください。</p>
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t border-slate-200">
-                    <div className="text-sm font-black text-slate-700 mb-3 flex items-center gap-2">
-                      <Banknote className="w-4 h-4 text-emerald-600" />
-                      10aあたり概算経費 (予算)
-                    </div>
-                    <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-                      ※ 月次の実績経費が未入力の月に、レポートの予測計算として使用されます。
-                    </p>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1">動力光熱費 (円)</label>
-                        <input 
-                          type="number" 
-                          value={formData.est_fuel_cost_10a || ''} 
-                          onChange={e => setFormData({...formData, est_fuel_cost_10a: Number(e.target.value)})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 font-bold"
-                          placeholder="例: 0"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1">機械・車両費 (円)</label>
-                        <input 
-                          type="number" 
-                          value={formData.est_machinery_cost_10a || ''} 
-                          onChange={e => setFormData({...formData, est_machinery_cost_10a: Number(e.target.value)})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 font-bold"
-                          placeholder="例: 0"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1">その他経費 (円)</label>
-                        <input 
-                          type="number" 
-                          value={formData.est_other_cost_10a || ''} 
-                          onChange={e => setFormData({...formData, est_other_cost_10a: Number(e.target.value)})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 font-bold"
-                          placeholder="例: 0"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* 圃場専用 */}
-              {modalType === 'fields' && (
-                <div className="mt-4">
-                  <label className="block text-xs font-bold text-slate-500 mb-1">面積 (a)</label>
-                  <input 
-                    type="number" 
-                    value={formData.area_size || ''} 
-                    onChange={e => setFormData({...formData, area_size: Number(e.target.value)})}
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
-                    placeholder="例: 14"
-                  />
-                </div>
-              )}
-
-              {/* 作業者専用 */}
+        ) : viewMode === 'list' ? (
+          // リストビュー (既存)
+          <div className="p-0">
+            {tasks.length === 0 ? (
+              <div className="text-center py-12 text-slate-400">現在予定されているタスクはありません</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="bg-slate-50 text-slate-500 font-bold">
+                    <tr>
+                      <th className="px-6 py-4">予定日</th>
+                      <th className="px-6 py-4">タスク内容</th>
+                      <th className="px-6 py-4">割り当て</th>
+                      <th className="px-6 py-4">圃場 / 作目</th>
+                      <th className="px-6 py-4">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                    {tasks.map(t => (
+                      <tr key={t.id} className="hover:bg-emerald-50/30 transition-colors">
+                        <td className="px-6 py-4">{t.work_date}</td>
+                        <td className="px-6 py-4 font-bold text-slate-900">{t.task_title || '-'}</td>
+                        <td className="px-6 py-4 flex items-center gap-2">
+                          {t.departments && (
+                            <span className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-md text-xs">
+                              <Briefcase className="w-3 h-3" /> {t.departments.name}
+                            </span>
+                          )}
+                          {t.workers && (
+                            <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md text-xs">
+                              <Users className="w-3 h-3" /> {t.workers.name}
+                            </span>
+                          )}
+                          {!t.departments && !t.workers && <span className="text-slate-400">全体</span>}
+                        </td>
+                        <td className="px-6 py-4 text-xs text-slate-500">
+                          {t.fields && <span className="mr-2">📍{t.fields.name}</span>}
+                          {t.crops && <span>🌱{t.crops.name}</span>}
+                        </td>
+                        <td className="px-6 py-4">
+                          <button onClick={() => handleDelete(t.id)} className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          // カレンダー（マトリックス）ビュー
+          <div className="flex flex-col">
+            <div className="p-4 border-b border-slate-100 flex flex-wrap gap-4 items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                <button onClick={handlePrev} className="p-2 hover:bg-slate-100 transition-colors"><ChevronLeft className="w-5 h-5 text-slate-600" /></button>
+                <button onClick={handleToday} className="px-4 font-black text-slate-700 hover:bg-slate-50 text-sm">今日</button>
+                <button onClick={handleNext} className="p-2 hover:bg-slate-100 transition-colors"><ChevronRight className="w-5 h-5 text-slate-600" /></button>
+              </div>
               
-              {modalType === 'departments' && (
-                <div className="mb-4">
-                  <label className="block text-xs font-bold text-slate-500 mb-1">部署名 <span className="text-rose-500">*</span></label>
-                  <input 
-                    type="text" 
-                    value={formData.name || ''} 
-                    onChange={e => setFormData({...formData, name: e.target.value})}
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
-                    placeholder="例: 栽培部"
-                  />
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-500">表示単位:</span>
+                  <select 
+                    value={calendarDays} 
+                    onChange={e => setCalendarDays(Number(e.target.value))}
+                    className="text-sm font-bold bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none"
+                  >
+                    <option value={2}>今日・明日 (2日)</option>
+                    <option value={7}>週間 (7日)</option>
+                    <option value={14}>2週間 (14日)</option>
+                  </select>
                 </div>
-              )}
-
-              {modalType === 'workers' && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">時給 (円)</label>
-                      <input 
-                        type="number" 
-                        value={formData.hourly_wage || ''} 
-                        onChange={e => setFormData({...formData, hourly_wage: Number(e.target.value)})}
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">ログイン暗証番号 (4桁)</label>
-                      <input 
-                        type="text" 
-                        maxLength={4}
-                        value={formData.pin_code || ''} 
-                        onChange={e => setFormData({...formData, pin_code: e.target.value.replace(/[^0-9]/g, '')})}
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold tracking-widest text-center"
-                        placeholder="0000"
-                      />
-                    </div>
-                  </div>
-                    <div className="col-span-2 mt-4">
-                      <label className="block text-xs font-bold text-slate-500 mb-1">権限 (Role)</label>
-                      <select
-                        value={formData.role || 'worker'}
-                        onChange={e => setFormData({...formData, role: e.target.value})}
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
-                      >
-                        <option value="worker">一般スタッフ</option>
-                        <option value="admin">管理者 (admin)</option>
-                      </select>
-                    </div>
-
-                    <div className="col-span-2 mt-4">
-                      <label className="block text-xs font-bold text-slate-500 mb-1">所属部署</label>
-                      <select
-                        value={formData.department_id || ''}
-                        onChange={e => setFormData({...formData, department_id: e.target.value})}
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-slate-700"
-                      >
-                        <option value="">未所属</option>
-                        {departments.map(d => (
-                          <option key={d.id} value={d.id}>{d.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-
-                </>
-              )}
-
-              {/* 資材専用 */}
-              {modalType === 'materials' && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2">
-                    <label className="block text-xs font-bold text-slate-500 mb-1">カテゴリ</label>
-                    <select
-                      value={formData.category || ''}
-                      onChange={e => setFormData({...formData, category: e.target.value})}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-slate-700"
-                    >
-                      <option value="">-- 選択してください --</option>
-                      {MATERIAL_CATEGORIES.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs font-bold text-slate-500 mb-1">規格 (詳細レポート用)</label>
-                    <input 
-                      type="text" 
-                      value={formData.specification || ''} 
-                      onChange={e => setFormData({...formData, specification: e.target.value})}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
-                      placeholder="例: 20kg袋, 1Lボトル, 200穴セルトレイ"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">単位</label>
-                    <input 
-                      type="text" 
-                      value={formData.unit || ''} 
-                      onChange={e => setFormData({...formData, unit: e.target.value})}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
-                      placeholder="例: kg, 袋, L"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">単価 (円)</label>
-                    <input 
-                      type="number" 
-                      value={formData.default_price || ''} 
-                      onChange={e => setFormData({...formData, default_price: Number(e.target.value)})}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-emerald-700"
-                    />
-                  </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-500">グループ:</span>
+                  <select 
+                    value={groupMode} 
+                    onChange={e => setGroupMode(e.target.value as 'worker'|'field')}
+                    className="text-sm font-bold bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none"
+                  >
+                    <option value="worker">担当者別</option>
+                    <option value="field">圃場別</option>
+                  </select>
                 </div>
-              )}
+              </div>
+            </div>
 
-              {/* 販売価格専用 */}
-              {modalType === 'sales_prices' && (
-                <>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">作目名 (必須)</label>
-                    <select
-                      value={formData.crop_name || ''}
-                      onChange={e => setFormData({...formData, crop_name: e.target.value})}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-slate-700"
-                    >
-                      <option value="">-- 作目を選択してください --</option>
-                      {crops.map(c => (
-                        <option key={c.id} value={c.name}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">販路名 (必須)</label>
-                    {(() => {
-                      const allChannelNames = Array.from(new Set([
-                        ...channels.map(c => c.name),
-                        ...salesPrices.map(sp => sp.channel_name)
-                      ])).filter(Boolean).sort();
-
-                      if (allChannelNames.length === 0) {
-                        return (
-                          <div className="space-y-1">
-                            <input 
-                              type="text" 
-                              value={formData.channel_name || ''} 
-                              onChange={e => setFormData({...formData, channel_name: e.target.value})}
-                              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
-                              placeholder="例: JA、直売所、〇〇スーパー"
-                            />
-                            <p className="text-[11px] text-slate-400">※ 入力した販路名は自動的に出荷先マスタにも保存されます。</p>
-                          </div>
-                        );
-                      }
-
-                      const isCustom = formData.isCustomChannel || (formData.channel_name && !allChannelNames.includes(formData.channel_name));
-
+            <div className="overflow-x-auto relative">
+              <table className="w-full text-sm text-left whitespace-nowrap min-w-[800px] border-collapse">
+                <thead className="text-xs text-slate-700 bg-slate-50 sticky top-0 z-20">
+                  <tr>
+                    <th className="px-4 py-3 border-b border-r font-black w-48 sticky left-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                      {groupMode === 'worker' ? '担当者' : '圃場'}
+                    </th>
+                    {dates.map((d, i) => {
+                      const isToday = d.toDateString() === new Date().toDateString();
+                      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                       return (
-                        <div className="space-y-2">
-                          <select
-                            value={isCustom ? '__custom__' : (formData.channel_name || '')} 
-                            onChange={e => {
-                              if (e.target.value === '__custom__') {
-                                setFormData({...formData, channel_name: '', isCustomChannel: true});
-                              } else {
-                                setFormData({...formData, channel_name: e.target.value, isCustomChannel: false});
-                              }
-                            }}
-                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-slate-700"
-                          >
-                            <option value="">-- 販路を選択してください --</option>
-                            {allChannelNames.map(chName => {
-                              const isRegistered = formData.crop_name ? salesPrices.some(sp => sp.crop_name === formData.crop_name && sp.channel_name === chName) : false;
-                              const isCurrentEditing = editingItem && editingItem.crop_name === formData.crop_name && editingItem.channel_name === chName;
-                              const isDisabled = isRegistered && !isCurrentEditing;
-                              return (
-                                <option key={chName} value={chName} disabled={isDisabled}>
-                                  {chName} {isDisabled ? '(この作目で登録済み)' : ''}
-                                </option>
-                              );
-                            })}
-                            <option value="__custom__">＋ 新しい販路名を直接入力する...</option>
-                          </select>
-
-                          {isCustom && (
-                            <div className="space-y-1">
-                              <input
-                                type="text"
-                                value={formData.channel_name || ''}
-                                onChange={e => setFormData({...formData, channel_name: e.target.value, isCustomChannel: true})}
-                                placeholder="新しい販路名を入力（例: JA、直売所、〇〇スーパー）"
-                                className="w-full p-3 bg-white border-2 border-emerald-500 rounded-xl focus:outline-none font-bold text-slate-800"
-                                autoFocus
-                              />
-                              <p className="text-[11px] text-slate-400">※ 入力した販路名は自動的に出荷先マスタにも保存されます。</p>
-                            </div>
+                        <th key={i} className={`px-2 py-2 border-b border-r text-center min-w-[140px] ${isToday ? 'bg-emerald-50/80 border-emerald-200' : ''}`}>
+                          <div className={`font-black text-lg ${isToday ? 'text-emerald-600' : 'text-slate-800'}`}>
+                            {d.getMonth() + 1}/{d.getDate()}
+                          </div>
+                          <div className={`text-[10px] font-bold ${isWeekend ? 'text-rose-500' : 'text-slate-500'}`}>
+                            ({getWeekDayStr(d)})
+                          </div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupedItems.map(item => (
+                    <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors group">
+                      <td className="px-4 py-3 border-r sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] group-hover:bg-slate-50">
+                        <div className="font-bold text-slate-700 truncate max-w-[160px] flex items-center gap-2">
+                          {groupMode === 'worker' ? (
+                            <><Users className="w-4 h-4 text-blue-500" /> {item.name}</>
+                          ) : (
+                            <><MapPin className="w-4 h-4 text-emerald-500" /> {item.name}</>
                           )}
                         </div>
-                      );
-                    })()}
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">販売単価 (円)</label>
-                    <input 
-                      type="number" 
-                      value={formData.price_per_unit || ''} 
-                      onChange={e => setFormData({...formData, price_per_unit: Number(e.target.value)})}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-blue-700"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
+                      </td>
+                      {dates.map((d, i) => {
+                        const dateStr = d.toISOString().split('T')[0];
+                        // このマスに該当するタスクを抽出
+                        const cellTasks = tasks.filter(t => {
+                          if (t.work_date !== dateStr) return false;
+                          if (groupMode === 'worker') {
+                            if (item.id === 'unassigned') return !t.worker_id;
+                            return t.worker_id === item.id;
+                          } else {
+                            if (item.id === 'unassigned') return !t.field_id;
+                            return t.field_id === item.id;
+                          }
+                        });
 
-            <div className="p-4 bg-slate-50 flex gap-3">
-              <button 
-                onClick={handleCloseModal}
-                disabled={isSaving}
-                className="flex-1 py-3 text-slate-500 font-bold bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
-              >
-                キャンセル
-              </button>
-              <button 
-                onClick={handleSave}
-                disabled={isSaving}
-                className="flex-1 py-3 text-white font-bold bg-emerald-600 rounded-xl hover:bg-emerald-700 shadow-sm transition-colors flex items-center justify-center gap-2"
-              >
-                {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : '保存する'}
-              </button>
+                        const isToday = d.toDateString() === new Date().toDateString();
+
+                        return (
+                          <td key={i} className={`p-1.5 border-r border-slate-100 relative min-h-[60px] align-top ${isToday ? 'bg-emerald-50/10' : ''}`}>
+                            <div className="min-h-[50px] relative group/cell">
+                              {/* 追加ボタン（ホバー時） */}
+                              <button 
+                                onClick={() => handleOpenModal(dateStr, groupMode === 'worker' ? (item.id !== 'unassigned' ? item.id : '') : '', groupMode === 'field' ? (item.id !== 'unassigned' ? item.id : '') : '')}
+                                className="absolute inset-0 w-full h-full flex items-center justify-center opacity-0 group-hover/cell:opacity-100 hover:bg-slate-100/50 transition-all rounded z-0"
+                              >
+                                <Plus className="w-5 h-5 text-emerald-500" />
+                              </button>
+                              
+                              {/* タスクカード */}
+                              <div className="relative z-10 flex flex-col gap-1.5 w-full">
+                                {cellTasks.map(task => (
+                                  <div key={task.id} className="bg-white border border-emerald-200 shadow-sm p-2 rounded-lg group/task hover:border-emerald-400 hover:shadow-md transition-all relative">
+                                    <div className="font-bold text-emerald-800 text-xs truncate mb-1 pr-6" title={task.task_title}>
+                                      {task.task_title}
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 flex flex-col gap-0.5">
+                                      {groupMode === 'worker' && task.fields && (
+                                        <div className="flex items-center gap-1 truncate"><MapPin className="w-3 h-3 text-emerald-500"/> {task.fields.name}</div>
+                                      )}
+                                      {groupMode === 'field' && task.workers && (
+                                        <div className="flex items-center gap-1 truncate"><Users className="w-3 h-3 text-blue-500"/> {task.workers.name}</div>
+                                      )}
+                                      {task.crops && (
+                                        <div className="flex items-center gap-1 truncate"><Sprout className="w-3 h-3 text-amber-500"/> {task.crops.name}</div>
+                                      )}
+                                    </div>
+                                    <button 
+                                      onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }}
+                                      className="absolute top-1 right-1 opacity-0 group-hover/task:opacity-100 p-1 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* --- コピー用モーダル --- */}
-      {isCopyModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-blue-50/50">
-              <h3 className="text-lg font-black text-blue-800 flex items-center gap-2">
-                <AlignLeft className="w-5 h-5" />
-                販売価格の一括コピー
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-emerald-50/50">
+              <h3 className="text-lg font-black text-emerald-800 flex items-center gap-2">
+                <Plus className="w-5 h-5" />
+                新規タスクの作成
               </h3>
-              <button onClick={() => setIsCopyModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition-colors">
+              <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full">
                 <X className="w-5 h-5" />
               </button>
             </div>
             
             <div className="p-6 space-y-4">
-              <div className="text-sm font-medium text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
-                既存の販路（例: スーパーA）のすべての作目の価格設定を丸ごとコピーして、新しい販路（例: スーパーB）として一気に登録します。
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">予定日 <span className="text-rose-500">*</span></label>
+                <input 
+                  type="date" 
+                  value={formData.work_date} 
+                  onChange={e => setFormData({...formData, work_date: e.target.value})}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                />
               </div>
               
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">コピー元 (既存の販路名)</label>
-                <select
-                  value={copySource}
-                  onChange={e => setCopySource(e.target.value)}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold"
-                >
-                  <option value="">選択してください</option>
-                  {Array.from(new Set(salesPrices.map(sp => sp.channel_name))).sort().map(ch => (
-                    <option key={ch} value={ch}>{ch}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">コピー先 (新しい販路名)</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1">タスク内容 <span className="text-rose-500">*</span></label>
                 <input 
                   type="text" 
-                  value={copyTarget} 
-                  onChange={e => setCopyTarget(e.target.value)}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold"
-                  placeholder="例: スーパーB"
+                  value={formData.task_title} 
+                  onChange={e => setFormData({...formData, task_title: e.target.value})}
+                  placeholder="例: キャベツの収穫、A棟の追肥"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">対象の作目</label>
+                  <select value={formData.crop_id} onChange={e => setFormData({...formData, crop_id: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold">
+                    <option value="">(指定なし)</option>
+                    {crops.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">対象の圃場</label>
+                  <select value={formData.field_id} onChange={e => setFormData({...formData, field_id: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold">
+                    <option value="">(指定なし)</option>
+                    {fields.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">担当部署</label>
+                  <select value={formData.department_id} onChange={e => setFormData({...formData, department_id: e.target.value})} className="w-full p-2 bg-white border border-slate-200 rounded-lg font-bold">
+                    <option value="">(全員)</option>
+                    {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">担当者（個人指名）</label>
+                  <select value={formData.worker_id} onChange={e => setFormData({...formData, worker_id: e.target.value})} className="w-full p-2 bg-white border border-slate-200 rounded-lg font-bold">
+                    <option value="">(指名なし)</option>
+                    {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </div>
               </div>
             </div>
 
             <div className="p-4 bg-slate-50 flex gap-3">
-              <button 
-                onClick={() => setIsCopyModalOpen(false)}
-                disabled={isCopying}
-                className="flex-1 py-3 text-slate-500 font-bold bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
-              >
+              <button onClick={() => setIsModalOpen(false)} className="flex-1 py-3 font-bold bg-white border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50">
                 キャンセル
               </button>
-              <button 
-                onClick={handleCopyChannel}
-                disabled={isCopying || !copySource || !copyTarget}
-                className="flex-1 py-3 text-white font-bold bg-blue-600 rounded-xl hover:bg-blue-700 shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                {isCopying ? <Loader2 className="w-5 h-5 animate-spin" /> : 'コピーして追加'}
+              <button onClick={handleSave} disabled={isSaving} className="flex-1 py-3 font-bold bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 flex items-center justify-center gap-2">
+                {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : 'タスクを保存'}
               </button>
             </div>
           </div>
