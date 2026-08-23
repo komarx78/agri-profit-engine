@@ -91,6 +91,9 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
         };
 
         localStorage.setItem('agri_current_worker', JSON.stringify(user));
+        if (data.user_id) {
+          localStorage.setItem('agri_owner_id', data.user_id);
+        }
         onLogin(user);
       } else {
         setErrorMsg(t('incorrectPin', language));
