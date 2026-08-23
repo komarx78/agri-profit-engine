@@ -409,6 +409,47 @@ export default function TasksPage() {
                         });
 
                         return (
+                          <td key={i} className={`p-1.5 border-r border-slate-100 relative min-h-[60px] align-top ${isToday ? 'bg-emerald-50/10' : ''}`}>
+                            <div className="min-h-[50px] relative group/cell">
+                              {/* 追加ボタン（ホバー時） */}
+                              <button 
+                                onClick={() => handleOpenModal(
+                                  dateStr, 
+                                  groupMode === 'worker' ? (item.id !== 'unassigned' ? item.id : '') : '', 
+                                  groupMode === 'field' ? (item.id !== 'unassigned' ? item.id : '') : '', 
+                                  groupMode === 'crop' ? (item.id !== 'unassigned' ? item.id : '') : ''
+                                )}
+                                className="absolute inset-0 w-full h-full flex items-center justify-center opacity-0 group-hover/cell:opacity-100 hover:bg-slate-100/50 transition-all rounded z-0"
+                              >
+                                <Plus className="w-5 h-5 text-emerald-500" />
+                              </button>
+                              
+                              {/* タスクカード */}
+                              <div className="relative z-10 flex flex-col gap-1.5 w-full">
+                                {cellTasks.map(task => (
+                                  <div key={task.id} onClick={() => handleEditModal(task)} className="bg-white border border-emerald-200 shadow-sm p-2 rounded-lg group/task hover:border-emerald-400 hover:shadow-md transition-all relative cursor-pointer">
+                                    <div className="font-bold text-emerald-800 text-xs truncate mb-1 pr-6" title={task.task_title}>
+                                      {task.task_title}
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 flex flex-col gap-0.5">
+                                      {groupMode === 'worker' && task.fields && (
+                                        <div className="flex items-center gap-1 truncate"><MapPin className="w-3 h-3 text-emerald-500"/> {task.fields.name}</div>
+                                      )}
+                                      {groupMode === 'worker' && task.crops && (
+                                        <div className="flex items-center gap-1 truncate text-slate-500"><Sprout className="w-3 h-3 text-amber-500"/> {task.crops.name}</div>
+                                      )}
+                                      {groupMode === 'field' && task.workers && (
+                                        <div className="flex items-center gap-1 truncate"><Users className="w-3 h-3 text-blue-500"/> {task.workers.name}</div>
+                                      )}
+                                      {groupMode === 'field' && task.crops && (
+                                        <div className="flex items-center gap-1 truncate text-slate-500"><Sprout className="w-3 h-3 text-amber-500"/> {task.crops.name}</div>
+                                      )}
+                                      {groupMode === 'crop' && task.workers && (
+                                        <div className="flex items-center gap-1 truncate"><Users className="w-3 h-3 text-blue-500"/> {task.workers.name}</div>
+                                      )}
+                                      {groupMode === 'crop' && task.fields && (
+                                        <div className="flex items-center gap-1 truncate"><MapPin className="w-3 h-3 text-emerald-500"/> {task.fields.name}</div>
+                                      )}
                                     </div>
                                     <button 
                                       onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }}
