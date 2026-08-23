@@ -408,6 +408,8 @@ export default function TasksPage() {
                           }
                         });
 
+                        const isToday = d.toDateString() === new Date().toDateString();
+
                         return (
                           <td key={i} className={`p-1.5 border-r border-slate-100 relative min-h-[60px] align-top ${isToday ? 'bg-emerald-50/10' : ''}`}>
                             <div className="min-h-[50px] relative group/cell">
