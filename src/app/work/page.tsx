@@ -93,6 +93,7 @@ export default function WorkEntryPage() {
   const [salesQuantity, setSalesQuantity] = useState('');
   const [isSubmittingSales, setIsSubmittingSales] = useState(false);
   const [tasks, setTasks] = useState<any[]>([]);
+  const [selectedTaskDetail, setSelectedTaskDetail] = useState<any | null>(null);
   const [attendanceLog, setAttendanceLog] = useState<any>(null);
   const [workerProfile, setWorkerProfile] = useState<any>(null);
   const [gpsStatus, setGpsStatus] = useState<string>('');
@@ -973,15 +974,31 @@ export default function WorkEntryPage() {
                 <h3 className="text-sm font-black text-emerald-400 mb-3 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4" /> 本日の指示・タスク ({tasks.length})
                 </h3>
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {tasks.map(t => (
-                    <div key={t.id} className="bg-emerald-900/40 border border-emerald-800/50 p-3 rounded-xl flex flex-col gap-1.5">
-                      <div className="text-white font-bold text-sm flex items-center gap-2">
-                        {t.task_title}
+                    <div 
+                      key={t.id} 
+                      onClick={() => setSelectedTaskDetail(t)}
+                      className="bg-emerald-900/50 hover:bg-emerald-900/80 border border-emerald-800/70 hover:border-emerald-500/50 p-3.5 rounded-2xl flex items-center justify-between gap-2 cursor-pointer transition-all active:scale-[0.99] shadow-sm group"
+                    >
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="text-white font-black text-sm truncate flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                          <span>{t.work_type || t.task_title || '作業指示'}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs font-bold text-emerald-300/80">
+                          {t.crops?.name && <span>🌱 {t.crops.name}</span>}
+                          {t.fields?.name && <span>📍 {t.fields.name}</span>}
+                        </div>
+                        {t.notes && (
+                          <p className="text-[11px] text-emerald-200/60 truncate pl-4">
+                            💬 {t.notes}
+                          </p>
+                        )}
                       </div>
-                      <div className="flex gap-3 text-xs font-medium text-emerald-300/80">
-                        {t.crops && <span>🌱 {t.crops.name}</span>}
-                        {t.fields && <span>📍 {t.fields.name}</span>}
+                      <div className="text-xs font-bold text-emerald-400 group-hover:text-white flex items-center gap-1 bg-emerald-950/60 px-2.5 py-1.5 rounded-xl border border-emerald-800 flex-shrink-0">
+                        <span>詳細</span>
+                        <ArrowRight className="w-3 h-3" />
                       </div>
                     </div>
                   ))}
@@ -1306,6 +1323,89 @@ export default function WorkEntryPage() {
           </div>
         )}
       </div>
+
+      {/* タスク詳細モーダル */}
+      {selectedTaskDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-emerald-950 border border-emerald-800 rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+            
+            <div className="flex items-center justify-between border-b border-emerald-800/80 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white">作業指示・タスク詳細</h3>
+                  <span className="text-[11px] font-bold text-emerald-400">{selectedTaskDetail.work_date}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedTaskDetail(null)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 bg-emerald-900/30 p-4 rounded-2xl border border-emerald-800/50 text-sm">
+              <div>
+                <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">担当者</span>
+                <p className="font-black text-white">👤 {selectedTaskDetail.workers?.name || currentUser.name}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">🌱 作目</span>
+                  <p className="font-black text-white">{selectedTaskDetail.crops?.name || '指定なし'}</p>
+                </div>
+                <div>
+                  <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">📍 圃場</span>
+                  <p className="font-black text-white">{selectedTaskDetail.fields?.name || '指定なし'}</p>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">📋 作業項目</span>
+                <p className="font-black text-emerald-400 text-base">{selectedTaskDetail.work_type || selectedTaskDetail.task_title || '一般作業'}</p>
+              </div>
+
+              {selectedTaskDetail.notes && (
+                <div>
+                  <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">📝 指示・備考メモ</span>
+                  <div className="bg-emerald-950/90 p-3 rounded-xl border border-emerald-800/80 text-xs font-bold text-slate-200 whitespace-pre-wrap leading-relaxed">
+                    {selectedTaskDetail.notes}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedTaskDetail.crops?.name) setSelectedCrop(selectedTaskDetail.crops.name);
+                  if (selectedTaskDetail.fields?.name) setSelectedField(selectedTaskDetail.fields.name);
+                  if (selectedTaskDetail.work_type) setWorkType(selectedTaskDetail.work_type);
+                  setSelectedTaskDetail(null);
+                }}
+                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black text-sm rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95"
+              >
+                <Play className="w-4 h-4 fill-emerald-950" />
+                <span>この指示を作業入力に反映する</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedTaskDetail(null)}
+                className="w-full py-2 text-xs font-bold text-slate-400 hover:text-slate-200"
+              >
+                閉じる
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* 残業申請モーダル */}
       {showOvertimeModal && (
