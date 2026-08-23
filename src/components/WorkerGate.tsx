@@ -31,44 +31,31 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
   useEffect(() => {
     async function fetchWorkers() {
       try {
-        const ownerId = localStorage.getItem('agri_owner_id');
+        const ownerId = localStorage.getItem('agri_owner_id') || '';
         setDebugOwnerId(ownerId || 'null');
 
-        let data = null;
-        let error = null;
+        // 1. API経由でワーカーを取得（RLSをサーバーサイドで安全にバイパス）
+        const res = await fetch(`/api/workers?ownerId=${encodeURIComponent(ownerId)}`);
+        const json = await res.json();
+        
+        let workerList = json.workers || [];
 
-        if (ownerId && ownerId !== 'null') {
-          // 1. まずは指定の ownerId で検索
-          const res = await supabase
-            .from('workers')
-            .select('*')
-            .eq('user_id', ownerId)
-            .order('name');
-          data = res.data;
-          error = res.error;
-        }
-
-        // 2. もし ownerId で見つからなかった場合は全件からフォールバック取得
-        if (!data || data.length === 0) {
-          const fallbackRes = await supabase
-            .from('workers')
-            .select('*')
-            .order('name');
-          if (fallbackRes.data && fallbackRes.data.length > 0) {
-            data = fallbackRes.data;
-            error = null;
-            // 最初のスタッフの user_id があれば ownerId を自動修復
-            if (data[0].user_id) {
-              localStorage.setItem('agri_owner_id', data[0].user_id);
-              setDebugOwnerId(data[0].user_id);
-            }
+        // 2. もしAPIで取れなかった場合は直接Supabaseも試行
+        if (workerList.length === 0) {
+          const { data } = await supabase.from('workers').select('*').order('name');
+          if (data && data.length > 0) {
+            workerList = data;
           }
         }
-          
-        if (error) throw error;
-        if (data && data.length > 0) {
+
+        if (workerList.length > 0) {
           setErrorMsg('');
-          setWorkers(data);
+          setWorkers(workerList);
+          // 最初のスタッフの user_id があれば ownerId を自動修復
+          if (workerList[0].user_id) {
+            localStorage.setItem('agri_owner_id', workerList[0].user_id);
+            setDebugOwnerId(workerList[0].user_id);
+          }
         } else {
           setErrorMsg('登録された作業者が見つかりません。管理者画面（スタッフマスタ）から作業者を登録してください。');
         }
