@@ -8,7 +8,7 @@ import {
   MapPin, LogOut, LayoutDashboard, Briefcase, FileText,
   AlertCircle, Loader2, ArrowRight, ArrowLeft, PlayCircle, Globe2,
   MessageSquare, Plus, Trash2, X, Send, Sparkles, CornerDownRight, RefreshCw,
-  Coffee, CalendarPlus, CheckCircle
+  Coffee, CalendarPlus, CheckCircle, UserCheck
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
