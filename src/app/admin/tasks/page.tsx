@@ -29,7 +29,7 @@ export default function TasksPage() {
 
   // UI State
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
-  const [groupMode, setGroupMode] = useState<'worker' | 'field'>('field');
+  const [groupMode, setGroupMode] = useState<'worker' | 'field' | 'crop'>('field');
   const [calendarDays, setCalendarDays] = useState<number>(7); // 2 = Today/Tomorrow, 7 = Week
   const [startDate, setStartDate] = useState(new Date());
 
@@ -149,12 +149,12 @@ export default function TasksPage() {
     }
   };
 
-  const handleOpenModal = (dateStr?: string, workerId?: string, fieldId?: string) => {
+  const handleOpenModal = (dateStr?: string, workerId?: string, fieldId?: string, cropId?: string) => {
     setEditingTaskId(null);
     setFormData({
       work_date: dateStr || new Date().toISOString().split('T')[0],
       task_title: '',
-      crop_id: '',
+      crop_id: cropId || '',
       field_id: fieldId || '',
       worker_id: workerId || '',
       worker_ids: workerId ? [workerId] : [],
@@ -212,12 +212,16 @@ export default function TasksPage() {
       const items = [...workers];
       items.push({ id: 'unassigned', name: '(担当者未定 / 全員)' });
       return items;
+    } else if (groupMode === 'crop') {
+      const items = [...crops];
+      items.push({ id: 'unassigned', name: '(作物指定なし)' });
+      return items;
     } else {
       const items = [...fields];
       items.push({ id: 'unassigned', name: '(圃場指定なし)' });
       return items;
     }
-  }, [workers, fields, groupMode]);
+  }, [workers, fields, crops, groupMode]);
 
   return (
     <div className="max-w-[95vw] mx-auto space-y-6 pb-12 relative">
@@ -339,11 +343,12 @@ export default function TasksPage() {
                   <span className="text-xs font-bold text-slate-500">グループ:</span>
                   <select 
                     value={groupMode} 
-                    onChange={e => setGroupMode(e.target.value as 'worker'|'field')}
+                    onChange={e => setGroupMode(e.target.value as 'worker'|'field'|'crop')}
                     className="text-sm font-bold bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none"
                   >
-                    <option value="worker">担当者別</option>
                     <option value="field">圃場別</option>
+                    <option value="crop">作物別</option>
+                    <option value="worker">担当者別</option>
                   </select>
                 </div>
               </div>
@@ -353,8 +358,8 @@ export default function TasksPage() {
               <table className="w-full text-sm text-left whitespace-nowrap min-w-[800px] border-collapse">
                 <thead className="text-xs text-slate-700 bg-slate-50 sticky top-0 z-20">
                   <tr>
-                    <th className="px-4 py-3 border-b border-r font-black w-48 sticky left-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                      {groupMode === 'worker' ? '担当者' : '圃場'}
+                    <th className="w-44 px-4 py-3 text-left font-bold text-slate-600 border-r sticky left-0 bg-slate-50 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                      {groupMode === 'worker' ? '担当者' : groupMode === 'crop' ? '作物' : '圃場'}
                     </th>
                     {dates.map((d, i) => {
                       const isToday = d.toDateString() === new Date().toDateString();
@@ -379,6 +384,8 @@ export default function TasksPage() {
                         <div className="font-bold text-slate-700 truncate max-w-[160px] flex items-center gap-2">
                           {groupMode === 'worker' ? (
                             <><Users className="w-4 h-4 text-blue-500" /> {item.name}</>
+                          ) : groupMode === 'crop' ? (
+                            <><Sprout className="w-4 h-4 text-amber-500" /> {item.name}</>
                           ) : (
                             <><MapPin className="w-4 h-4 text-emerald-500" /> {item.name}</>
                           )}
@@ -392,42 +399,16 @@ export default function TasksPage() {
                           if (groupMode === 'worker') {
                             if (item.id === 'unassigned') return !t.worker_id;
                             return t.worker_id === item.id;
+                          } else if (groupMode === 'crop') {
+                            if (item.id === 'unassigned') return !t.crop_id;
+                            return t.crop_id === item.id;
                           } else {
                             if (item.id === 'unassigned') return !t.field_id;
                             return t.field_id === item.id;
                           }
                         });
 
-                        const isToday = d.toDateString() === new Date().toDateString();
-
                         return (
-                          <td key={i} className={`p-1.5 border-r border-slate-100 relative min-h-[60px] align-top ${isToday ? 'bg-emerald-50/10' : ''}`}>
-                            <div className="min-h-[50px] relative group/cell">
-                              {/* 追加ボタン（ホバー時） */}
-                              <button 
-                                onClick={() => handleOpenModal(dateStr, groupMode === 'worker' ? (item.id !== 'unassigned' ? item.id : '') : '', groupMode === 'field' ? (item.id !== 'unassigned' ? item.id : '') : '')}
-                                className="absolute inset-0 w-full h-full flex items-center justify-center opacity-0 group-hover/cell:opacity-100 hover:bg-slate-100/50 transition-all rounded z-0"
-                              >
-                                <Plus className="w-5 h-5 text-emerald-500" />
-                              </button>
-                              
-                              {/* タスクカード */}
-                              <div className="relative z-10 flex flex-col gap-1.5 w-full">
-                                {cellTasks.map(task => (
-                                  <div key={task.id} onClick={() => handleEditModal(task)} className="bg-white border border-emerald-200 shadow-sm p-2 rounded-lg group/task hover:border-emerald-400 hover:shadow-md transition-all relative cursor-pointer">
-                                    <div className="font-bold text-emerald-800 text-xs truncate mb-1 pr-6" title={task.task_title}>
-                                      {task.task_title}
-                                    </div>
-                                    <div className="text-[10px] text-slate-500 flex flex-col gap-0.5">
-                                      {groupMode === 'worker' && task.fields && (
-                                        <div className="flex items-center gap-1 truncate"><MapPin className="w-3 h-3 text-emerald-500"/> {task.fields.name}</div>
-                                      )}
-                                      {groupMode === 'field' && task.workers && (
-                                        <div className="flex items-center gap-1 truncate"><Users className="w-3 h-3 text-blue-500"/> {task.workers.name}</div>
-                                      )}
-                                      {task.crops && (
-                                        <div className="flex items-center gap-1 truncate"><Sprout className="w-3 h-3 text-amber-500"/> {task.crops.name}</div>
-                                      )}
                                     </div>
                                     <button 
                                       onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }}
