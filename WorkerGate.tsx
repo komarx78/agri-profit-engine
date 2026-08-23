@@ -17,6 +17,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [language, setLanguage] = useState<LanguageCode>('ja');
+  const [debugOwnerId, setDebugOwnerId] = useState('');
 
   useEffect(() => {
     let loadedLang = 'ja' as LanguageCode;
@@ -31,6 +32,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
     async function fetchWorkers() {
       try {
         const ownerId = localStorage.getItem('agri_owner_id');
+        setDebugOwnerId(ownerId || 'null');
         if (!ownerId) {
           setErrorMsg('タブレットが設定されていません。一度管理者でログインしてください。');
           setIsLoading(false);
@@ -184,6 +186,14 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
             )}
           </button>
         </form>
+      </div>
+
+      {/* Debug Info for Troubleshooting */}
+      <div className="mt-8 text-xs text-slate-500 font-mono text-center max-w-sm w-full break-all">
+        <p>Debug Info:</p>
+        <p>Owner ID: {debugOwnerId}</p>
+        <p>Workers loaded: {workers.length}</p>
+        {errorMsg && <p className="text-rose-500">Error: {errorMsg}</p>}
       </div>
     </div>
   );
