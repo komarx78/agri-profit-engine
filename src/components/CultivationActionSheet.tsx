@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Sprout, 
   FlaskConical, 
@@ -16,7 +16,9 @@ import {
   Loader2, 
   AlertCircle,
   FileText,
-  MapPin
+  MapPin,
+  Calculator,
+  Layers
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -26,7 +28,7 @@ export interface CultivationTarget {
   fieldName: string;
   cropId?: string;
   cropName: string;
-  areaAcre?: number;
+  areaAcre?: number; // a (アール)
   startDate?: string;
 }
 
@@ -38,6 +40,28 @@ interface CultivationActionSheetProps {
 
 type ActionCategory = 'fertilizer' | 'pesticide' | 'work' | 'pest' | 'growth' | 'shipment' | 'sales' | null;
 
+// 肥料プリセットマスター
+interface FertilizerPreset {
+  name: string;
+  n: number; // %
+  p: number; // %
+  k: number; // %
+  bagWeight: number; // kg
+  pricePerBag: number; // 円
+}
+
+const FERTILIZER_PRESETS: FertilizerPreset[] = [
+  { name: '普通化成肥料 (8-8-8)', n: 8, p: 8, k: 8, bagWeight: 20, pricePerBag: 2400 },
+  { name: '高度化成肥料 (14-14-14)', n: 14, p: 14, k: 14, bagWeight: 20, pricePerBag: 3800 },
+  { name: '有機配合肥料 (10-8-8)', n: 10, p: 8, k: 8, bagWeight: 20, pricePerBag: 3200 },
+  { name: '発酵鶏ふん (3-5-2)', n: 3.0, p: 5.0, k: 2.0, bagWeight: 15, pricePerBag: 350 },
+  { name: '完熟牛ふん堆肥 (1-1-1)', n: 1.2, p: 1.5, k: 1.0, bagWeight: 40, pricePerBag: 600 },
+  { name: '尿素 (46-0-0)', n: 46, p: 0, k: 0, bagWeight: 20, pricePerBag: 4200 },
+  { name: '過リン酸石灰 (0-20-0)', n: 0, p: 20, k: 0, bagWeight: 20, pricePerBag: 2800 },
+  { name: '塩化加里 (0-0-60)', n: 0, p: 0, k: 60, bagWeight: 20, pricePerBag: 4500 },
+  { name: 'その他（手入力）', n: 0, p: 0, k: 0, bagWeight: 20, pricePerBag: 0 }
+];
+
 export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
   selectedCultivations,
   onClearSelection,
@@ -48,15 +72,76 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // フォーム用ステート
+  // 共通フォームステート
   const [formDate, setFormDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [workType, setWorkType] = useState<string>('播種');
-  const [itemName, setItemName] = useState<string>(''); // 肥料名/農薬名/出荷先など
+  const [durationMinutes, setDurationMinutes] = useState<string>('60');
+  const [memo, setMemo] = useState<string>('');
+
+  // 作業用
+  const [workType, setWorkType] = useState<string>('定植');
+
+  // 肥料専用ステート
+  const [selectedFertilizerName, setSelectedFertilizerName] = useState<string>(FERTILIZER_PRESETS[0].name);
+  const [fertilizerType, setFertilizerType] = useState<'元肥' | '追肥1回目' | '追肥2回目' | '土壌改良' | '葉面散布'>('元肥');
+  const [fertInputMode, setFertInputMode] = useState<'bags' | 'kg'>('bags');
+  const [fertBags, setFertBags] = useState<string>('3'); // 袋数
+  const [fertTotalKg, setFertTotalKg] = useState<string>('60'); // kg
+  const [customN, setCustomN] = useState<string>('8');
+  const [customP, setCustomP] = useState<string>('8');
+  const [customK, setCustomK] = useState<string>('8');
+  const [fertPricePerBag, setFertPricePerBag] = useState<string>('2400');
+
+  // その他の品名・数量・金額
+  const [itemName, setItemName] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('');
   const [unit, setUnit] = useState<string>('kg');
-  const [durationMinutes, setDurationMinutes] = useState<string>('60');
   const [priceAmount, setPriceAmount] = useState<string>('');
-  const [memo, setMemo] = useState<string>('');
+
+  // 選択中圃場の合計面積(a)
+  const totalAreaAcre = useMemo(() => {
+    return selectedCultivations.reduce((sum, c) => sum + (c.areaAcre || 10), 0);
+  }, [selectedCultivations]);
+
+  // 肥料成分のリアルタイム計算
+  const fertCalculation = useMemo(() => {
+    const preset = FERTILIZER_PRESETS.find(p => p.name === selectedFertilizerName);
+    const nRatio = preset && preset.name !== 'その他（手入力）' ? preset.n : (parseFloat(customN) || 0);
+    const pRatio = preset && preset.name !== 'その他（手入力）' ? preset.p : (parseFloat(customP) || 0);
+    const kRatio = preset && preset.name !== 'その他（手入力）' ? preset.k : (parseFloat(customK) || 0);
+    const bagKg = preset ? preset.bagWeight : 20;
+    const bagPrice = preset && preset.name !== 'その他（手入力）' ? preset.pricePerBag : (parseFloat(fertPricePerBag) || 0);
+
+    let totalWeightKg = 0;
+    let bagsCount = 0;
+
+    if (fertInputMode === 'bags') {
+      bagsCount = parseFloat(fertBags) || 0;
+      totalWeightKg = bagsCount * bagKg;
+    } else {
+      totalWeightKg = parseFloat(fertTotalKg) || 0;
+      bagsCount = bagKg > 0 ? totalWeightKg / bagKg : 0;
+    }
+
+    // 10a (1反) あたりの施肥量
+    const weightPer10a = totalAreaAcre > 0 ? (totalWeightKg / totalAreaAcre) * 10 : totalWeightKg;
+
+    // N-P-K 純成分量 (kg/10a)
+    const nPer10a = (weightPer10a * nRatio) / 100;
+    const pPer10a = (weightPer10a * pRatio) / 100;
+    const kPer10a = (weightPer10a * kRatio) / 100;
+
+    // 概算総コスト (円)
+    const totalCost = bagsCount * bagPrice;
+
+    return {
+      totalWeightKg: Math.round(totalWeightKg * 10) / 10,
+      bagsCount: Math.round(bagsCount * 10) / 10,
+      nPer10a: Math.round(nPer10a * 10) / 10,
+      pPer10a: Math.round(pPer10a * 10) / 10,
+      kPer10a: Math.round(kPer10a * 10) / 10,
+      totalCost: Math.round(totalCost)
+    };
+  }, [selectedFertilizerName, fertInputMode, fertBags, fertTotalKg, customN, customP, customK, fertPricePerBag, totalAreaAcre]);
 
   if (selectedCultivations.length === 0) {
     return null;
@@ -69,10 +154,11 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
     setQuantity('');
     setPriceAmount('');
 
-    // カテゴリごとのデフォルト値
     if (category === 'fertilizer') {
-      setItemName('元肥（化成肥料8-8-8）');
-      setUnit('kg');
+      setSelectedFertilizerName(FERTILIZER_PRESETS[0].name);
+      setFertilizerType('元肥');
+      setFertBags('3');
+      setFertPricePerBag(String(FERTILIZER_PRESETS[0].pricePerBag));
     } else if (category === 'pesticide') {
       setItemName('カスケード乳剤');
       setUnit('ml');
@@ -104,7 +190,39 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       const isRecord = activeTab === 'record';
       const timestamp = new Date().toISOString();
 
-      if (activeCategory === 'shipment' || activeCategory === 'sales') {
+      if (activeCategory === 'fertilizer') {
+        // 肥料（施肥）の登録: work_logs と material_costs に連動
+        const fertMemoText = `[施肥:${fertilizerType}] ${selectedFertilizerName} ${fertCalculation.totalWeightKg}kg (${fertCalculation.bagsCount}袋) | N:${fertCalculation.nPer10a}kg P:${fertCalculation.pPer10a}kg K:${fertCalculation.kPer10a}kg/10a | 費用:¥${fertCalculation.totalCost.toLocaleString()} ${memo}`.trim();
+
+        // 1. work_logs へ Insert
+        const workRecords = selectedCultivations.map(c => ({
+          field_id: c.fieldId || null,
+          crop_id: c.cropId || null,
+          work_date: formDate,
+          work_type: `施肥 (${fertilizerType})`,
+          duration_minutes: parseInt(durationMinutes, 10) || 60,
+          status: isRecord ? 'completed' : 'planned',
+          memo: `[一括${isRecord ? '記録' : '予定'}] ${fertMemoText}`,
+          created_at: timestamp
+        }));
+        const { error: workErr } = await supabase.from('work_logs').insert(workRecords);
+        if (workErr) throw workErr;
+
+        // 2. 実績の場合、資材経費 (material_costs) にも原価を自動計上
+        if (isRecord && fertCalculation.totalCost > 0) {
+          const costPerField = fertCalculation.totalCost / selectedCultivations.length;
+          const costRecords = selectedCultivations.map(c => ({
+            crop_id: c.cropId || null,
+            expense_date: formDate,
+            item_name: `肥料: ${selectedFertilizerName} (${fertilizerType}) - ${c.fieldName}`,
+            amount: Math.round(costPerField),
+            memo: fertMemoText,
+            created_at: timestamp
+          }));
+          await supabase.from('material_costs').insert(costRecords);
+        }
+
+      } else if (activeCategory === 'shipment' || activeCategory === 'sales') {
         // sales_logs に一括登録
         const recordsToInsert = selectedCultivations.map(c => ({
           field_id: c.fieldId || null,
@@ -116,14 +234,12 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
           memo: `[一括${isRecord ? '記録' : '予定'}:${activeCategory === 'shipment' ? '出荷' : '売上'}] ${itemName} ${memo}`.trim(),
           created_at: timestamp
         }));
-
         const { error } = await supabase.from('sales_logs').insert(recordsToInsert);
         if (error) throw error;
 
       } else {
-        // work_logs に一括登録
+        // 通常作業・農薬・病害虫・生育調査の work_logs 登録
         const typeLabelMap: Record<string, string> = {
-          fertilizer: '肥料（施肥）',
           pesticide: '農薬散布',
           work: workType || '一般作業',
           pest: '病害虫記録',
@@ -172,15 +288,13 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-2xl transition-all duration-300 animate-in slide-in-from-bottom-5">
         <div className="max-w-5xl mx-auto px-4 py-3 sm:px-6">
           
-          {/* 上部ヘッダー：選択件数・全解除・タブ切り替え */}
           <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center justify-center px-2.5 py-1 text-xs font-bold text-emerald-800 bg-emerald-100 rounded-full border border-emerald-200">
                 {selectedCultivations.length} 件選択中
               </span>
-              <span className="text-xs text-slate-500 hidden sm:inline">
-                ({selectedCultivations.map(c => `${c.cropName}・${c.fieldName}`).slice(0, 2).join(', ')}
-                {selectedCultivations.length > 2 ? ` ほか${selectedCultivations.length - 2}件` : ''})
+              <span className="text-xs text-slate-500 hidden sm:inline font-medium">
+                合計面積: {totalAreaAcre.toFixed(1)} a
               </span>
               <button
                 onClick={onClearSelection}
@@ -257,7 +371,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                     一括{activeTab === 'record' ? '記録' : '予定'}登録：{categories.find(c => c.id === activeCategory)?.label}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    選択中の {selectedCultivations.length} 圃場・作付けにまとめて保存されます
+                    選択中の {selectedCultivations.length} 圃場 (計 {totalAreaAcre.toFixed(1)}a) に保存されます
                   </p>
                 </div>
               </div>
@@ -270,7 +384,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
             </div>
 
             {/* 対象一覧プレビュー */}
-            <div className="px-6 py-2.5 bg-emerald-50/60 border-b border-emerald-100 flex items-center gap-2 overflow-x-auto text-xs text-emerald-800">
+            <div className="px-6 py-2 bg-emerald-50/60 border-b border-emerald-100 flex items-center gap-2 overflow-x-auto text-xs text-emerald-800">
               <MapPin className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
               <span className="font-semibold shrink-0">対象:</span>
               <div className="flex gap-1.5 flex-nowrap">
@@ -308,7 +422,155 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                 </div>
               </div>
 
-              {/* カテゴリに応じた固有項目 */}
+              {/* ========================================================= */}
+              {/* 肥料専用入力ブロック（N-P-K計算 & コスト連動） */}
+              {/* ========================================================= */}
+              {activeCategory === 'fertilizer' && (
+                <div className="space-y-3.5 p-4 bg-amber-50/50 border border-amber-200 rounded-2xl">
+                  
+                  {/* 施肥区分 */}
+                  <div>
+                    <label className="block text-xs font-bold text-amber-900 mb-1.5">施肥区分</label>
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 text-center">
+                      {(['元肥', '追肥1回目', '追肥2回目', '土壌改良', '葉面散布'] as const).map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setFertilizerType(t)}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all border ${
+                            fertilizerType === t
+                              ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-100'
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 肥料選択 */}
+                  <div>
+                    <label className="block text-xs font-bold text-amber-900 mb-1.5">肥料・資材名</label>
+                    <select
+                      value={selectedFertilizerName}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedFertilizerName(val);
+                        const preset = FERTILIZER_PRESETS.find(p => p.name === val);
+                        if (preset && preset.name !== 'その他（手入力）') {
+                          setFertPricePerBag(String(preset.pricePerBag));
+                        }
+                      }}
+                      className="w-full px-3 py-2 text-sm bg-white border border-amber-300 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                      {FERTILIZER_PRESETS.map((p) => (
+                        <option key={p.name} value={p.name}>
+                          {p.name} {p.name !== 'その他（手入力）' ? `(単価:約¥${p.pricePerBag.toLocaleString()}/袋)` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 施肥量入力（袋数 または kg） */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-amber-900">投入量</label>
+                        <div className="flex text-[10px] font-bold bg-amber-200/60 p-0.5 rounded-md">
+                          <button
+                            type="button"
+                            onClick={() => setFertInputMode('bags')}
+                            className={`px-1.5 py-0.5 rounded ${fertInputMode === 'bags' ? 'bg-white text-amber-900 shadow-xs' : 'text-amber-700'}`}
+                          >
+                            袋数
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFertInputMode('kg')}
+                            className={`px-1.5 py-0.5 rounded ${fertInputMode === 'kg' ? 'bg-white text-amber-900 shadow-xs' : 'text-amber-700'}`}
+                          >
+                            kg
+                          </button>
+                        </div>
+                      </div>
+
+                      {fertInputMode === 'bags' ? (
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="any"
+                            value={fertBags}
+                            onChange={(e) => setFertBags(e.target.value)}
+                            placeholder="3"
+                            className="w-full px-3 py-2 text-sm bg-white border border-amber-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">袋</span>
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="any"
+                            value={fertTotalKg}
+                            onChange={(e) => setFertTotalKg(e.target.value)}
+                            placeholder="60"
+                            className="w-full px-3 py-2 text-sm bg-white border border-amber-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">kg</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-amber-900 mb-1.5">袋単価 (概算)</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={fertPricePerBag}
+                          onChange={(e) => setFertPricePerBag(e.target.value)}
+                          className="w-full px-3 py-2 text-sm bg-white border border-amber-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-amber-500"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">円/袋</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* N-P-K 成分量 ＆ コスト自動計算サマリー */}
+                  <div className="p-3 bg-white border border-amber-200 rounded-xl shadow-xs space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-amber-900">
+                      <span className="flex items-center gap-1">
+                        <Calculator className="w-3.5 h-3.5 text-amber-600" />
+                        10aあたり純成分投入量 (kg/10a)
+                      </span>
+                      <span className="text-amber-700">総量: {fertCalculation.totalWeightKg}kg</span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="text-[10px] font-extrabold text-blue-600">N (窒素)</div>
+                        <div className="text-sm font-black text-blue-900">{fertCalculation.nPer10a} <span className="text-[10px]">kg</span></div>
+                      </div>
+                      <div className="p-2 bg-orange-50 border border-orange-200 rounded-lg">
+                        <div className="text-[10px] font-extrabold text-orange-600">P (リン酸)</div>
+                        <div className="text-sm font-black text-orange-900">{fertCalculation.pPer10a} <span className="text-[10px]">kg</span></div>
+                      </div>
+                      <div className="p-2 bg-purple-50 border border-purple-200 rounded-lg">
+                        <div className="text-[10px] font-extrabold text-purple-600">K (カリ)</div>
+                        <div className="text-sm font-black text-purple-900">{fertCalculation.kPer10a} <span className="text-[10px]">kg</span></div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-amber-100 text-xs font-bold">
+                      <span className="text-slate-600">概算肥料原価 (合計):</span>
+                      <span className="text-emerald-700 text-sm font-black">¥{fertCalculation.totalCost.toLocaleString()}</span>
+                    </div>
+                  </div>
+
+                </div>
+              )}
+
+              {/* 作業内容 */}
               {activeCategory === 'work' && (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">作業内容</label>
@@ -329,11 +591,11 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                 </div>
               )}
 
-              {(activeCategory === 'fertilizer' || activeCategory === 'pesticide' || activeCategory === 'pest' || activeCategory === 'growth' || activeCategory === 'shipment' || activeCategory === 'sales') && (
+              {/* 農薬・病害虫・生育調査・出荷・売上の一般名称入力 */}
+              {(activeCategory === 'pesticide' || activeCategory === 'pest' || activeCategory === 'growth' || activeCategory === 'shipment' || activeCategory === 'sales') && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-xs font-bold text-slate-700">
-                      {activeCategory === 'fertilizer' && '肥料・資材名'}
                       {activeCategory === 'pesticide' && '農薬名'}
                       {activeCategory === 'pest' && '病害虫・雑草名'}
                       {activeCategory === 'growth' && '調査項目'}
@@ -360,8 +622,8 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                 </div>
               )}
 
-              {/* 数量・単位 */}
-              {(activeCategory === 'fertilizer' || activeCategory === 'pesticide' || activeCategory === 'shipment' || activeCategory === 'sales') && (
+              {/* 数量・単位 (出荷・売上・農薬等) */}
+              {(activeCategory === 'pesticide' || activeCategory === 'shipment' || activeCategory === 'sales') && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5">数量 (各圃場あたり)</label>
@@ -387,7 +649,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                 </div>
               )}
 
-              {/* 売上金額（売上時のみ） */}
+              {/* 売上金額 */}
               {activeCategory === 'sales' && (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">売上金額 (円)</label>
@@ -398,13 +660,13 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                       value={priceAmount}
                       onChange={(e) => setPriceAmount(e.target.value)}
                       placeholder="例: 50000"
-                      className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                      className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium"
                     />
                   </div>
                 </div>
               )}
 
-              {/* 作業時間 */}
+              {/* 所要時間 */}
               {activeCategory !== 'sales' && (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">所要時間 (分/圃場)</label>
@@ -415,7 +677,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                       value={durationMinutes}
                       onChange={(e) => setDurationMinutes(e.target.value)}
                       placeholder="60"
-                      className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                      className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium"
                     />
                   </div>
                 </div>
@@ -428,8 +690,8 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                   rows={2}
                   value={memo}
                   onChange={(e) => setMemo(e.target.value)}
-                  placeholder="希釈倍率、発生状況、現場メモ等"
-                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium resize-none"
+                  placeholder="施肥機設定、作業メモ等"
+                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium resize-none"
                 />
               </div>
 
