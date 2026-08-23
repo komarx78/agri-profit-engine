@@ -22,6 +22,7 @@ export default function TasksPage() {
     crop_id: '',
     field_id: '',
     worker_id: '',
+    worker_ids: [] as string[],
     department_id: ''
   });
 
@@ -80,7 +81,7 @@ export default function TasksPage() {
       if (error) throw error;
       if (data) setTasks([...tasks, data[0]].sort((a, b) => a.work_date.localeCompare(b.work_date)));
       setIsModalOpen(false);
-      setFormData({ work_date: new Date().toISOString().split('T')[0], task_title: '', crop_id: '', field_id: '', worker_id: '', department_id: '' });
+      setFormData({ work_date: new Date().toISOString().split('T')[0], task_title: '', crop_id: '', field_id: '', worker_id: '', worker_ids: [], department_id: '' });
     } catch (err) {
       console.error(err);
       alert('保存に失敗しました');
@@ -106,6 +107,7 @@ export default function TasksPage() {
       crop_id: '',
       field_id: fieldId || '',
       worker_id: workerId || '',
+      worker_ids: workerId ? [workerId] : [],
       department_id: ''
     });
     setIsModalOpen(true);
@@ -437,20 +439,41 @@ export default function TasksPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">担当部署</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">担当部署</label>
                   <select value={formData.department_id} onChange={e => setFormData({...formData, department_id: e.target.value})} className="w-full p-2 bg-white border border-slate-200 rounded-lg font-bold">
-                    <option value="">(全員)</option>
+                    <option value="">(全社・指定なし)</option>
                     {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">担当者（個人指名）</label>
-                  <select value={formData.worker_id} onChange={e => setFormData({...formData, worker_id: e.target.value})} className="w-full p-2 bg-white border border-slate-200 rounded-lg font-bold">
-                    <option value="">(指名なし)</option>
-                    {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                  </select>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">担当者（複数選択可）</label>
+                  <div className="flex flex-wrap gap-2">
+                    {workers.map(w => {
+                      const isSelected = formData.worker_ids && formData.worker_ids.includes(w.id);
+                      return (
+                        <button
+                          key={w.id}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (isSelected) {
+                              setFormData({...formData, worker_ids: formData.worker_ids.filter((id) => id !== w.id)});
+                            } else {
+                              setFormData({...formData, worker_ids: [...(formData.worker_ids || []), w.id]});
+                            }
+                          }}
+                          className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${isSelected ? 'bg-emerald-500 text-white border-emerald-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                        >
+                          {w.name}
+                        </button>
+                      );
+                    })}
+                    {(!workers || workers.length === 0) && (
+                      <span className="text-xs text-slate-400">登録されている担当者がいません</span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
