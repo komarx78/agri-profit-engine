@@ -7,7 +7,8 @@ import {
   Calendar as CalendarIcon, Clock, CheckCircle2, Inbox, 
   MapPin, LogOut, LayoutDashboard, Briefcase, FileText,
   AlertCircle, Loader2, ArrowRight, ArrowLeft, PlayCircle, Globe2,
-  MessageSquare, Plus, Trash2, X, Send, Sparkles, CornerDownRight, RefreshCw
+  MessageSquare, Plus, Trash2, X, Send, Sparkles, CornerDownRight, RefreshCw,
+  Coffee, CalendarPlus, CheckCircle
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
@@ -54,6 +55,21 @@ export default function PortalPage() {
   const [replyInputs, setReplyInputs] = useState<{ [postId: string]: string }>({});
   const [isSubmittingReply, setIsSubmittingReply] = useState<{ [postId: string]: boolean }>({});
   const [openReplyThread, setOpenReplyThread] = useState<{ [postId: string]: boolean }>({});
+
+  // 有給・休暇関連ステート
+  const [leaveBalance, setLeaveBalance] = useState<{ carryover: number; balance: number; total: number } | null>(null);
+  const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
+  const [allWorkers, setAllWorkers] = useState<any[]>([]);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [isSubmittingLeave, setIsSubmittingLeave] = useState(false);
+  const [leaveToast, setLeaveToast] = useState<string | null>(null);
+  const [leaveForm, setLeaveForm] = useState({
+    worker_id: '',
+    type: '有給休暇',
+    start_date: getJSTDate(),
+    end_date: getJSTDate(),
+    reason: ''
+  });
 
   useEffect(() => {
     const init = async () => {
@@ -157,6 +173,82 @@ export default function PortalPage() {
         .eq('date', today)
         .maybeSingle();
       if (aLog) setAttendance(aLog);
+    }
+
+    // 5. 有給休暇・残高と申請履歴の取得
+    try {
+      const { data: wList } = await supabase.from('workers').select('id, name, paid_leave_carryover, paid_leave_balance').order('name');
+      if (wList) {
+        setAllWorkers(wList);
+        
+        // ログイン中のワーカーを探す
+        let targetWorker = null;
+        if (profile && profile.id) {
+          targetWorker = wList.find(w => w.id === profile.id);
+        } else if (wList.length > 0) {
+          targetWorker = wList[0]; // 管理者でワーカー紐付けがない場合は最初のスタッフを参考表示
+        }
+
+        if (targetWorker) {
+          const c = Number(targetWorker.paid_leave_carryover) || 0;
+          const b = Number(targetWorker.paid_leave_balance) || 0;
+          setLeaveBalance({ carryover: c, balance: b, total: c + b });
+          setLeaveForm(prev => ({ ...prev, worker_id: targetWorker.id }));
+        }
+      }
+
+      // 直近の休暇申請履歴
+      let reqQuery = supabase
+        .from('leave_requests')
+        .select('*, workers(name)')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (profile && profile.id) {
+        reqQuery = reqQuery.eq('worker_id', profile.id);
+      }
+
+      const { data: reqData } = await reqQuery;
+      if (reqData) setLeaveRequests(reqData);
+    } catch (err) {
+      console.error('Error loading leave data:', err);
+    }
+  };
+
+  // 有給休暇の申請送信
+  const handleSubmitLeaveRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!leaveForm.worker_id) {
+      alert('従業員を選択してください');
+      return;
+    }
+    setIsSubmittingLeave(true);
+    try {
+      const isAutoApprove = role === 'admin';
+      const { error } = await supabase.from('leave_requests').insert([{
+        worker_id: leaveForm.worker_id,
+        type: leaveForm.type,
+        start_date: leaveForm.start_date,
+        end_date: leaveForm.end_date,
+        reason: leaveForm.reason || '私用のため',
+        status: isAutoApprove ? '承認' : '申請中'
+      }]);
+
+      if (error) throw error;
+
+      setShowLeaveModal(false);
+      setLeaveToast(`有給休暇の申請（${leaveForm.start_date}）を送信しました！`);
+      setTimeout(() => setLeaveToast(null), 4000);
+
+      // データ再取得
+      const { data: { session } } = await supabase.auth.getSession();
+      const ownerId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
+      await fetchPortalData(ownerId, role, workerProfile);
+    } catch (err: any) {
+      console.error(err);
+      alert('有給申請に失敗しました: ' + err.message);
+    } finally {
+      setIsSubmittingLeave(false);
     }
   };
 
@@ -469,12 +561,75 @@ export default function PortalPage() {
                 </button>
               </div>
 
+              {/* 現場ポータル遷移ボタン */}
               <button 
                 onClick={() => router.push('/work')}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm"
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm mb-4"
               >
                 {t('goToWorkPortal', language)} <ArrowRight className="w-4 h-4" />
               </button>
+
+              {/* 🏖️ 有給休暇・残日数 ＆ 申請セクション */}
+              <div className="pt-4 border-t border-slate-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-black text-slate-700">
+                    <Coffee className="w-4 h-4 text-amber-500" />
+                    <span>有給休暇・残日数</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowLeaveModal(true)}
+                    className="text-[11px] font-black bg-amber-500 hover:bg-amber-600 active:scale-95 text-white px-3 py-1 rounded-lg flex items-center gap-1 shadow-xs transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>有給を申請</span>
+                  </button>
+                </div>
+
+                {leaveBalance ? (
+                  <div className="bg-amber-50/60 border border-amber-200/70 p-3.5 rounded-2xl">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[11px] font-bold text-amber-800">現在の利用可能残日数</span>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl font-black text-amber-600">{leaveBalance.total}</span>
+                        <span className="text-xs font-bold text-amber-800">日</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-amber-700 font-medium mt-1 pt-1.5 border-t border-amber-200/50">
+                      <span>繰越: <strong>{leaveBalance.carryover}日</strong></span>
+                      <span>今年度付与: <strong>{leaveBalance.balance}日</strong></span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 p-3 rounded-xl text-center text-xs font-bold text-slate-400">
+                    有給データ取得中...
+                  </div>
+                )}
+
+                {/* 直近の休暇申請状況 */}
+                {leaveRequests.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] font-black text-slate-400 block">最近の申請ステータス:</span>
+                    {leaveRequests.slice(0, 2).map((req, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-xs bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-100">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-700">{req.start_date}</span>
+                          <span className="text-[10px] text-slate-500">({req.type})</span>
+                        </div>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                          req.status === '承認' 
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                            : req.status === '却下'
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                          {req.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* マニュアル動画 */}
@@ -858,9 +1013,163 @@ export default function PortalPage() {
 
             </div>
           </div>
-
         </div>
       )}
+
+      {/* 🏖️ 有給申請モーダル */}
+      {showLeaveModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-5 animate-in zoom-in-95">
+            
+            {/* ヘッダー */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-amber-100 text-amber-700 rounded-xl">
+                  <Coffee className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-800">有給・休暇の申請</h3>
+                  <p className="text-[10px] text-slate-400 font-bold">希望日と理由を入力して送信してください</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLeaveModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 有給残日数サマリー */}
+            {leaveBalance && (
+              <div className="bg-amber-50/80 border border-amber-200 p-3 rounded-2xl flex items-center justify-between text-xs">
+                <span className="font-bold text-amber-800">現在の利用可能残日数:</span>
+                <span className="font-black text-amber-700 text-sm">残り {leaveBalance.total}日</span>
+              </div>
+            )}
+
+            {/* 申請フォーム */}
+            <form onSubmit={handleSubmitLeaveRequest} className="space-y-4">
+              {/* 従業員選択（管理者の場合、またはスタッフ名表示） */}
+              {role === 'admin' ? (
+                <div>
+                  <label className="block text-xs font-black text-slate-700 mb-1.5">
+                    申請する従業員 <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={leaveForm.worker_id}
+                    onChange={e => setLeaveForm({ ...leaveForm, worker_id: e.target.value })}
+                    required
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500 focus:bg-white"
+                  >
+                    <option value="">従業員を選択してください</option>
+                    {allWorkers.map(w => (
+                      <option key={w.id} value={w.id}>{w.name}（残: {Number(w.paid_leave_carryover || 0) + Number(w.paid_leave_balance || 0)}日）</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 flex items-center justify-between">
+                  <span>申請者:</span>
+                  <span className="font-black text-slate-800">{currentUser ? getTranslatedName(currentUser, language) : '現場スタッフ'}</span>
+                </div>
+              )}
+
+              {/* 休暇種別 */}
+              <div>
+                <label className="block text-xs font-black text-slate-700 mb-1.5">
+                  休暇の種類 <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={leaveForm.type}
+                  onChange={e => setLeaveForm({ ...leaveForm, type: e.target.value })}
+                  required
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500 focus:bg-white"
+                >
+                  <option value="有給休暇">有給休暇（全休・1日）</option>
+                  <option value="午前半休">午前半休（0.5日）</option>
+                  <option value="午後半休">午後半休（0.5日）</option>
+                  <option value="特別休暇">特別休暇（慶弔・リフレッシュ等）</option>
+                  <option value="欠勤">欠勤</option>
+                </select>
+              </div>
+
+              {/* 取得希望日 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-black text-slate-700 mb-1.5">
+                    開始日 <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={leaveForm.start_date}
+                    onChange={e => setLeaveForm({ ...leaveForm, start_date: e.target.value, end_date: e.target.value > leaveForm.end_date ? e.target.value : leaveForm.end_date })}
+                    required
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500 focus:bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-slate-700 mb-1.5">
+                    終了日 <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={leaveForm.end_date}
+                    min={leaveForm.start_date}
+                    onChange={e => setLeaveForm({ ...leaveForm, end_date: e.target.value })}
+                    required
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* 申請理由 */}
+              <div>
+                <label className="block text-xs font-black text-slate-700 mb-1.5">
+                  申請理由・備考 <span className="text-slate-400 font-normal">(任意)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={leaveForm.reason}
+                  onChange={e => setLeaveForm({ ...leaveForm, reason: e.target.value })}
+                  placeholder="例: 私用のため、通院のため、家庭の事情など"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
+                />
+              </div>
+
+              {/* 操作ボタン */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowLeaveModal(false)}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingLeave}
+                  className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-95 disabled:bg-slate-200 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
+                >
+                  {isSubmittingLeave ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  <span>{role === 'admin' ? '有給を登録する' : '申請を送信する'}</span>
+                </button>
+              </div>
+            </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* トースト通知 */}
+      {leaveToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-emerald-700 text-white px-5 py-3 rounded-2xl shadow-xl font-black text-xs flex items-center gap-2 animate-in slide-in-from-bottom">
+          <CheckCircle className="w-4 h-4 text-emerald-300" />
+          <span>{leaveToast}</span>
+        </div>
+      )}
+
     </div>
   );
 }
