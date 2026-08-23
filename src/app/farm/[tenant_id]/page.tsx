@@ -92,10 +92,23 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
       }
       setFarmInfo(infoRes.data);
 
+      let loadedWorkers: any[] = [];
       const workersRes = await getFarmWorkers(tenantId);
-      if (workersRes.success && workersRes.data) {
-        setWorkers(workersRes.data);
+      if (workersRes.success && workersRes.data && workersRes.data.length > 0) {
+        loadedWorkers = workersRes.data;
+      } else {
+        // フォールバック: /api/workers を直接フェッチ
+        try {
+          const apiRes = await fetch(`/api/workers?ownerId=${encodeURIComponent(tenantId)}`);
+          const apiJson = await apiRes.json();
+          if (apiJson.workers && apiJson.workers.length > 0) {
+            loadedWorkers = apiJson.workers;
+          }
+        } catch (e) {
+          console.error(e);
+        }
       }
+      setWorkers(loadedWorkers);
 
       let savedLang = localStorage.getItem(`agri_lang_${tenantId}`) as LanguageCode;
       if (!savedLang) {
