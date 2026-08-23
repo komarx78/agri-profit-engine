@@ -456,6 +456,53 @@ export default function WorkEntryPage() {
     }
   };
 
+  // --- 出荷・納品ハンドラー ---
+  const handleCompleteB2BOrder = async (orderId: string) => {
+    if (!window.confirm("この注文を「納品済」として記録しますか？")) return;
+    try {
+      await updateB2BOrderStatus(orderId, 'delivered');
+      const oRes = await getB2BOrders(null);
+      if (oRes && oRes.success) {
+        const todayStr = getJSTDate();
+        setB2bOrders(oRes.orders.filter((o: any) => o.delivery_date === todayStr && o.status === 'pending'));
+      }
+      alert("納品完了として記録しました！");
+    } catch (err: any) {
+      alert("エラー: " + err.message);
+    }
+  };
+
+  const handleAdHocSalesSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSalesChannel || !selectedSalesCrop || !salesQuantity) return;
+    setIsSubmittingSales(true);
+    try {
+      const cropId = crops.find(c => c.name === selectedSalesCrop)?.id;
+      const channelId = salesChannels.find(c => c.name === selectedSalesChannel)?.id;
+      
+      const { error } = await supabase.from('sales_logs').insert([
+        {
+          crop_id: cropId || null,
+          channel_id: channelId || null,
+          sales_date: getJSTDate(),
+          quantity: parseFloat(salesQuantity) || 0,
+          status: 'completed',
+          worker_id: currentUser?.id || null
+        }
+      ]);
+      if (error) throw error;
+      
+      alert("都度出荷を記録しました！");
+      setSelectedSalesCrop('');
+      setSelectedSalesChannel('');
+      setSalesQuantity('');
+    } catch (err: any) {
+      alert("エラー: " + err.message);
+    } finally {
+      setIsSubmittingSales(false);
+    }
+  };
+
   const handleAttendance = async (action: 'clock_in' | 'break_start' | 'break_end' | 'clock_out') => {
     if (!currentUser) return;
     setIsSubmitting(true);
