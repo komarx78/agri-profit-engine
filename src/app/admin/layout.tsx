@@ -92,58 +92,41 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const navGroups = [
     {
-      title: '計画・予実管理',
+      title: '日々の現場・作業日誌',
       items: [
         { name: 'ダッシュボード', path: '/admin/dashboard', icon: LayoutDashboard },
-        { name: '作付け一覧・一括日誌', path: '/admin/cultivations', icon: Sprout },
-        { name: '作付地図', path: '/admin/map', icon: MapPin },
-        { name: '作目別 分析', path: '/admin/crop-analysis', icon: PieChart },
+        { name: '作付け・作業 統合司令塔', path: '/admin/cultivations', icon: Sprout },
+        { name: '作業承認インボックス', path: '/admin/approvals', icon: Inbox },
+      ]
+    },
+    {
+      title: '栽培計画・マップ・分析',
+      items: [
+        { name: '作付地図 (圃場マップ)', path: '/admin/map', icon: MapPin },
         { name: '栽培・予実管理表', path: '/admin/cultivation-schedule', icon: Calendar },
+        { name: '作目別 採算分析', path: '/admin/crop-analysis', icon: PieChart },
         { name: '育苗スケジュール', path: '/admin/nursery-schedule', icon: Table },
         { name: '必要資材自動集計', path: '/admin/material-requirements', icon: Calculator },
       ]
     },
     {
-      title: '売上・経費管理',
+      title: '売上・請求・経費管理',
       items: [
         { name: '出荷履歴一覧', path: '/admin/sales-history', icon: Truck },
         { name: '請求書一括発行', path: '/admin/invoices', icon: FileText },
         { name: '資材購入・直接経費', path: '/admin/purchases', icon: Receipt },
-        { name: '月次全体経費(按分用)', path: '/admin/monthly-expenses', icon: Calculator },
+        { name: '月次全体経費 (按分用)', path: '/admin/monthly-expenses', icon: Calculator },
         { name: '会計データ出力', path: '/admin/accounting', icon: FileSpreadsheet },
       ]
     },
     {
-      title: 'タスク・作業記録',
+      title: '連携アプリ・マスタ設定',
       items: [
-        { name: 'タスク・スケジュール', path: '/admin/tasks', icon: CheckSquare },
-        { name: '散布管理 (残回数・RAC)', path: '/admin/spray-management', icon: FlaskConical },
-        { name: '承認インボックス', path: '/admin/approvals', icon: Inbox },
-        { name: '作業記録一覧', path: '/admin/history', icon: History },
-        { name: '作業内容台帳 (集計)', path: '/admin/work-ledger', icon: Table },
-      ]
-    },
-    {
-      title: '連携アプリ',
-      items: [
-        { name: '出退勤・現場ポータルへ', path: '/portal', icon: Layout, external: true },
-        { name: '販売管理システムへ', path: '/sales-management/orders', icon: Truck, external: true },
-        { name: '労務・人事システムへ', path: '/hr', icon: Users, external: true },
-        { name: '農薬検索・管理システムへ', path: '/pesticides', icon: FlaskConical, external: true },
-        { name: '動画マニュアル集', path: '/manuals', icon: Video, external: true },
-      ]
-    },
-    {
-      title: '設定・マスタ',
-      items: [
+        { name: '現場出退勤ポータル', path: '/portal', icon: Layout, external: true },
+        { name: 'B2B販売管理システム', path: '/sales-management/orders', icon: Truck, external: true },
+        { name: '労務・人事システム', path: '/hr', icon: Users, external: true },
         { name: 'マスタ管理全般', path: '/admin/masters', icon: Database },
         { name: '自社情報設定', path: '/admin/settings', icon: Settings },
-      ]
-    },
-    {
-      title: 'サポート',
-      items: [
-        { name: '使い方ガイド', path: '/admin/manual', icon: BookOpen },
       ]
     }
   ];
