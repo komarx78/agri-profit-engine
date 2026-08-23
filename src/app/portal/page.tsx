@@ -493,9 +493,21 @@ export default function PortalPage() {
           </div>
           <div className="flex items-center gap-3 md:gap-4">
             {currentUser && (
-              <div className="text-xs md:text-sm font-bold text-slate-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100 flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                {getTranslatedName(currentUser, language)}
+              <div className="flex items-center gap-2">
+                <div className="text-xs md:text-sm font-black text-slate-800 bg-emerald-50 border border-emerald-200 px-3.5 py-1.5 rounded-2xl flex items-center gap-2 shadow-xs">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                  <span className="text-[11px] text-emerald-700 font-bold">ログイン中:</span>
+                  <span className="text-slate-900 font-black">{getTranslatedName(currentUser, language)}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowWorkerGate(true)}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-xl border border-blue-200 transition-colors flex items-center gap-1"
+                  title="別の現場スタッフとしてログインし直す"
+                >
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">スタッフ切替</span>
+                </button>
               </div>
             )}
             <div className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
@@ -529,6 +541,25 @@ export default function PortalPage() {
               <div className="absolute top-0 right-0 p-4 opacity-5">
                 <Clock className="w-24 h-24" />
               </div>
+
+              {/* ログインユーザー ウェルカムバナー */}
+              {currentUser && (
+                <div className="mb-4 bg-emerald-50/80 border border-emerald-200/80 p-3 rounded-2xl flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black text-xs shadow-xs">
+                      {currentUser.name ? currentUser.name.charAt(0) : 'ユ'}
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-emerald-700">現在の作業者</p>
+                      <p className="text-sm font-black text-slate-800">{getTranslatedName(currentUser, language)} さん</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg">
+                    {role === 'admin' ? '管理者' : '現場スタッフ'}
+                  </span>
+                </div>
+              )}
+
               <h2 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2">
                 <Clock className="w-5 h-5 text-blue-500" /> {t('attendancePortal', language)}
               </h2>
@@ -746,6 +777,7 @@ export default function PortalPage() {
                 language={language}
                 currentWorkerId={workerProfile?.id}
                 currentWorkerName={currentUser?.name}
+                allWorkers={allWorkers}
               />
               
             </div>

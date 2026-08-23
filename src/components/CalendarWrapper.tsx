@@ -9,13 +9,22 @@ interface CalendarProps {
   events: any[];
   currentWorkerId?: string;
   currentWorkerName?: string;
+  allWorkers?: any[];
 }
 
-export default function CalendarWrapper({ events, t, language, currentWorkerId, currentWorkerName }: CalendarProps) {
+export default function CalendarWrapper({ events, t, language, currentWorkerId, currentWorkerName, allWorkers = [] }: CalendarProps) {
   const today = new Date();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<'all' | 'mine'>('all');
+  const [selectedTargetWorker, setSelectedTargetWorker] = useState<string>(currentWorkerName || '');
   
+  // ログイン中の名前が変わったら更新
+  React.useEffect(() => {
+    if (currentWorkerName) {
+      setSelectedTargetWorker(currentWorkerName);
+    }
+  }, [currentWorkerName]);
+
   const getWeekDaysArray = (lang: string) => {
     switch(lang) {
       case 'en': return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -29,9 +38,10 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
   };
 
   const isEventForMe = (event: any) => {
-    if (!currentWorkerName && !currentWorkerId) return false;
+    const target = selectedTargetWorker || currentWorkerName;
+    if (!target) return false;
+    if (event.workerName && (event.workerName === target || event.workerName.includes(target))) return true;
     if (currentWorkerId && event.workerId === currentWorkerId) return true;
-    if (currentWorkerName && event.workerName && (event.workerName === currentWorkerName || event.workerName.includes(currentWorkerName))) return true;
     return false;
   };
 
@@ -55,7 +65,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
     <div className="space-y-4 relative">
       
       {/* 絞り込みフィルターバー */}
-      <div className="flex items-center justify-between gap-3 pb-1">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-1 border-b border-slate-100">
         <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl border border-slate-200 text-xs font-black">
           <button
             type="button"
@@ -79,16 +89,32 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
             }`}
           >
             <Star className="w-3.5 h-3.5" />
-            <span>自分のタスクのみ {myEventsCount > 0 && `(${myEventsCount})`}</span>
+            <span>担当タスクのみ {myEventsCount > 0 && `(${myEventsCount})`}</span>
           </button>
         </div>
 
-        {currentWorkerName && (
-          <span className="text-xs font-bold text-slate-400 hidden sm:inline-flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span>
-            黄色枠があなたの担当です
+        {/* 担当者指定セレクター */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
+            <UserCheck className="w-3.5 h-3.5 text-amber-500" />
+            <span>担当者表示:</span>
           </span>
-        )}
+          <select
+            value={selectedTargetWorker}
+            onChange={(e) => setSelectedTargetWorker(e.target.value)}
+            className="px-3 py-1.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs font-black text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer shadow-xs"
+          >
+            <option value="">（未選択・全員対象）</option>
+            {allWorkers.map((w: any) => (
+              <option key={w.id} value={w.name}>{w.name}</option>
+            ))}
+          </select>
+          {selectedTargetWorker && (
+            <span className="text-[11px] font-bold text-amber-600 hidden sm:inline-block">
+              🟡「{selectedTargetWorker}」をハイライト中
+            </span>
+          )}
+        </div>
       </div>
 
       {/* 水平スクロール可能なカレンダーマトリックスUI */}
