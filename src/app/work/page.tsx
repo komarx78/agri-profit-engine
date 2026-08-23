@@ -663,32 +663,32 @@ export default function WorkEntryPage() {
   return (
     <main className="min-h-screen bg-emerald-950 text-slate-100 font-sans pb-32">
       {/* ヘッダー */}
-      <header className="sticky top-0 z-10 backdrop-blur-md bg-emerald-950/90 border-b border-emerald-800/50 px-3 py-2.5 shadow-lg flex flex-col gap-2.5">
-        <div className="max-w-md w-full mx-auto flex items-center justify-between gap-2">
+      <header className="sticky top-0 z-10 backdrop-blur-md bg-emerald-950/90 border-b border-emerald-800/50 px-2.5 py-2 shadow-lg flex flex-col gap-2">
+        <div className="max-w-md w-full mx-auto flex items-center justify-between gap-1 flex-wrap sm:flex-nowrap">
           
           {/* 左側：アプリアイコン＆タイトル */}
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <div className="p-2 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-xl shadow-md text-emerald-950 flex-shrink-0">
-              <Sprout className="w-5 h-5 stroke-[2.5]" />
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <div className="p-1.5 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-lg shadow-md text-emerald-950 flex-shrink-0">
+              <Sprout className="w-4 h-4 stroke-[2.5]" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-base font-black tracking-tight text-white truncate leading-tight">
+              <h1 className="text-xs sm:text-sm font-black tracking-tight text-white truncate leading-tight">
                 {t('systemTitle', language)}
               </h1>
-              <p className="text-[11px] font-bold text-emerald-400 truncate">
+              <p className="text-[10px] font-bold text-emerald-400 truncate">
                 {language === 'ja' ? `${getTranslatedName(currentUser, language)} さん` : getTranslatedName(currentUser, language)}
               </p>
             </div>
           </div>
 
           {/* 右側：コントロール (ポータル戻る・言語・ログアウト) */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className="flex items-center gap-1 flex-shrink-0">
             <button
               onClick={() => router.push('/portal')}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 hover:text-white border border-blue-500/40 rounded-xl text-xs font-bold transition-all shadow-sm whitespace-nowrap"
+              className="flex items-center gap-1 px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 hover:text-white border border-blue-500/40 rounded-lg text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"
               title="ポータル画面へ戻る"
             >
-              <Layout className="w-3.5 h-3.5 flex-shrink-0" />
+              <Layout className="w-3 h-3 flex-shrink-0" />
               <span>ポータル</span>
             </button>
             <select
@@ -701,52 +701,52 @@ export default function WorkEntryPage() {
                 const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang'));
                 langKeys.forEach(key => localStorage.setItem(key, newLang));
               }}
-              className="bg-emerald-900 text-emerald-300 text-xs font-bold rounded-xl px-2 py-1.5 focus:outline-none border border-emerald-800"
+              className="bg-emerald-900 text-emerald-300 text-[11px] font-bold rounded-lg px-1.5 py-1 focus:outline-none border border-emerald-800"
             >
               {LANGUAGES.map(l => (
                 <option key={l.code} value={l.code}>{l.flag} {l.code.toUpperCase()}</option>
               ))}
             </select>
-            <button onClick={handleLogout} className="p-1.5 bg-emerald-900/80 text-emerald-400 rounded-xl hover:bg-emerald-800 transition-colors" title="ログアウト">
-              <LogOut className="w-4 h-4" />
+            <button onClick={handleLogout} className="p-1 bg-emerald-900/80 text-emerald-400 rounded-lg hover:bg-emerald-800 transition-colors" title="ログアウト">
+              <LogOut className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
-        {/* タブ切り替え (現場実務: 出退勤・作業記録・出荷) */}
-        <div className="max-w-md w-full mx-auto flex bg-emerald-900/60 p-1 rounded-2xl">
+        {/* タブ切り替え (3等分均等グリッド配置) */}
+        <div className="max-w-md w-full mx-auto grid grid-cols-3 gap-1 bg-emerald-900/60 p-1 rounded-xl">
           <button
             onClick={() => setActiveTab('attendance')}
-            className={`flex-1 py-2 px-1 text-xs sm:text-sm font-black rounded-xl transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+            className={`py-1.5 px-0.5 text-[11px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 text-center truncate ${
               activeTab === 'attendance' ? 'bg-emerald-500 text-emerald-950 shadow-md scale-[1.02]' : 'text-emerald-300/70 hover:text-white'
             }`}
           >
-            <Clock className="w-3.5 h-3.5 flex-shrink-0" />
-            <span>{t('attendance', language)}</span>
+            <Clock className="w-3.5 h-3.5 flex-shrink-0 hidden sm:inline" />
+            <span className="truncate">{t('attendance', language)}</span>
           </button>
           <button
             onClick={() => setActiveTab('work')}
-            className={`flex-1 py-2 px-1 text-xs sm:text-sm font-black rounded-xl transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+            className={`py-1.5 px-0.5 text-[11px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 text-center truncate ${
               activeTab === 'work' ? 'bg-emerald-500 text-emerald-950 shadow-md scale-[1.02]' : 'text-emerald-300/70 hover:text-white'
             }`}
           >
-            <History className="w-3.5 h-3.5 flex-shrink-0" />
-            <span>{t('workRecord', language)}</span>
+            <History className="w-3.5 h-3.5 flex-shrink-0 hidden sm:inline" />
+            <span className="truncate">{t('workRecord', language)}</span>
           </button>
           <button
             onClick={() => setActiveTab('sales')}
-            className={`flex-1 py-2 px-1 text-xs sm:text-sm font-black rounded-xl transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+            className={`py-1.5 px-0.5 text-[11px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 text-center truncate ${
               activeTab === 'sales' ? 'bg-emerald-500 text-emerald-950 shadow-md scale-[1.02]' : 'text-emerald-300/70 hover:text-white'
             }`}
           >
-            <Truck className="w-3.5 h-3.5 flex-shrink-0" />
-            <span>出荷・納品</span>
+            <Truck className="w-3.5 h-3.5 flex-shrink-0 hidden sm:inline" />
+            <span className="truncate">出荷・納品</span>
           </button>
         </div>
         
         {/* GPS住所の表示 */}
-        <div className="max-w-md w-full mx-auto flex items-center justify-center gap-1.5 text-[11px] font-bold text-emerald-400 truncate">
-          <MapPin className="w-3 h-3 flex-shrink-0" />
+        <div className="max-w-md w-full mx-auto flex items-center justify-center gap-1 text-[10px] font-bold text-emerald-400 truncate">
+          <MapPin className="w-2.5 h-2.5 flex-shrink-0" />
           <span className="truncate">{currentAddress}</span>
         </div>
       </header>
@@ -846,7 +846,7 @@ export default function WorkEntryPage() {
             {/* LINE連携・通知設定エリア */}
             <div className="mt-12 bg-slate-800/50 border border-slate-700 p-6 rounded-3xl shadow-inner">
               <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                <svg viewBox="0 0 24 24" className="w-6 h-6 fill-[#06C755]"><path d="M22.2 10.3c0-4.4-4.5-8-10.1-8s-10.1 3.6-10.1 8c0 4 3.7 7.4 8.6 7.9.4 0 .9.1 1 .5.1.3.1.5-.1 1-.1.4-.4 1.3-.4 1.3s-.1.4.1.5c.2.1.5 0 .5 0 2.9-1.8 5.7-4 7.6-6 1.8-1.7 2.9-3.4 2.9-5.2zm-12.7 3c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h2.3c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3h-1.4v.9h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3h-1.4v.9h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3zM7.3 13.3c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v4.2c0 .2-.1.3-.3.3h-.8zm-3 0c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v3h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3.3h-2.8zm13.1-.3c0 .2-.1.3-.3.3h-.8c-.2 0-.3-.1-.3-.3v-3l-1.9 3c-.1.1-.2.2-.3.2h-.8c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v3l1.9-3c.1-.1.2-.2.3-.2h.8c.2 0 .3.1.3.3v4.2z"/></svg>
+                <svg viewBox="0 0 24 24" className="w-6 h-6 fill-[#06C755]"><path d="M12 2C6.48 2 2 5.82 2 10.53c0 4.23 3.64 7.77 8.56 8.41.33.07.78.22.89.5.1.25.07.64-.03 1.05-.16.63-.53 2.05-.53 2.05s-.16.65.25.79c.41.14.94-.23 1.3-.5 3.09-2.27 6.09-4.8 7.98-7.39C21.6 13.56 22 12.09 22 10.53 22 5.82 17.52 2 12 2z"/></svg>
                 {t('lineAlertTitle', language)}
               </h3>
               
