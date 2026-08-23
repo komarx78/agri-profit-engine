@@ -19,7 +19,8 @@ import {
   AlertCircle,
   Truck,
   Video,
-  Layout
+  Layout,
+  Receipt
 } from 'lucide-react';
 
 export default function PortalPage() {
@@ -135,13 +136,13 @@ export default function PortalPage() {
               </div>
               <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-emerald-500 transition-colors" />
             </div>
-            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors">🌾 作付け・作業 統合司令塔</h3>
+            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors">🌾 農業・作付け司令塔</h3>
             <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
-              作付け一覧、7大一括日誌、散布管理（残回数）、圃場マップ、栽培計画を一元管理します。
+              作付け一覧、7大一括日誌、散布管理（残回数判定）、圃場マップ、栽培計画を一元管理します。
             </p>
           </Link>
 
-          {/* 販売・受注・請求管理 (管理者用) */}
+          {/* 販売・受注・請求管理 */}
           <Link href="/sales-management" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-indigo-300 transition-all flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -149,63 +150,63 @@ export default function PortalPage() {
               </div>
               <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-indigo-500 transition-colors" />
             </div>
-            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-indigo-700 transition-colors">💰 販売・請求・経費管理</h3>
+            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-indigo-700 transition-colors">📦 B2B販売管理システム</h3>
             <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
-              B2B受注、出荷履歴、請求書一括発行、資材購入・経費、会計データ出力（MF/freee）を統合管理します。
+              取引先からの受注受付、納品管理、出荷履歴一覧、請求書の自動生成（PDF）を管理します。
+            </p>
+          </Link>
+
+          {/* 経理・購買管理 */}
+          <Link href="/accounting-management" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-emerald-300 transition-all flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Receipt className="w-6 h-6" />
+              </div>
+              <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-emerald-500 transition-colors" />
+            </div>
+            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors">💳 経理・購買システム</h3>
+            <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
+              資材購入（レシートAI読取）、月次固定費の圃場按分、マネーフォワード仕訳CSV出力を管理します。
+            </p>
+          </Link>
+
+          {/* 勤怠管理 */}
+          <Link href="/hr" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-blue-300 transition-all flex flex-col cursor-pointer">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Users className="w-6 h-6" />
+              </div>
+              <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition-colors" />
+            </div>
+            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-blue-700 transition-colors">👥 勤怠・有給労務管理</h3>
+            <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
+              従業員の出退勤一覧、有給休暇の付与・申請承認、シフト作成・給与計算連携を行います。
             </p>
           </Link>
 
           {/* 出荷・納品ハブ (現場用) */}
-          <Link href="/sales" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-emerald-300 transition-all flex flex-col">
+          <Link href="/sales" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-amber-300 transition-all flex flex-col">
             <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+              <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
                 <Truck className="w-6 h-6" />
               </div>
-              <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-emerald-500 transition-colors" />
+              <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-amber-500 transition-colors" />
             </div>
-            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors">出荷・納品ハブ (現場用)</h3>
+            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-amber-700 transition-colors">🚚 現場出荷・配達ハブ</h3>
             <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
-              本日の配達予定（受注分）の確認・消込と、JA等への都度出荷を記録します。
-            </p>
-          </Link>
-
-          {/* 経費精算 */}
-          <Link href="/sales-management/purchases" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-rose-300 transition-all flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <CreditCard className="w-6 h-6" />
-              </div>
-              <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-rose-500 transition-colors" />
-            </div>
-            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-rose-700 transition-colors">経費・購買管理</h3>
-            <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
-              農業資材の購入履歴、レシート画像の保存、月別の経費集計などを管理します。
-            </p>
-          </Link>
-
-          {/* 会計連動 */}
-          <Link href="/sales-management/accounting" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-cyan-300 transition-all flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-cyan-100 text-cyan-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Calculator className="w-6 h-6" />
-              </div>
-              <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-cyan-500 transition-colors" />
-            </div>
-            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-cyan-700 transition-colors">クラウド会計データ出力</h3>
-            <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
-              売上・経費データから仕訳データを自動生成し、各種会計ソフトへ取り込める形式で出力します。
+              本日の配達予定（受注分）の確認・消込と、JAや直売所への出荷をスマートフォンで記録します。
             </p>
           </Link>
 
           {/* 動画マニュアル集 */}
-          <Link href="/manuals" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-red-300 transition-all flex flex-col">
+          <Link href="/manuals" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-rose-300 transition-all flex flex-col">
             <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-red-100 text-red-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+              <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
                 <Video className="w-6 h-6" />
               </div>
-              <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-red-500 transition-colors" />
+              <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-rose-500 transition-colors" />
             </div>
-            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-red-700 transition-colors">動画マニュアル集</h3>
+            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-rose-700 transition-colors">🎬 動画マニュアル集</h3>
             <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
               システムの使い方や各機能の操作手順を動画で分かりやすく解説します。
             </p>

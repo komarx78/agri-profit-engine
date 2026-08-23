@@ -4,18 +4,17 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
-  LayoutDashboard, 
-  ShoppingCart, 
-  Users, 
-  FileText, 
-  Truck, 
+  Receipt, 
+  Calculator, 
+  FileSpreadsheet, 
   LogOut, 
   Sprout, 
   ArrowLeft,
-  CreditCard
+  ShoppingCart,
+  DollarSign
 } from 'lucide-react';
 
-export default function SalesManagementLayout({
+export default function AccountingManagementLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -23,11 +22,9 @@ export default function SalesManagementLayout({
   const pathname = usePathname();
 
   const navItems = [
-    { name: '販売ダッシュボード', path: '/sales-management', icon: LayoutDashboard },
-    { name: 'B2B受注・納品管理', path: '/sales-management/orders', icon: ShoppingCart },
-    { name: '出荷履歴一覧', path: '/sales-management/sales-history', icon: Truck },
-    { name: '請求書一括発行', path: '/sales-management/invoices', icon: FileText },
-    { name: '顧客・取引先マスタ', path: '/sales-management/customers', icon: Users },
+    { name: '資材購入・直接経費', path: '/accounting-management', icon: Receipt },
+    { name: '月次全体経費 (按分用)', path: '/accounting-management/monthly-expenses', icon: Calculator },
+    { name: '会計データ出力 (MF等)', path: '/accounting-management/accounting', icon: FileSpreadsheet },
   ];
 
   return (
@@ -38,19 +35,19 @@ export default function SalesManagementLayout({
         
         {/* ヘッダー */}
         <div className="h-16 flex items-center px-5 border-b border-slate-800 bg-slate-950">
-          <div className="p-1.5 bg-indigo-500/20 text-indigo-400 rounded-xl mr-2.5">
-            <ShoppingCart className="w-5 h-5" />
+          <div className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-xl mr-2.5">
+            <DollarSign className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="font-black text-white text-base leading-tight tracking-tight">販売管理システム</h1>
-            <p className="text-[10px] text-slate-400 font-bold">受注・出荷・請求書</p>
+            <h1 className="font-black text-white text-base leading-tight tracking-tight">経理・購買システム</h1>
+            <p className="text-[10px] text-slate-400 font-bold">経費・按分・会計連動</p>
           </div>
         </div>
         
         {/* ナビゲーション */}
         <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
           <h2 className="px-3 text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2">
-            販売・受注メニュー
+            経理・コスト管理
           </h2>
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -61,7 +58,7 @@ export default function SalesManagementLayout({
                 href={item.path}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-xs transition-all ${
                   isActive
-                    ? 'bg-indigo-600 text-white shadow-md'
+                    ? 'bg-emerald-600 text-white shadow-md'
                     : 'text-slate-400 hover:bg-slate-800/70 hover:text-white'
                 }`}
               >
@@ -75,11 +72,11 @@ export default function SalesManagementLayout({
         {/* フッターリンク */}
         <div className="p-3 border-t border-slate-800 space-y-1 bg-slate-950/60">
           <Link
-            href="/accounting-management"
-            className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-emerald-400 hover:bg-emerald-950/40 rounded-xl transition-colors"
+            href="/sales-management"
+            className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-indigo-400 hover:bg-indigo-950/40 rounded-xl transition-colors"
           >
-            <CreditCard className="w-4 h-4" />
-            <span>💳 経理・購買システムへ</span>
+            <ShoppingCart className="w-4 h-4" />
+            <span>📦 販売管理システムへ</span>
           </Link>
           <Link
             href="/admin/cultivations"
@@ -105,8 +102,8 @@ export default function SalesManagementLayout({
         {/* モバイルヘッダー */}
         <header className="md:hidden h-14 bg-slate-900 flex items-center justify-between px-4 border-b border-slate-800 sticky top-0 z-20">
           <div className="flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5 text-indigo-400" />
-            <span className="font-black text-white text-base">販売管理システム</span>
+            <DollarSign className="w-5 h-5 text-emerald-400" />
+            <span className="font-black text-white text-base">経理・購買システム</span>
           </div>
           <div className="flex items-center gap-2">
             <Link href="/admin/cultivations" className="px-2.5 py-1 bg-emerald-900/60 text-emerald-300 text-xs font-bold rounded-lg border border-emerald-700">

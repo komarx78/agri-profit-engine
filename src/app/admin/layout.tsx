@@ -32,7 +32,8 @@ import {
   FlaskConical,
   CheckSquare,
   Inbox,
-  Layout
+  Layout,
+  ShoppingCart
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -112,7 +113,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     {
       title: '連携システム・マスタ',
       items: [
-        { name: '💰 販売・請求・経費システム', path: '/sales-management', icon: Truck, external: true },
+        { name: '📦 販売管理システム', path: '/sales-management', icon: ShoppingCart, external: true },
+        { name: '💳 経理・購買システム', path: '/accounting-management', icon: Receipt, external: true },
         { name: '📱 現場出退勤ポータル', path: '/portal', icon: Layout, external: true },
         { name: '👥 労務・人事システム', path: '/hr', icon: Users, external: true },
         { name: '⚙️ マスタ管理全般', path: '/admin/masters', icon: Database },
