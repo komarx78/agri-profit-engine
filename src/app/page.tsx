@@ -170,7 +170,7 @@ export default function PortalPage() {
           </Link>
 
           {/* 経費精算 */}
-          <Link href="/admin/purchases" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-rose-300 transition-all flex flex-col">
+          <Link href="/sales-management/purchases" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-rose-300 transition-all flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
                 <CreditCard className="w-6 h-6" />
@@ -184,7 +184,7 @@ export default function PortalPage() {
           </Link>
 
           {/* 会計連動 */}
-          <Link href="/admin/accounting" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-cyan-300 transition-all flex flex-col">
+          <Link href="/sales-management/accounting" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-cyan-300 transition-all flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 bg-cyan-100 text-cyan-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
                 <Calculator className="w-6 h-6" />
