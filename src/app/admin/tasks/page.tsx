@@ -1,9 +1,9 @@
+
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Calendar, CheckCircle2, Clock, MapPin, Sprout, Loader2, Plus, Trash2, Edit2, Users, Briefcase, X } from 'lucide-react';
-import { HelpTooltip } from '@/components/HelpTooltip';
+import { Calendar, CheckCircle2, Clock, MapPin, Sprout, Loader2, Plus, Trash2, Edit2, Users, Briefcase, X, List, LayoutGrid, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<any[]>([]);
@@ -25,167 +25,364 @@ export default function TasksPage() {
     department_id: ''
   });
 
-  const fetchData = async () => {
-    try {
-      setIsLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const userTenantId = session.user.id;
-      setTenantId(userTenantId);
-
-      const [taskRes, cRes, fRes, wRes, dRes] = await Promise.all([
-        supabase.from('work_logs').select(`
-          id, work_date, task_title, status, approval_status, duration_minutes,
-          crops(name), fields(name), workers(name), departments(name)
-        `).eq('user_id', userTenantId).eq('status', 'planned').order('work_date', { ascending: true }),
-        supabase.from('crops').select('*').order('name'),
-        supabase.from('fields').select('*').order('name'),
-        supabase.from('workers').select('*').order('name'),
-        supabase.from('departments').select('*').order('name'),
-      ]);
-
-      setTasks(taskRes.data || []);
-      setCrops(cRes.data || []);
-      setFields(fRes.data || []);
-      setWorkers(wRes.data || []);
-      setDepartments(dRes.data || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // UI State
+  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
+  const [groupMode, setGroupMode] = useState<'worker' | 'field'>('worker');
+  const [calendarDays, setCalendarDays] = useState<number>(7); // 2 = Today/Tomorrow, 7 = Week
+  const [startDate, setStartDate] = useState(new Date());
 
   useEffect(() => {
+    async function fetchData() {
+      setIsLoading(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        const ownerId = session.user.id;
+        setTenantId(ownerId);
+
+        const [tasksRes, cropsRes, fieldsRes, workersRes, deptsRes] = await Promise.all([
+          supabase.from('work_tasks').select('*, crops(*), fields(*), workers(*), departments(*)').eq('tenant_id', ownerId).order('work_date', { ascending: true }),
+          supabase.from('crops').select('*').eq('tenant_id', ownerId),
+          supabase.from('fields').select('*').eq('tenant_id', ownerId),
+          supabase.from('workers').select('*').eq('user_id', ownerId).order('name'),
+          supabase.from('departments').select('*').eq('tenant_id', ownerId)
+        ]);
+
+        if (tasksRes.data) setTasks(tasksRes.data);
+        if (cropsRes.data) setCrops(cropsRes.data);
+        if (fieldsRes.data) setFields(fieldsRes.data);
+        if (workersRes.data) setWorkers(workersRes.data);
+        if (deptsRes.data) setDepartments(deptsRes.data);
+
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
     fetchData();
   }, []);
 
   const handleSave = async () => {
-    if (!formData.task_title) {
-      alert("タスク名を入力してください");
-      return;
-    }
+    if (!formData.work_date || !formData.task_title) return;
+    setIsSaving(true);
     try {
-      setIsSaving(true);
-      const insertData = {
-        user_id: tenantId,
-        work_date: formData.work_date,
-        task_title: formData.task_title,
-        work_type: formData.task_title,
+      const dataToSave = {
+        ...formData,
+        tenant_id: tenantId,
         crop_id: formData.crop_id || null,
         field_id: formData.field_id || null,
         worker_id: formData.worker_id || null,
-        department_id: formData.department_id || null,
-        status: 'planned',
-        duration_minutes: 0,
-        approval_status: 'pending' // 着手前はpending扱い、またはnull
+        department_id: formData.department_id || null
       };
-      
-      const { error } = await supabase.from('work_logs').insert(insertData);
-      if (error) throw error;
 
+      const { data, error } = await supabase.from('work_tasks').insert([dataToSave]).select('*, crops(*), fields(*), workers(*), departments(*)');
+      if (error) throw error;
+      if (data) setTasks([...tasks, data[0]].sort((a, b) => a.work_date.localeCompare(b.work_date)));
       setIsModalOpen(false);
-      setFormData({
-        work_date: new Date().toISOString().split('T')[0],
-        task_title: '',
-        crop_id: '',
-        field_id: '',
-        worker_id: '',
-        department_id: ''
-      });
-      fetchData();
-    } catch (err: any) {
-      alert(`エラー: ${err.message}`);
+      setFormData({ work_date: new Date().toISOString().split('T')[0], task_title: '', crop_id: '', field_id: '', worker_id: '', department_id: '' });
+    } catch (err) {
+      console.error(err);
+      alert('保存に失敗しました');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('このタスクを削除しますか？')) return;
+    if (!window.confirm('本当に削除しますか？')) return;
     try {
-      const { error } = await supabase.from('work_logs').delete().eq('id', id);
-      if (error) throw error;
-      fetchData();
-    } catch (err: any) {
-      alert(`削除エラー: ${err.message}`);
+      await supabase.from('work_tasks').delete().eq('id', id);
+      setTasks(tasks.filter(t => t.id !== id));
+    } catch (err) {
+      console.error(err);
     }
   };
 
+  const handleOpenModal = (dateStr?: string, workerId?: string, fieldId?: string) => {
+    setFormData({
+      work_date: dateStr || new Date().toISOString().split('T')[0],
+      task_title: '',
+      crop_id: '',
+      field_id: fieldId || '',
+      worker_id: workerId || '',
+      department_id: ''
+    });
+    setIsModalOpen(true);
+  };
+
+  // Calendar Logic
+  const dates = useMemo(() => {
+    const arr = [];
+    for (let i = 0; i < calendarDays; i++) {
+      const d = new Date(startDate);
+      d.setDate(d.getDate() + i);
+      arr.push(d);
+    }
+    return arr;
+  }, [startDate, calendarDays]);
+
+  const handlePrev = () => {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() - calendarDays);
+    setStartDate(d);
+  };
+  
+  const handleNext = () => {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + calendarDays);
+    setStartDate(d);
+  };
+
+  const handleToday = () => {
+    setStartDate(new Date());
+  };
+
+  const getWeekDayStr = (d: Date) => ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+
+  // グループ化されたデータ (Worker or Field)
+  const groupedItems = useMemo(() => {
+    if (groupMode === 'worker') {
+      const items = [...workers];
+      items.push({ id: 'unassigned', name: '(担当者未定 / 全員)' });
+      return items;
+    } else {
+      const items = [...fields];
+      items.push({ id: 'unassigned', name: '(圃場指定なし)' });
+      return items;
+    }
+  }, [workers, fields, groupMode]);
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+    <div className="max-w-[95vw] mx-auto space-y-6 pb-12 relative">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
-            <Calendar className="w-7 h-7 text-emerald-600" />
+          <h1 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
+            <Calendar className="w-6 h-6 md:w-8 md:h-8 text-emerald-600 flex-shrink-0" />
             タスク・スケジュール管理
           </h1>
-          <p className="text-slate-500 font-medium mt-1">現場に指示する作業タスク（予定）を作成し、担当者や部署に割り当てます。</p>
+          <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">誰がどこで何の作業をするか、日々のスケジュールを管理します。</p>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-6 rounded-xl flex items-center gap-2 transition-colors shadow-sm"
-        >
-          <Plus className="w-5 h-5" />
-          新しいタスクを追加
-        </button>
+        
+        <div className="flex flex-wrap items-center gap-2 md:gap-4">
+          <div className="flex bg-slate-100 p-1 rounded-xl">
+            <button 
+              onClick={() => setViewMode('calendar')} 
+              className={`px-3 py-1.5 text-sm font-bold rounded-lg flex items-center gap-2 transition-all ${viewMode === 'calendar' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}
+            >
+              <LayoutGrid className="w-4 h-4" /> カレンダー
+            </button>
+            <button 
+              onClick={() => setViewMode('list')} 
+              className={`px-3 py-1.5 text-sm font-bold rounded-lg flex items-center gap-2 transition-all ${viewMode === 'list' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:bg-slate-200'}`}
+            >
+              <List className="w-4 h-4" /> リスト
+            </button>
+          </div>
+          
+          <button 
+            onClick={() => handleOpenModal()}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-xl flex items-center gap-2 transition-colors shadow-sm text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            新規追加
+          </button>
+        </div>
       </header>
 
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-lg font-black text-slate-800">登録済みのタスク（予定）</h2>
-        </div>
-        <div className="p-0">
-          {isLoading ? (
-            <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 text-emerald-500 animate-spin" /></div>
-          ) : tasks.length === 0 ? (
-            <div className="text-center py-12 text-slate-400">現在予定されているタスクはありません</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-slate-50 text-slate-500 font-bold">
+        {isLoading ? (
+          <div className="flex justify-center p-20">
+            <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
+          </div>
+        ) : viewMode === 'list' ? (
+          // リストビュー (既存)
+          <div className="p-0">
+            {tasks.length === 0 ? (
+              <div className="text-center py-12 text-slate-400">現在予定されているタスクはありません</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="bg-slate-50 text-slate-500 font-bold">
+                    <tr>
+                      <th className="px-6 py-4">予定日</th>
+                      <th className="px-6 py-4">タスク内容</th>
+                      <th className="px-6 py-4">割り当て</th>
+                      <th className="px-6 py-4">圃場 / 作目</th>
+                      <th className="px-6 py-4">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                    {tasks.map(t => (
+                      <tr key={t.id} className="hover:bg-emerald-50/30 transition-colors">
+                        <td className="px-6 py-4">{t.work_date}</td>
+                        <td className="px-6 py-4 font-bold text-slate-900">{t.task_title || '-'}</td>
+                        <td className="px-6 py-4 flex items-center gap-2">
+                          {t.departments && (
+                            <span className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-md text-xs">
+                              <Briefcase className="w-3 h-3" /> {t.departments.name}
+                            </span>
+                          )}
+                          {t.workers && (
+                            <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md text-xs">
+                              <Users className="w-3 h-3" /> {t.workers.name}
+                            </span>
+                          )}
+                          {!t.departments && !t.workers && <span className="text-slate-400">全体</span>}
+                        </td>
+                        <td className="px-6 py-4 text-xs text-slate-500">
+                          {t.fields && <span className="mr-2">📍{t.fields.name}</span>}
+                          {t.crops && <span>🌱{t.crops.name}</span>}
+                        </td>
+                        <td className="px-6 py-4">
+                          <button onClick={() => handleDelete(t.id)} className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          // カレンダー（マトリックス）ビュー
+          <div className="flex flex-col">
+            <div className="p-4 border-b border-slate-100 flex flex-wrap gap-4 items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                <button onClick={handlePrev} className="p-2 hover:bg-slate-100 transition-colors"><ChevronLeft className="w-5 h-5 text-slate-600" /></button>
+                <button onClick={handleToday} className="px-4 font-black text-slate-700 hover:bg-slate-50 text-sm">今日</button>
+                <button onClick={handleNext} className="p-2 hover:bg-slate-100 transition-colors"><ChevronRight className="w-5 h-5 text-slate-600" /></button>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-500">表示単位:</span>
+                  <select 
+                    value={calendarDays} 
+                    onChange={e => setCalendarDays(Number(e.target.value))}
+                    className="text-sm font-bold bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none"
+                  >
+                    <option value={2}>今日・明日 (2日)</option>
+                    <option value={7}>週間 (7日)</option>
+                    <option value={14}>2週間 (14日)</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-500">グループ:</span>
+                  <select 
+                    value={groupMode} 
+                    onChange={e => setGroupMode(e.target.value as 'worker'|'field')}
+                    className="text-sm font-bold bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none"
+                  >
+                    <option value="worker">担当者別</option>
+                    <option value="field">圃場別</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto relative">
+              <table className="w-full text-sm text-left whitespace-nowrap min-w-[800px] border-collapse">
+                <thead className="text-xs text-slate-700 bg-slate-50 sticky top-0 z-20">
                   <tr>
-                    <th className="px-6 py-4">予定日</th>
-                    <th className="px-6 py-4">タスク内容</th>
-                    <th className="px-6 py-4">割り当て</th>
-                    <th className="px-6 py-4">圃場 / 作目</th>
-                    <th className="px-6 py-4">操作</th>
+                    <th className="px-4 py-3 border-b border-r font-black w-48 sticky left-0 bg-slate-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                      {groupMode === 'worker' ? '担当者' : '圃場'}
+                    </th>
+                    {dates.map((d, i) => {
+                      const isToday = d.toDateString() === new Date().toDateString();
+                      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                      return (
+                        <th key={i} className={`px-2 py-2 border-b border-r text-center min-w-[140px] ${isToday ? 'bg-emerald-50/80 border-emerald-200' : ''}`}>
+                          <div className={`font-black text-lg ${isToday ? 'text-emerald-600' : 'text-slate-800'}`}>
+                            {d.getMonth() + 1}/{d.getDate()}
+                          </div>
+                          <div className={`text-[10px] font-bold ${isWeekend ? 'text-rose-500' : 'text-slate-500'}`}>
+                            ({getWeekDayStr(d)})
+                          </div>
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                  {tasks.map(t => (
-                    <tr key={t.id} className="hover:bg-emerald-50/30 transition-colors">
-                      <td className="px-6 py-4">{t.work_date}</td>
-                      <td className="px-6 py-4 font-bold text-slate-900">{t.task_title || '-'}</td>
-                      <td className="px-6 py-4 flex items-center gap-2">
-                        {t.departments ? (
-                          <span className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-md text-xs">
-                            <Briefcase className="w-3 h-3" /> {t.departments.name}
-                          </span>
-                        ) : null}
-                        {t.workers ? (
-                          <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md text-xs">
-                            <Users className="w-3 h-3" /> {t.workers.name}
-                          </span>
-                        ) : null}
-                        {!t.departments && !t.workers && <span className="text-slate-400">全体</span>}
+                <tbody>
+                  {groupedItems.map(item => (
+                    <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors group">
+                      <td className="px-4 py-3 border-r sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] group-hover:bg-slate-50">
+                        <div className="font-bold text-slate-700 truncate max-w-[160px] flex items-center gap-2">
+                          {groupMode === 'worker' ? (
+                            <><Users className="w-4 h-4 text-blue-500" /> {item.name}</>
+                          ) : (
+                            <><MapPin className="w-4 h-4 text-emerald-500" /> {item.name}</>
+                          )}
+                        </div>
                       </td>
-                      <td className="px-6 py-4 text-xs text-slate-500">
-                        {t.fields ? <span className="mr-2">📍{t.fields.name}</span> : null}
-                        {t.crops ? <span>🌱{t.crops.name}</span> : null}
-                      </td>
-                      <td className="px-6 py-4">
-                        <button onClick={() => handleDelete(t.id)} className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
+                      {dates.map((d, i) => {
+                        const dateStr = d.toISOString().split('T')[0];
+                        // このマスに該当するタスクを抽出
+                        const cellTasks = tasks.filter(t => {
+                          if (t.work_date !== dateStr) return false;
+                          if (groupMode === 'worker') {
+                            if (item.id === 'unassigned') return !t.worker_id;
+                            return t.worker_id === item.id;
+                          } else {
+                            if (item.id === 'unassigned') return !t.field_id;
+                            return t.field_id === item.id;
+                          }
+                        });
+
+                        const isToday = d.toDateString() === new Date().toDateString();
+
+                        return (
+                          <td key={i} className={`p-1.5 border-r border-slate-100 relative min-h-[60px] align-top ${isToday ? 'bg-emerald-50/10' : ''}`}>
+                            <div className="min-h-[50px] relative group/cell">
+                              {/* 追加ボタン（ホバー時） */}
+                              <button 
+                                onClick={() => handleOpenModal(dateStr, groupMode === 'worker' ? (item.id !== 'unassigned' ? item.id : '') : '', groupMode === 'field' ? (item.id !== 'unassigned' ? item.id : '') : '')}
+                                className="absolute inset-0 w-full h-full flex items-center justify-center opacity-0 group-hover/cell:opacity-100 hover:bg-slate-100/50 transition-all rounded z-0"
+                              >
+                                <Plus className="w-5 h-5 text-emerald-500" />
+                              </button>
+                              
+                              {/* タスクカード */}
+                              <div className="relative z-10 flex flex-col gap-1.5 w-full">
+                                {cellTasks.map(task => (
+                                  <div key={task.id} className="bg-white border border-emerald-200 shadow-sm p-2 rounded-lg group/task hover:border-emerald-400 hover:shadow-md transition-all relative">
+                                    <div className="font-bold text-emerald-800 text-xs truncate mb-1 pr-6" title={task.task_title}>
+                                      {task.task_title}
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 flex flex-col gap-0.5">
+                                      {groupMode === 'worker' && task.fields && (
+                                        <div className="flex items-center gap-1 truncate"><MapPin className="w-3 h-3 text-emerald-500"/> {task.fields.name}</div>
+                                      )}
+                                      {groupMode === 'field' && task.workers && (
+                                        <div className="flex items-center gap-1 truncate"><Users className="w-3 h-3 text-blue-500"/> {task.workers.name}</div>
+                                      )}
+                                      {task.crops && (
+                                        <div className="flex items-center gap-1 truncate"><Sprout className="w-3 h-3 text-amber-500"/> {task.crops.name}</div>
+                                      )}
+                                    </div>
+                                    <button 
+                                      onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }}
+                                      className="absolute top-1 right-1 opacity-0 group-hover/task:opacity-100 p-1 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {isModalOpen && (

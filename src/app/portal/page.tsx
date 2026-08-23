@@ -9,7 +9,7 @@ import {
   AlertCircle, Loader2, ArrowRight, PlayCircle, Globe2
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import { t, LANGUAGES, LanguageCode } from '@/lib/i18n';
+import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
 
 const CalendarWrapper = dynamic(() => import('@/components/CalendarWrapper'), { 
@@ -93,7 +93,7 @@ export default function PortalPage() {
             profile = workerData;
             setWorkerProfile(workerData);
             setCurrentUser(workerData);
-            ownerId = workerData.user_id; // ワーカーは所属するオーナーのIDを持っている
+            ownerId = localStorage.getItem('agri_owner_id') || ''; // 正しいオーナーIDを取得
             
             // ワーカー用に会社名を取得 (ownerIdから)
             const { data: companyData } = await supabase.from('company_settings').select('company_name').eq('user_id', ownerId).maybeSingle();
@@ -124,7 +124,7 @@ export default function PortalPage() {
     const today = getJSTDate();
 
     // 1. タスク (カレンダー用)
-    const targetUserId = profile ? profile.user_id : userId; // オーナーID
+    const targetUserId = userId; // userId には既に ownerId が渡されている
     const { data: taskData } = await supabase.from('work_logs')
       .select('id, task_title, work_date, status, crops(name), fields(name)')
       .eq('user_id', targetUserId)
@@ -246,7 +246,13 @@ export default function PortalPage() {
               {role === 'admin' ? t('adminMode', language) : t('workerMode', language)}
             </span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
+            {currentUser && (
+              <div className="text-xs md:text-sm font-bold text-slate-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                {getTranslatedName(currentUser, language)}
+              </div>
+            )}
             <div className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
               <Globe2 className="w-4 h-4 text-slate-400" />
               <select 

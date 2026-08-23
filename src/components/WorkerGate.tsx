@@ -17,6 +17,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [language, setLanguage] = useState<LanguageCode>('ja');
+  const [debugOwnerId, setDebugOwnerId] = useState('');
 
   useEffect(() => {
     let loadedLang = 'ja' as LanguageCode;
@@ -31,19 +32,32 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
     async function fetchWorkers() {
       try {
         const ownerId = localStorage.getItem('agri_owner_id');
+        setDebugOwnerId(ownerId || 'null');
         if (!ownerId) {
           setErrorMsg('タブレットが設定されていません。一度管理者でログインしてください。');
           setIsLoading(false);
           return;
         }
 
-        const res = await fetch(`/api/workers?ownerId=${ownerId}`);
-        const data = await res.json();
-        
-        if (data.error) throw new Error(data.error);
-        if (data.workers) setWorkers(data.workers);
-      } catch (err) {
+        // Vercel環境変数に依存しないよう、直接Supabaseから取得
+        // IDのズレを防ぐため一時的に全件取得（RLSは無効化済み）というコメントがありましたが
+        // マルチテナント対応のため、必ず ownerId で絞り込みます
+        const { data, error } = await supabase
+          .from('workers')
+          .select('*')
+          .eq('user_id', ownerId)
+          .order('name');
+          
+        if (error) throw error;
+        if (data) {
+          if (data.length === 0) {
+            setErrorMsg(`エラー: 登録された作業者が見つかりません。(ID: ${ownerId})`);
+          }
+          setWorkers(data);
+        }
+      } catch (err: any) {
         console.error(err);
+        setErrorMsg('Data Fetch Error: ' + (err.message || 'Unknown error'));
       } finally {
         setIsLoading(false);
       }
@@ -178,6 +192,14 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
             )}
           </button>
         </form>
+      </div>
+
+      {/* Debug Info for Troubleshooting */}
+      <div className="mt-8 text-xs text-slate-500 font-mono text-center max-w-sm w-full break-all">
+        <p>Debug Info:</p>
+        <p>Owner ID: {debugOwnerId}</p>
+        <p>Workers loaded: {workers.length}</p>
+        {errorMsg && <p className="text-rose-500">Error: {errorMsg}</p>}
       </div>
     </div>
   );
