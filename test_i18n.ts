@@ -1,0 +1,1 @@
+const a = { boardFilterGeneral: { ja: 'その他', en: 'Other', vi: 'Khác', id: 'Lainnya', zh: '其他', si: 'වෙනත්', km: 'ផ្សេងៗ' } };
