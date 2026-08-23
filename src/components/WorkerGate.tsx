@@ -32,36 +32,29 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
     async function fetchWorkers() {
       try {
         const ownerId = localStorage.getItem('agri_owner_id') || '';
-        setDebugOwnerId(ownerId || 'null');
+        setDebugOwnerId(ownerId || '未設定');
 
-        // 1. API経由でワーカーを取得（RLSをサーバーサイドで安全にバイパス）
+        if (!ownerId || ownerId === 'null' || ownerId === 'undefined') {
+          setErrorMsg('農園が設定されていません。一度管理者アカウントでログインして現場ポータルを設定してください。');
+          setIsLoading(false);
+          return;
+        }
+
+        // 指定された農園のワーカーのみをAPI経由で取得
         const res = await fetch(`/api/workers?ownerId=${encodeURIComponent(ownerId)}`);
         const json = await res.json();
         
-        let workerList = json.workers || [];
-
-        // 2. もしAPIで取れなかった場合は直接Supabaseも試行
-        if (workerList.length === 0) {
-          const { data } = await supabase.from('workers').select('*').order('name');
-          if (data && data.length > 0) {
-            workerList = data;
-          }
-        }
+        const workerList = json.workers || [];
 
         if (workerList.length > 0) {
           setErrorMsg('');
           setWorkers(workerList);
-          // 最初のスタッフの user_id があれば ownerId を自動修復
-          if (workerList[0].user_id) {
-            localStorage.setItem('agri_owner_id', workerList[0].user_id);
-            setDebugOwnerId(workerList[0].user_id);
-          }
         } else {
-          setErrorMsg('登録された作業者が見つかりません。管理者画面（スタッフマスタ）から作業者を登録してください。');
+          setErrorMsg('この農園に登録された作業者が見つかりません。管理者画面（スタッフマスタ）から作業者を登録してください。');
         }
       } catch (err: any) {
         console.error(err);
-        setErrorMsg('Data Fetch Error: ' + (err.message || 'Unknown error'));
+        setErrorMsg('データ取得エラー: ' + (err.message || 'Unknown error'));
       } finally {
         setIsLoading(false);
       }

@@ -13,63 +13,31 @@ export async function getFarmInfo(tenantId: string): Promise<{ success: boolean;
   try {
     const supabase = createAdminClient();
     
-    // 1. まずは指定の tenantId で会社設定を検索
-    if (tenantId && tenantId.length === 36) {
-      const { data } = await supabase
-        .from('company_settings')
-        .select('user_id, company_name, plan_type')
-        .eq('user_id', tenantId)
-        .maybeSingle();
-
-      if (data) {
-        return { 
-          success: true, 
-          data: { 
-            id: data.user_id, 
-            company_name: data.company_name || '名称未設定の農園',
-            plan_type: data.plan_type || 'standard'
-          } 
-        };
-      }
+    if (!tenantId || tenantId.length !== 36) {
+      return { success: false, error: '農園URL（ID）が正しくありません。' };
     }
 
-    // 2. もし見つからなかった場合は登録済みの会社設定からフォールバック取得
-    const { data: fallbackList } = await supabase
+    const { data, error } = await supabase
       .from('company_settings')
       .select('user_id, company_name, plan_type')
-      .limit(1);
+      .eq('user_id', tenantId)
+      .maybeSingle();
 
-    if (fallbackList && fallbackList.length > 0) {
-      const fb = fallbackList[0];
-      return {
-        success: true,
-        data: {
-          id: fb.user_id,
-          company_name: fb.company_name || '名称未設定の農園',
-          plan_type: fb.plan_type || 'standard'
-        }
-      };
+    if (error || !data) {
+      return { success: false, error: '指定された農園情報が見つかりませんでした。URLを確認してください。' };
     }
 
-    // 3. 会社設定すらまだない場合はデフォルト農園情報を返却
-    return {
-      success: true,
-      data: {
-        id: tenantId || 'default-tenant',
-        company_name: '農園ポータル',
-        plan_type: 'standard'
-      }
+    return { 
+      success: true, 
+      data: { 
+        id: data.user_id, 
+        company_name: data.company_name || '名称未設定の農園',
+        plan_type: data.plan_type || 'standard'
+      } 
     };
   } catch (error: any) {
     console.error('getFarmInfo Error:', error);
-    return { 
-      success: true, 
-      data: {
-        id: tenantId || 'default-tenant',
-        company_name: '農園ポータル',
-        plan_type: 'standard'
-      }
-    };
+    return { success: false, error: '農園情報の取得中にエラーが発生しました。' };
   }
 }
 
@@ -78,27 +46,19 @@ export async function getFarmWorkers(tenantId: string) {
   try {
     const supabase = createAdminClient();
 
-    // 1. tenantIdで検索
-    if (tenantId) {
-      const { data } = await supabase
-        .from('workers')
-        .select('id, name')
-        .eq('user_id', tenantId)
-        .order('name');
-        
-      if (data && data.length > 0) {
-        return { success: true, data };
-      }
+    if (!tenantId) {
+      return { success: false, error: '農園IDが指定されていません。' };
     }
 
-    // 2. フォールバック: 全ワーカー取得
-    const { data: allWorkers, error } = await supabase
+    // 指定された農園（tenantId）の作業者のみを厳格に取得
+    const { data, error } = await supabase
       .from('workers')
       .select('id, name')
+      .eq('user_id', tenantId)
       .order('name');
       
     if (error) throw error;
-    return { success: true, data: allWorkers || [] };
+    return { success: true, data: data || [] };
   } catch (error: any) {
     return { success: false, error: '作業者一覧を取得できませんでした。' };
   }
@@ -110,12 +70,13 @@ export async function verifyWorkerPin(tenantId: string, workerId: string, pinCod
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from('workers')
-      .select('id, name, pin_code, role')
+      .select('id, name, pin_code, role, user_id')
       .eq('id', workerId)
+      .eq('user_id', tenantId)
       .single();
 
     if (error || !data) {
-      return { success: false, error: '作業者が見つかりません。' };
+      return { success: false, error: '指定の農園に登録された作業者が見つかりません。' };
     }
 
     const expectedPin = data.pin_code || '0000';
@@ -139,10 +100,14 @@ export async function getFarmMasters(tenantId: string) {
     const supabase = createAdminClient();
     const currentYear = new Date().getFullYear();
 
+    if (!tenantId) {
+      return { success: false, error: '農園IDが指定されていません。' };
+    }
+
     const [cRes, fRes, mRes, pRes] = await Promise.all([
-      supabase.from('crops').select('id, name').order('name'),
-      supabase.from('fields').select('id, name, area_size').order('name'),
-      supabase.from('materials').select('*').order('name'),
+      supabase.from('crops').select('id, name').eq('user_id', tenantId).order('name'),
+      supabase.from('fields').select('id, name, area_size').eq('user_id', tenantId).order('name'),
+      supabase.from('materials').select('*').eq('user_id', tenantId).order('name'),
       supabase.from('cultivation_plans_v2').select(`
         id, 
         field_id, 
@@ -151,7 +116,7 @@ export async function getFarmMasters(tenantId: string) {
         start_month, 
         end_month,
         crops ( name )
-      `).eq('year', currentYear)
+      `).eq('user_id', tenantId).eq('year', currentYear)
     ]);
 
     return {

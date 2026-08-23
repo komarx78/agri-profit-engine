@@ -11,25 +11,20 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const ownerId = searchParams.get('ownerId');
 
-    let query = supabaseAdmin.from('workers').select('*').order('name');
-
-    if (ownerId && ownerId !== 'null' && ownerId !== 'undefined') {
-      const { data: specificData } = await supabaseAdmin
-        .from('workers')
-        .select('*')
-        .eq('user_id', ownerId)
-        .order('name');
-      
-      if (specificData && specificData.length > 0) {
-        return NextResponse.json({ workers: specificData });
-      }
+    if (!ownerId || ownerId === 'null' || ownerId === 'undefined') {
+      return NextResponse.json({ error: '農園IDが指定されていません', workers: [] }, { status: 400 });
     }
 
-    // フォールバック: 全ワーカー取得
-    const { data: allData, error } = await query;
+    // 指定された農園（user_id）のワーカーのみを厳格に取得
+    const { data, error } = await supabaseAdmin
+      .from('workers')
+      .select('id, name, name_en, name_vi, name_id, name_zh, name_si, name_km, role, pin_code, user_id')
+      .eq('user_id', ownerId)
+      .order('name');
+    
     if (error) throw error;
     
-    return NextResponse.json({ workers: allData || [] });
+    return NextResponse.json({ workers: data || [] });
   } catch (error: any) {
     console.error('API Error:', error.message);
     return NextResponse.json({ error: error.message || 'Failed to fetch workers', workers: [] }, { status: 500 });
