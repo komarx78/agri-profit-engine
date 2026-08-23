@@ -128,58 +128,16 @@ export default function PortalPage() {
           </Link>
 
           {/* 農業経営管理 */}
-          <Link href="/admin/dashboard" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-emerald-300 transition-all flex flex-col">
+          <Link href="/admin/cultivations" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-emerald-300 transition-all flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
                 <Sprout className="w-6 h-6" />
               </div>
               <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-emerald-500 transition-colors" />
             </div>
-            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors">農業経営管理</h3>
+            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors">🌾 作付け・作業 統合司令塔</h3>
             <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
-              作付計画、圃場マップ、売上推移などの農業生産に特化した利益管理ダッシュボードです。
-            </p>
-          </Link>
-
-          {/* 農薬・防除AIチェッカー */}
-          <Link href="/farm/pesticide-check" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-teal-300 transition-all flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-teal-100 text-teal-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <ShieldCheck className="w-6 h-6" />
-              </div>
-              <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-teal-500 transition-colors" />
-            </div>
-            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-teal-700 transition-colors">農薬・防除AIチェッカー</h3>
-            <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
-              MAFFの登録基準を参照し、対象の作物に対して指定した農薬や希釈倍率が適切かAIで自動チェックします。
-            </p>
-          </Link>
-
-          {/* 現場作業・スマホ打刻 */}
-          <Link href="/work" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-amber-300 transition-all flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Clock className="w-6 h-6" />
-              </div>
-              <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-amber-500 transition-colors" />
-            </div>
-            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-amber-700 transition-colors">現場作業・スマホ打刻</h3>
-            <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
-              農場スタッフ用のスマートフォン向け画面です。作業開始・終了の打刻や資材使用量の記録を行います。
-            </p>
-          </Link>
-
-          {/* 勤怠管理 */}
-          <Link href="/hr" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-blue-300 transition-all flex flex-col cursor-pointer">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Users className="w-6 h-6" />
-              </div>
-              <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition-colors" />
-            </div>
-            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-blue-700 transition-colors">勤怠・有給管理</h3>
-            <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
-              従業員の出退勤管理、有給休暇の付与・申請承認、シフト作成などを行います。
+              作付け一覧、7大一括日誌、散布管理（残回数）、圃場マップ、栽培計画を一元管理します。
             </p>
           </Link>
 
@@ -191,9 +149,9 @@ export default function PortalPage() {
               </div>
               <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-indigo-500 transition-colors" />
             </div>
-            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-indigo-700 transition-colors">販売・受注・請求管理</h3>
+            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-indigo-700 transition-colors">💰 販売・請求・経費管理</h3>
             <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
-              取引先からの受注管理、納品スケジュール可視化、請求書の自動生成などを一元管理します。
+              B2B受注、出荷履歴、請求書一括発行、資材購入・経費、会計データ出力（MF/freee）を統合管理します。
             </p>
           </Link>
 

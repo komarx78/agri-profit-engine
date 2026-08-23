@@ -110,23 +110,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       ]
     },
     {
-      title: '売上・請求・経費管理',
+      title: '連携システム・マスタ',
       items: [
-        { name: '出荷履歴一覧', path: '/admin/sales-history', icon: Truck },
-        { name: '請求書一括発行', path: '/admin/invoices', icon: FileText },
-        { name: '資材購入・直接経費', path: '/admin/purchases', icon: Receipt },
-        { name: '月次全体経費 (按分用)', path: '/admin/monthly-expenses', icon: Calculator },
-        { name: '会計データ出力', path: '/admin/accounting', icon: FileSpreadsheet },
-      ]
-    },
-    {
-      title: '連携アプリ・マスタ設定',
-      items: [
-        { name: '現場出退勤ポータル', path: '/portal', icon: Layout, external: true },
-        { name: 'B2B販売管理システム', path: '/sales-management/orders', icon: Truck, external: true },
-        { name: '労務・人事システム', path: '/hr', icon: Users, external: true },
-        { name: 'マスタ管理全般', path: '/admin/masters', icon: Database },
-        { name: '自社情報設定', path: '/admin/settings', icon: Settings },
+        { name: '💰 販売・請求・経費システム', path: '/sales-management', icon: Truck, external: true },
+        { name: '📱 現場出退勤ポータル', path: '/portal', icon: Layout, external: true },
+        { name: '👥 労務・人事システム', path: '/hr', icon: Users, external: true },
+        { name: '⚙️ マスタ管理全般', path: '/admin/masters', icon: Database },
+        { name: '🏢 自社情報設定', path: '/admin/settings', icon: Settings },
       ]
     }
   ];
