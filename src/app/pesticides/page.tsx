@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Search, AlertTriangle, CheckCircle2, ArrowLeft, Loader2, Save, ChevronDown, ChevronUp, Settings2, FlaskConical, ExternalLink, Plus, Check } from 'lucide-react';
+import { ShieldCheck, Search, AlertTriangle, CheckCircle2, ArrowLeft, Loader2, Save, ChevronDown, ChevronUp, Settings2, FlaskConical, ExternalLink, Plus, Check, LayoutGrid, Table as TableIcon } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
@@ -15,6 +15,7 @@ export default function PesticidesHubPage() {
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
   // 自社登録済み農薬マスタ
   const [adoptedPesticideNames, setAdoptedPesticideNames] = useState<string[]>([]);
@@ -352,20 +353,51 @@ export default function PesticidesHubPage() {
                   {result.message}
                 </div>
 
-                {/* カラム表示設定トグル */}
-                <div className="flex items-center justify-between pt-2">
-                  <span className="text-xs font-black text-slate-700">適用基準一覧（クリックで詳細展開）</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowColumnSettings(!showColumnSettings)}
-                    className="text-xs font-bold text-slate-500 hover:text-teal-600 flex items-center gap-1 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200"
-                  >
-                    <Settings2 className="w-3.5 h-3.5" />
-                    <span>列の表示設定</span>
-                  </button>
+                {/* 表示切替 ＆ カラム設定バー */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-slate-700">表示形式:</span>
+                    <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => setViewMode('cards')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 transition-all ${
+                          viewMode === 'cards' 
+                            ? 'bg-white text-teal-700 shadow-sm' 
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        <LayoutGrid className="w-3.5 h-3.5" />
+                        <span>見やすいカード一覧</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setViewMode('table')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 transition-all ${
+                          viewMode === 'table' 
+                            ? 'bg-white text-teal-700 shadow-sm' 
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        <TableIcon className="w-3.5 h-3.5" />
+                        <span>表形式</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {viewMode === 'table' && (
+                    <button
+                      type="button"
+                      onClick={() => setShowColumnSettings(!showColumnSettings)}
+                      className="text-xs font-bold text-slate-500 hover:text-teal-600 flex items-center gap-1 bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200 self-start sm:self-auto"
+                    >
+                      <Settings2 className="w-3.5 h-3.5" />
+                      <span>列の表示設定</span>
+                    </button>
+                  )}
                 </div>
 
-                {showColumnSettings && (
+                {viewMode === 'table' && showColumnSettings && (
                   <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-bold text-slate-700">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={showColumns.target_pest} onChange={e => setShowColumns({...showColumns, target_pest: e.target.checked})} className="rounded text-teal-600" />
@@ -398,8 +430,102 @@ export default function PesticidesHubPage() {
                   </div>
                 )}
 
-                {/* 該当基準テーブル */}
-                {result.pesticides && result.pesticides.length > 0 && (
+                {/* 1. カード一覧表示（全項目が見切れず一目瞭然） */}
+                {viewMode === 'cards' && result.pesticides && result.pesticides.length > 0 && (
+                  <div className="space-y-4">
+                    {result.pesticides.map((p: any, i: number) => {
+                      const isAlreadyAdopted = adoptedPesticideNames.includes(p.name);
+                      const isDirect = p.match_type === 'direct';
+                      return (
+                        <div 
+                          key={i} 
+                          className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm hover:border-teal-300 transition-all space-y-4"
+                        >
+                          {/* カードヘッダー */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="font-black text-base text-slate-800 tracking-tight">{p.name}</h3>
+                                <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${
+                                  isDirect 
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                    : p.match_type === 'subgroup'
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    : 'bg-purple-50 text-purple-700 border-purple-200'
+                                }`}>
+                                  {p.scope_label || p.crop_name}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-400 font-bold mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                                <span>登録番号: <strong className="text-slate-600">{p.registration_no}</strong></span>
+                                <span>製造元: <strong className="text-slate-600">{p.applicant || '未登録'}</strong></span>
+                                {p.type && <span>分類: <strong className="text-slate-600">{p.type}</strong></span>}
+                              </div>
+                            </div>
+
+                            {/* 自社マスタ登録ボタン */}
+                            <div className="self-start sm:self-center">
+                              {isAlreadyAdopted ? (
+                                <span className="text-xs font-black bg-emerald-100 text-emerald-800 px-3 py-1.5 rounded-xl inline-flex items-center gap-1 border border-emerald-200">
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                  自社マスタ登録済
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={isAdopting === p.name}
+                                  onClick={() => handleAdoptPesticide(p)}
+                                  className="text-xs font-black bg-teal-600 hover:bg-teal-700 text-white px-3.5 py-1.5 rounded-xl inline-flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                                >
+                                  {isAdopting === p.name ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                                  <span>自社農薬マスタに登録</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* AI包括登録の解説 */}
+                          {!isDirect && (
+                            <div className="bg-purple-50/80 border border-purple-200 p-3 rounded-2xl flex items-start gap-2.5 text-xs text-purple-900 font-bold">
+                              <span className="text-base">🤖</span>
+                              <div className="leading-relaxed">
+                                <span className="font-black text-purple-950 block mb-0.5">AI適用解説</span>
+                                本剤はFAMICにおいて「<span className="underline font-black">{p.crop_name}</span>」として包括登録されています。「{cropName}」は{p.crop_name}に該当するため、法令上**適正に使用可能**です。
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 4大必須スペックグリッド（全情報が即座に見える） */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50/80 p-3.5 rounded-2xl border border-slate-100 text-xs">
+                            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+                              <span className="text-[10px] font-black text-slate-400 block mb-0.5">🐛 対象病害虫・雑草</span>
+                              <p className="font-black text-rose-600 text-xs leading-tight">{p.target_pest}</p>
+                            </div>
+                            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+                              <span className="text-[10px] font-black text-slate-400 block mb-0.5">💧 希釈倍数・使用量</span>
+                              <p className="font-black text-teal-700 text-xs leading-tight">{p.usage_amount}</p>
+                            </div>
+                            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+                              <span className="text-[10px] font-black text-slate-400 block mb-0.5">⏳ 使用時期（収穫前等）</span>
+                              <p className="font-black text-slate-800 text-xs leading-tight">{p.usage_time}</p>
+                            </div>
+                            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+                              <span className="text-[10px] font-black text-slate-400 block mb-0.5">🔢 総使用可能回数</span>
+                              <p className="font-black text-amber-700 text-xs leading-tight">{p.usage_count}</p>
+                            </div>
+                            <div className="col-span-2 sm:col-span-4 pt-1.5 border-t border-slate-200/60 text-slate-500 font-bold text-[11px] flex items-center gap-1.5">
+                              <span>🚜 散布・使用方法:</span>
+                              <span className="text-slate-800 font-black">{p.usage_method}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* 2. テーブル一覧表示 */}
+                {viewMode === 'table' && result.pesticides && result.pesticides.length > 0 && (
                   <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm">
                     <table className="w-full text-xs text-left">
                       <thead className="text-white bg-teal-700 font-bold whitespace-nowrap">
