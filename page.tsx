@@ -244,6 +244,17 @@ export default function PortalPage() {
     return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-10 h-10 text-blue-500 animate-spin" /></div>;
   }
 
+  if (showWorkerGate) {
+    return (
+      <WorkerGate 
+        onLogin={(user) => {
+          setShowWorkerGate(false);
+          window.location.reload();
+        }} 
+      />
+    );
+  }
+
   const calendarEvents = tasks.map(t => ({
     id: t.id,
     title: t.task_title || '作業',
