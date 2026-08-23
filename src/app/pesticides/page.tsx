@@ -65,7 +65,6 @@ export default function PesticidesHubPage() {
 
       const newRecord = {
         user_id: userId,
-        tenant_id: userId,
         name: pName,
         material_type: 'pesticide',
         category: '農薬費',

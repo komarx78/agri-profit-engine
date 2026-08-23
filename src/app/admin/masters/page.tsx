@@ -201,8 +201,11 @@ export default function MastersPage() {
       // セッションからユーザーID (テナントID) を取得してセット
       const { data: { session } } = await supabase.auth.getSession();
       if (session && session.user) {
-        dataToSave.tenant_id = session.user.id;
-        dataToSave.user_id = session.user.id;
+        if (table === 'departments') {
+          dataToSave.tenant_id = session.user.id;
+        } else {
+          dataToSave.user_id = session.user.id;
+        }
       }
 
       if (['crops', 'fields', 'materials', 'pesticides', 'fertilizers'].includes(modalType) && dataToSave.name) {
