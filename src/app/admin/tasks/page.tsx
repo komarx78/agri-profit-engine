@@ -15,6 +15,7 @@ export default function TasksPage() {
   const [tenantId, setTenantId] = useState<string>('');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState<any>({
     work_date: new Date().toISOString().split('T')[0],
@@ -81,25 +82,51 @@ export default function TasksPage() {
         approval_status: 'pending'
       };
 
-      let insertData = [];
-      if (worker_ids && worker_ids.length > 0) {
-        insertData = worker_ids.map(id => ({
-          ...baseDataToSave,
-          worker_id: id
-        }));
-      } else {
-        insertData = [{
-          ...baseDataToSave,
-          worker_id: null
-        }];
-      }
+      if (editingTaskId) {
+        // 編集保存
+        const updatePayload = {
+          work_date: formData.work_date,
+          task_title: formData.task_title,
+          work_type: formData.task_title,
+          crop_id: formData.crop_id || null,
+          field_id: formData.field_id || null,
+          worker_id: (worker_ids && worker_ids.length > 0) ? worker_ids[0] : null,
+          department_id: formData.department_id || null
+        };
 
-      const { data, error } = await supabase.from('work_logs').insert(insertData).select('id, work_date, task_title, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(name), fields(name), workers(name), departments(name)');
-      if (error) throw error;
-      if (data) {
-        setTasks(prev => [...prev, ...data].sort((a, b) => a.work_date.localeCompare(b.work_date)));
+        const { data, error } = await supabase
+          .from('work_logs')
+          .update(updatePayload)
+          .eq('id', editingTaskId)
+          .select('id, work_date, task_title, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(name), fields(name), workers(name), departments(name)');
+
+        if (error) throw error;
+        if (data && data.length > 0) {
+          setTasks(prev => prev.map(t => t.id === editingTaskId ? data[0] : t).sort((a, b) => a.work_date.localeCompare(b.work_date)));
+        }
+      } else {
+        // 新規作成（複数担当者への複製対応）
+        let insertData = [];
+        if (worker_ids && worker_ids.length > 0) {
+          insertData = worker_ids.map(id => ({
+            ...baseDataToSave,
+            worker_id: id
+          }));
+        } else {
+          insertData = [{
+            ...baseDataToSave,
+            worker_id: null
+          }];
+        }
+
+        const { data, error } = await supabase.from('work_logs').insert(insertData).select('id, work_date, task_title, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(name), fields(name), workers(name), departments(name)');
+        if (error) throw error;
+        if (data) {
+          setTasks(prev => [...prev, ...data].sort((a, b) => a.work_date.localeCompare(b.work_date)));
+        }
       }
       setIsModalOpen(false);
+      setEditingTaskId(null);
       setFormData({ work_date: new Date().toISOString().split('T')[0], task_title: '', crop_id: '', field_id: '', worker_id: '', worker_ids: [], department_id: '' });
     } catch (err) {
       console.error(err);
@@ -120,6 +147,7 @@ export default function TasksPage() {
   };
 
   const handleOpenModal = (dateStr?: string, workerId?: string, fieldId?: string) => {
+    setEditingTaskId(null);
     setFormData({
       work_date: dateStr || new Date().toISOString().split('T')[0],
       task_title: '',
@@ -128,6 +156,20 @@ export default function TasksPage() {
       worker_id: workerId || '',
       worker_ids: workerId ? [workerId] : [],
       department_id: ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleEditModal = (task: any) => {
+    setEditingTaskId(task.id);
+    setFormData({
+      work_date: task.work_date,
+      task_title: task.task_title || '',
+      crop_id: task.crop_id || '',
+      field_id: task.field_id || '',
+      worker_id: task.worker_id || '',
+      worker_ids: task.worker_id ? [task.worker_id] : [],
+      department_id: task.department_id || ''
     });
     setIsModalOpen(true);
   };
@@ -369,7 +411,7 @@ export default function TasksPage() {
                               {/* タスクカード */}
                               <div className="relative z-10 flex flex-col gap-1.5 w-full">
                                 {cellTasks.map(task => (
-                                  <div key={task.id} className="bg-white border border-emerald-200 shadow-sm p-2 rounded-lg group/task hover:border-emerald-400 hover:shadow-md transition-all relative">
+                                  <div key={task.id} onClick={() => handleEditModal(task)} className="bg-white border border-emerald-200 shadow-sm p-2 rounded-lg group/task hover:border-emerald-400 hover:shadow-md transition-all relative cursor-pointer">
                                     <div className="font-bold text-emerald-800 text-xs truncate mb-1 pr-6" title={task.task_title}>
                                       {task.task_title}
                                     </div>
@@ -409,10 +451,10 @@ export default function TasksPage() {
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-emerald-50/50">
-              <h3 className="text-lg font-black text-emerald-800 flex items-center gap-2">
-                <Plus className="w-5 h-5" />
-                新規タスクの作成
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-emerald-50">
+              <h3 className="font-bold text-emerald-800 flex items-center gap-2">
+                {editingTaskId ? <Edit2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                {editingTaskId ? 'タスクの編集' : '新規タスクの作成'}
               </h3>
               <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full">
                 <X className="w-5 h-5" />
