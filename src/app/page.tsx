@@ -17,7 +17,8 @@ import {
   CreditCard,
   CheckCircle2,
   AlertCircle,
-  Truck
+  Truck,
+  Video
 } from 'lucide-react';
 
 export default function PortalPage() {
@@ -211,6 +212,20 @@ export default function PortalPage() {
             <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-cyan-700 transition-colors">クラウド会計データ出力</h3>
             <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
               売上・経費データから仕訳データを自動生成し、各種会計ソフトへ取り込める形式で出力します。
+            </p>
+          </Link>
+
+          {/* 動画マニュアル集 */}
+          <Link href="/manuals" className="group bg-white rounded-2xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-red-300 transition-all flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-red-100 text-red-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Video className="w-6 h-6" />
+              </div>
+              <ArrowUpRight className="w-5 h-5 text-slate-300 group-hover:text-red-500 transition-colors" />
+            </div>
+            <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-red-700 transition-colors">動画マニュアル集</h3>
+            <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
+              システムの使い方や各機能の操作手順を動画で分かりやすく解説します。
             </p>
           </Link>
 

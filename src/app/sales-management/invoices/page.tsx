@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { FileText, Play, CheckCircle2, AlertCircle, Calendar } from 'lucide-react';
+import { FileText, FileSpreadsheet, Calendar, CheckCircle2, AlertCircle, Play } from 'lucide-react';
+import Link from 'next/link';
 import { getB2BInvoices, generateInvoicesForMonth } from '@/app/actions/b2b';
 
 export default function InvoicesPage() {
@@ -90,15 +91,16 @@ export default function InvoicesPage() {
               <tr className="bg-white border-b border-slate-200 text-sm">
                 <th className="p-4 font-black text-slate-500">対象月・顧客名</th>
                 <th className="p-4 font-black text-slate-500">請求額 (円)</th>
-                <th className="p-4 font-black text-slate-500">支払期限</th>
-                <th className="p-4 font-black text-slate-500 text-center">ステータス</th>
+                <th className="p-4 font-bold text-slate-500 w-1/4">支払期限</th>
+                <th className="p-4 font-bold text-slate-500 w-32 text-center">ステータス</th>
+                <th className="p-4 font-bold text-slate-500 w-28 text-center">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr><td colSpan={4} className="p-8 text-center text-slate-500 font-bold">読み込み中...</td></tr>
+                <tr><td colSpan={5} className="p-8 text-center text-slate-500 font-bold">読み込み中...</td></tr>
               ) : invoices.length === 0 ? (
-                <tr><td colSpan={4} className="p-8 text-center text-slate-500 font-bold">請求書データがありません。</td></tr>
+                <tr><td colSpan={5} className="p-8 text-center text-slate-500 font-bold">請求書データがありません。</td></tr>
               ) : invoices.map((inv) => (
                 <tr key={inv.id} className="hover:bg-slate-50 transition-colors">
                   <td className="p-4">
@@ -121,6 +123,12 @@ export default function InvoicesPage() {
                       {inv.status === 'paid' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
                       {inv.status === 'paid' ? '入金済' : '未入金'}
                     </span>
+                  </td>
+                  <td className="p-4 text-center">
+                    <Link href={`/sales-management/invoices/${inv.id}`} className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 rounded-lg text-xs font-bold transition-colors">
+                      <FileText className="w-3.5 h-3.5" />
+                      詳細・PDF
+                    </Link>
                   </td>
                 </tr>
               ))}

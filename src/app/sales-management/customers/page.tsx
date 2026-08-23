@@ -34,7 +34,8 @@ export default function CustomersPage() {
     const token = Math.random().toString(36).substr(2, 9); // mock token
     const res = await createB2BCustomer({
       ...formData,
-      order_token: token
+      order_token: token,
+      farm_id: '00000000-0000-0000-0000-000000000001'
     });
     if (res.success) {
       setShowModal(false);
@@ -87,7 +88,6 @@ export default function CustomersPage() {
                 <th className="p-4 font-black text-slate-500 w-1/3">顧客名・タイプ</th>
                 <th className="p-4 font-black text-slate-500">締め日・支払日</th>
                 <th className="p-4 font-black text-slate-500 text-center">発注用URL</th>
-                <th className="p-4 font-black text-slate-500 text-right">設定</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -124,11 +124,6 @@ export default function CustomersPage() {
                     ) : (
                       <span className="text-slate-400 text-sm font-bold">-</span>
                     )}
-                  </td>
-                  <td className="p-4 text-right">
-                    <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                      <Settings className="w-5 h-5" />
-                    </button>
                   </td>
                 </tr>
               ))}

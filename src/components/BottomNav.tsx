@@ -55,8 +55,8 @@ export default function BottomNav() {
     
   }, [pathname]);
 
-  // /admin 配下やポータル画面(/)、ログイン画面ではボトムナビ全体を非表示
-  if (pathname === '/' || pathname?.startsWith('/admin') || pathname?.startsWith('/login') || pathname?.startsWith('/hr')) {
+  // /admin 配下やポータル画面(/)、ログイン画面、販売管理、B2B発注画面ではボトムナビ全体を非表示
+  if (pathname === '/' || pathname?.startsWith('/admin') || pathname?.startsWith('/login') || pathname?.startsWith('/hr') || pathname?.startsWith('/sales-management') || pathname?.startsWith('/b2b-order')) {
     return null;
   }
 

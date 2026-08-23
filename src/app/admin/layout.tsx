@@ -97,21 +97,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       items: [
         { name: '作業記録一覧', path: '/admin/history', icon: History },
         { name: '作業内容台帳 (集計)', path: '/admin/work-ledger', icon: Table },
-        { name: '動画マニュアル集', path: '/admin/manuals', icon: Video },
       ]
     },
     {
       title: '連携アプリ',
       items: [
+        { name: '販売管理システムへ', path: '/sales-management/orders', icon: Truck, external: true },
         { name: '労務・人事システムへ', path: '/hr', icon: Users, external: true },
         { name: '農薬検索・管理システムへ', path: '/pesticides', icon: FlaskConical, external: true },
+        { name: '動画マニュアル集', path: '/manuals', icon: Video, external: true },
       ]
     },
     {
       title: '設定・マスタ',
       items: [
         { name: 'マスタ管理全般', path: '/admin/masters', icon: Database },
-        { name: '出荷先・メール設定', path: '/admin/channels', icon: Store },
         { name: '自社情報設定', path: '/admin/settings', icon: Settings },
       ]
     },

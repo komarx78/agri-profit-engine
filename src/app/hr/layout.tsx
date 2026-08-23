@@ -14,7 +14,8 @@ import {
   X,
   Lock,
   Crown,
-  Cloud
+  Cloud,
+  Clock
 } from 'lucide-react';
 
 export default function HrLayout({ children }: { children: React.ReactNode }) {
@@ -29,6 +30,7 @@ export default function HrLayout({ children }: { children: React.ReactNode }) {
     { name: '本日の打刻状況', path: '/hr', icon: Users },
     { name: '月次タイムカード', path: '/hr/monthly', icon: Calendar },
     { name: '有給・休暇管理', path: '/hr/paid-leave', icon: Coffee },
+    { name: '残業申請の管理', path: '/hr/overtime', icon: Clock },
     { name: '従業員マスタ', path: '/hr/employees', icon: Settings },
     { name: '勤怠ルール・会社設定', path: '/hr/settings', icon: Building },
   ];

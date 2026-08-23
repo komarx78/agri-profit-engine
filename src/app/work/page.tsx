@@ -94,12 +94,19 @@ export default function WorkEntryPage() {
   const [memo, setMemo] = useState<string>('');
   const [selectedMaterial, setSelectedMaterial] = useState<string>('');
   const [materialQuantity, setMaterialQuantity] = useState<string>('');
+  const [errorMsg, setErrorMsg] = useState<string>('');
+
+  // 残業申請用ステート
+  const [showOvertimeModal, setShowOvertimeModal] = useState(false);
+  const [overtimeDate, setOvertimeDate] = useState(''); // useEffectで初期化
+  const [overtimeTime, setOvertimeTime] = useState('18:00');
+  const [overtimeReason, setOvertimeReason] = useState('');
+  const [overtimeStatus, setOvertimeStatus] = useState<string | null>(null);
 
   const [inputMode, setInputMode] = useState<'timer' | 'manual'>('timer');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
-  const [errorMsg, setErrorMsg] = useState<string>('');
 
   const [activeWorkLog, setActiveWorkLog] = useState<any>(null);
   const [elapsedMinutes, setElapsedMinutes] = useState<number>(0);
@@ -144,6 +151,26 @@ export default function WorkEntryPage() {
         if (!cRes.error) setIsConnected(true);
 
         if (!cRes.error && currentUser) {
+          // 今日の打刻状態を取得
+          const { data: aLog } = await supabase
+            .from('attendance_logs')
+            .select('*')
+            .eq('worker_id', currentUser.id)
+            .eq('date', getJSTDate())
+            .maybeSingle();
+          if (aLog) setAttendanceLog(aLog);
+
+          // 今日の残業申請を取得
+          const { data: oReq } = await supabase
+            .from('overtime_requests')
+            .select('*')
+            .eq('worker_id', currentUser.id)
+            .eq('date', getJSTDate())
+            .maybeSingle();
+          if (oReq) setOvertimeStatus(oReq.status);
+
+          setOvertimeDate(getJSTDate()); // 初期値は今日
+
           // 作業ログ取得
           const { data: activeLogs } = await supabase
             .from('work_logs')
@@ -297,6 +324,32 @@ export default function WorkEntryPage() {
   };
 
   // --- 勤怠打刻アクション ---
+  // --- 残業申請アクション ---
+  const handleOvertimeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !overtimeTime) return;
+    setIsSubmitting(true);
+    try {
+      const { error } = await supabase.from('overtime_requests').insert([{
+        worker_id: currentUser.id,
+        date: overtimeDate,
+        scheduled_end_time: overtimeTime.length === 5 ? overtimeTime + ':00' : overtimeTime,
+        reason: overtimeReason,
+        status: 'pending'
+      }]);
+      if (error) throw error;
+      
+      setOvertimeStatus('pending');
+      setShowOvertimeModal(false);
+      alert('残業申請を送信しました！');
+    } catch(err) {
+      console.error(err);
+      alert('残業申請の送信に失敗しました');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleAttendance = async (action: 'clock_in' | 'break_start' | 'break_end' | 'clock_out') => {
     if (!currentUser) return;
     setIsSubmitting(true);
@@ -634,6 +687,39 @@ export default function WorkEntryPage() {
               )}
             </div>
 
+            {/* 残業申請エリア（事前申請も可能） */}
+            <div className="mt-8 p-5 bg-slate-800/60 rounded-3xl border border-slate-700 flex flex-col items-center gap-4">
+              <h3 className="text-white font-bold w-full flex items-center gap-2 mb-1">
+                <Clock className="w-5 h-5 text-amber-400" /> 残業の申請（事前申請可）
+              </h3>
+              
+              {overtimeStatus === 'pending' && (
+                <div className="w-full py-3 bg-amber-500/20 text-amber-400 font-bold rounded-xl text-center border border-amber-500/30">
+                  【本日】残業申請中（承認待ち）
+                </div>
+              )}
+              {overtimeStatus === 'approved' && (
+                <div className="w-full py-3 bg-emerald-500/20 text-emerald-400 font-bold rounded-xl text-center border border-emerald-500/30 flex items-center justify-center gap-2">
+                  <CheckCircle2 className="w-5 h-5" /> 【本日】残業申請 承認済み
+                </div>
+              )}
+              {overtimeStatus === 'rejected' && (
+                <div className="w-full py-3 bg-rose-500/20 text-rose-400 font-bold rounded-xl text-center border border-rose-500/30 flex items-center justify-center gap-2">
+                  <AlertCircle className="w-5 h-5" /> 【本日】残業申請 却下
+                </div>
+              )}
+              
+              <button
+                onClick={() => {
+                  setOvertimeDate(getJSTDate());
+                  setShowOvertimeModal(true);
+                }}
+                className="w-full py-4 bg-amber-600 hover:bg-amber-500 text-white font-black rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
+              >
+                <Clock className="w-5 h-5" /> 残業を申請する
+              </button>
+            </div>
+
             {/* LINE連携・通知設定エリア */}
             <div className="mt-12 bg-slate-800/50 border border-slate-700 p-6 rounded-3xl shadow-inner">
               <h3 className="text-white font-bold mb-4 flex items-center gap-2">
@@ -907,6 +993,69 @@ export default function WorkEntryPage() {
           </form>
         )}
       </div>
+
+      {/* 残業申請モーダル */}
+      {showOvertimeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-800 rounded-3xl p-6 w-full max-w-sm border border-slate-700 shadow-2xl">
+            <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2">
+              <Clock className="w-6 h-6 text-amber-400" /> 残業の申請
+            </h3>
+            <form onSubmit={handleOvertimeSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-400 mb-1">残業する日付</label>
+                <input
+                  type="date"
+                  required
+                  value={overtimeDate}
+                  onChange={e => setOvertimeDate(e.target.value)}
+                  className="w-full p-4 bg-slate-900 border border-slate-700 rounded-2xl text-white font-black text-xl text-center focus:outline-none focus:border-amber-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-400 mb-1">残業終了(予定)時刻</label>
+                <input
+                  type="time"
+                  required
+                  value={overtimeTime}
+                  onChange={e => setOvertimeTime(e.target.value)}
+                  className="w-full p-4 bg-slate-900 border border-slate-700 rounded-2xl text-white font-black text-xl text-center focus:outline-none focus:border-amber-500"
+                />
+                <p className="text-xs text-emerald-400 mt-2 font-bold">
+                  ※承認されると、この予定時刻に合わせてLINEの退勤忘れ通知が遅らせて送信されます。
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-400 mb-1">残業の理由・作業内容</label>
+                <textarea
+                  required
+                  value={overtimeReason}
+                  onChange={e => setOvertimeReason(e.target.value)}
+                  placeholder="例: トマトの収穫が長引いたため"
+                  className="w-full p-4 bg-slate-900 border border-slate-700 rounded-2xl text-white focus:outline-none focus:border-amber-500"
+                  rows={3}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowOvertimeModal(false)}
+                  className="py-3 bg-slate-700 text-slate-300 font-bold rounded-xl"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="py-3 bg-amber-500 hover:bg-amber-400 text-amber-950 font-black rounded-xl disabled:opacity-50"
+                >
+                  {isSubmitting ? '送信中...' : '申請する'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

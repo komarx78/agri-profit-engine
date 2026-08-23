@@ -11,7 +11,8 @@ export default function HrSettingsPage() {
     default_start_time: '08:00',
     default_end_time: '17:00',
     default_rest_minutes: 60,
-    auto_round_out_time: true
+    auto_round_out_time: true,
+    line_notification_time: '18:00'
   });
 
   const [isLoading, setIsLoading] = useState(true);
@@ -36,7 +37,8 @@ export default function HrSettingsPage() {
             default_start_time: data.default_start_time ? data.default_start_time.substring(0, 5) : '08:00',
             default_end_time: data.default_end_time ? data.default_end_time.substring(0, 5) : '17:00',
             default_rest_minutes: data.default_rest_minutes ?? 60,
-            auto_round_out_time: data.auto_round_out_time ?? true
+            auto_round_out_time: data.auto_round_out_time ?? true,
+            line_notification_time: data.line_notification_time ? data.line_notification_time.substring(0, 5) : '18:00'
           });
         }
       } catch (err) {
@@ -64,6 +66,7 @@ export default function HrSettingsPage() {
         default_end_time: formData.default_end_time.length === 5 ? formData.default_end_time + ':00' : formData.default_end_time,
         default_rest_minutes: formData.default_rest_minutes,
         auto_round_out_time: formData.auto_round_out_time,
+        line_notification_time: formData.line_notification_time.length === 5 ? formData.line_notification_time + ':00' : formData.line_notification_time,
         updated_at: new Date().toISOString()
       };
 
@@ -169,6 +172,29 @@ export default function HrSettingsPage() {
                       定時以降の打刻を自動で残業としない
                     </label>
                   </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
+              <Clock className="w-5 h-5 text-emerald-500" /> LINE通知設定
+            </h2>
+            <div className="bg-emerald-50/50 p-5 rounded-xl border border-emerald-100 space-y-4">
+              <p className="text-sm font-bold text-slate-500 mb-2">
+                出勤したまま退勤を忘れている従業員に対して、自動でLINE通知（アラート）を送る時間を設定します。
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-500 mb-1">退勤忘れ通知の送信時間</label>
+                  <input
+                    type="time"
+                    name="line_notification_time"
+                    value={formData.line_notification_time}
+                    onChange={handleChange}
+                    className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold focus:outline-none focus:border-emerald-500"
+                  />
                 </div>
               </div>
             </div>

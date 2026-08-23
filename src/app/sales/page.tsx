@@ -116,7 +116,7 @@ export default function SalesEntryHubPage() {
                   <div>
                     <div className="font-black text-white text-base mb-1">{order.customer?.name}</div>
                     <div className="text-xs font-bold text-slate-400">
-                      {order.items?.map((i: any) => `${i.crop?.name} ${i.quantity}${i.unit}`).join(' / ')}
+                      {order.items?.map((i: any) => `${i.crops?.name || i.crop?.name || '不明'} ${i.quantity}${i.unit}`).join(' / ')}
                     </div>
                   </div>
                   <button 

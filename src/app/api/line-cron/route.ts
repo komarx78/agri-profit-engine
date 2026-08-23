@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     today.setHours(today.getHours() + 9);
     const dateStr = today.toISOString().split('T')[0];
 
-    // 1. 今日の打刻ログを取得（ジョインせずに単独で取得）
+    // 1. 今日の未退勤ログを取得
     const { data: logs, error: logsError } = await supabase
       .from('attendance_logs')
       .select('id, worker_id, clock_in, clock_out')
@@ -44,8 +44,24 @@ export async function GET(req: Request) {
       return NextResponse.json({ status: 'success', message: '未退勤者はおりませんでした' }, { status: 200 });
     }
 
-    // 2. 抽出されたworker_idを使ってワーカー情報を取得
     const workerIds = logs.map(l => l.worker_id);
+
+    // 2. マスタ設定を取得 (複数テナント対応のため全件取得。将来的にはworkerのcompany_id等で紐付ける)
+    const { data: settings } = await supabase.from('company_settings').select('id, line_notification_time');
+    // ※今回は簡略化のため最初の1件をデフォルトマスタとする
+    const defaultMasterTime = settings && settings.length > 0 && settings[0].line_notification_time 
+      ? settings[0].line_notification_time.substring(0, 5) 
+      : '18:00';
+
+    // 3. 承認済みの残業申請を取得
+    const { data: overtimes } = await supabase
+      .from('overtime_requests')
+      .select('worker_id, scheduled_end_time')
+      .eq('date', dateStr)
+      .eq('status', 'approved')
+      .in('worker_id', workerIds);
+
+    // 4. ワーカー情報を取得
     const { data: workers, error: workersError } = await supabase
       .from('workers')
       .select('id, name, line_user_id, is_line_notification_enabled')
@@ -56,37 +72,45 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Database error', details: workersError }, { status: 500 });
     }
 
-    // 3. 抽出されたワーカーに対してLINEプッシュ通知を送信
+    // 現在時刻(HH:MM)
+    const currentHourMin = today.toISOString().split('T')[1].substring(0, 5);
+    const forceRun = searchParams.get('force') === 'true';
+
     const pushResults = [];
     
     for (const log of logs) {
       const worker = workers?.find(w => w.id === log.worker_id);
-      
-      // LINE連携がOFF、またはIDがない場合はスキップ
       if (!worker || !worker.line_user_id || !worker.is_line_notification_enabled) continue;
 
-      const messageText = `お疲れ様です！\n本日 ${worker.name} さんの「退勤」がまだ打刻されていないようです。\n作業が終了している場合は、マイページから退勤処理をお願いいたします！\nhttps://agri-profit-engine.vercel.app/work`;
+      // そのワーカーの通知時間を決定 (残業申請があればそれを優先)
+      const ot = overtimes?.find(o => o.worker_id === worker.id);
+      const targetTime = ot ? ot.scheduled_end_time.substring(0, 5) : defaultMasterTime;
 
-      try {
-        const response = await fetch('https://api.line.me/v2/bot/message/push', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${channelAccessToken}`
-          },
-          body: JSON.stringify({
-            to: worker.line_user_id,
-            messages: [{ type: 'text', text: messageText }]
-          })
-        });
+      // 現在時刻と一致しているか、またはforceRun指定時のみ送信
+      if (forceRun || targetTime === currentHourMin) {
+        const messageText = `お疲れ様です！\n本日 ${worker.name} さんの「退勤」がまだ打刻されていません。\n作業が終わっている場合は、マイページから退勤処理をお願いいたします！\nhttps://agri-profit-engine.vercel.app/work`;
 
-        pushResults.push({
-          worker_id: worker.id,
-          name: worker.name,
-          status: response.status
-        });
-      } catch (err) {
-        console.error(`Push Error to ${worker.name}:`, err);
+        try {
+          const response = await fetch('https://api.line.me/v2/bot/message/push', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${channelAccessToken}`
+            },
+            body: JSON.stringify({
+              to: worker.line_user_id,
+              messages: [{ type: 'text', text: messageText }]
+            })
+          });
+
+          pushResults.push({
+            worker_id: worker.id,
+            name: worker.name,
+            status: response.status
+          });
+        } catch (err) {
+          console.error(`Push Error to ${worker.name}:`, err);
+        }
       }
     }
 

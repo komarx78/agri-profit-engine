@@ -113,16 +113,16 @@ export default function SalesManagementDashboard() {
                     <div className="text-sm font-bold text-slate-500 flex items-center gap-2">
                       {order.items?.map((item: any) => (
                         <span key={item.id} className="bg-slate-100 px-2 py-0.5 rounded">
-                          {item.crop?.name} {item.quantity}{item.unit}
+                          {item.crops?.name || item.crop?.name || '不明'} {item.quantity}{item.unit}
                         </span>
                       ))}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-lg font-black text-slate-800">¥{Number(order.total_amount).toLocaleString()}</span>
-                    <button className="text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg transition-colors">
-                      詳細
-                    </button>
+                    <Link href="/sales-management/orders" className="text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg transition-colors">
+                      詳細を見る
+                    </Link>
                   </div>
                 </div>
               ))}
