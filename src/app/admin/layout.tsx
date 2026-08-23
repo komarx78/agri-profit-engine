@@ -45,11 +45,28 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     async function checkAuth() {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/login');
+      if (session) {
+        setTenantId(session.user.id);
         return;
       }
-      setTenantId(session.user.id);
+
+      // 現場PINログイン（スタッフ管理者）の認証チェック
+      const savedWorker = localStorage.getItem('agri_current_worker');
+      const savedOwnerId = localStorage.getItem('agri_owner_id');
+
+      if (savedWorker && savedOwnerId) {
+        try {
+          const workerData = JSON.parse(savedWorker);
+          if (workerData.role === 'admin' || workerData.role === 'manager') {
+            setTenantId(savedOwnerId);
+            return;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      router.push('/login');
     }
     checkAuth();
   }, [router]);
