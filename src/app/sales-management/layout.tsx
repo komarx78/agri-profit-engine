@@ -31,7 +31,7 @@ export default function SalesManagementLayout({
       items: [
         { name: '売上ダッシュボード', path: '/sales-management', icon: LayoutDashboard },
         { name: 'B2B受注・納品管理', path: '/sales-management/orders', icon: ShoppingCart },
-        { name: '出荷履歴一覧', path: '/admin/sales-history', icon: Truck },
+        { name: '出荷履歴一覧', path: '/sales-management/sales-history', icon: Truck },
         { name: '請求書一括発行', path: '/sales-management/invoices', icon: FileText },
         { name: '顧客・取引先マスタ', path: '/sales-management/customers', icon: Users },
       ]
@@ -39,9 +39,9 @@ export default function SalesManagementLayout({
     {
       title: '仕入・経費・会計連動',
       items: [
-        { name: '資材購入・直接経費', path: '/admin/purchases', icon: Receipt },
-        { name: '月次全体経費 (按分用)', path: '/admin/monthly-expenses', icon: Calculator },
-        { name: '会計データ出力 (MF等)', path: '/admin/accounting', icon: FileSpreadsheet },
+        { name: '資材購入・直接経費', path: '/sales-management/purchases', icon: Receipt },
+        { name: '月次全体経費 (按分用)', path: '/sales-management/monthly-expenses', icon: Calculator },
+        { name: '会計データ出力 (MF等)', path: '/sales-management/accounting', icon: FileSpreadsheet },
       ]
     }
   ];
