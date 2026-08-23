@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   try {
     const { data, error } = await supabaseAdmin
       .from('workers')
-      .select('id, name, name_en, name_vi, name_id, name_zh, name_si, name_km, pin_code, role')
+      .select('*')
       .eq('user_id', ownerId)
       .order('name');
 
