@@ -662,24 +662,33 @@ export default function WorkEntryPage() {
 
   return (
     <main className="min-h-screen bg-emerald-950 text-slate-100 font-sans pb-32">
-      <header className="sticky top-0 z-10 backdrop-blur-md bg-emerald-950/80 border-b border-emerald-800/50 px-4 pt-4 pb-2 shadow-lg flex flex-col gap-4">
-        <div className="max-w-md w-full mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-xl shadow-md text-emerald-950">
-              <Sprout className="w-6 h-6 stroke-[2.5]" />
+      {/* ヘッダー */}
+      <header className="sticky top-0 z-10 backdrop-blur-md bg-emerald-950/90 border-b border-emerald-800/50 px-3 py-2.5 shadow-lg flex flex-col gap-2.5">
+        <div className="max-w-md w-full mx-auto flex items-center justify-between gap-2">
+          
+          {/* 左側：アプリアイコン＆タイトル */}
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="p-2 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-xl shadow-md text-emerald-950 flex-shrink-0">
+              <Sprout className="w-5 h-5 stroke-[2.5]" />
             </div>
-            <div>
-              <h1 className="text-xl font-black tracking-tight text-white">{t('systemTitle', language)}</h1>
-              <p className="text-xs font-medium text-emerald-400">{language === 'ja' ? `${getTranslatedName(currentUser, language)} さん` : getTranslatedName(currentUser, language)}</p>
+            <div className="min-w-0">
+              <h1 className="text-base font-black tracking-tight text-white truncate leading-tight">
+                {t('systemTitle', language)}
+              </h1>
+              <p className="text-[11px] font-bold text-emerald-400 truncate">
+                {language === 'ja' ? `${getTranslatedName(currentUser, language)} さん` : getTranslatedName(currentUser, language)}
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* 右側：コントロール (ポータル戻る・言語・ログアウト) */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             <button
               onClick={() => router.push('/portal')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 hover:text-white border border-blue-400/30 rounded-xl text-xs font-bold transition-all shadow-sm"
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 hover:text-white border border-blue-500/40 rounded-xl text-xs font-bold transition-all shadow-sm whitespace-nowrap"
               title="ポータル画面へ戻る"
             >
-              <Layout className="w-3.5 h-3.5" />
+              <Layout className="w-3.5 h-3.5 flex-shrink-0" />
               <span>ポータル</span>
             </button>
             <select
@@ -692,49 +701,53 @@ export default function WorkEntryPage() {
                 const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang'));
                 langKeys.forEach(key => localStorage.setItem(key, newLang));
               }}
-              className="bg-emerald-900 text-emerald-300 text-xs font-bold rounded-lg px-2 py-1.5 focus:outline-none border border-emerald-800"
+              className="bg-emerald-900 text-emerald-300 text-xs font-bold rounded-xl px-2 py-1.5 focus:outline-none border border-emerald-800"
             >
               {LANGUAGES.map(l => (
                 <option key={l.code} value={l.code}>{l.flag} {l.code.toUpperCase()}</option>
               ))}
             </select>
-            <button onClick={handleLogout} className="p-2 bg-emerald-900 text-emerald-400 rounded-full hover:bg-emerald-800 transition-colors">
-              <LogOut className="w-5 h-5" />
+            <button onClick={handleLogout} className="p-1.5 bg-emerald-900/80 text-emerald-400 rounded-xl hover:bg-emerald-800 transition-colors" title="ログアウト">
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {/* タブ切り替え (現場実務: 出退勤・作業記録・出荷) */}
-        <div className="max-w-md w-full mx-auto flex bg-emerald-900/50 p-1 rounded-xl mb-2">
+        <div className="max-w-md w-full mx-auto flex bg-emerald-900/60 p-1 rounded-2xl">
           <button
             onClick={() => setActiveTab('attendance')}
-            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'attendance' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70 hover:text-white'
+            className={`flex-1 py-2 px-1 text-xs sm:text-sm font-black rounded-xl transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'attendance' ? 'bg-emerald-500 text-emerald-950 shadow-md scale-[1.02]' : 'text-emerald-300/70 hover:text-white'
             }`}
           >
-            <Clock className="w-4 h-4" />{t('attendance', language)}
+            <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>{t('attendance', language)}</span>
           </button>
           <button
             onClick={() => setActiveTab('work')}
-            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'work' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70 hover:text-white'
+            className={`flex-1 py-2 px-1 text-xs sm:text-sm font-black rounded-xl transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'work' ? 'bg-emerald-500 text-emerald-950 shadow-md scale-[1.02]' : 'text-emerald-300/70 hover:text-white'
             }`}
           >
-            <History className="w-4 h-4" />{t('workRecord', language)}
+            <History className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>{t('workRecord', language)}</span>
           </button>
           <button
             onClick={() => setActiveTab('sales')}
-            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'sales' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70 hover:text-white'
+            className={`flex-1 py-2 px-1 text-xs sm:text-sm font-black rounded-xl transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'sales' ? 'bg-emerald-500 text-emerald-950 shadow-md scale-[1.02]' : 'text-emerald-300/70 hover:text-white'
             }`}
           >
-            <Truck className="w-4 h-4" />出荷・納品
+            <Truck className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>出荷・納品</span>
           </button>
         </div>
         
         {/* GPS住所の表示 */}
-        <div className="max-w-md w-full mx-auto flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-400">
-          <MapPin className="w-3.5 h-3.5" /> {currentAddress}
+        <div className="max-w-md w-full mx-auto flex items-center justify-center gap-1.5 text-[11px] font-bold text-emerald-400 truncate">
+          <MapPin className="w-3 h-3 flex-shrink-0" />
+          <span className="truncate">{currentAddress}</span>
         </div>
       </header>
 
