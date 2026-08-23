@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
+  Truck,
   Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, 
   History, LogOut, Loader2, AlertCircle, Coffee, LogIn, LogOut as LogOutIcon, Sun, CloudRain, Plus, X,
   ImageIcon, FileText, Video, MessageSquare, Globe2, MessageCircle, Trash2
@@ -685,7 +686,7 @@ export default function WorkEntryPage() {
           </div>
         </div>
 
-        {/* タブ切り替え */}
+        {/* タブ切り替え (現場実務: 出退勤・作業記録・出荷) */}
         <div className="max-w-md w-full mx-auto flex bg-emerald-900/50 p-1 rounded-xl mb-2">
           <button
             onClick={() => setActiveTab('attendance')}
@@ -704,12 +705,10 @@ export default function WorkEntryPage() {
             <History className="w-4 h-4" />{t('workRecord', language)}
           </button>
           <button
-            onClick={() => setActiveTab('board')}
-            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
-              activeTab === 'board' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70'
-            }`}
+            onClick={() => router.push('/sales')}
+            className="flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 text-emerald-300/70 hover:text-white"
           >
-            <MessageSquare className="w-4 h-4" />{t('board', language)}
+            <Truck className="w-4 h-4 text-emerald-400" />出荷・納品
           </button>
         </div>
         
