@@ -55,15 +55,18 @@ export default function MastersPage() {
   const fetchMasters = async () => {
     try {
       setIsLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      
       const [cRes, fRes, wRes, mRes, spRes, csRes, chRes, dRes] = await Promise.all([
-        supabase.from('crops').select('*').order('name'),
-        supabase.from('fields').select('*').order('name'),
-        supabase.from('workers').select('*').order('name'),
-        supabase.from('materials').select('*').order('name'),
-        supabase.from('sales_prices').select('*').order('crop_name'),
-        supabase.from('crop_standards').select('*'),
-        supabase.from('sales_channels').select('*').order('name'),
-        supabase.from('departments').select('*').order('name')
+        supabase.from('crops').select('*').eq('user_id', userId).order('name'),
+        supabase.from('fields').select('*').eq('user_id', userId).order('name'),
+        supabase.from('workers').select('*').eq('user_id', userId).order('name'),
+        supabase.from('materials').select('*').eq('user_id', userId).order('name'),
+        supabase.from('sales_prices').select('*').eq('user_id', userId).order('crop_name'),
+        supabase.from('crop_standards').select('*'), // Assuming standards linked via crop_id?
+        supabase.from('sales_channels').select('*').order('name'), // If sales_channels is global or tenant? Assuming it might not have user_id if it's empty, we leave it for now.
+        supabase.from('departments').select('*').eq('tenant_id', userId).order('name')
       ]);
       
       setCrops(cRes.data || []);
