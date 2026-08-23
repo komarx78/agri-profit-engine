@@ -38,10 +38,12 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
         }
 
         // Vercel環境変数に依存しないよう、直接Supabaseから取得
-        // IDのズレを防ぐため一時的に全件取得（RLSは無効化済み）
+        // IDのズレを防ぐため一時的に全件取得（RLSは無効化済み）というコメントがありましたが
+        // マルチテナント対応のため、必ず ownerId で絞り込みます
         const { data, error } = await supabase
           .from('workers')
-          .select('id, name, name_en, name_vi, name_id, name_zh, name_si, name_km, pin_code, role')
+          .select('*')
+          .eq('user_id', ownerId)
           .order('name');
           
         if (error) throw error;
