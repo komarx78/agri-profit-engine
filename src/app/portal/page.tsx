@@ -534,7 +534,7 @@ export default function PortalPage() {
                   onClick={handleOpenBoardModal}
                   className="text-xs font-bold text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-1 rounded-lg transition-colors flex items-center gap-1"
                 >
-                  <Plus className="w-3.5 h-3.5" /> 投稿
+                  <Plus className="w-3.5 h-3.5" /> {t('board_newPost', language)}
                 </button>
               </div>
               <div className="space-y-3 mb-4">
@@ -600,10 +600,10 @@ export default function PortalPage() {
             <div className="flex items-center gap-3">
               <button 
                 onClick={() => setShowBoardModal(false)}
-                className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors flex items-center gap-1 font-bold text-sm"
+                className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors flex items-center gap-1.5 font-bold text-sm"
               >
                 <ArrowLeft className="w-5 h-5" />
-                <span className="hidden sm:inline">ポータルへ戻る</span>
+                <span className="hidden sm:inline">{t('board_backToPortal', language)}</span>
               </button>
               <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
               <div className="flex items-center gap-2">
@@ -611,15 +611,35 @@ export default function PortalPage() {
                   <MessageSquare className="w-5 h-5" />
                 </div>
                 <div>
-                  <h1 className="font-black text-slate-800 text-lg leading-none">
-                    社内掲示板 & スレッド
+                  <h1 className="font-black text-slate-800 text-base sm:text-lg leading-none">
+                    {t('board_modalTitle', language)}
                   </h1>
-                  <span className="text-xs font-bold text-slate-400">リアルタイム連絡・多言語自動翻訳</span>
+                  <span className="text-[11px] sm:text-xs font-bold text-slate-400">
+                    {t('board_modalSub', language)}
+                  </span>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
+              {/* 言語切り替えセレクター */}
+              <select
+                value={language}
+                onChange={(e) => {
+                  const newLang = e.target.value as LanguageCode;
+                  setLanguage(newLang);
+                  localStorage.setItem('agri_lang', newLang);
+                  localStorage.setItem('agri_lang_sales', newLang);
+                  const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang'));
+                  langKeys.forEach(key => localStorage.setItem(key, newLang));
+                }}
+                className="bg-slate-50 text-slate-700 font-black text-xs border border-slate-200 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-purple-400 shadow-sm"
+              >
+                {LANGUAGES.map(l => (
+                  <option key={l.code} value={l.code}>{l.flag} {l.code.toUpperCase()}</option>
+                ))}
+              </select>
+
               <button
                 onClick={loadFullBoardPosts}
                 className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-colors"
@@ -646,18 +666,18 @@ export default function PortalPage() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <span className="text-sm font-black text-slate-700 flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-purple-500" />
-                      新しいお知らせを投稿（全スタッフの母国語へAI自動翻訳）
+                      {t('board_newPostTitle', language)}
                     </span>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-400">カテゴリ:</span>
+                      <span className="text-xs font-bold text-slate-400">{t('board_categoryLabel', language)}</span>
                       <select
                         value={newPostCategory}
                         onChange={e => setNewPostCategory(e.target.value as any)}
                         className="bg-slate-50 text-xs font-bold text-slate-700 border border-slate-200 rounded-xl px-3 py-1.5 focus:outline-none focus:border-purple-400 shadow-sm"
                       >
-                        <option value="life">🛒 生活・買い物・特売</option>
-                        <option value="work">🚜 仕事・業務連絡</option>
-                        <option value="general">💬 雑談・その他</option>
+                        <option value="life">{t('board_catLife', language)}</option>
+                        <option value="work">{t('board_catWork', language)}</option>
+                        <option value="general">{t('board_catGeneral', language)}</option>
                       </select>
                     </div>
                   </div>
@@ -665,7 +685,7 @@ export default function PortalPage() {
                   <textarea
                     value={newPostContent}
                     onChange={e => setNewPostContent(e.target.value)}
-                    placeholder="スタッフ全員にお知らせしたい内容を入力してください... (例: マツヤスーパーでイチゴが特売だよ！ / 明日は雨天のため長靴を持参してください)"
+                    placeholder={t('board_placeholder', language)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:bg-white transition-all resize-none shadow-inner"
                     rows={3}
                     required
@@ -673,7 +693,7 @@ export default function PortalPage() {
 
                   <div className="flex items-center justify-between pt-1">
                     <span className="text-xs font-bold text-slate-400">
-                      投稿者: <span className="text-purple-600 font-black">{workerProfile ? workerProfile.name : '管理者'}</span>
+                      {t('board_author', language)} <span className="text-purple-600 font-black">{workerProfile ? workerProfile.name : '管理者'}</span>
                     </span>
                     <button
                       type="submit"
@@ -681,7 +701,7 @@ export default function PortalPage() {
                       className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-200 text-white font-black text-sm rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2"
                     >
                       {isPostingBoard ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                      <span>投稿する</span>
+                      <span>{t('board_postBtn', language)}</span>
                     </button>
                   </div>
                 </form>
@@ -691,10 +711,10 @@ export default function PortalPage() {
               <div className="flex items-center justify-between">
                 <div className="flex gap-2 overflow-x-auto pb-1 max-w-full">
                   {[
-                    { id: 'all', label: 'すべて' },
-                    { id: 'life', label: '🛒 生活・買い物' },
-                    { id: 'work', label: '🚜 業務連絡' },
-                    { id: 'general', label: '💬 その他' }
+                    { id: 'all', label: t('board_filterAll', language) },
+                    { id: 'life', label: t('board_catLife', language) },
+                    { id: 'work', label: t('board_catWork', language) },
+                    { id: 'general', label: t('board_catGeneral', language) }
                   ].map(tab => (
                     <button
                       key={tab.id}
@@ -710,7 +730,7 @@ export default function PortalPage() {
                   ))}
                 </div>
                 <span className="text-xs font-bold text-slate-400 hidden sm:inline">
-                  全 {allBoardPosts.length} 件
+                  {allBoardPosts.length} posts
                 </span>
               </div>
 
@@ -719,14 +739,13 @@ export default function PortalPage() {
                 {allBoardPosts.filter(p => boardFilter === 'all' || p.category === boardFilter).length === 0 ? (
                   <div className="text-center py-16 bg-white rounded-3xl border border-slate-200 border-dashed">
                     <MessageSquare className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                    <p className="text-slate-400 font-bold">該当するお知らせはありません</p>
+                    <p className="text-slate-400 font-bold">{t('board_noPosts', language)}</p>
                   </div>
                 ) : (
                   allBoardPosts
                     .filter(p => boardFilter === 'all' || p.category === boardFilter)
                     .map(post => {
                       const comments = post.board_comments || [];
-                      const isReplying = openReplyThread[post.id];
 
                       return (
                         <div key={post.id} className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4 transition-all hover:border-purple-200">
@@ -739,7 +758,7 @@ export default function PortalPage() {
                                 post.category === 'life' ? 'bg-amber-100 text-amber-700' :
                                 'bg-slate-100 text-slate-600'
                               }`}>
-                                {post.category === 'work' ? '🚜 業務' : post.category === 'life' ? '🛒 生活' : '💬 その他'}
+                                {post.category === 'work' ? t('board_catWork', language) : post.category === 'life' ? t('board_catLife', language) : t('board_catGeneral', language)}
                               </span>
                               <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
                                 <span className="font-black text-slate-800">👤 {post.workers?.name || '管理者'}</span>
@@ -806,7 +825,7 @@ export default function PortalPage() {
                                   type="text"
                                   value={replyInputs[post.id] || ''}
                                   onChange={e => setReplyInputs({ ...replyInputs, [post.id]: e.target.value })}
-                                  placeholder="返信を入力... (例: 了解しました！ / 私も行きます)"
+                                  placeholder={t('board_replyPlaceholder', language)}
                                   className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-4 pr-10 text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-purple-400 focus:bg-white transition-all"
                                 />
                                 {replyInputs[post.id] && (
@@ -825,7 +844,7 @@ export default function PortalPage() {
                                 className="px-4 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-200 text-white font-black text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5 flex-shrink-0"
                               >
                                 {isSubmittingReply[post.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                                <span>返信</span>
+                                <span>{t('board_replyBtn', language)}</span>
                               </button>
                             </form>
 
