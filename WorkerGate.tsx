@@ -37,12 +37,15 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           return;
         }
 
-        // 安全なAPIルート経由で、ownerIdに紐づくスタッフのみを取得
-        const res = await fetch(`/api/workers?ownerId=${ownerId}`);
-        const data = await res.json();
-        
-        if (data.error) throw new Error(data.error);
-        if (data.workers) setWorkers(data.workers);
+        // Vercel環境変数に依存しないよう、直接Supabaseから取得
+        const { data, error } = await supabase
+          .from('workers')
+          .select('id, name, name_en, name_vi, name_id, name_zh, name_si, name_km, pin_code, role')
+          .eq('user_id', ownerId)
+          .order('name');
+          
+        if (error) throw error;
+        if (data) setWorkers(data);
       } catch (err) {
         console.error(err);
       } finally {
