@@ -406,6 +406,7 @@ export default function PesticidesHubPage() {
                       <thead className="text-white bg-teal-700 font-bold whitespace-nowrap">
                         <tr>
                           <th className="px-4 py-3">農薬名 / 登録番号</th>
+                          <th className="px-4 py-3">登録適用区分</th>
                           {showColumns.target_pest && <th className="px-4 py-3">対象病害虫</th>}
                           {showColumns.usage_amount && <th className="px-4 py-3">希釈倍数/使用量</th>}
                           {showColumns.usage_time && <th className="px-4 py-3">使用時期</th>}
@@ -419,6 +420,7 @@ export default function PesticidesHubPage() {
                       <tbody className="divide-y divide-slate-100 bg-white">
                         {result.pesticides.map((p: any, i: number) => {
                           const isAlreadyAdopted = adoptedPesticideNames.includes(p.name);
+                          const isDirect = p.match_type === 'direct';
                           return (
                             <React.Fragment key={i}>
                               <tr 
@@ -435,6 +437,17 @@ export default function PesticidesHubPage() {
                                       {expandedRow === i ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                     </div>
                                   </div>
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full inline-block border ${
+                                    isDirect 
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                      : p.match_type === 'subgroup'
+                                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                      : 'bg-purple-50 text-purple-700 border-purple-200'
+                                  }`}>
+                                    {p.scope_label || p.crop_name}
+                                  </span>
                                 </td>
                                 {showColumns.target_pest && <td className="px-4 py-3 font-bold text-rose-600">{p.target_pest}</td>}
                                 {showColumns.usage_amount && <td className="px-4 py-3 font-bold text-slate-700">{p.usage_amount}</td>}
@@ -466,57 +479,74 @@ export default function PesticidesHubPage() {
                               {/* 展開行（詳細） */}
                               {expandedRow === i && (
                                 <tr className="bg-slate-50">
-                                  <td colSpan={2 + Object.values(showColumns).filter(Boolean).length} className="p-5 shadow-inner">
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs font-bold">
-                                      <div>
-                                        <span className="text-[10px] text-slate-400 block mb-0.5">農薬名</span>
-                                        <p className="text-slate-800 font-black text-sm">{p.name}</p>
-                                      </div>
-                                      <div>
-                                        <span className="text-[10px] text-slate-400 block mb-0.5">農林水産省 登録番号</span>
-                                        <p className="text-slate-800">{p.registration_no}</p>
-                                      </div>
-                                      <div>
-                                        <span className="text-[10px] text-slate-400 block mb-0.5">製造・登録メーカー</span>
-                                        <p className="text-slate-800">{p.applicant || '未登録'}</p>
-                                      </div>
-                                      <div>
-                                        <span className="text-[10px] text-slate-400 block mb-0.5">対象病害虫・雑草</span>
-                                        <p className="text-rose-600">{p.target_pest}</p>
-                                      </div>
-                                      <div>
-                                        <span className="text-[10px] text-slate-400 block mb-0.5">希釈倍数・使用量</span>
-                                        <p className="text-slate-800">{p.usage_amount}</p>
-                                      </div>
-                                      <div>
-                                        <span className="text-[10px] text-slate-400 block mb-0.5">使用時期（収穫前日数等）</span>
-                                        <p className="text-slate-800">{p.usage_time}</p>
-                                      </div>
-                                      <div>
-                                        <span className="text-[10px] text-slate-400 block mb-0.5">使用方法</span>
-                                        <p className="text-slate-800">{p.usage_method}</p>
-                                      </div>
-                                      <div>
-                                        <span className="text-[10px] text-slate-400 block mb-0.5">本剤の総使用可能回数</span>
-                                        <p className="text-amber-700">{p.usage_count}</p>
-                                      </div>
-                                      <div className="sm:col-span-2 md:col-span-3 pt-2 border-t border-slate-200 flex justify-end">
-                                        {isAlreadyAdopted ? (
-                                          <span className="text-xs font-black bg-emerald-100 text-emerald-800 px-3 py-1.5 rounded-xl inline-flex items-center gap-1 border border-emerald-200">
-                                            <Check className="w-4 h-4 text-emerald-600" />
-                                            自社の採用農薬マスタに登録済みです
-                                          </span>
-                                        ) : (
-                                          <button
-                                            type="button"
-                                            disabled={isAdopting === p.name}
-                                            onClick={() => handleAdoptPesticide(p)}
-                                            className="text-xs font-black bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl inline-flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
-                                          >
-                                            {isAdopting === p.name ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                                            <span>この基準情報で自社農薬マスタに登録する</span>
-                                          </button>
-                                        )}
+                                  <td colSpan={3 + Object.values(showColumns).filter(Boolean).length} className="p-5 shadow-inner">
+                                    <div className="space-y-4">
+                                      {/* AI解説ボックス */}
+                                      {!isDirect && (
+                                        <div className="bg-purple-50 border border-purple-200 p-3.5 rounded-2xl flex items-start gap-2.5 text-xs text-purple-900 font-bold">
+                                          <span className="text-base">🤖</span>
+                                          <div className="leading-relaxed">
+                                            <span className="font-black text-purple-950 block mb-0.5">AI適用解説（作物群・包括登録）</span>
+                                            本剤はFAMICにおいて「<span className="underline font-black">{p.crop_name}</span>」として包括登録されています。「{cropName}」は{p.crop_name}に該当するため、法令上**適正に使用可能**です。
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs font-bold">
+                                        <div>
+                                          <span className="text-[10px] text-slate-400 block mb-0.5">農薬名</span>
+                                          <p className="text-slate-800 font-black text-sm">{p.name}</p>
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] text-slate-400 block mb-0.5">登録適用作物</span>
+                                          <p className="text-slate-800 font-black">{p.crop_name}</p>
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] text-slate-400 block mb-0.5">農林水産省 登録番号</span>
+                                          <p className="text-slate-800">{p.registration_no}</p>
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] text-slate-400 block mb-0.5">製造・登録メーカー</span>
+                                          <p className="text-slate-800">{p.applicant || '未登録'}</p>
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] text-slate-400 block mb-0.5">対象病害虫・雑草</span>
+                                          <p className="text-rose-600">{p.target_pest}</p>
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] text-slate-400 block mb-0.5">希釈倍数・使用量</span>
+                                          <p className="text-slate-800">{p.usage_amount}</p>
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] text-slate-400 block mb-0.5">使用時期（収穫前日数等）</span>
+                                          <p className="text-slate-800">{p.usage_time}</p>
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] text-slate-400 block mb-0.5">使用方法</span>
+                                          <p className="text-slate-800">{p.usage_method}</p>
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] text-slate-400 block mb-0.5">本剤の総使用可能回数</span>
+                                          <p className="text-amber-700">{p.usage_count}</p>
+                                        </div>
+                                        <div className="sm:col-span-2 md:col-span-3 pt-2 border-t border-slate-200 flex justify-end">
+                                          {isAlreadyAdopted ? (
+                                            <span className="text-xs font-black bg-emerald-100 text-emerald-800 px-3 py-1.5 rounded-xl inline-flex items-center gap-1 border border-emerald-200">
+                                              <Check className="w-4 h-4 text-emerald-600" />
+                                              自社の採用農薬マスタに登録済みです
+                                            </span>
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              disabled={isAdopting === p.name}
+                                              onClick={() => handleAdoptPesticide(p)}
+                                              className="text-xs font-black bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl inline-flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
+                                            >
+                                              {isAdopting === p.name ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                                              <span>この基準情報で自社農薬マスタに登録する</span>
+                                            </button>
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
                                   </td>

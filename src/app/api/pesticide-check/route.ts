@@ -34,6 +34,90 @@ function toHalfWidthKana(str: string) {
   return str.replace(reg, match => kanaMap[match]);
 }
 
+// 農作物の分類グループ（包括グループ辞書）
+const CROP_HIERARCHY: { [key: string]: { direct: string[], subGroups: string[], broadGroups: string[] } } = {
+  // 果菜類
+  'トマト': { direct: ['トマト', 'ミニトマト'], subGroups: ['果菜類'], broadGroups: ['野菜類'] },
+  'ミニトマト': { direct: ['ミニトマト', 'トマト'], subGroups: ['果菜類'], broadGroups: ['野菜類'] },
+  'なす': { direct: ['なす', '茄子'], subGroups: ['果菜類'], broadGroups: ['野菜類'] },
+  '茄子': { direct: ['なす', '茄子'], subGroups: ['果菜類'], broadGroups: ['野菜類'] },
+  'きゅうり': { direct: ['きゅうり', '胡瓜'], subGroups: ['果菜類'], broadGroups: ['野菜類'] },
+  '胡瓜': { direct: ['きゅうり', '胡瓜'], subGroups: ['果菜類'], broadGroups: ['野菜類'] },
+  'ピーマン': { direct: ['ピーマン', 'パプリカ', 'とうがらし類'], subGroups: ['果菜類'], broadGroups: ['野菜類'] },
+  'パプリカ': { direct: ['パプリカ', 'ピーマン', 'とうがらし類'], subGroups: ['果菜類'], broadGroups: ['野菜類'] },
+  'いちご': { direct: ['いちご', '苺'], subGroups: ['果菜類'], broadGroups: ['野菜類'] },
+  '苺': { direct: ['いちご', '苺'], subGroups: ['果菜類'], broadGroups: ['野菜類'] },
+  'すいか': { direct: ['すいか', 'スイカ', '西瓜'], subGroups: ['果菜類'], broadGroups: ['野菜類'] },
+  'スイカ': { direct: ['すいか', 'スイカ', '西瓜'], subGroups: ['果菜類'], broadGroups: ['野菜類'] },
+  'メロン': { direct: ['メロン'], subGroups: ['果菜類'], broadGroups: ['野菜類'] },
+  'かぼちゃ': { direct: ['かぼちゃ', 'カボチャ', '南瓜'], subGroups: ['果菜類'], broadGroups: ['野菜類'] },
+  'ズッキーニ': { direct: ['ズッキーニ'], subGroups: ['果菜類'], broadGroups: ['野菜類'] },
+  'オクラ': { direct: ['オクラ'], subGroups: ['果菜類'], broadGroups: ['野菜類'] },
+
+  // 葉菜類
+  'キャベツ': { direct: ['キャベツ'], subGroups: ['結球葉菜類', '葉菜類'], broadGroups: ['野菜類'] },
+  'はくさい': { direct: ['はくさい', '白菜'], subGroups: ['結球葉菜類', '葉菜類'], broadGroups: ['野菜類'] },
+  '白菜': { direct: ['はくさい', '白菜'], subGroups: ['結球葉菜類', '葉菜類'], broadGroups: ['野菜類'] },
+  'レタス': { direct: ['レタス', '非結球レタス'], subGroups: ['結球葉菜類', '葉菜類'], broadGroups: ['野菜類'] },
+  'ほうれんそう': { direct: ['ほうれんそう', 'ホウレンソウ', 'ほうれん草'], subGroups: ['葉菜類'], broadGroups: ['野菜類'] },
+  'ほうれん草': { direct: ['ほうれんそう', 'ホウレンソウ', 'ほうれん草'], subGroups: ['葉菜類'], broadGroups: ['野菜類'] },
+  'ねぎ': { direct: ['ねぎ', 'ネギ', '葱', '青ねぎ', '白ねぎ'], subGroups: ['葉菜類'], broadGroups: ['野菜類'] },
+  'ネギ': { direct: ['ねぎ', 'ネギ', '葱', '青ねぎ', '白ねぎ'], subGroups: ['葉菜類'], broadGroups: ['野菜類'] },
+  'こまつな': { direct: ['こまつな', 'コマツナ', '小松菜'], subGroups: ['葉菜類'], broadGroups: ['野菜類'] },
+  '小松菜': { direct: ['こまつな', 'コマツナ', '小松菜'], subGroups: ['葉菜類'], broadGroups: ['野菜類'] },
+  'ブロッコリー': { direct: ['ブロッコリー'], subGroups: ['花蕾類', '葉菜類'], broadGroups: ['野菜類'] },
+  'カリフラワー': { direct: ['カリフラワー'], subGroups: ['花蕾類', '葉菜類'], broadGroups: ['野菜類'] },
+  'チンゲンサイ': { direct: ['チンゲンサイ', '青梗菜'], subGroups: ['葉菜類'], broadGroups: ['野菜類'] },
+  '春菊': { direct: ['しゅんぎく', '春菊'], subGroups: ['葉菜類'], broadGroups: ['野菜類'] },
+
+  // 根菜類
+  'だいこん': { direct: ['だいこん', 'ダイコン', '大根'], subGroups: ['根菜類'], broadGroups: ['野菜類'] },
+  '大根': { direct: ['だいこん', 'ダイコン', '大根'], subGroups: ['根菜類'], broadGroups: ['野菜類'] },
+  'にんじん': { direct: ['にんじん', 'ニンジン', '人参'], subGroups: ['根菜類'], broadGroups: ['野菜類'] },
+  '人参': { direct: ['にんじん', 'ニンジン', '人参'], subGroups: ['根菜類'], broadGroups: ['野菜類'] },
+  'たまねぎ': { direct: ['たまねぎ', 'タマネギ', '玉ねぎ', '玉葱'], subGroups: ['根菜類'], broadGroups: ['野菜類'] },
+  '玉ねぎ': { direct: ['たまねぎ', 'タマネギ', '玉ねぎ', '玉葱'], subGroups: ['根菜類'], broadGroups: ['野菜類'] },
+  'かぶ': { direct: ['かぶ', 'カブ', '蕪'], subGroups: ['根菜類'], broadGroups: ['野菜類'] },
+  'ごぼう': { direct: ['ごぼう', 'ゴボウ', '牛蒡'], subGroups: ['根菜類'], broadGroups: ['野菜類'] },
+
+  // いも類
+  'じゃがいも': { direct: ['ばれいしょ', 'バレイショ', 'ジャガイモ'], subGroups: ['いも類'], broadGroups: ['野菜類'] },
+  '馬鈴薯': { direct: ['ばれいしょ', 'バレイショ'], subGroups: ['いも類'], broadGroups: ['野菜類'] },
+  'さつまいも': { direct: ['かんしょ', 'カンショ', 'サツマイモ'], subGroups: ['いも類'], broadGroups: ['野菜類'] },
+  'さといも': { direct: ['さといも', 'サトイモ', '里芋'], subGroups: ['いも類'], broadGroups: ['野菜類'] },
+
+  // 豆類（未成熟）
+  'えだまめ': { direct: ['えだまめ', 'エダマメ', '枝豆'], subGroups: ['未成熟豆類', '豆類（未成熟）'], broadGroups: ['野菜類'] },
+  '枝豆': { direct: ['えだまめ', 'エダマメ', '枝豆'], subGroups: ['未成熟豆類', '豆類（未成熟）'], broadGroups: ['野菜類'] },
+  'さやえんどう': { direct: ['さやえんどう', '実えんどう'], subGroups: ['未成熟豆類'], broadGroups: ['野菜類'] },
+  'さやいんげん': { direct: ['さやいんげん', 'いんげん'], subGroups: ['未成熟豆類'], broadGroups: ['野菜類'] },
+
+  // 穀物・果樹
+  '水稲': { direct: ['水稲', '稲', '水稲（移植水稲）', '水稲（直播水稲）'], subGroups: ['食用作物'], broadGroups: [] },
+  '米': { direct: ['水稲', '稲'], subGroups: ['食用作物'], broadGroups: [] },
+  'みかん': { direct: ['温州みかん', 'みかん', 'かんきつ'], subGroups: ['かんきつ'], broadGroups: ['果樹類'] },
+  'りんご': { direct: ['りんご', 'リンゴ'], subGroups: [], broadGroups: ['果樹類'] },
+  'ぶどう': { direct: ['ぶどう', 'ブドウ'], subGroups: [], broadGroups: ['果樹類'] },
+};
+
+function getHierarchyKeywords(inputCrop: string) {
+  const norm = inputCrop.trim().toLowerCase();
+  
+  // 完全一致または部分一致するエントリを検索
+  for (const [key, value] of Object.entries(CROP_HIERARCHY)) {
+    if (norm.includes(key.toLowerCase()) || key.toLowerCase().includes(norm)) {
+      return value;
+    }
+  }
+
+  // 見つからない場合でも、一般的な野菜と推定して「野菜類」を包括グループに追加
+  return {
+    direct: [inputCrop.trim()],
+    subGroups: [],
+    broadGroups: ['野菜類']
+  };
+}
+
 export async function POST(request: Request) {
   try {
     const { cropName, pesticideName, targetPest, usageAmount } = await request.json();
@@ -52,96 +136,68 @@ export async function POST(request: Request) {
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    let usages: any[] = [];
-    let dbError = null;
+    // 作物の階層キーワードを展開
+    const hierarchy = getHierarchyKeywords(cleanCropName);
+    const searchDirects = Array.from(new Set([cleanCropName, ...hierarchy.direct, toKatakana(cleanCropName), toHiragana(cleanCropName)]));
+    const searchSubGroups = Array.from(new Set([...hierarchy.subGroups, ...hierarchy.subGroups.map(toKatakana)]));
+    const searchBroadGroups = Array.from(new Set([...hierarchy.broadGroups, ...hierarchy.broadGroups.map(toKatakana)]));
 
-    // Supabaseの1000件制限を突破して全件取得するヘルパー関数
-    async function fetchAllRows(queryBuilder: any) {
-      let allData: any[] = [];
-      let from = 0;
-      const step = 1000;
-      while (true) {
-        const { data, error } = await queryBuilder.range(from, from + step - 1);
-        if (error) {
-          dbError = error;
-          break;
-        }
-        if (!data || data.length === 0) break;
-        allData = allData.concat(data);
-        if (data.length < step) break; // 1000件未満ならループ終了（最後まで取得した）
-        from += step;
-      }
-      return allData;
-    }
-
-    // 1. 完全一致・部分一致検索 (平仮名・カタカナの揺らぎ対応)
-    const kanaName = toKatakana(cleanCropName);
-    const halfKanaName = toHalfWidthKana(kanaName);
-
-    let query = supabase
-      .from('m_pesticide_usages')
-      .select('*')
-      .like('crop_name', `%${cleanCropName}%`);
-      
-    if (cleanTargetPest) {
-       query = query.like('target_pest', `%${cleanTargetPest}%`);
-    }
-
-    usages = await fetchAllRows(query);
-
-    if (!usages || usages.length === 0) {
-      let fallbackQuery = supabase
-        .from('m_pesticide_usages')
-        .select('*')
-        .like('crop_name', `%${halfKanaName}%`); 
+    // Supabaseの全件取得ヘルパー
+    async function fetchKeywordsRows(keywords: string[]) {
+      let combined: any[] = [];
+      for (const kw of keywords) {
+        if (!kw) continue;
+        const kwHalf = toHalfWidthKana(toKatakana(kw));
         
-      if (cleanTargetPest) {
-         const kanaPest = toKatakana(cleanTargetPest);
-         const halfKanaPest = toHalfWidthKana(kanaPest);
-         fallbackQuery = fallbackQuery.like('target_pest', `%${halfKanaPest}%`);
-      }
-      
-      usages = await fetchAllRows(fallbackQuery);
-      
-      if (!usages || usages.length === 0) {
-         let fallbackQuery2 = supabase
-          .from('m_pesticide_usages')
-          .select('*')
-          .like('crop_name', `%${kanaName}%`);
-          
+        let q = supabase.from('m_pesticide_usages').select('*').or(`crop_name.like.%${kw}%,crop_name.like.%${kwHalf}%`);
         if (cleanTargetPest) {
-           const kanaPest = toKatakana(cleanTargetPest);
-           fallbackQuery2 = fallbackQuery2.like('target_pest', `%${kanaPest}%`);
+          const pestKana = toKatakana(cleanTargetPest);
+          const pestHalf = toHalfWidthKana(pestKana);
+          q = q.or(`target_pest.like.%${cleanTargetPest}%,target_pest.like.%${pestKana}%,target_pest.like.%${pestHalf}%`);
         }
-        usages = await fetchAllRows(fallbackQuery2);
+        const { data } = await q.limit(1000);
+        if (data) {
+          combined = combined.concat(data);
+        }
       }
+      return combined;
     }
 
-    // 3. 【最終手段】SQLの .like() バグ回避用 JS強制フィルタ
-    if ((!usages || usages.length === 0) && !dbError) {
-      // 最終手段の全件なめは重すぎるので、直近10000件だけにする
-      const { data: bulkData } = await supabase
-          .from('m_pesticide_usages')
-          .select('*')
-          .limit(10000)
-          .order('created_at', { ascending: false });
+    // 1. 直接適用（トマト等）
+    const directUsages = await fetchKeywordsRows(searchDirects);
+    // 2. 小グループ包括適用（果菜類等）
+    const subGroupUsages = await fetchKeywordsRows(searchSubGroups);
+    // 3. 大グループ包括適用（野菜類等）
+    const broadGroupUsages = await fetchKeywordsRows(searchBroadGroups);
 
-      if (bulkData) {
-          const jsFiltered = bulkData.filter(row => {
-              if (!row.crop_name) return false;
-              return row.crop_name.includes(cleanCropName) || 
-                     row.crop_name.includes(kanaName) || 
-                     row.crop_name.includes(halfKanaName);
-          });
-          if (jsFiltered.length > 0) {
-              usages = jsFiltered;
-          }
+    // 重複を整理しながらスコープタグを付与
+    const processedMap = new Map<string, any>();
+
+    // 直接適用
+    directUsages.forEach(u => {
+      const key = `${u.registration_no}_${u.target_pest}_${u.usage_amount}`;
+      if (!processedMap.has(key)) {
+        processedMap.set(key, { ...u, match_type: 'direct', scope_label: `🎯 ${u.crop_name} 直接適用` });
       }
-    }
+    });
 
-    if (dbError) {
-       return NextResponse.json({ error: `データベース検索エラー: ${dbError.message}` }, { status: 500 });
-    }
+    // 小グループ（果菜類）
+    subGroupUsages.forEach(u => {
+      const key = `${u.registration_no}_${u.target_pest}_${u.usage_amount}`;
+      if (!processedMap.has(key)) {
+        processedMap.set(key, { ...u, match_type: 'subgroup', scope_label: `🌱 ${u.crop_name} 包括適用` });
+      }
+    });
+
+    // 大グループ（野菜類）
+    broadGroupUsages.forEach(u => {
+      const key = `${u.registration_no}_${u.target_pest}_${u.usage_amount}`;
+      if (!processedMap.has(key)) {
+        processedMap.set(key, { ...u, match_type: 'broad_group', scope_label: `🥦 ${u.crop_name} 包括適用` });
+      }
+    });
+
+    let usages = Array.from(processedMap.values());
     
     if (usages && usages.length > 0) {
        // 全件取得したため、pesticidesの取得もループで分割して行う（IN句の数上限エラーを防ぐため）
@@ -168,6 +224,9 @@ export async function POST(request: Request) {
             type: pInfo.pesticide_type || '-',
             applicant: pInfo.applicant_name || '-',
             registration_no: u.registration_no,
+            crop_name: u.crop_name,
+            match_type: u.match_type || 'direct',
+            scope_label: u.scope_label || `🎯 ${u.crop_name} 直接適用`,
             target_pest: u.target_pest || '-',
             usage_amount: u.usage_amount || '-',
             usage_time: u.usage_time || '-',
@@ -185,12 +244,17 @@ export async function POST(request: Request) {
          );
        }
 
+       const directCount = pesticides.filter(p => p.match_type === 'direct').length;
+       const groupCount = pesticides.filter(p => p.match_type !== 'direct').length;
+
        return NextResponse.json({
           judgment: 'DB検索完了',
           status: pesticides.length > 0 ? 'success' : 'warning',
+          directCount,
+          groupCount,
           message: cleanPesticideName 
-            ? `作物「${cleanCropName}」× 農薬「${cleanPesticideName}」の適用検索結果です。（該当: ${pesticides.length}件）`
-            : `作物「${cleanCropName}」に登録されている適用農薬一覧です。（該当: ${pesticides.length}件）`,
+            ? `作物「${cleanCropName}」× 農薬「${cleanPesticideName}」の適用検索結果です。（直接登録: ${directCount}件 / 野菜類等の包括登録: ${groupCount}件）`
+            : `作物「${cleanCropName}」に使える登録農薬一覧です。（直接登録: ${directCount}件 / 野菜類等の包括登録: ${groupCount}件 計${pesticides.length}件）`,
           pesticides: pesticides
        });
     } else {
