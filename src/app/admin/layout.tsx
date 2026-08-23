@@ -98,7 +98,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { name: 'ダッシュボード', path: '/admin/dashboard', icon: LayoutDashboard },
         { name: '作付け・作業 統合司令塔', path: '/admin/cultivations', icon: Sprout },
         { name: 'タスク・スケジュール管理', path: '/admin/tasks', icon: Calendar },
-        { name: '💊 農薬検索・防除AI', path: '/pesticides', icon: FlaskConical },
         { name: '作業承認インボックス', path: '/admin/approvals', icon: Inbox },
       ]
     },
@@ -119,6 +118,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { name: '💳 経理・購買システム', path: '/accounting-management', icon: Receipt, external: true },
         { name: '📱 現場出退勤ポータル', path: '/portal', icon: Layout, external: true },
         { name: '👥 労務・人事システム', path: '/hr', icon: Users, external: true },
+        { name: '💊 農薬検索・防除AI', path: '/pesticides', icon: FlaskConical },
         { name: '⚙️ マスタ管理全般', path: '/admin/masters', icon: Database },
         { name: '🏢 自社情報設定', path: '/admin/settings', icon: Settings },
       ]
