@@ -49,9 +49,15 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           .order('name');
           
         if (error) throw error;
-        if (data) setWorkers(data);
-      } catch (err) {
+        if (data) {
+          if (data.length === 0) {
+            setErrorMsg(`エラー: 登録された作業者が見つかりません。(ID: ${ownerId})`);
+          }
+          setWorkers(data);
+        }
+      } catch (err: any) {
         console.error(err);
+        setErrorMsg('Data Fetch Error: ' + (err.message || 'Unknown error'));
       } finally {
         setIsLoading(false);
       }
