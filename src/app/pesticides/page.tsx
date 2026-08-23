@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from 'react';
-import { ShieldCheck, Search, AlertTriangle, CheckCircle2, ArrowLeft, Loader2, Save, ChevronDown, ChevronUp, Settings2, FlaskConical, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ShieldCheck, Search, AlertTriangle, CheckCircle2, ArrowLeft, Loader2, Save, ChevronDown, ChevronUp, Settings2, FlaskConical, ExternalLink, Plus, Check } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
@@ -14,6 +14,84 @@ export default function PesticidesHubPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // 自社登録済み農薬マスタ
+  const [adoptedPesticideNames, setAdoptedPesticideNames] = useState<string[]>([]);
+  const [isAdopting, setIsAdopting] = useState<string | null>(null);
+
+  const fetchAdoptedPesticides = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (!userId) return;
+
+      const { data } = await supabase
+        .from('materials')
+        .select('name')
+        .eq('user_id', userId)
+        .or('material_type.eq.pesticide,category.eq.農薬費');
+
+      if (data) {
+        setAdoptedPesticideNames(data.map(d => d.name));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchAdoptedPesticides();
+  }, []);
+
+  // 自社農薬マスタへワンタップ登録
+  const handleAdoptPesticide = async (pesticideInfo: any) => {
+    const pName = pesticideInfo.name || pesticideName;
+    setIsAdopting(pName);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (!userId) {
+        alert('ログインが必要です');
+        return;
+      }
+
+      // 使用回数のパース (例: "3回以内" -> 3)
+      let parsedCount = 3;
+      if (pesticideInfo.usage_count) {
+        const match = String(pesticideInfo.usage_count).match(/\d+/);
+        if (match) parsedCount = parseInt(match[0], 10);
+      }
+
+      const newRecord = {
+        user_id: userId,
+        tenant_id: userId,
+        name: pName,
+        material_type: 'pesticide',
+        category: '農薬費',
+        pesticide_type: pesticideInfo.type?.includes('殺菌') ? '殺菌剤' : pesticideInfo.type?.includes('除草') ? '除草剤' : '殺虫剤',
+        rac_code: pesticideInfo.rac_code || '',
+        dilution: pesticideInfo.usage_amount || '1000倍',
+        target_pests: pesticideInfo.target_pest || '',
+        usage_time: pesticideInfo.usage_time || '収穫前日まで',
+        max_count: parsedCount,
+        unit: '本',
+        default_price: 0
+      };
+
+      const { error: insertErr } = await supabase.from('materials').insert([newRecord]);
+      if (insertErr) throw insertErr;
+
+      setAdoptedPesticideNames(prev => [...prev, pName]);
+      setToastMessage(`「${pName}」を自社農薬マスタに登録しました！`);
+      setTimeout(() => setToastMessage(null), 3500);
+    } catch (err: any) {
+      console.error(err);
+      alert('マスタ登録に失敗しました: ' + err.message);
+    } finally {
+      setIsAdopting(null);
+    }
+  };
 
   // テーブル詳細・カラム表示設定
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
@@ -249,11 +327,24 @@ export default function PesticidesHubPage() {
                     </div>
                   </div>
 
-                  {result.pesticides && (
-                    <div className="text-xs font-black text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl self-start sm:self-center">
-                      FAMIC該当基準: {result.pesticides.length} 件
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 self-start sm:self-center">
+                    {adoptedPesticideNames.includes(pesticideName) ? (
+                      <span className="text-xs font-black bg-emerald-100 text-emerald-800 px-3 py-1.5 rounded-xl flex items-center gap-1 border border-emerald-200">
+                        <Check className="w-4 h-4 text-emerald-600" />
+                        自社マスタ採用済み
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={isAdopting === pesticideName}
+                        onClick={() => handleAdoptPesticide(result.pesticides?.[0] || { name: pesticideName })}
+                        className="text-xs font-black bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 text-white px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                      >
+                        {isAdopting === pesticideName ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                        <span>自社農薬マスタに登録</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* 判定レポート文 */}
@@ -321,78 +412,118 @@ export default function PesticidesHubPage() {
                           {showColumns.usage_count && <th className="px-4 py-3">総使用回数</th>}
                           {showColumns.type && <th className="px-4 py-3">農薬の種類</th>}
                           {showColumns.applicant && <th className="px-4 py-3">メーカー</th>}
+                          <th className="px-4 py-3 text-center">自社マスタ</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
-                        {result.pesticides.map((p: any, i: number) => (
-                          <React.Fragment key={i}>
-                            <tr 
-                              onClick={() => setExpandedRow(expandedRow === i ? null : i)}
-                              className="hover:bg-teal-50/60 cursor-pointer transition-colors group"
-                            >
-                              <td className="px-4 py-3 font-bold text-slate-800">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div>
-                                    <span className="group-hover:text-teal-700 transition-colors font-black text-sm block">{p.name}</span>
-                                    <span className="text-[10px] text-slate-400">登録: {p.registration_no}</span>
-                                  </div>
-                                  <div className="text-slate-300 group-hover:text-teal-600">
-                                    {expandedRow === i ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                  </div>
-                                </div>
-                              </td>
-                              {showColumns.target_pest && <td className="px-4 py-3 font-bold text-rose-600">{p.target_pest}</td>}
-                              {showColumns.usage_amount && <td className="px-4 py-3 font-bold text-slate-700">{p.usage_amount}</td>}
-                              {showColumns.usage_time && <td className="px-4 py-3 font-bold text-slate-700">{p.usage_time}</td>}
-                              {showColumns.usage_method && <td className="px-4 py-3 font-medium text-slate-600">{p.usage_method}</td>}
-                              {showColumns.usage_count && <td className="px-4 py-3 font-bold text-amber-600">{p.usage_count}</td>}
-                              {showColumns.type && <td className="px-4 py-3 font-medium text-slate-600">{p.type}</td>}
-                              {showColumns.applicant && <td className="px-4 py-3 font-medium text-slate-600">{p.applicant}</td>}
-                            </tr>
-
-                            {/* 展開行（詳細） */}
-                            {expandedRow === i && (
-                              <tr className="bg-slate-50">
-                                <td colSpan={1 + Object.values(showColumns).filter(Boolean).length} className="p-5 shadow-inner">
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs font-bold">
+                        {result.pesticides.map((p: any, i: number) => {
+                          const isAlreadyAdopted = adoptedPesticideNames.includes(p.name);
+                          return (
+                            <React.Fragment key={i}>
+                              <tr 
+                                onClick={() => setExpandedRow(expandedRow === i ? null : i)}
+                                className="hover:bg-teal-50/60 cursor-pointer transition-colors group"
+                              >
+                                <td className="px-4 py-3 font-bold text-slate-800">
+                                  <div className="flex items-center justify-between gap-2">
                                     <div>
-                                      <span className="text-[10px] text-slate-400 block mb-0.5">農薬名</span>
-                                      <p className="text-slate-800 font-black text-sm">{p.name}</p>
+                                      <span className="group-hover:text-teal-700 transition-colors font-black text-sm block">{p.name}</span>
+                                      <span className="text-[10px] text-slate-400">登録: {p.registration_no}</span>
                                     </div>
-                                    <div>
-                                      <span className="text-[10px] text-slate-400 block mb-0.5">農林水産省 登録番号</span>
-                                      <p className="text-slate-800">{p.registration_no}</p>
-                                    </div>
-                                    <div>
-                                      <span className="text-[10px] text-slate-400 block mb-0.5">製造・登録メーカー</span>
-                                      <p className="text-slate-800">{p.applicant || '未登録'}</p>
-                                    </div>
-                                    <div>
-                                      <span className="text-[10px] text-slate-400 block mb-0.5">対象病害虫・雑草</span>
-                                      <p className="text-rose-600">{p.target_pest}</p>
-                                    </div>
-                                    <div>
-                                      <span className="text-[10px] text-slate-400 block mb-0.5">希釈倍数・使用量</span>
-                                      <p className="text-slate-800">{p.usage_amount}</p>
-                                    </div>
-                                    <div>
-                                      <span className="text-[10px] text-slate-400 block mb-0.5">使用時期（収穫前日数等）</span>
-                                      <p className="text-slate-800">{p.usage_time}</p>
-                                    </div>
-                                    <div>
-                                      <span className="text-[10px] text-slate-400 block mb-0.5">使用方法</span>
-                                      <p className="text-slate-800">{p.usage_method}</p>
-                                    </div>
-                                    <div>
-                                      <span className="text-[10px] text-slate-400 block mb-0.5">本剤の総使用可能回数</span>
-                                      <p className="text-amber-700">{p.usage_count}</p>
+                                    <div className="text-slate-300 group-hover:text-teal-600">
+                                      {expandedRow === i ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                     </div>
                                   </div>
                                 </td>
+                                {showColumns.target_pest && <td className="px-4 py-3 font-bold text-rose-600">{p.target_pest}</td>}
+                                {showColumns.usage_amount && <td className="px-4 py-3 font-bold text-slate-700">{p.usage_amount}</td>}
+                                {showColumns.usage_time && <td className="px-4 py-3 font-bold text-slate-700">{p.usage_time}</td>}
+                                {showColumns.usage_method && <td className="px-4 py-3 font-medium text-slate-600">{p.usage_method}</td>}
+                                {showColumns.usage_count && <td className="px-4 py-3 font-bold text-amber-600">{p.usage_count}</td>}
+                                {showColumns.type && <td className="px-4 py-3 font-medium text-slate-600">{p.type}</td>}
+                                {showColumns.applicant && <td className="px-4 py-3 font-medium text-slate-600">{p.applicant}</td>}
+                                <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+                                  {isAlreadyAdopted ? (
+                                    <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2 py-1 rounded-lg inline-flex items-center gap-1 border border-emerald-200">
+                                      <Check className="w-3 h-3 text-emerald-600" />
+                                      登録済
+                                    </span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      disabled={isAdopting === p.name}
+                                      onClick={() => handleAdoptPesticide(p)}
+                                      className="text-[11px] font-black bg-teal-600 hover:bg-teal-700 text-white px-2.5 py-1 rounded-lg inline-flex items-center gap-1 shadow-sm active:scale-95 transition-all"
+                                    >
+                                      {isAdopting === p.name ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                                      <span>追加</span>
+                                    </button>
+                                  )}
+                                </td>
                               </tr>
-                            )}
-                          </React.Fragment>
-                        ))}
+
+                              {/* 展開行（詳細） */}
+                              {expandedRow === i && (
+                                <tr className="bg-slate-50">
+                                  <td colSpan={2 + Object.values(showColumns).filter(Boolean).length} className="p-5 shadow-inner">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs font-bold">
+                                      <div>
+                                        <span className="text-[10px] text-slate-400 block mb-0.5">農薬名</span>
+                                        <p className="text-slate-800 font-black text-sm">{p.name}</p>
+                                      </div>
+                                      <div>
+                                        <span className="text-[10px] text-slate-400 block mb-0.5">農林水産省 登録番号</span>
+                                        <p className="text-slate-800">{p.registration_no}</p>
+                                      </div>
+                                      <div>
+                                        <span className="text-[10px] text-slate-400 block mb-0.5">製造・登録メーカー</span>
+                                        <p className="text-slate-800">{p.applicant || '未登録'}</p>
+                                      </div>
+                                      <div>
+                                        <span className="text-[10px] text-slate-400 block mb-0.5">対象病害虫・雑草</span>
+                                        <p className="text-rose-600">{p.target_pest}</p>
+                                      </div>
+                                      <div>
+                                        <span className="text-[10px] text-slate-400 block mb-0.5">希釈倍数・使用量</span>
+                                        <p className="text-slate-800">{p.usage_amount}</p>
+                                      </div>
+                                      <div>
+                                        <span className="text-[10px] text-slate-400 block mb-0.5">使用時期（収穫前日数等）</span>
+                                        <p className="text-slate-800">{p.usage_time}</p>
+                                      </div>
+                                      <div>
+                                        <span className="text-[10px] text-slate-400 block mb-0.5">使用方法</span>
+                                        <p className="text-slate-800">{p.usage_method}</p>
+                                      </div>
+                                      <div>
+                                        <span className="text-[10px] text-slate-400 block mb-0.5">本剤の総使用可能回数</span>
+                                        <p className="text-amber-700">{p.usage_count}</p>
+                                      </div>
+                                      <div className="sm:col-span-2 md:col-span-3 pt-2 border-t border-slate-200 flex justify-end">
+                                        {isAlreadyAdopted ? (
+                                          <span className="text-xs font-black bg-emerald-100 text-emerald-800 px-3 py-1.5 rounded-xl inline-flex items-center gap-1 border border-emerald-200">
+                                            <Check className="w-4 h-4 text-emerald-600" />
+                                            自社の採用農薬マスタに登録済みです
+                                          </span>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            disabled={isAdopting === p.name}
+                                            onClick={() => handleAdoptPesticide(p)}
+                                            className="text-xs font-black bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl inline-flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
+                                          >
+                                            {isAdopting === p.name ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                                            <span>この基準情報で自社農薬マスタに登録する</span>
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

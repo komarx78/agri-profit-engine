@@ -7,14 +7,14 @@ import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2
 import Papa from 'papaparse';
 import { autoTranslateMasterData } from '@/app/actions/translate';
 
-type MasterType = 'materials' | 'sales_prices' | 'crops' | 'fields' | 'workers' | 'departments';
+type MasterType = 'materials' | 'pesticides' | 'fertilizers' | 'sales_prices' | 'crops' | 'fields' | 'workers' | 'departments';
 
 const MATERIAL_CATEGORIES = [
+  '諸材料費',
   '種苗費',
   '肥料費',
   '農薬費',
   '動力光熱費',
-  '諸材料費',
   '機械・車両費',
   'その他経費'
 ];
@@ -47,6 +47,8 @@ export default function MastersPage() {
   const [priceViewMode, setPriceViewMode] = useState<'byCrop' | 'byChannel'>('byCrop');
 
   const fileInputRefMats = useRef<HTMLInputElement>(null);
+  const fileInputRefPesticides = useRef<HTMLInputElement>(null);
+  const fileInputRefFertilizers = useRef<HTMLInputElement>(null);
   const fileInputRefPrices = useRef<HTMLInputElement>(null);
   const fileInputRefCrops = useRef<HTMLInputElement>(null);
   const fileInputRefFields = useRef<HTMLInputElement>(null);
@@ -65,7 +67,7 @@ export default function MastersPage() {
         supabase.from('materials').select('*').eq('user_id', userId).order('name'),
         supabase.from('sales_prices').select('*').eq('user_id', userId).order('crop_name'),
         supabase.from('crop_standards').select('*'), // Assuming standards linked via crop_id?
-        supabase.from('sales_channels').select('*').order('name'), // If sales_channels is global or tenant? Assuming it might not have user_id if it's empty, we leave it for now.
+        supabase.from('sales_channels').select('*').order('name'),
         supabase.from('departments').select('*').eq('tenant_id', userId).order('name')
       ]);
       
@@ -89,13 +91,11 @@ export default function MastersPage() {
   }, []);
 
   // --- CRUD (モーダル) 処理 ---
-  // defaultValues: 新規作成時にあらかじめセットしておきたい値
   const handleOpenModal = (type: MasterType, item: any = null, defaultValues: any = {}) => {
     setModalType(type);
     setEditingItem(item);
     if (item) {
       let initial = { ...item };
-      // 作目の場合は基準値も合わせて読み込む
       if (type === 'crops') {
         const standard = cropStandards.find(s => s.crop_id === item.id);
         if (standard) {
@@ -107,16 +107,42 @@ export default function MastersPage() {
       }
       setFormData(initial);
     } else {
-      // 新規作成時の初期値 ＋ 渡されたdefaultValuesをマージ
       const initial: any = { ...defaultValues };
       if (type === 'workers') {
         initial.name = initial.name || '';
         initial.hourly_wage = initial.hourly_wage || 1000;
         initial.pin_code = initial.pin_code || '0000';
       }
+      else if (type === 'pesticides') {
+        initial.name = initial.name || '';
+        initial.material_type = 'pesticide';
+        initial.category = '農薬費';
+        initial.pesticide_type = initial.pesticide_type || '殺虫剤';
+        initial.rac_code = initial.rac_code || '';
+        initial.dilution = initial.dilution || '1000倍';
+        initial.target_pests = initial.target_pests || '';
+        initial.usage_time = initial.usage_time || '収穫前日まで';
+        initial.max_count = initial.max_count || 3;
+        initial.unit = initial.unit || '本';
+        initial.default_price = initial.default_price || 0;
+      }
+      else if (type === 'fertilizers') {
+        initial.name = initial.name || '';
+        initial.material_type = 'fertilizer';
+        initial.category = '肥料費';
+        initial.fertilizer_type = initial.fertilizer_type || '化成肥料';
+        initial.fertilizer_usage = initial.fertilizer_usage || '共通';
+        initial.n_percent = initial.n_percent ?? 8;
+        initial.p_percent = initial.p_percent ?? 8;
+        initial.k_percent = initial.k_percent ?? 8;
+        initial.bag_weight_kg = initial.bag_weight_kg ?? 20;
+        initial.unit = initial.unit || '袋';
+        initial.default_price = initial.default_price || 0;
+      }
       else if (type === 'materials') {
         initial.name = initial.name || '';
-        initial.unit = initial.unit || '';
+        initial.material_type = 'general';
+        initial.unit = initial.unit || '個';
         initial.default_price = initial.default_price || 0;
         initial.category = initial.category || '諸材料費';
       }
@@ -151,20 +177,26 @@ export default function MastersPage() {
     setIsSaving(true);
     
     try {
-      const table = modalType;
+      const table = (modalType === 'pesticides' || modalType === 'fertilizers') ? 'materials' : modalType;
       
       // Validation
-      if (['crops', 'fields', 'workers', 'materials'].includes(table) && !formData.name) {
+      if (['crops', 'fields', 'workers', 'materials', 'pesticides', 'fertilizers'].includes(modalType) && !formData.name) {
         throw new Error('名前は必須です');
       }
-      if (table === 'sales_prices' && (!formData.crop_name || !formData.channel_name)) {
+      if (modalType === 'sales_prices' && (!formData.crop_name || !formData.channel_name)) {
         throw new Error('作目名と販路名は必須です');
       }
 
-      // 自動翻訳処理（作目、圃場、資材のみ）
-      // ユーザーが手動で更新した場合でも、必ず最新の翻訳を強制的に取得する
       let dataToSave = { ...formData };
-      
+
+      // 自動セット
+      if (modalType === 'pesticides') {
+        dataToSave.material_type = 'pesticide';
+        dataToSave.category = '農薬費';
+      } else if (modalType === 'fertilizers') {
+        dataToSave.material_type = 'fertilizer';
+        dataToSave.category = '肥料費';
+      }
 
       // セッションからユーザーID (テナントID) を取得してセット
       const { data: { session } } = await supabase.auth.getSession();
@@ -173,7 +205,7 @@ export default function MastersPage() {
         dataToSave.user_id = session.user.id;
       }
 
-      if (['crops', 'fields', 'materials'].includes(table) && dataToSave.name) {
+      if (['crops', 'fields', 'materials', 'pesticides', 'fertilizers'].includes(modalType) && dataToSave.name) {
         setUploadStatus({ type: 'info', message: '多言語翻訳を生成中...' });
         const translations = await autoTranslateMasterData(dataToSave.name);
         dataToSave = { ...dataToSave, ...translations };
@@ -185,13 +217,12 @@ export default function MastersPage() {
         delete dataToSave.materials_per_10a;
       }
 
-      // sales_prices 保存時、もし sales_channels に登録されていない販路名なら自動追加
+      // sales_prices 保存時
       if (table === 'sales_prices' && dataToSave.channel_name) {
         const existsInChannels = channels.some(ch => ch.name === dataToSave.channel_name);
         if (!existsInChannels) {
           await supabase.from('sales_channels').insert([{ name: dataToSave.channel_name }]);
         }
-        // UI用のフラグを削除
         delete dataToSave.isCustomChannel;
       }
 
@@ -206,6 +237,7 @@ export default function MastersPage() {
       }
 
       const { data: savedData, error } = await query;
+      if (error) throw error;
       if (error) throw error;
       
       if (!insertedId && savedData && savedData.length > 0) {
@@ -637,44 +669,139 @@ export default function MastersPage() {
               
 
 
-          {/* 単価・計算用マスタ */}
+          {/* 単価・生産資材マスタ（3大分離） */}
           <div className="flex items-center justify-between mt-12 mb-4">
-            <h2 className="text-xl font-bold text-slate-700 border-b-2 border-slate-200 pb-1">単価・計算用マスタ</h2>
+            <h2 className="text-xl font-bold text-slate-700 border-b-2 border-slate-200 pb-1">生産・資材マスタ（3大分類）</h2>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             
-            {/* 資材マスタ */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
-              <CardHeader icon={Package} title={`資材・農薬 (${materials.length})`} type="materials" />
-              
-              <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
-                {materials.length === 0 ? <p className="text-slate-400 text-sm">データなし</p> : null}
-                {materials.map(m => (
-                  <div key={m.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
-                    <div>
-                      <div className="font-bold text-slate-700">{m.name}</div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">{m.category || '未設定'}</span>
-                        <span className="text-xs text-slate-400">{m.specification ? `${m.specification} ` : ''}({m.unit})</span>
+            {/* 1. 農薬マスタ */}
+            {(() => {
+              const pesticideList = materials.filter(m => m.material_type === 'pesticide' || m.category === '農薬費');
+              return (
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
+                  <CardHeader icon={FlaskConical} title={`💊 農薬マスタ (${pesticideList.length})`} type="pesticides" />
+                  
+                  <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
+                    {pesticideList.length === 0 ? <p className="text-slate-400 text-sm">農薬データなし（農薬検索から一括追加も可能）</p> : null}
+                    {pesticideList.map(m => (
+                      <div key={m.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
+                        <div>
+                          <div className="font-bold text-slate-700">{m.name}</div>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                            {m.rac_code && <span className="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold border border-rose-200">RAC: {m.rac_code}</span>}
+                            {m.dilution && <span className="text-[10px] bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded font-bold">{m.dilution}</span>}
+                            {m.max_count ? <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">上限{m.max_count}回</span> : null}
+                            <span className="text-xs text-slate-400">({m.unit || '本'})</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="font-bold text-teal-700 text-sm">¥{m.default_price || 0}</div>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => handleOpenModal('pesticides', m)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => handleDelete('materials', m.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="font-bold text-emerald-600">¥{m.default_price}</div>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => handleOpenModal('materials', m)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => handleDelete('materials', m.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              <CsvActionButtons type="materials" inputRef={fileInputRefMats} />
-            </div>
+                  <CsvActionButtons type="pesticides" inputRef={fileInputRefPesticides} />
+                </div>
+              );
+            })()}
+
+            {/* 2. 肥料マスタ */}
+            {(() => {
+              const fertilizerList = materials.filter(m => m.material_type === 'fertilizer' || m.category === '肥料費');
+              return (
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
+                  <CardHeader icon={Sprout} title={`🌱 肥料マスタ (${fertilizerList.length})`} type="fertilizers" />
+                  
+                  <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
+                    {fertilizerList.length === 0 ? <p className="text-slate-400 text-sm">肥料データなし</p> : null}
+                    {fertilizerList.map(m => (
+                      <div key={m.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
+                        <div>
+                          <div className="font-bold text-slate-700">{m.name}</div>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                            {(m.n_percent !== undefined || m.p_percent !== undefined || m.k_percent !== undefined) && (
+                              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-black border border-emerald-200">
+                                N-P-K: {m.n_percent || 0}-{m.p_percent || 0}-{m.k_percent || 0}
+                              </span>
+                            )}
+                            {m.fertilizer_usage && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold">{m.fertilizer_usage}</span>}
+                            {m.bag_weight_kg && <span className="text-xs text-slate-400">{m.bag_weight_kg}kg/袋</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="font-bold text-emerald-700 text-sm">¥{m.default_price || 0}</div>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => handleOpenModal('fertilizers', m)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => handleDelete('materials', m.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <CsvActionButtons type="fertilizers" inputRef={fileInputRefFertilizers} />
+                </div>
+              );
+            })()}
+
+            {/* 3. その他資材マスタ */}
+            {(() => {
+              const otherMaterials = materials.filter(m => m.material_type !== 'pesticide' && m.material_type !== 'fertilizer' && m.category !== '農薬費' && m.category !== '肥料費');
+              return (
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
+                  <CardHeader icon={Package} title={`📦 その他資材 (${otherMaterials.length})`} type="materials" />
+                  
+                  <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
+                    {otherMaterials.length === 0 ? <p className="text-slate-400 text-sm">その他資材データなし</p> : null}
+                    {otherMaterials.map(m => (
+                      <div key={m.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
+                        <div>
+                          <div className="font-bold text-slate-700">{m.name}</div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-bold">{m.category || '諸材料費'}</span>
+                            <span className="text-xs text-slate-400">{m.specification ? `${m.specification} ` : ''}({m.unit})</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="font-bold text-slate-700 text-sm">¥{m.default_price || 0}</div>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => handleOpenModal('materials', m)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => handleDelete('materials', m.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <CsvActionButtons type="materials" inputRef={fileInputRefMats} />
+                </div>
+              );
+            })()}
+
+          </div>
+
+          {/* 販売・価格マスタ */}
+          <div className="flex items-center justify-between mt-12 mb-4">
+            <h2 className="text-xl font-bold text-slate-700 border-b-2 border-slate-200 pb-1">販売価格マスタ</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-6">
 
             {/* 販売価格マスタ (ツリー表示対応) */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
@@ -1010,20 +1137,216 @@ export default function MastersPage() {
                 </>
               )}
 
+              {/* 農薬専用 */}
+              {modalType === 'pesticides' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">農薬区分</label>
+                    <select
+                      value={formData.pesticide_type || '殺虫剤'}
+                      onChange={e => setFormData({...formData, pesticide_type: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 font-bold text-slate-700"
+                    >
+                      <option value="殺虫剤">殺虫剤</option>
+                      <option value="殺菌剤">殺菌剤</option>
+                      <option value="除草剤">除草剤</option>
+                      <option value="植物成長調整剤">植物成長調整剤</option>
+                      <option value="展着剤">展着剤</option>
+                      <option value="その他">その他</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">RACコード (作用機構)</label>
+                    <input 
+                      type="text" 
+                      value={formData.rac_code || ''} 
+                      onChange={e => setFormData({...formData, rac_code: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 font-bold"
+                      placeholder="例: 1A, 3, FR M5, IR 4A"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">標準希釈倍数</label>
+                    <input 
+                      type="text" 
+                      value={formData.dilution || ''} 
+                      onChange={e => setFormData({...formData, dilution: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 font-bold"
+                      placeholder="例: 1000〜2000倍"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">総使用可能回数 (上限)</label>
+                    <input 
+                      type="number" 
+                      value={formData.max_count ?? 3} 
+                      onChange={e => setFormData({...formData, max_count: Number(e.target.value)})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 font-bold text-teal-700"
+                      placeholder="例: 3"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold text-slate-500 mb-1">対象病害虫・雑草</label>
+                    <input 
+                      type="text" 
+                      value={formData.target_pests || ''} 
+                      onChange={e => setFormData({...formData, target_pests: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 font-bold"
+                      placeholder="例: アブラムシ類、うどんこ病、アザミウマ"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold text-slate-500 mb-1">使用時期</label>
+                    <input 
+                      type="text" 
+                      value={formData.usage_time || ''} 
+                      onChange={e => setFormData({...formData, usage_time: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 font-bold"
+                      placeholder="例: 収穫前日まで、定植時"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">単位</label>
+                    <input 
+                      type="text" 
+                      value={formData.unit || '本'} 
+                      onChange={e => setFormData({...formData, unit: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 font-bold"
+                      placeholder="例: 本, 袋, L, kg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">購入単価 (円)</label>
+                    <input 
+                      type="number" 
+                      value={formData.default_price || ''} 
+                      onChange={e => setFormData({...formData, default_price: Number(e.target.value)})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 font-bold text-teal-700"
+                      placeholder="例: 2800"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 肥料専用 */}
+              {modalType === 'fertilizers' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">肥料種類</label>
+                    <select
+                      value={formData.fertilizer_type || '化成肥料'}
+                      onChange={e => setFormData({...formData, fertilizer_type: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-slate-700"
+                    >
+                      <option value="化成肥料">化成肥料</option>
+                      <option value="有機質肥料">有機質肥料</option>
+                      <option value="配合肥料">配合肥料</option>
+                      <option value="液体肥料">液体肥料</option>
+                      <option value="土壌改良材">土壌改良材 (石灰・堆肥等)</option>
+                      <option value="その他">その他</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">用途区分</label>
+                    <select
+                      value={formData.fertilizer_usage || '共通'}
+                      onChange={e => setFormData({...formData, fertilizer_usage: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-slate-700"
+                    >
+                      <option value="元肥">元肥</option>
+                      <option value="追肥">追肥</option>
+                      <option value="葉面散布">葉面散布</option>
+                      <option value="共通">共通</option>
+                    </select>
+                  </div>
+
+                  {/* N-P-K 比率 */}
+                  <div className="col-span-2 bg-emerald-50 p-3.5 rounded-xl border border-emerald-200">
+                    <label className="block text-xs font-black text-emerald-900 mb-2">
+                      🌱 N-P-K 純成分比率 (%)
+                    </label>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <span className="text-[11px] font-bold text-emerald-800">窒素 (N) %</span>
+                        <input 
+                          type="number" 
+                          step="0.1"
+                          value={formData.n_percent ?? 0} 
+                          onChange={e => setFormData({...formData, n_percent: Number(e.target.value)})}
+                          className="w-full p-2 bg-white border border-emerald-300 rounded-lg font-black text-emerald-900"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-bold text-emerald-800">リン酸 (P) %</span>
+                        <input 
+                          type="number" 
+                          step="0.1"
+                          value={formData.p_percent ?? 0} 
+                          onChange={e => setFormData({...formData, p_percent: Number(e.target.value)})}
+                          className="w-full p-2 bg-white border border-emerald-300 rounded-lg font-black text-emerald-900"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-bold text-emerald-800">カリ (K) %</span>
+                        <input 
+                          type="number" 
+                          step="0.1"
+                          value={formData.k_percent ?? 0} 
+                          onChange={e => setFormData({...formData, k_percent: Number(e.target.value)})}
+                          className="w-full p-2 bg-white border border-emerald-300 rounded-lg font-black text-emerald-900"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">1袋の重量 (kg)</label>
+                    <input 
+                      type="number" 
+                      value={formData.bag_weight_kg ?? 20} 
+                      onChange={e => setFormData({...formData, bag_weight_kg: Number(e.target.value)})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
+                      placeholder="例: 20"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">単位</label>
+                    <input 
+                      type="text" 
+                      value={formData.unit || '袋'} 
+                      onChange={e => setFormData({...formData, unit: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
+                      placeholder="例: 袋, kg, L"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold text-slate-500 mb-1">購入単価 (円)</label>
+                    <input 
+                      type="number" 
+                      value={formData.default_price || ''} 
+                      onChange={e => setFormData({...formData, default_price: Number(e.target.value)})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-emerald-700"
+                      placeholder="例: 2600"
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* 資材専用 */}
               {modalType === 'materials' && (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
                     <label className="block text-xs font-bold text-slate-500 mb-1">カテゴリ</label>
                     <select
-                      value={formData.category || ''}
+                      value={formData.category || '諸材料費'}
                       onChange={e => setFormData({...formData, category: e.target.value})}
                       className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-slate-700"
                     >
-                      <option value="">-- 選択してください --</option>
-                      {MATERIAL_CATEGORIES.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
+                      <option value="諸材料費">諸材料費 (マルチ・ネット等)</option>
+                      <option value="種苗費">種苗費 (種子・苗)</option>
+                      <option value="動力光熱費">動力光熱費 (燃料・電気)</option>
+                      <option value="機械・車両費">機械・車両費</option>
+                      <option value="その他経費">その他経費</option>
                     </select>
                   </div>
                   <div className="col-span-2">
@@ -1033,7 +1356,7 @@ export default function MastersPage() {
                       value={formData.specification || ''} 
                       onChange={e => setFormData({...formData, specification: e.target.value})}
                       className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
-                      placeholder="例: 20kg袋, 1Lボトル, 200穴セルトレイ"
+                      placeholder="例: 0.02mm×95cm×200m, 200穴セルトレイ"
                     />
                   </div>
                   <div>
@@ -1043,7 +1366,7 @@ export default function MastersPage() {
                       value={formData.unit || ''} 
                       onChange={e => setFormData({...formData, unit: e.target.value})}
                       className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
-                      placeholder="例: kg, 袋, L"
+                      placeholder="例: 巻, 本, 枚, 箱"
                     />
                   </div>
                   <div>
