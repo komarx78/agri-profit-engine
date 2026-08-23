@@ -37,49 +37,46 @@ export default function CalendarWrapper({ events, t, language }: CalendarProps) 
 
   return (
     <div className="space-y-4">
-      {/* 簡易的な週間カレンダーUI */}
-      <div className="grid grid-cols-7 gap-2">
-        {weekDays.map(day => (
-          <div 
-            key={day.dateStr} 
-            className={`p-3 rounded-2xl flex flex-col items-center justify-center ${day.isToday ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}
-          >
-            <span className="text-xs font-bold mb-1">{day.dayName}</span>
-            <span className={`text-lg font-black ${day.isToday ? 'text-white' : 'text-slate-800'}`}>{day.dateObj.getDate()}</span>
-          </div>
-        ))}
-      </div>
+      {/* 水平スクロール可能なカレンダーマトリックスUI */}
+      <div className="overflow-x-auto pb-4">
+        <div className="grid grid-cols-7 gap-2 min-w-[700px]">
+          {weekDays.map(day => {
+            const dayEvents = events.filter(e => e.date === day.dateStr);
 
-      <div className="mt-8 space-y-6">
-        <h3 className="text-lg font-black text-slate-800">{t('portal_recentTasks', language)}</h3>
-        
-        {events.length === 0 ? (
-          <div className="text-center py-10 bg-slate-50 rounded-2xl border border-slate-100 border-dashed">
-            <p className="text-slate-400 font-bold">{t('noTasksRecent', language)}</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {events.map(event => {
-              // イベントの日付をパース
-              const eDate = new Date(event.date);
-              const isToday = eDate.toDateString() === today.toDateString();
-              
-              return (
-                <div key={event.id} className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm flex items-start gap-4 group hover:border-blue-300 transition-colors">
-                  <div className={`w-1.5 h-12 rounded-full ${isToday ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${isToday ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
-                        {isToday ? t('portal_today', language) : event.date}
-                      </span>
-                    </div>
-                    <h4 className="font-black text-slate-800 text-base">{event.title}</h4>
-                  </div>
+            return (
+              <div key={day.dateStr} className="flex flex-col gap-3">
+                {/* 日付ヘッダー */}
+                <div 
+                  className={`p-3 rounded-2xl flex flex-col items-center justify-center transition-all shadow-sm ${day.isToday ? 'bg-blue-600 text-white shadow-md scale-105' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}
+                >
+                  <span className="text-xs font-bold mb-1">{day.dayName}</span>
+                  <span className={`text-lg font-black ${day.isToday ? 'text-white' : 'text-slate-800'}`}>{day.dateObj.getDate()}</span>
                 </div>
-              );
-            })}
-          </div>
-        )}
+
+                {/* タスクブロックエリア */}
+                <div className="flex flex-col gap-2 flex-1 bg-slate-50/50 rounded-xl p-1.5 min-h-[150px]">
+                  {dayEvents.length > 0 ? (
+                    dayEvents.map(event => (
+                      <div 
+                        key={event.id} 
+                        className={`p-2.5 bg-white rounded-xl border shadow-sm flex flex-col gap-1 transition-colors ${day.isToday ? 'border-blue-200' : 'border-slate-200'}`}
+                      >
+                        <div className={`w-6 h-1 rounded-full mb-1 ${day.isToday ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
+                        <h4 className="font-bold text-slate-800 text-xs leading-snug break-words line-clamp-3">
+                          {event.title}
+                        </h4>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="h-full flex items-center justify-center p-2 rounded-xl">
+                      <span className="text-xs text-slate-300 font-bold">-</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
