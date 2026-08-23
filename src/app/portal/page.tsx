@@ -196,12 +196,8 @@ export default function PortalPage() {
         category: newPostCategory,
         content: newPostContent,
         translations: translations,
-        user_id: localStorage.getItem('agri_owner_id') || ''
+        worker_id: (workerProfile && workerProfile.id) ? workerProfile.id : null
       };
-
-      if (workerProfile && workerProfile.id) {
-        postPayload.worker_id = workerProfile.id;
-      }
 
       const { data, error } = await supabase.from('board_posts').insert([postPayload]).select('*, workers(name)').single();
       if (error) throw error;
