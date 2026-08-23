@@ -42,11 +42,11 @@ export default function TasksPage() {
         setTenantId(ownerId);
 
         const [tasksRes, cropsRes, fieldsRes, workersRes, deptsRes] = await Promise.all([
-          supabase.from('work_tasks').select('*, crops(*), fields(*), workers(*), departments(*)').eq('tenant_id', ownerId).order('work_date', { ascending: true }),
-          supabase.from('crops').select('*').eq('tenant_id', ownerId),
-          supabase.from('fields').select('*').eq('tenant_id', ownerId),
+          supabase.from('work_logs').select('id, work_date, task_title, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(name), fields(name), workers(name), departments(name)').eq('user_id', ownerId).eq('status', 'planned').order('work_date', { ascending: true }),
+          supabase.from('crops').select('*').eq('user_id', ownerId),
+          supabase.from('fields').select('*').eq('user_id', ownerId),
           supabase.from('workers').select('*').eq('user_id', ownerId).order('name'),
-          supabase.from('departments').select('*').eq('tenant_id', ownerId)
+          supabase.from('departments').select('*').eq('user_id', ownerId)
         ]);
 
         if (tasksRes.data) setTasks(tasksRes.data);
@@ -54,9 +54,8 @@ export default function TasksPage() {
         if (fieldsRes.data) setFields(fieldsRes.data);
         if (workersRes.data) setWorkers(workersRes.data);
         if (deptsRes.data) setDepartments(deptsRes.data);
-
-      } catch (error) {
-        console.error('Error fetching data:', error);
+      } catch (err) {
+        console.error(err);
       } finally {
         setIsLoading(false);
       }
@@ -68,18 +67,38 @@ export default function TasksPage() {
     if (!formData.work_date || !formData.task_title) return;
     setIsSaving(true);
     try {
-      const dataToSave = {
-        ...formData,
-        tenant_id: tenantId,
+      const { worker_ids, ...restFormData } = formData;
+      const baseDataToSave = {
+        user_id: tenantId,
+        work_date: formData.work_date,
+        task_title: formData.task_title,
+        work_type: formData.task_title,
         crop_id: formData.crop_id || null,
         field_id: formData.field_id || null,
-        worker_id: formData.worker_id || null,
-        department_id: formData.department_id || null
+        department_id: formData.department_id || null,
+        status: 'planned',
+        duration_minutes: 0,
+        approval_status: 'pending'
       };
 
-      const { data, error } = await supabase.from('work_tasks').insert([dataToSave]).select('*, crops(*), fields(*), workers(*), departments(*)');
+      let insertData = [];
+      if (worker_ids && worker_ids.length > 0) {
+        insertData = worker_ids.map(id => ({
+          ...baseDataToSave,
+          worker_id: id
+        }));
+      } else {
+        insertData = [{
+          ...baseDataToSave,
+          worker_id: null
+        }];
+      }
+
+      const { data, error } = await supabase.from('work_logs').insert(insertData).select('id, work_date, task_title, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(name), fields(name), workers(name), departments(name)');
       if (error) throw error;
-      if (data) setTasks([...tasks, data[0]].sort((a, b) => a.work_date.localeCompare(b.work_date)));
+      if (data) {
+        setTasks(prev => [...prev, ...data].sort((a, b) => a.work_date.localeCompare(b.work_date)));
+      }
       setIsModalOpen(false);
       setFormData({ work_date: new Date().toISOString().split('T')[0], task_title: '', crop_id: '', field_id: '', worker_id: '', worker_ids: [], department_id: '' });
     } catch (err) {
@@ -93,7 +112,7 @@ export default function TasksPage() {
   const handleDelete = async (id: string) => {
     if (!window.confirm('本当に削除しますか？')) return;
     try {
-      await supabase.from('work_tasks').delete().eq('id', id);
+      await supabase.from('work_logs').delete().eq('id', id);
       setTasks(tasks.filter(t => t.id !== id));
     } catch (err) {
       console.error(err);
