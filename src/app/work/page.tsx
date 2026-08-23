@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Truck,
+  Truck, Layout, Home,
   Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, 
   History, LogOut, Loader2, AlertCircle, Coffee, LogIn, LogOut as LogOutIcon, Sun, CloudRain, Plus, X,
   ImageIcon, FileText, Video, MessageSquare, Globe2, MessageCircle, Trash2
@@ -664,6 +664,14 @@ export default function WorkEntryPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => router.push('/portal')}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 hover:text-white border border-blue-400/30 rounded-xl text-xs font-bold transition-all shadow-sm"
+              title="ポータル画面へ戻る"
+            >
+              <Layout className="w-3.5 h-3.5" />
+              <span>ポータル</span>
+            </button>
             <select
               value={language}
               onChange={(e) => {
