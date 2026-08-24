@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Truck, Download, Filter, Sprout, Store, Trash2 } from 'lucide-react';
 import Papa from 'papaparse';
@@ -21,6 +22,12 @@ export default function SalesHistoryPage() {
   async function fetchSalesLogs() {
     try {
       setIsLoading(true);
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
       const [logsRes, channelsRes, cropsRes] = await Promise.all([
         supabase
           .from('sales_logs')
@@ -33,11 +40,12 @@ export default function SalesHistoryPage() {
             channel_id,
             crop_id
           `)
+          .eq('user_id', tenantId)
           .or('status.neq.planned,status.is.null')
           .order('sales_date', { ascending: false })
           .order('id', { ascending: false }),
-        supabase.from('sales_channels').select('id, name'),
-        supabase.from('crops').select('id, name')
+        supabase.from('sales_channels').select('id, name').eq('user_id', tenantId),
+        supabase.from('crops').select('id, name').eq('user_id', tenantId)
       ]);
 
       if (logsRes.error) throw logsRes.error;

@@ -46,7 +46,12 @@ export default function CustomerInvoicePrintPage({ params }: { params: Promise<{
         if (invErr || !inv) throw new Error("請求書が見つかりません");
         setInvoice(inv);
 
-        const { data: comp } = await supabase.from('company_settings').select('*').single();
+        const farmOwnerId = inv.user_id;
+        let compQuery = supabase.from('company_settings').select('*');
+        if (farmOwnerId) {
+          compQuery = compQuery.eq('user_id', farmOwnerId);
+        }
+        const { data: comp } = await compQuery.maybeSingle();
         if (comp) setCompany(comp);
 
         const startDate = `${inv.target_month}-01`;

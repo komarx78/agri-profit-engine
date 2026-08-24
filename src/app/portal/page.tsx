@@ -274,9 +274,12 @@ export default function PortalPage() {
       if (appData) setPendingApprovals(appData);
     }
 
-    // 3. 掲示板最新3件
-    const { data: boardData } = await supabase.from('board_posts')
-      .select('*')
+    // 3. 掲示板最新3件 (自社テナントのみ)
+    let boardQuery = supabase.from('board_posts').select('*');
+    if (targetUserId) {
+      boardQuery = boardQuery.eq('user_id', targetUserId);
+    }
+    const { data: boardData } = await boardQuery
       .order('created_at', { ascending: false })
       .limit(3);
     if (boardData) setBoardPosts(boardData);

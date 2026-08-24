@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { MapPin, ArrowLeft, Loader2, Calendar, Edit, History, Sprout, Leaf } from 'lucide-react';
 import Link from 'next/link';
 import { GoogleMap, useJsApiLoader, Polygon } from '@react-google-maps/api';
@@ -39,11 +40,22 @@ export default function FieldDetailPage() {
 
   async function fetchFieldDetails() {
     try {
-      const { data, error } = await supabase
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
+      let query = supabase
         .from('fields')
         .select('*')
-        .eq('id', fieldId)
-        .single();
+        .eq('id', fieldId);
+
+      if (tenantId) {
+        query = query.eq('user_id', tenantId);
+      }
+
+      const { data, error } = await query.single();
       
       if (error) throw error;
 
@@ -56,11 +68,17 @@ export default function FieldDetailPage() {
 
       setField({ ...data, path });
 
-      // 最新の作付計画を取得
-      const { data: plansData } = await supabase
+      // 自社テナントの最新の作付計画を取得
+      let planQuery = supabase
         .from('cultivation_plans_v2')
         .select(`*, crops(name)`)
-        .eq('field_id', fieldId)
+        .eq('field_id', fieldId);
+
+      if (tenantId) {
+        planQuery = planQuery.eq('user_id', tenantId);
+      }
+
+      const { data: plansData } = await planQuery
         .order('year', { ascending: false })
         .order('start_month', { ascending: false })
         .limit(1);
@@ -71,11 +89,17 @@ export default function FieldDetailPage() {
         setCurrentPlan(latestPlan);
       }
 
-      // 最近の作業履歴を取得
-      const { data: worksData } = await supabase
+      // 自社テナントの最近の作業履歴を取得
+      let workQuery = supabase
         .from('work_logs')
         .select(`*, workers(name)`)
-        .or(latestPlan ? `plan_id.eq.${latestPlan.id},field_id.eq.${fieldId}` : `field_id.eq.${fieldId}`)
+        .or(latestPlan ? `plan_id.eq.${latestPlan.id},field_id.eq.${fieldId}` : `field_id.eq.${fieldId}`);
+
+      if (tenantId) {
+        workQuery = workQuery.eq('user_id', tenantId);
+      }
+
+      const { data: worksData } = await workQuery
         .order('work_date', { ascending: false })
         .limit(5);
         

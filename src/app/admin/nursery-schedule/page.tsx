@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Table, Sprout, Save, Loader2, Info, Paintbrush, Eraser, ChevronLeft, ChevronRight, Calculator, Calendar, RefreshCw, X, ChevronDown, Filter } from 'lucide-react';
 
@@ -56,7 +57,13 @@ export default function NurserySchedulePage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // 栽培計画 (基準に基づく自動計算結果を含む) を取得
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
+      // 自社テナントの栽培計画を取得
       const { data: plansData, error: plansErr } = await supabase
         .from('cultivation_plans_v2')
         .select(`
@@ -64,6 +71,7 @@ export default function NurserySchedulePage() {
           fields ( name ),
           crops ( name )
         `)
+        .eq('user_id', tenantId)
         .eq('year', year)
         .gt('calculated_seedlings', 0); // 苗が必要な作目のみ抽出
         

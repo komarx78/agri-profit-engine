@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { History, Search, Download, CheckCircle2, Clock, Filter, User, MapPin, Sprout, Image as ImageIcon, FileText, X, Video, Play, Loader2 } from 'lucide-react';
 import Papa from 'papaparse';
@@ -26,6 +27,12 @@ function HistoryContent() {
   useEffect(() => {
     async function fetchHistory() {
       try {
+        const tenantId = await getCurrentTenantId();
+        if (!tenantId) {
+          setIsLoading(false);
+          return;
+        }
+
         const { data, error } = await supabase
           .from('work_logs')
           .select(`
@@ -45,6 +52,7 @@ function HistoryContent() {
             materials(name),
             material_quantity
           `)
+          .eq('user_id', tenantId)
           .neq('status', 'planned')
           .order('start_time', { ascending: false });
 

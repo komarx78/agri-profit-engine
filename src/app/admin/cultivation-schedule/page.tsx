@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Calendar, Save, Loader2, ChevronLeft, ChevronRight, Plus, Trash2, X, BarChart2, User, ChevronDown, ChevronUp, PieChart as PieChartIcon, Sprout } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
@@ -47,17 +48,23 @@ export default function CultivationSchedulePage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
       const [fRes, cRes, csRes, pRes, expRes, workRes, salesRes] = await Promise.all([
-        supabase.from('fields').select('*').order('name'),
-        supabase.from('crops').select('*').order('name'),
+        supabase.from('fields').select('*').eq('user_id', tenantId).order('name'),
+        supabase.from('crops').select('*').eq('user_id', tenantId).order('name'),
         supabase.from('crop_standards').select('*'),
         supabase.from('cultivation_plans_v2').select(`
           *,
           crops ( * )
-        `).eq('year', year),
-        supabase.from('monthly_expenses').select('*'),
-        supabase.from('work_logs').select('*, workers(name), materials(default_price)'),
-        supabase.from('sales_logs').select('*')
+        `).eq('user_id', tenantId).eq('year', year),
+        supabase.from('monthly_expenses').select('*').eq('user_id', tenantId),
+        supabase.from('work_logs').select('*, workers(name), materials(default_price)').eq('user_id', tenantId),
+        supabase.from('sales_logs').select('*').eq('user_id', tenantId)
       ]);
       
       setFields(fRes.data || []);

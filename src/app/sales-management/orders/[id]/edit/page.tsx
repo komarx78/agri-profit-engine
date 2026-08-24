@@ -6,6 +6,7 @@ import { ShoppingCart, ArrowLeft, Copy, Plus, Trash2, CheckCircle2 } from 'lucid
 import Link from 'next/link';
 import { getB2BCustomers, updateB2BOrderDetails, deleteB2BOrder } from '@/app/actions/b2b';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 
 // In Next.js 15+ async params must be used with React.use, or defined properly
 export default function EditOrderPage({ params }: { params: Promise<{ id: string }> }) {
@@ -37,18 +38,29 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     async function load() {
       if (!orderId) return;
       
-      const { data: cropData } = await supabase.from('crops').select('*');
+      const tenantId = await getCurrentTenantId();
+
+      let cropQuery = supabase.from('crops').select('*');
+      if (tenantId) {
+        cropQuery = cropQuery.eq('user_id', tenantId);
+      }
+      const { data: cropData } = await cropQuery;
       if (cropData) setCrops(cropData);
 
-      const custRes = await getB2BCustomers(null);
+      const custRes = await getB2BCustomers(tenantId);
       if (custRes.success) setCustomers(custRes.customers);
       
       // Load existing order
-      const { data: orderData, error } = await supabase
+      let orderQuery = supabase
         .from('b2b_orders')
         .select(`*, items:b2b_order_items(*)`)
-        .eq('id', orderId)
-        .single();
+        .eq('id', orderId);
+
+      if (tenantId) {
+        orderQuery = orderQuery.eq('user_id', tenantId);
+      }
+
+      const { data: orderData, error } = await orderQuery.single();
         
       if (orderData) {
         setSelectedCustomerId(orderData.customer_id);

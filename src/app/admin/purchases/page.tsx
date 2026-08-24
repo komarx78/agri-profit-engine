@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Receipt, Search, Image as ImageIcon, Camera, UploadCloud, Calendar, DollarSign, Store, Tag, Plus, Loader2, Sparkles, AlertCircle, TrendingUp, BarChart3, CheckCircle2, ChevronDown, Download, Check, MapPin, FileText, History, ExternalLink } from 'lucide-react';
 
@@ -55,17 +56,29 @@ export default function PurchasesPage() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
       // 1. 資材マスタ取得
-      const { data: matData } = await supabase.from('materials').select('*').order('name');
+      const { data: matData } = await supabase
+        .from('materials')
+        .select('*')
+        .eq('user_id', tenantId)
+        .order('name');
+
       if (matData) setMaterials(matData);
 
-      // 2. 購入履歴取得 (テーブルが存在しない場合はエラーをキャッチして空にする)
+      // 2. 仕入実績一覧取得
       const { data: purData, error } = await supabase
         .from('material_purchases')
         .select(`
           *,
           materials (name, unit)
         `)
+        .eq('user_id', tenantId)
         .order('purchase_date', { ascending: false });
 
       if (error) {
@@ -87,7 +100,11 @@ export default function PurchasesPage() {
     setSubmitSuccess(false);
 
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error('テナントIDが特定できません');
+
       const { error } = await supabase.from('material_purchases').insert([{
+        user_id: tenantId,
         purchase_date: formData.purchase_date,
         material_id: formData.material_id || null,
         supplier: formData.supplier,

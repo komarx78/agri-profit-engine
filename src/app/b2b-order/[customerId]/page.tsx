@@ -30,31 +30,34 @@ export default function B2BClientOrderPage({ params }: { params: Promise<{ custo
 
   useEffect(() => {
     async function load() {
-      // 実際は order_token で顧客を検索する安全な設計にする
+      // order_token または id で顧客を検索
       const { data: custData } = await supabase
         .from('b2b_customers')
-        .select(`
-          *,
-          farm:farms(name)
-        `)
-        .eq('order_token', customerId)
-        .single();
-        
-      // 自社情報（佐原農園など）を取得
-      const { data: companyData } = await supabase
-        .from('company_settings')
-        .select('company_name')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+        .select('*')
+        .or(`order_token.eq.${customerId},id.eq.${customerId}`)
+        .maybeSingle();
         
       if (custData) {
+        const farmOwnerId = custData.user_id;
+
+        // 農園の会社設定を取得
+        let compQuery = supabase.from('company_settings').select('company_name');
+        if (farmOwnerId) {
+          compQuery = compQuery.eq('user_id', farmOwnerId);
+        }
+        const { data: companyData } = await compQuery.maybeSingle();
+        
         setCustomer({
           ...custData,
-          company_name: companyData?.company_name || custData.farm?.name || '当農園'
+          company_name: companyData?.company_name || '当農園'
         });
-        // 作目一覧を取得
-        const { data: cropData } = await supabase.from('crops').select('*');
+
+        // 該当農園の作目一覧を取得
+        let cropQuery = supabase.from('crops').select('*');
+        if (farmOwnerId) {
+          cropQuery = cropQuery.eq('user_id', farmOwnerId);
+        }
+        const { data: cropData } = await cropQuery;
         if (cropData) setCrops(cropData);
 
         // 過去の請求書を取得

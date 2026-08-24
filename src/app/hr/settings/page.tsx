@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { Clock, Save, CheckCircle2, Loader2 } from 'lucide-react';
 
 export default function HrSettingsPage() {
@@ -22,12 +23,19 @@ export default function HrSettingsPage() {
   useEffect(() => {
     async function fetchSettings() {
       try {
+        const tenantId = await getCurrentTenantId();
+        if (!tenantId) {
+          setIsLoading(false);
+          return;
+        }
+
         const { data, error } = await supabase
           .from('company_settings')
           .select('*')
+          .eq('user_id', tenantId)
           .order('created_at', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (error && error.code !== 'PGRST116') {
           console.error(error);
@@ -61,7 +69,11 @@ export default function HrSettingsPage() {
     setSaveSuccess(false);
 
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error('テナントIDが特定できません');
+
       const payload = {
+        user_id: tenantId,
         default_start_time: formData.default_start_time.length === 5 ? formData.default_start_time + ':00' : formData.default_start_time,
         default_end_time: formData.default_end_time.length === 5 ? formData.default_end_time + ':00' : formData.default_end_time,
         default_rest_minutes: formData.default_rest_minutes,

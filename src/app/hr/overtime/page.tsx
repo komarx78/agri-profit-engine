@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId, getTenantWorkerIds } from '@/lib/tenant';
 import { Clock, CheckCircle2, XCircle, Search, Calendar, FileText } from 'lucide-react';
 
 export default function OvertimeApprovalPage() {
@@ -13,12 +14,25 @@ export default function OvertimeApprovalPage() {
   const fetchRequests = async () => {
     setLoading(true);
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setLoading(false);
+        return;
+      }
+      const workerIds = await getTenantWorkerIds(tenantId);
+      if (workerIds.length === 0) {
+        setRequests([]);
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('overtime_requests')
         .select(`
           *,
           workers ( name )
         `)
+        .in('worker_id', workerIds)
         .order('date', { ascending: false })
         .order('created_at', { ascending: false });
         

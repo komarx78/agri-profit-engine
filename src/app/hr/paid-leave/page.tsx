@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { Coffee, Download, Users, Loader2, AlertCircle, CheckCircle, XCircle, Plus, Calendar } from 'lucide-react';
 
 export default function PaidLeavePage() {
@@ -33,21 +34,35 @@ export default function PaidLeavePage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // 農業システム側は farms テーブルが拠点となっているため farm_id を取得するか、
-      // ひとまず会社設定を基準とする。
-      const { data: cData } = await supabase.from('company_settings').select('id').limit(1).single();
-      const companyId = cData?.id;
+      const resolvedTenantId = await getCurrentTenantId();
+      setTenantId(resolvedTenantId);
+      if (!resolvedTenantId) {
+        setIsLoading(false);
+        return;
+      }
 
-      // ワーカー（有給残日数等）の取得
-      const { data: wData } = await supabase.from('workers').select('*').order('name');
-      if (wData) setWorkers(wData);
+      // 自社テナントのワーカー（有給残日数等）の取得
+      const { data: wData } = await supabase
+        .from('workers')
+        .select('*')
+        .eq('user_id', resolvedTenantId)
+        .order('name');
 
-      // 休暇申請履歴の取得
-      const { data: reqData } = await supabase
-        .from('leave_requests')
-        .select('*, workers(name)')
-        .order('created_at', { ascending: false });
-      if (reqData) setLeaveRequests(reqData);
+      const currentWorkers = wData || [];
+      setWorkers(currentWorkers);
+      const workerIds = currentWorkers.map(w => w.id);
+
+      // 自社ワーカーの休暇申請履歴の取得
+      if (workerIds.length > 0) {
+        const { data: reqData } = await supabase
+          .from('leave_requests')
+          .select('*, workers(name)')
+          .in('worker_id', workerIds)
+          .order('created_at', { ascending: false });
+        if (reqData) setLeaveRequests(reqData);
+      } else {
+        setLeaveRequests([]);
+      }
 
     } catch (err) {
       console.error(err);

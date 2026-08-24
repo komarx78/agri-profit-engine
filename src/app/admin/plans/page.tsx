@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { Calendar, Sprout, Store, Calculator, CheckCircle2, Clock, Truck, MapPin, Loader2, Target, ChevronLeft, ChevronRight, Plus, X, User, FileText, Image as ImageIcon, ChevronDown, ChevronUp, PieChart as PieChartIcon } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -68,12 +69,15 @@ export default function PlansPage() {
 
   async function fetchMasters() {
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) return;
+
       const [cRes, fRes, chRes, spRes, mRes] = await Promise.all([
-        supabase.from('crops').select('id, name'),
-        supabase.from('fields').select('id, name'),
-        supabase.from('sales_channels').select('id, name'),
-        supabase.from('sales_prices').select('*'),
-        supabase.from('materials').select('id, name, default_price')
+        supabase.from('crops').select('id, name').eq('user_id', tenantId),
+        supabase.from('fields').select('id, name').eq('user_id', tenantId),
+        supabase.from('sales_channels').select('id, name').eq('user_id', tenantId),
+        supabase.from('sales_prices').select('*').eq('user_id', tenantId),
+        supabase.from('materials').select('id, name, default_price').eq('user_id', tenantId)
       ]);
 
       if (cRes.data) setCrops(cRes.data);
@@ -95,13 +99,21 @@ export default function PlansPage() {
     const endOfMonth = `${year}-${month}-31`;
 
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
       const [workRes, salesRes] = await Promise.all([
         supabase.from('work_logs')
           .select('*, crops(name), fields(name), workers(name), materials(name, default_price)')
+          .eq('user_id', tenantId)
           .gte('work_date', startOfMonth)
           .lte('work_date', endOfMonth),
         supabase.from('sales_logs')
           .select('*, crops(name)')
+          .eq('user_id', tenantId)
           .gte('sales_date', startOfMonth)
           .lte('sales_date', endOfMonth)
       ]);

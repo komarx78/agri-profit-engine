@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, Save, Plus, Trash2, Globe2, Loader2, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import VideoPlayerWithSubtitles, { Narration } from '@/components/VideoPlayerWithSubtitles';
 
 export default function ManualDetailPage() {
@@ -34,12 +35,18 @@ export default function ManualDetailPage() {
   const fetchVideoData = async () => {
     setIsLoading(true);
     try {
-      // 1. 動画情報の取得
-      const { data: videoData, error: videoError } = await supabase
+      const tenantId = await getCurrentTenantId();
+      let vQuery = supabase
         .from('video_manuals')
         .select('*')
-        .eq('id', id)
-        .single();
+        .eq('id', id);
+
+      if (tenantId) {
+        vQuery = vQuery.eq('user_id', tenantId);
+      }
+
+      // 1. 動画情報の取得
+      const { data: videoData, error: videoError } = await vQuery.single();
       
       if (videoError) throw videoError;
       setVideo(videoData);

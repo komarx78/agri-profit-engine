@@ -9,8 +9,7 @@ export async function getB2BCustomers(tenantId: string | null) {
   try {
     let query = supabase.from('b2b_customers').select('*').order('created_at', { ascending: false });
     if (tenantId) {
-      // In a real app, you would filter by farm_id = tenantId.
-      // Currently using a mocked tenant for prototyping if needed.
+      query = query.eq('user_id', tenantId);
     }
     const { data, error } = await query;
     if (error) throw error;
@@ -20,9 +19,13 @@ export async function getB2BCustomers(tenantId: string | null) {
   }
 }
 
-export async function createB2BCustomer(data: any) {
+export async function createB2BCustomer(data: any, tenantId?: string | null) {
   try {
-    const { error } = await supabase.from('b2b_customers').insert([data]);
+    const payload = { ...data };
+    if (tenantId && !payload.user_id) {
+      payload.user_id = tenantId;
+    }
+    const { error } = await supabase.from('b2b_customers').insert([payload]);
     if (error) throw error;
     return { success: true };
   } catch (error: any) {
@@ -43,6 +46,11 @@ export async function getB2BOrders(tenantId: string | null) {
         items:b2b_order_items(*, crops(*))
       `)
       .order('delivery_date', { ascending: true });
+
+    if (tenantId) {
+      query = query.eq('user_id', tenantId);
+    }
+
     const { data, error } = await query;
     if (error) throw error;
     return { success: true, orders: data || [] };
@@ -51,12 +59,17 @@ export async function getB2BOrders(tenantId: string | null) {
   }
 }
 
-export async function createB2BOrder(orderData: any, orderItems: any[]) {
+export async function createB2BOrder(orderData: any, orderItems: any[], tenantId?: string | null) {
   try {
     // 1. Create Order
+    const payload = { ...orderData };
+    if (tenantId && !payload.user_id) {
+      payload.user_id = tenantId;
+    }
+
     const { data: newOrder, error: orderError } = await supabase
       .from('b2b_orders')
-      .insert([orderData])
+      .insert([payload])
       .select('id')
       .single();
       
@@ -145,10 +158,16 @@ export async function deleteB2BOrder(orderId: string) {
 // ---------------------------
 export async function getB2BInvoices(tenantId: string | null) {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('b2b_invoices')
       .select('*, customer:b2b_customers(*)')
-      .order('created_at', { ascending: false });
+      .order('issue_date', { ascending: false });
+
+    if (tenantId) {
+      query = query.eq('user_id', tenantId);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     return { success: true, invoices: data || [] };
   } catch (error: any) {
@@ -156,101 +175,134 @@ export async function getB2BInvoices(tenantId: string | null) {
   }
 }
 
-export async function generateInvoicesForMonth(targetMonth: string) {
-  // Mock logic to find 'delivered' orders in the month and create invoices
+export async function createB2BInvoice(invoiceData: any, tenantId?: string | null) {
   try {
-    // 1. Fetch delivered orders not yet invoiced for this month
-    const { data: orders, error: ordersError } = await supabase
-      .from('b2b_orders')
-      .select('*')
-      .eq('status', 'delivered')
-      // .like('delivery_date', `${targetMonth}%`); // simplified
-
-    if (ordersError) throw ordersError;
-    if (!orders || orders.length === 0) return { success: true, count: 0 };
-
-    // Group by customer
-    const grouped: Record<string, { total: number, count: number }> = {};
-    orders.forEach(o => {
-      if(o.delivery_date.startsWith(targetMonth)) {
-        if (!grouped[o.customer_id]) {
-          grouped[o.customer_id] = { total: 0, count: 0 };
-        }
-        grouped[o.customer_id].total += Number(o.total_amount || 0);
-        grouped[o.customer_id].count += 1;
-      }
-    });
-
-      // Create invoices
-    let count = 0;
-    for (const customerId of Object.keys(grouped)) {
-      if (grouped[customerId].count > 0) {
-        // Fetch customer to get terms
-        const { data: customer } = await supabase.from('b2b_customers').select('*').eq('id', customerId).single();
-        
-        let dueDate = new Date();
-        dueDate.setMonth(dueDate.getMonth() + 1);
-        dueDate.setDate(customer?.payment_day || 31); // simplifed
-        
-        await supabase.from('b2b_invoices').insert([{
-          customer_id: customerId,
-          target_month: targetMonth,
-          total_amount: grouped[customerId].total,
-          issue_date: new Date().toISOString().split('T')[0],
-          due_date: dueDate.toISOString().split('T')[0],
-          status: 'unpaid'
-        }]);
-        
-        const startDate = `${targetMonth}-01`;
-        const [yearStr, monthStr] = targetMonth.split('-');
-        const nextMonth = new Date(Number(yearStr), Number(monthStr), 1);
-        const endDate = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`;
-
-        // Mark orders as invoiced
-        await supabase
-          .from('b2b_orders')
-          .update({ status: 'invoiced' })
-          .eq('customer_id', customerId)
-          .eq('status', 'delivered')
-          .gte('delivery_date', startDate)
-          .lt('delivery_date', endDate);
-        
-        count++;
-      }
+    const payload = { ...invoiceData };
+    if (tenantId && !payload.user_id) {
+      payload.user_id = tenantId;
     }
-
-    return { success: true, count };
+    const { data, error } = await supabase
+      .from('b2b_invoices')
+      .insert([payload])
+      .select('id')
+      .single();
+    if (error) throw error;
+    return { success: true, invoiceId: data.id };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
 }
 
-export async function updateInvoiceAmounts(invoiceId: string, updatedOrders: any[], newTotal: number) {
+export async function updateB2BInvoiceStatus(invoiceId: string, status: string) {
   try {
-    // 1. Update items
-    for (const order of updatedOrders) {
-      for (const item of order.items) {
-        await supabase
-          .from('b2b_order_items')
-          .update({
-            unit_price: item.unit_price,
-            total_price: item.total_price
-          })
-          .eq('id', item.id);
-      }
-      // 2. Update order total
-      await supabase
-        .from('b2b_orders')
-        .update({ total_amount: order.total_amount })
-        .eq('id', order.id);
+    const { error } = await supabase
+      .from('b2b_invoices')
+      .update({ status })
+      .eq('id', invoiceId);
+    if (error) throw error;
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function generateInvoicesForMonth(targetMonth: string, tenantId?: string | null) {
+  try {
+    const startDate = `${targetMonth}-01`;
+    const [yearStr, monthStr] = targetMonth.split('-');
+    const nextMonth = new Date(Number(yearStr), Number(monthStr), 1);
+    const endDate = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`;
+
+    let orderQuery = supabase
+      .from('b2b_orders')
+      .select('*, customer:b2b_customers(*), items:b2b_order_items(*)')
+      .gte('delivery_date', startDate)
+      .lt('delivery_date', endDate)
+      .in('status', ['delivered', 'invoiced']);
+
+    if (tenantId) {
+      orderQuery = orderQuery.eq('user_id', tenantId);
     }
 
-    // 3. Update invoice total
-    await supabase
-      .from('b2b_invoices')
-      .update({ total_amount: newTotal })
-      .eq('id', invoiceId);
+    const { data: deliveredOrders, error: orderErr } = await orderQuery;
+    if (orderErr) throw orderErr;
 
+    if (!deliveredOrders || deliveredOrders.length === 0) {
+      return { success: true, count: 0, message: "対象となる納品済データがありませんでした" };
+    }
+
+    // 顧客ごとにグループ化
+    const customerOrdersMap: { [customerId: string]: typeof deliveredOrders } = {};
+    deliveredOrders.forEach(o => {
+      if (!customerOrdersMap[o.customer_id]) {
+        customerOrdersMap[o.customer_id] = [];
+      }
+      customerOrdersMap[o.customer_id].push(o);
+    });
+
+    let generatedCount = 0;
+
+    for (const [customerId, ordersList] of Object.entries(customerOrdersMap)) {
+      let subtotal = 0;
+      ordersList.forEach(o => {
+        if (o.items && Array.isArray(o.items)) {
+          o.items.forEach((item: any) => {
+            subtotal += (item.unit_price || 0) * (item.quantity || 0);
+          });
+        }
+      });
+
+      const tax = Math.floor(subtotal * 0.1);
+      const total = subtotal + tax;
+
+      const invoiceData: any = {
+        customer_id: customerId,
+        target_month: targetMonth,
+        issue_date: new Date().toISOString().split('T')[0],
+        subtotal,
+        tax,
+        total_amount: total,
+        status: 'issued'
+      };
+
+      if (tenantId) {
+        invoiceData.user_id = tenantId;
+      }
+
+      const { data: invData, error: invErr } = await supabase
+        .from('b2b_invoices')
+        .upsert([invoiceData], { onConflict: 'customer_id, target_month' })
+        .select('id')
+        .single();
+
+      if (!invErr && invData) {
+        generatedCount++;
+        // 該当オーダーのステータスを invoiced に更新
+        const orderIds = ordersList.map(o => o.id);
+        await supabase
+          .from('b2b_orders')
+          .update({ status: 'invoiced' })
+          .in('id', orderIds);
+      }
+    }
+
+    return { success: true, count: generatedCount };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function updateInvoiceAmounts(invoiceId: string, subtotal: number, tax: number, total: number) {
+  try {
+    const { error } = await supabase
+      .from('b2b_invoices')
+      .update({
+        subtotal,
+        tax,
+        total_amount: total
+      })
+      .eq('id', invoiceId);
+    if (error) throw error;
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };

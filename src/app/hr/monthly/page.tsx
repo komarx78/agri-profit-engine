@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { Calendar, Download, ChevronLeft, ChevronRight, Clock, Users, Loader2, Save, FileText, Settings, ArrowLeft } from 'lucide-react';
 
 export default function MonthlyTimecardPage() {
@@ -25,33 +26,61 @@ export default function MonthlyTimecardPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
       const year = currentMonth.getFullYear();
       const month = currentMonth.getMonth() + 1;
       const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
       const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
 
-      const { data: cData } = await supabase.from('company_settings').select('*').order('created_at', { ascending: false }).limit(1).single();
+      // 自社テナントの設定を取得
+      const { data: cData } = await supabase
+        .from('company_settings')
+        .select('*')
+        .eq('user_id', tenantId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
       if (cData) setCompanySettings(cData);
 
-      // ★ 全従業員を取得
-      const { data: wData } = await supabase.from('workers').select('*');
-      if (wData) setWorkers(wData);
-
-      const { data: lData, error } = await supabase
-        .from('attendance_logs')
+      // 自社テナントの従業員のみを取得
+      const { data: wData } = await supabase
+        .from('workers')
         .select('*')
-        .gte('date', startDate)
-        .lte('date', endDate)
-        .order('date', { ascending: false });
+        .eq('user_id', tenantId)
+        .order('name');
 
-      if (error) throw error;
-      setLogs(lData || []);
+      const currentWorkers = wData || [];
+      setWorkers(currentWorkers);
+      const workerIds = currentWorkers.map(w => w.id);
 
-      const editState: Record<string, number> = {};
-      lData?.forEach(log => {
-        editState[log.id] = log.actual_rest_minutes !== null ? log.actual_rest_minutes : (log.total_break_minutes || 0);
-      });
-      setEditingRestMinutes(editState);
+      // 自社従業員の勤怠ログのみを取得
+      if (workerIds.length > 0) {
+        const { data: lData, error } = await supabase
+          .from('attendance_logs')
+          .select('*')
+          .in('worker_id', workerIds)
+          .gte('date', startDate)
+          .lte('date', endDate)
+          .order('date', { ascending: false });
+
+        if (error) throw error;
+        setLogs(lData || []);
+
+        const editState: Record<string, number> = {};
+        lData?.forEach(log => {
+          editState[log.id] = log.actual_rest_minutes !== null ? log.actual_rest_minutes : (log.total_break_minutes || 0);
+        });
+        setEditingRestMinutes(editState);
+      } else {
+        setLogs([]);
+        setEditingRestMinutes({});
+      }
 
     } catch (err) {
       console.error(err);

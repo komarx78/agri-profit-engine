@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createBrowserClient } from '@supabase/ssr';
+import { getCurrentTenantId, getTenantWorkerIds } from '@/lib/tenant';
 import { 
   Sprout, 
   Clock, 
@@ -45,26 +46,38 @@ export default function PortalPage() {
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
         );
 
-        // 1. 未確定のB2B受注を取得
+        const tenantId = await getCurrentTenantId();
+        if (!tenantId) {
+          setLoadingTasks(false);
+          return;
+        }
+
+        // 1. 自社テナントの未確定B2B受注を取得
         const { count: orderCount } = await supabase
           .from('b2b_orders')
           .select('*', { count: 'exact', head: true })
+          .eq('user_id', tenantId)
           .eq('status', 'pending');
 
-        // 2. 勤怠打刻エラー（出勤打刻あり、かつ退勤打刻が未入力・NULL）を取得
-        // 直近30日間のレコードを対象に集計
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const startDateStr = thirtyDaysAgo.toISOString().split('T')[0];
-
-        const { data: attLogs } = await supabase
-          .from('attendance_logs')
-          .select('id, clock_in, clock_out, date')
-          .gte('date', startDateStr);
+        // 2. 自社テナントの作業者IDリストを取得
+        const workerIds = await getTenantWorkerIds(tenantId);
 
         let attErrors = 0;
-        if (attLogs) {
-          attErrors = attLogs.filter(l => Boolean(l.clock_in) && (!l.clock_out || l.clock_out === '-')).length;
+        if (workerIds.length > 0) {
+          // 直近30日間の自社作業員のレコードのみを対象に集計
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          const startDateStr = thirtyDaysAgo.toISOString().split('T')[0];
+
+          const { data: attLogs } = await supabase
+            .from('attendance_logs')
+            .select('id, clock_in, clock_out, date, worker_id')
+            .in('worker_id', workerIds)
+            .gte('date', startDateStr);
+
+          if (attLogs) {
+            attErrors = attLogs.filter(l => Boolean(l.clock_in) && (!l.clock_out || l.clock_out === '-')).length;
+          }
         }
 
         setPendingOrdersCount(orderCount || 0);

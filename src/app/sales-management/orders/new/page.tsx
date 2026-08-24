@@ -6,6 +6,7 @@ import { ShoppingCart, ArrowLeft, Copy, Plus, Trash2, CheckCircle2 } from 'lucid
 import Link from 'next/link';
 import { getB2BCustomers, getB2BOrders, createB2BOrder } from '@/app/actions/b2b';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 
 export default function NewOrderPage() {
   const router = useRouter();
@@ -28,10 +29,13 @@ export default function NewOrderPage() {
 
   useEffect(() => {
     async function load() {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) return;
+
       const [custRes, cropRes, ordRes] = await Promise.all([
-        getB2BCustomers(null),
-        supabase.from('crops').select('*'),
-        getB2BOrders(null)
+        getB2BCustomers(tenantId),
+        supabase.from('crops').select('*').eq('user_id', tenantId),
+        getB2BOrders(tenantId)
       ]);
       if (custRes.success) setCustomers(custRes.customers);
       if (cropRes.data) setCrops(cropRes.data);

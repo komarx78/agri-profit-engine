@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { Users, Plus, Edit2, Trash2, X, Loader2, Save, Building, ShieldCheck, Clock } from 'lucide-react';
 
 export default function HrEmployeesPage() {
@@ -27,13 +28,21 @@ export default function HrEmployeesPage() {
   const [companySettings, setCompanySettings] = useState<any>(null);
 
   useEffect(() => {
-    fetchWorkers();
     fetchCompanySettings();
+    fetchWorkers();
   }, []);
 
   const fetchCompanySettings = async () => {
     try {
-      const { data } = await supabase.from('company_settings').select('*').order('created_at', { ascending: false }).limit(1).single();
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) return;
+      const { data } = await supabase
+        .from('company_settings')
+        .select('*')
+        .eq('user_id', tenantId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
       if (data) setCompanySettings(data);
     } catch (err) {
       console.error(err);
@@ -43,7 +52,17 @@ export default function HrEmployeesPage() {
   const fetchWorkers = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.from('workers').select('*').order('name');
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+      const { data, error } = await supabase
+        .from('workers')
+        .select('*')
+        .eq('user_id', tenantId)
+        .order('name');
+
       if (error) throw error;
       setWorkers(data || []);
     } catch (err) {
@@ -91,16 +110,20 @@ export default function HrEmployeesPage() {
     }
     setIsSaving(true);
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error('テナントIDが特定できません');
+
       let query;
       // time 型にするために秒までつける
       const dataToSave = {
         ...formData,
+        user_id: tenantId,
         standard_start_time: formData.standard_start_time.length === 5 ? formData.standard_start_time + ':00' : formData.standard_start_time,
         standard_end_time: formData.standard_end_time.length === 5 ? formData.standard_end_time + ':00' : formData.standard_end_time,
       };
 
       if (editingId) {
-        query = supabase.from('workers').update(dataToSave).eq('id', editingId);
+        query = supabase.from('workers').update(dataToSave).eq('id', editingId).eq('user_id', tenantId);
       } else {
         query = supabase.from('workers').insert([dataToSave]);
       }

@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ShoppingCart, Plus, Search, Calendar, CheckCircle2, Clock, Truck } from 'lucide-react';
 import { getB2BOrders, updateB2BOrderStatus } from '@/app/actions/b2b';
+import { getCurrentTenantId } from '@/lib/tenant';
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<any[]>([]);
@@ -15,7 +16,8 @@ export default function OrdersPage() {
 
   async function loadOrders() {
     setLoading(true);
-    const res = await getB2BOrders(null);
+    const tenantId = await getCurrentTenantId();
+    const res = await getB2BOrders(tenantId);
     if (res.success) {
       setOrders(res.orders);
     }

@@ -29,6 +29,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { CultivationActionSheet, CultivationTarget } from '@/components/CultivationActionSheet';
 import Link from 'next/link';
 
@@ -101,11 +102,17 @@ function CultivationsHubContent() {
   const fetchAllData = async () => {
     setIsLoading(true);
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
       const [fRes, cRes, pRes, logsRes] = await Promise.all([
-        supabase.from('fields').select('*').order('name'),
-        supabase.from('crops').select('*').order('name'),
-        supabase.from('cultivation_plans_v2').select('*, crops(*)').order('created_at', { ascending: false }),
-        supabase.from('work_logs').select('*, crops(name), fields(name), workers(name)').order('work_date', { ascending: false })
+        supabase.from('fields').select('*').eq('user_id', tenantId).order('name'),
+        supabase.from('crops').select('*').eq('user_id', tenantId).order('name'),
+        supabase.from('cultivation_plans_v2').select('*, crops(*)').eq('user_id', tenantId).order('created_at', { ascending: false }),
+        supabase.from('work_logs').select('*, crops(name), fields(name), workers(name)').eq('user_id', tenantId).order('work_date', { ascending: false })
       ]);
 
       const fetchedFields = fRes.data || [];

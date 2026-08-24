@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Package, Loader2, ChevronLeft, ChevronRight, Calculator, Info } from 'lucide-react';
 
@@ -19,13 +20,19 @@ export default function MaterialRequirementsPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
       const [mRes, pRes, csRes] = await Promise.all([
-        supabase.from('materials').select('*').order('name'),
+        supabase.from('materials').select('*').eq('user_id', tenantId).order('name'),
         supabase.from('cultivation_plans_v2').select(`
           *,
           fields ( name ),
           crops ( name )
-        `).eq('year', year),
+        `).eq('user_id', tenantId).eq('year', year),
         supabase.from('crop_standards').select('*')
       ]);
       

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as BarTooltip } from 'recharts';
 import { Sprout, Loader2, User, Clock, BarChart2, TrendingUp, HelpCircle } from 'lucide-react';
 import { HelpTooltip } from '@/components/HelpTooltip';
@@ -24,10 +25,16 @@ export default function CropAnalysisPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
       const [cRes, wRes, sRes] = await Promise.all([
-        supabase.from('crops').select('*').order('name'),
-        supabase.from('work_logs').select('*, workers(name), materials(default_price)').gte('work_date', `${year}-01-01`).lte('work_date', `${year}-12-31`),
-        supabase.from('sales_logs').select('*').gte('sales_date', `${year}-01-01`).lte('sales_date', `${year}-12-31`)
+        supabase.from('crops').select('*').eq('user_id', tenantId).order('name'),
+        supabase.from('work_logs').select('*, workers(name), materials(default_price)').eq('user_id', tenantId).gte('work_date', `${year}-01-01`).lte('work_date', `${year}-12-31`),
+        supabase.from('sales_logs').select('*').eq('user_id', tenantId).gte('sales_date', `${year}-01-01`).lte('sales_date', `${year}-12-31`)
       ]);
       setCrops(cRes.data || []);
       setAllWorkLogs(wRes.data || []);

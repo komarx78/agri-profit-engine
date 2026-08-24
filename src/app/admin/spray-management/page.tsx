@@ -22,6 +22,7 @@ import {
   Zap
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import Link from 'next/link';
 
 interface PesticideDisplayItem {
@@ -72,9 +73,15 @@ function SprayManagementContent() {
   const fetchInitialData = async () => {
     setIsLoading(true);
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
       const [cropsRes, fieldsRes] = await Promise.all([
-        supabase.from('crops').select('*').order('name'),
-        supabase.from('fields').select('*').order('name')
+        supabase.from('crops').select('*').eq('user_id', tenantId).order('name'),
+        supabase.from('fields').select('*').eq('user_id', tenantId).order('name')
       ]);
 
       const fetchedCrops = cropsRes.data || [];
@@ -110,11 +117,18 @@ function SprayManagementContent() {
     if (!cropName) return;
     setIsPesticidesLoading(true);
     try {
-      // 過去の散布履歴を取得（使用回数計算用）
-      const { data: pastSprays } = await supabase
+      const tenantId = await getCurrentTenantId();
+      // 過去の自社散布履歴を取得（使用回数計算用）
+      let sprayQuery = supabase
         .from('work_logs')
         .select('*')
         .like('work_type', '%農薬%');
+
+      if (tenantId) {
+        sprayQuery = sprayQuery.eq('user_id', tenantId);
+      }
+
+      const { data: pastSprays } = await sprayQuery;
 
       // 本番APIから作物の適用農薬を全件取得
       const res = await fetch('/api/pesticide-check', {

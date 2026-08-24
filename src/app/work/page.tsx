@@ -167,17 +167,36 @@ export default function WorkEntryPage() {
 
     async function fetchData() {
       try {
-        const [cRes, fRes, mRes, wRes, chRes] = await Promise.all([
-          supabase.from('crops').select('*'),
-          supabase.from('fields').select('*'),
-          supabase.from('materials').select('*'),
-          supabase.from('workers').select('*').eq('id', currentUser.id).single(),
-          supabase.from('sales_channels').select('*')
+        // まず作業者本人の所属テナント（user_id）を取得
+        const { data: wProfile } = await supabase
+          .from('workers')
+          .select('*')
+          .eq('id', currentUser.id)
+          .single();
+
+        const ownerId = wProfile?.user_id || (currentUser as any).user_id;
+
+        // 自社テナントのマスタのみを厳格に取得
+        const [cRes, fRes, mRes, chRes] = await Promise.all([
+          ownerId 
+            ? supabase.from('crops').select('*').eq('user_id', ownerId) 
+            : supabase.from('crops').select('*'),
+          ownerId 
+            ? supabase.from('fields').select('*').eq('user_id', ownerId) 
+            : supabase.from('fields').select('*'),
+          ownerId 
+            ? supabase.from('materials').select('*').eq('user_id', ownerId) 
+            : supabase.from('materials').select('*'),
+          ownerId 
+            ? supabase.from('sales_channels').select('*').eq('user_id', ownerId) 
+            : supabase.from('sales_channels').select('*')
         ]);
+
+        if (wProfile) setWorkerProfile(wProfile);
         if (chRes.data) setSalesChannels(chRes.data);
 
         try {
-          const oRes = await getB2BOrders(null);
+          const oRes = await getB2BOrders(ownerId || null);
           if (oRes && oRes.success) {
             const todayStr = getJSTDate();
             setB2bOrders(oRes.orders.filter((o: any) => o.delivery_date === todayStr && o.status === 'pending'));
@@ -200,7 +219,6 @@ export default function WorkEntryPage() {
         if (cRes.data) setCrops(cRes.data);
         if (fRes.data) setFields(fRes.data);
         if (mRes.data) setMaterials(mRes.data);
-        if (wRes.data) setWorkerProfile(wRes.data);
         if (!cRes.error) setIsConnected(true);
 
         if (!cRes.error && currentUser) {

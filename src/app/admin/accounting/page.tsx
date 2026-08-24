@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { FileSpreadsheet, Download, RefreshCw, Loader2, Info, AlertTriangle, Calendar, Settings } from 'lucide-react';
 import Papa from 'papaparse';
@@ -39,6 +40,11 @@ export default function AccountingPage() {
     setMessage('');
     
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        throw new Error('テナントIDが特定できません');
+      }
+
       // 指定期間のデータを取得
       const [salesRes, purchasesRes, cropsRes, channelsRes] = await Promise.all([
         supabase
@@ -49,6 +55,7 @@ export default function AccountingPage() {
             crop_id,
             channel_id
           `)
+          .eq('user_id', tenantId)
           .gte('sales_date', startDate)
           .lte('sales_date', endDate),
         
@@ -59,13 +66,14 @@ export default function AccountingPage() {
             supplier,
             total_price,
             notes,
-            materials(name)
+            materials (name)
           `)
+          .eq('user_id', tenantId)
           .gte('purchase_date', startDate)
           .lte('purchase_date', endDate),
           
-        supabase.from('crops').select('id, name'),
-        supabase.from('sales_channels').select('id, name')
+        supabase.from('crops').select('id, name').eq('user_id', tenantId),
+        supabase.from('sales_channels').select('id, name').eq('user_id', tenantId)
       ]);
 
       const crops = cropsRes.data || [];

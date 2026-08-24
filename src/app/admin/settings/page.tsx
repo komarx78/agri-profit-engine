@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { Settings, Save, CheckCircle2, Building, MapPin, Phone, FileText, Landmark, Clock } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -23,12 +24,19 @@ export default function SettingsPage() {
   useEffect(() => {
     async function fetchSettings() {
       try {
+        const tenantId = await getCurrentTenantId();
+        if (!tenantId) {
+          setIsLoading(false);
+          return;
+        }
+
         const { data, error } = await supabase
           .from('company_settings')
           .select('*')
+          .eq('user_id', tenantId)
           .order('created_at', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (error && error.code !== 'PGRST116') {
           console.error(error);
@@ -63,8 +71,12 @@ export default function SettingsPage() {
     setSaveSuccess(false);
 
     try {
-      const payload = {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error('テナントIDが特定できません');
+
+      const dataToSave = {
         ...formData,
+        user_id: tenantId,
         updated_at: new Date().toISOString()
       };
 

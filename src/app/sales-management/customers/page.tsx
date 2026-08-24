@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Users, Plus, Link as LinkIcon, Settings, Search } from 'lucide-react';
 import { getB2BCustomers, createB2BCustomer } from '@/app/actions/b2b';
+import { getCurrentTenantId } from '@/lib/tenant';
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<any[]>([]);
@@ -22,7 +23,8 @@ export default function CustomersPage() {
 
   async function loadCustomers() {
     setLoading(true);
-    const res = await getB2BCustomers(null);
+    const tenantId = await getCurrentTenantId();
+    const res = await getB2BCustomers(tenantId);
     if (res.success) {
       setCustomers(res.customers);
     }
@@ -31,12 +33,13 @@ export default function CustomersPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = Math.random().toString(36).substr(2, 9); // mock token
+    const tenantId = await getCurrentTenantId();
+    const token = Math.random().toString(36).substr(2, 9);
     const res = await createB2BCustomer({
       ...formData,
       order_token: token,
-      farm_id: '00000000-0000-0000-0000-000000000001'
-    });
+      user_id: tenantId
+    }, tenantId);
     if (res.success) {
       setShowModal(false);
       loadCustomers();

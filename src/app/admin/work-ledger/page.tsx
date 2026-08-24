@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { Table, Download, Loader2, Calendar as CalendarIcon, Briefcase } from 'lucide-react';
 import Papa from 'papaparse';
 
@@ -30,7 +31,13 @@ export default function WorkLedgerPage() {
     if (!startDate || !endDate) return;
     setIsLoading(true);
     try {
-      // 作業実績の取得
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
+      // 自社テナントの作業実績の取得
       const { data: workData, error: workError } = await supabase
         .from('work_logs')
         .select(`
@@ -43,13 +50,14 @@ export default function WorkLedgerPage() {
           material_quantity,
           materials(name, default_price)
         `)
+        .eq('user_id', tenantId)
         .gte('work_date', startDate)
         .lte('work_date', endDate)
         .eq('status', 'completed');
 
       if (workError) throw workError;
       
-      // 売上実績の取得
+      // 自社テナントの収穫・売上実績の取得
       const { data: salesData, error: salesError } = await supabase
         .from('sales_logs')
         .select(`
@@ -58,6 +66,7 @@ export default function WorkLedgerPage() {
           total_sales,
           crops(name)
         `)
+        .eq('user_id', tenantId)
         .gte('sales_date', startDate)
         .lte('sales_date', endDate)
         .eq('status', 'completed');

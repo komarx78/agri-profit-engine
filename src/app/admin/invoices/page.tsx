@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { FileText, Printer, Calculator, AlertCircle, RefreshCw, Mail, Users, Loader2, CheckCircle2, Download, Send, ChevronRight, Share2 } from 'lucide-react';
 import Link from 'next/link';
@@ -54,10 +55,13 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     async function init() {
-      // 販路と自社設定の取得（ここではマスタとして持っておく）
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) return;
+
+      // 自社販路と自社設定の取得
       const [chRes, setRes] = await Promise.all([
-        supabase.from('sales_channels').select('id, name, email').order('name'),
-        supabase.from('company_settings').select('*').order('created_at', { ascending: false }).limit(1).single()
+        supabase.from('sales_channels').select('id, name, email').eq('user_id', tenantId).order('name'),
+        supabase.from('company_settings').select('*').eq('user_id', tenantId).order('created_at', { ascending: false }).limit(1).maybeSingle()
       ]);
       
       if (chRes.data) setChannels(chRes.data);
@@ -75,12 +79,18 @@ export default function InvoicesPage() {
     setIsBatchAssistOpen(false);
     
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
       // 指定月（YYYY-MM）の最初の日と最後の日
       const startDate = `${selectedMonth}-01`;
       const date = new Date(selectedMonth + '-01');
       const endDate = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
 
-      // 指定月の「すべて」の売上ログを取得
+      // 指定月の「自社」の売上ログを取得
       const [logsRes, cropsRes, invoicesRes] = await Promise.all([
         supabase
           .from('sales_logs')
@@ -93,13 +103,15 @@ export default function InvoicesPage() {
             crop_id,
             channel_id
           `)
+          .eq('user_id', tenantId)
           .gte('sales_date', startDate)
           .lte('sales_date', endDate)
           .order('sales_date', { ascending: true }), // 日付順
-        supabase.from('crops').select('id, name'),
+        supabase.from('crops').select('id, name').eq('user_id', tenantId),
         supabase
           .from('issued_invoices')
           .select('id, channel_name, is_sent, sent_at')
+          .eq('user_id', tenantId)
           .eq('billing_month', selectedMonth)
       ]);
       

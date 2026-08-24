@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, Polygon, InfoWindow } from '@react-google-maps/api';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { MapPin, Plus, Loader2, Save, X, Info, Search, Check, Trash2, Edit2, Palette, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
@@ -135,8 +136,13 @@ export default function MapPage() {
   async function fetchFieldsData() {
     try {
       setIsLoading(true);
-      // 圃場データと、最新の作業記録などを取得して状況を可視化したい
-      // 今回はまず基本のフィールドデータを取得する
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
+      // 自社テナントの圃場データを取得
       const { data: fieldsData, error } = await supabase
         .from('fields')
         .select(`
@@ -146,6 +152,7 @@ export default function MapPage() {
           polygon_coordinates,
           color
         `)
+        .eq('user_id', tenantId)
         .order('name');
         
       if (error) throw error;

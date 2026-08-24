@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { FileText, FileSpreadsheet, Calendar, CheckCircle2, AlertCircle, Play } from 'lucide-react';
 import Link from 'next/link';
 import { getB2BInvoices, generateInvoicesForMonth } from '@/app/actions/b2b';
+import { getCurrentTenantId } from '@/lib/tenant';
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -21,7 +22,8 @@ export default function InvoicesPage() {
 
   async function loadInvoices() {
     setLoading(true);
-    const res = await getB2BInvoices(null);
+    const tenantId = await getCurrentTenantId();
+    const res = await getB2BInvoices(tenantId);
     if (res.success) {
       setInvoices(res.invoices);
     }

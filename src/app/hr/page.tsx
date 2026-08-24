@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId, getTenantWorkerIds } from '@/lib/tenant';
 import { Clock, Users, Calendar as CalendarIcon, Coffee, Sun, CloudRain, ShieldCheck, ArrowRight, Save, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
@@ -22,24 +23,47 @@ export default function HrDashboardPage() {
   useEffect(() => {
     async function fetchData() {
       try {
+        const tenantId = await getCurrentTenantId();
+        if (!tenantId) {
+          setIsLoading(false);
+          return;
+        }
+
         const today = new Date();
         today.setHours(today.getHours() + 9);
         const dateStr = today.toISOString().split('T')[0];
 
-        // 従業員マスタ取得 (仮に authentication の users テーブルか、company_users 等とするが、ここでは attendance_logs の uuid から推測するか、別途テーブルがないので直接取得)
-        // とりあえず attendance_logs と work_logs を JOIN して取得
-        const { data: attData } = await supabase
-          .from('attendance_logs')
+        // 1. 自社テナントの従業員一覧を取得
+        const { data: wData } = await supabase
+          .from('workers')
           .select('*')
-          .eq('date', dateStr)
-          .order('clock_in', { ascending: false });
+          .eq('user_id', tenantId);
 
+        const currentWorkers = wData || [];
+        setWorkers(currentWorkers);
+        const workerIds = currentWorkers.map(w => w.id);
+
+        // 2. 自社従業員の勤怠ログのみを取得
+        if (workerIds.length > 0) {
+          const { data: attData } = await supabase
+            .from('attendance_logs')
+            .select('*')
+            .in('worker_id', workerIds)
+            .eq('date', dateStr)
+            .order('clock_in', { ascending: false });
+
+          if (attData) setAttendanceLogs(attData);
+        } else {
+          setAttendanceLogs([]);
+        }
+
+        // 3. 自社テナントの日報ログのみを取得
         const { data: workData } = await supabase
           .from('work_logs')
           .select('*, crops(name), fields(name)')
+          .eq('user_id', tenantId)
           .eq('work_date', dateStr);
 
-        if (attData) setAttendanceLogs(attData);
         if (workData) setWorkLogs(workData);
       } catch (err) {
         console.error(err);

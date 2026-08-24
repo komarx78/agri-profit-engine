@@ -75,7 +75,7 @@ export default function MastersPage() {
         supabase.from('materials').select('*').eq('user_id', userId).order('name'),
         supabase.from('sales_prices').select('*').eq('user_id', userId).order('crop_name'),
         supabase.from('crop_standards').select('*'),
-        supabase.from('sales_channels').select('*').order('name'),
+        supabase.from('sales_channels').select('*').eq('user_id', userId).order('name'),
         supabase.from('departments').select('*').eq('tenant_id', userId).order('name')
       ]);
       

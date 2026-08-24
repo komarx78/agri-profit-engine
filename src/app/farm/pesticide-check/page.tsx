@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { createBrowserClient } from '@supabase/ssr';
+import { getCurrentTenantId } from '@/lib/tenant';
 
 interface ActiveIngredient {
   raw: string;
@@ -87,11 +88,17 @@ export default function PesticideCheckPage() {
   useEffect(() => {
     const fetchMasterPesticides = async () => {
       try {
-        const { data, error } = await supabase
+        const tenantId = await getCurrentTenantId();
+        let query = supabase
           .from('materials')
           .select('name')
           .or("category.eq.農薬費,material_type.eq.pesticide");
 
+        if (tenantId) {
+          query = query.eq('user_id', tenantId);
+        }
+
+        const { data, error } = await query;
         if (data) {
           setRegisteredMasterNames(data.map(d => d.name));
         }
@@ -111,10 +118,11 @@ export default function PesticideCheckPage() {
 
     setIsRegisteringMaster(p.name);
     try {
+      const tenantId = await getCurrentTenantId();
       const pType = (p.purpose && p.purpose !== '-') ? p.purpose : (p.type && p.type !== '-') ? p.type : '殺虫剤';
       const maxCountNum = typeof p.usage_count === 'string' ? parseInt(p.usage_count.match(/\d+/)?.[0] || '4', 10) : 4;
 
-      const { error } = await supabase.from('materials').insert({
+      const dataToInsert: any = {
         name: p.name,
         category: '農薬費',
         material_type: 'pesticide',
@@ -124,7 +132,13 @@ export default function PesticideCheckPage() {
         usage_time: p.usage_time || '',
         max_count: maxCountNum,
         unit: '本'
-      });
+      };
+
+      if (tenantId) {
+        dataToInsert.user_id = tenantId;
+      }
+
+      const { error } = await supabase.from('materials').insert(dataToInsert);
 
       if (error) throw error;
 

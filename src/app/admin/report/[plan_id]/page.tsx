@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, use } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Printer, Loader2, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -44,16 +45,23 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
   const fetchData = async () => {
     setIsLoading(true);
     try {
+      const tenantId = await getCurrentTenantId();
+
       // 計画データの取得
-      const { data: planRes, error: planErr } = await supabase
+      let planQuery = supabase
         .from('cultivation_plans_v2')
         .select(`
           *,
           fields ( name, area_size ),
           crops ( * )
         `)
-        .eq('id', unwrappedParams.plan_id)
-        .single();
+        .eq('id', unwrappedParams.plan_id);
+
+      if (tenantId) {
+        planQuery = planQuery.eq('user_id', tenantId);
+      }
+
+      const { data: planRes, error: planErr } = await planQuery.single();
         
       if (planErr) throw planErr;
       
@@ -65,15 +73,28 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
       const m = 10 / area;
       setMultiplier(m);
       
-      // 作業ログと出荷ログの取得 (スマホから入力された plan_id のないデータも拾うため or 条件を使用)
+      // 自社テナントの作業ログと出荷ログの取得
+      let wQuery = supabase.from('work_logs').select(`
+        *,
+        materials (*)
+      `).or(`plan_id.eq.${unwrappedParams.plan_id},and(crop_id.eq.${plan.crop_id},field_id.eq.${plan.field_id})`).order('work_date', { ascending: true });
+
+      let sQuery = supabase.from('sales_logs').select('*').or(`plan_id.eq.${unwrappedParams.plan_id},crop_id.eq.${plan.crop_id}`).order('sales_date', { ascending: true });
+      let fQuery = supabase.from('fields').select('*');
+      let eQuery = supabase.from('monthly_expenses').select('*');
+
+      if (tenantId) {
+        wQuery = wQuery.eq('user_id', tenantId);
+        sQuery = sQuery.eq('user_id', tenantId);
+        fQuery = fQuery.eq('user_id', tenantId);
+        eQuery = eQuery.eq('user_id', tenantId);
+      }
+
       const [workRes, salesRes, fieldsRes, expRes] = await Promise.all([
-        supabase.from('work_logs').select(`
-          *,
-          materials (*)
-        `).or(`plan_id.eq.${unwrappedParams.plan_id},and(crop_id.eq.${plan.crop_id},field_id.eq.${plan.field_id})`).order('work_date', { ascending: true }),
-        supabase.from('sales_logs').select('*').or(`plan_id.eq.${unwrappedParams.plan_id},crop_id.eq.${plan.crop_id}`).order('sales_date', { ascending: true }),
-        supabase.from('fields').select('*'),
-        supabase.from('monthly_expenses').select('*')
+        wQuery,
+        sQuery,
+        fQuery,
+        eQuery
       ]);
       
       const workLogs = workRes.data || [];
