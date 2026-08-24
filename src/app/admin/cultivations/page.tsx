@@ -462,14 +462,30 @@ function CultivationsHubContent() {
               </div>
             </div>
 
-            <Link
-              href="/admin/map"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
-            >
-              <MapIcon className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="hidden sm:inline">作付地図を見る</span>
-              <span className="sm:hidden">地図</span>
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+                title="システム総合トップへ"
+              >
+                <span>🏠 トップ</span>
+              </Link>
+              <Link
+                href="/portal"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition-colors"
+                title="出退勤・現場ポータルへ"
+              >
+                <span>📱 現場ポータル</span>
+              </Link>
+              <Link
+                href="/admin/map"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-colors"
+              >
+                <MapIcon className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="hidden sm:inline">作付地図・気象</span>
+                <span className="sm:hidden">地図</span>
+              </Link>
+            </div>
           </div>
 
           {/* 4大メインナビゲーションタブ */}

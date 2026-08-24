@@ -761,8 +761,16 @@ export default function WorkEntryPage() {
             </div>
           </div>
 
-          {/* 右側：コントロール (ポータル戻る・言語・ログアウト) */}
+          {/* 右側：コントロール (司令塔・ポータル・言語・ログアウト) */}
           <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={() => router.push('/admin/cultivations')}
+              className="flex items-center gap-1 px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 hover:text-white border border-emerald-500/40 rounded-lg text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"
+              title="農業司令塔へ"
+            >
+              <Sprout className="w-3 h-3 flex-shrink-0" />
+              <span>司令塔</span>
+            </button>
             <button
               onClick={() => router.push('/portal')}
               className="flex items-center gap-1 px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 hover:text-white border border-blue-500/40 rounded-lg text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"

@@ -1001,8 +1001,27 @@ export default function PortalPage() {
             </div>
           </div>
 
-          {/* 右側：ユーザー情報・言語切替・ログアウト */}
+          {/* 右側：ナビゲーション・ユーザー情報・言語切替・ログアウト */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            {/* 農業司令塔へのリンク */}
+            <button
+              onClick={() => router.push('/admin/cultivations')}
+              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs transition-colors shadow-2xs"
+            >
+              <Sprout className="w-3.5 h-3.5" />
+              <span>🌱 農業司令塔</span>
+            </button>
+
+            {/* 現場日報入力へのリンク */}
+            <button
+              onClick={() => router.push('/work')}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl font-black text-xs transition-colors shadow-2xs"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">⏱️ 現場日報入力</span>
+              <span className="sm:hidden">日報</span>
+            </button>
+
             {currentUser && (
               <div className="flex items-center gap-1 sm:gap-2">
                 {/* PC用 ログイン中バッジ */}
