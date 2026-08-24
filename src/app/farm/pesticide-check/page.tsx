@@ -411,7 +411,7 @@ export default function PesticideCheckPage() {
                 </div>
 
                 {/* 【方法A：スマート用途・ステージセレクター】 */}
-                {result.availableStages && result.availableStages.length > 1 && (
+                {result.availableStages && (
                   <div className="bg-slate-800/70 border border-slate-700/80 rounded-2xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black text-slate-300 flex items-center gap-1.5">
@@ -426,6 +426,7 @@ export default function PesticideCheckPage() {
                     <div className="flex flex-wrap gap-2">
                       {result.availableStages.map((st: any) => {
                         const isSelected = selectedStageFilter === st.key;
+                        const isZero = st.count === 0;
                         return (
                           <button
                             key={st.key}
@@ -438,13 +439,21 @@ export default function PesticideCheckPage() {
                               isSelected
                                 ? st.key === 'seed'
                                   ? 'bg-amber-400 text-slate-950 shadow-lg shadow-amber-400/20 ring-2 ring-amber-300'
+                                  : st.key === 'nursery'
+                                  ? 'bg-teal-400 text-slate-950 shadow-lg shadow-teal-400/20 ring-2 ring-teal-300'
                                   : 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20'
+                                : isZero
+                                ? 'bg-slate-900/40 text-slate-500 hover:text-slate-300 border border-slate-800'
                                 : 'bg-slate-900/80 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-700'
                             }`}
                           >
                             <span>{st.label}</span>
                             <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                              isSelected ? 'bg-black/20 text-slate-950' : 'bg-slate-800 text-slate-400'
+                              isSelected 
+                                ? 'bg-black/20 text-slate-950' 
+                                : isZero 
+                                ? 'bg-slate-800 text-slate-600' 
+                                : 'bg-slate-800 text-slate-400'
                             }`}>
                               {st.count}
                             </span>
@@ -464,7 +473,22 @@ export default function PesticideCheckPage() {
                         🌱 【農薬取締法完全遵守】採種用（種採り用）専用モード作動中
                       </h4>
                       <p className="text-xs font-bold text-amber-300/80 mt-0.5">
-                        種子採取用圃場に正式登録されている農薬のみを表示しています。食用の農薬は自動的に除外されているため、安心して適法な散布計画を策定できます。
+                        種子採取用圃場に登録された農薬のみを表示しています。食用の農薬と混同することなく、安全に適法な防除計画を策定できます。
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 育苗期モード特大アラートバナー */}
+                {selectedStageFilter === 'nursery' && (
+                  <div className="bg-teal-950/40 border border-teal-500/60 rounded-2xl p-4 text-teal-200 flex items-start gap-3 shadow-lg">
+                    <Sparkles className="w-5 h-5 text-teal-400 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-black text-white">
+                        🌿 【育苗期・苗床専用モード】
+                      </h4>
+                      <p className="text-xs font-bold text-teal-300/80 mt-0.5">
+                        育苗トレイ潅注、苗床・床土くん蒸、苗立枯病防除など、育苗ステージに適用可能な農薬のみを表示しています。
                       </p>
                     </div>
                   </div>
@@ -563,25 +587,44 @@ export default function PesticideCheckPage() {
                           </div>
 
                           {/* 主要スペック・グリッド */}
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-5 bg-slate-900/40">
-                            <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
-                              <p className="text-[10px] font-bold text-slate-400 mb-1">対象病害虫・雑草</p>
-                              <p className="text-sm font-black text-rose-400 line-clamp-1">{p.target_pest}</p>
+                          <div className="p-5 bg-slate-900/40 space-y-3">
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 mb-1.5 flex items-center justify-between">
+                                <span>適用病害虫・雑草 ({p.target_pests_array?.length || 1}件):</span>
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {p.target_pests_array && p.target_pests_array.length > 0 ? (
+                                  p.target_pests_array.map((pest: string, pI: number) => (
+                                    <span key={pI} className="text-xs font-black bg-rose-950/60 border border-rose-500/40 text-rose-300 px-2.5 py-1 rounded-lg">
+                                      {pest}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-xs font-bold text-rose-400">{p.target_pest}</span>
+                                )}
+                              </div>
                             </div>
 
-                            <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
-                              <p className="text-[10px] font-bold text-slate-400 mb-1">希釈倍数・使用量</p>
-                              <p className="text-sm font-black text-white">{p.usage_amount}</p>
-                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+                              <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
+                                <p className="text-[10px] font-bold text-slate-400 mb-1">希釈倍数・使用量</p>
+                                <p className="text-sm font-black text-white">{p.usage_amount}</p>
+                              </div>
 
-                            <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
-                              <p className="text-[10px] font-bold text-slate-400 mb-1">使用時期（収穫前）</p>
-                              <p className="text-sm font-black text-emerald-400">{p.usage_time}</p>
-                            </div>
+                              <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
+                                <p className="text-[10px] font-bold text-slate-400 mb-1">使用時期（収穫前）</p>
+                                <p className="text-sm font-black text-emerald-400">{p.usage_time || '収穫前日まで'}</p>
+                              </div>
 
-                            <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
-                              <p className="text-[10px] font-bold text-slate-400 mb-1">使用方法</p>
-                              <p className="text-sm font-black text-cyan-300">{p.usage_method}</p>
+                              <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
+                                <p className="text-[10px] font-bold text-slate-400 mb-1">使用方法</p>
+                                <p className="text-sm font-black text-cyan-300">{p.usage_method}</p>
+                              </div>
+
+                              <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
+                                <p className="text-[10px] font-bold text-slate-400 mb-1">散布液量(10a)</p>
+                                <p className="text-sm font-black text-slate-200">{p.spray_amount || '-'}</p>
+                              </div>
                             </div>
                           </div>
 
@@ -593,7 +636,7 @@ export default function PesticideCheckPage() {
                                 有効成分制限:
                               </span>
                               {p.active_ingredients && p.active_ingredients.length > 0 ? (
-                                p.active_ingredients.map((ing, i) => (
+                                p.active_ingredients.map((ing: any, i: number) => (
                                   <span 
                                     key={i}
                                     className="bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 text-[11px] font-bold px-2.5 py-0.5 rounded-lg"
@@ -612,45 +655,57 @@ export default function PesticideCheckPage() {
                               onClick={() => setExpandedCardId(isExpanded ? null : cardId)}
                               className="text-xs font-bold text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors"
                             >
-                              {isExpanded ? '詳細カルテを閉じる' : '詳細カルテ（散布液量・土壌等）を展開'}
+                              {isExpanded ? '詳細カルテを閉じる' : '病害虫ごとの適用詳細を展開'}
                               {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                             </button>
                           </div>
 
                           {/* 展開された詳細情報 */}
                           {isExpanded && (
-                            <div className="p-5 bg-slate-950/60 border-t border-slate-800 grid grid-cols-2 md:grid-cols-3 gap-4 text-xs">
-                              <div>
-                                <p className="font-bold text-slate-500 mb-0.5">散布液量 (10aあたり)</p>
-                                <p className="font-black text-slate-200">{p.spray_amount || '-'}</p>
-                              </div>
-                              <div>
-                                <p className="font-bold text-slate-500 mb-0.5">本剤の使用回数制限</p>
-                                <p className="font-black text-slate-200">{p.usage_count || '-'}</p>
-                              </div>
-                              <div>
-                                <p className="font-bold text-slate-500 mb-0.5">適用場所</p>
-                                <p className="font-black text-slate-200">{p.application_place || '-'}</p>
-                              </div>
-                              <div>
-                                <p className="font-bold text-slate-500 mb-0.5">使用目的</p>
-                                <p className="font-black text-slate-200">{p.usage_purpose || '-'}</p>
-                              </div>
-                              <div>
-                                <p className="font-bold text-slate-500 mb-0.5">くん蒸時間・温度</p>
-                                <p className="font-black text-slate-200">
-                                  {p.fumigation_time !== '-' || p.fumigation_temp !== '-' 
-                                    ? `${p.fumigation_time} / ${p.fumigation_temp}` 
-                                    : '-'}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="font-bold text-slate-500 mb-0.5">適用土壌・地帯</p>
-                                <p className="font-black text-slate-200">
-                                  {p.applicable_soil !== '-' || p.applicable_region !== '-' 
-                                    ? `${p.applicable_soil} / ${p.applicable_region}` 
-                                    : '-'}
-                                </p>
+                            <div className="p-5 bg-slate-950/60 border-t border-slate-800 space-y-4 text-xs">
+                              {p.usages_list && p.usages_list.length > 1 && (
+                                <div>
+                                  <p className="font-black text-slate-300 mb-2">📋 対象病害虫ごとの適用条件一覧:</p>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                      <thead>
+                                        <tr className="border-b border-slate-800 text-slate-500">
+                                          <th className="py-2 px-3">対象病害虫</th>
+                                          <th className="py-2 px-3">希釈・使用量</th>
+                                          <th className="py-2 px-3">使用時期</th>
+                                          <th className="py-2 px-3">使用方法</th>
+                                          <th className="py-2 px-3">回数</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {p.usages_list.map((u: any, uIdx: number) => (
+                                          <tr key={uIdx} className="border-b border-slate-900/60 hover:bg-slate-900/40 text-slate-300">
+                                            <td className="py-2 px-3 font-bold text-rose-400">{u.target_pest}</td>
+                                            <td className="py-2 px-3">{u.usage_amount}</td>
+                                            <td className="py-2 px-3 text-emerald-400">{u.usage_time}</td>
+                                            <td className="py-2 px-3 text-cyan-300">{u.usage_method}</td>
+                                            <td className="py-2 px-3">{u.usage_count}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-2 border-t border-slate-800/60">
+                                <div>
+                                  <p className="font-bold text-slate-500 mb-0.5">本剤の使用回数制限</p>
+                                  <p className="font-black text-slate-200">{p.usage_count || '-'}</p>
+                                </div>
+                                <div>
+                                  <p className="font-bold text-slate-500 mb-0.5">適用場所</p>
+                                  <p className="font-black text-slate-200">{p.application_place || '-'}</p>
+                                </div>
+                                <div>
+                                  <p className="font-bold text-slate-500 mb-0.5">使用目的</p>
+                                  <p className="font-black text-slate-200">{p.usage_purpose || '-'}</p>
+                                </div>
                               </div>
                             </div>
                           )}
@@ -659,10 +714,26 @@ export default function PesticideCheckPage() {
                     })}
                   </div>
                 ) : (
-                  <div className="bg-slate-800/40 border border-slate-800 rounded-3xl p-12 text-center">
-                    <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto mb-3" />
-                    <p className="text-base font-black text-white">該当する農薬が見つかりませんでした</p>
-                    <p className="text-xs font-bold text-slate-400 mt-1">{result.message}</p>
+                  <div className="bg-slate-800/40 border border-slate-700/80 rounded-3xl p-10 text-center space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center mx-auto text-amber-400">
+                      <ShieldCheck className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-black text-white">
+                        {selectedStageFilter === 'seed' 
+                          ? '🌱 採種用（種採り用）専用の登録農薬：0件'
+                          : selectedStageFilter === 'nursery'
+                          ? '🌿 育苗期専用の登録農薬：0件'
+                          : '該当する農薬が見つかりませんでした'}
+                      </h4>
+                      <p className="text-xs font-bold text-slate-300 max-w-lg mx-auto mt-2 leading-relaxed">
+                        {selectedStageFilter === 'seed' 
+                          ? '※この作物（たまねぎ等）には「採種用」に限定された登録農薬が存在しないため、農薬取締法上、通常の【🧅 食用（本圃）】登録の農薬が適用可能です。上部の「🧅 食用（本圃）」タブを選択してご確認ください。'
+                          : selectedStageFilter === 'nursery'
+                          ? '※育苗期に特化した専用農薬は見つかりませんでした。「すべて」または「食用（本圃）」から本圃用農薬をご確認ください。'
+                          : result.message}
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
