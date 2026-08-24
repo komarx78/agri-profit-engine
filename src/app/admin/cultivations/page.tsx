@@ -123,8 +123,10 @@ function CultivationsHubContent() {
       setFields(fetchedFields);
       setCrops(fetchedCrops);
 
-      if (fetchedCrops.length > 0 && !selectedSprayCropId) {
-        setSelectedSprayCropId(fetchedCrops[0].id);
+      let initialCropId = selectedSprayCropId;
+      if (fetchedCrops.length > 0 && !initialCropId) {
+        initialCropId = fetchedCrops[0].id;
+        setSelectedSprayCropId(initialCropId);
       }
       if (fetchedFields.length > 0 && selectedSprayFieldIds.length === 0) {
         setSelectedSprayFieldIds([fetchedFields[0].id]);
@@ -180,133 +182,108 @@ function CultivationsHubContent() {
       setWorkLogs(completedLogs);
       setPlannedTasks(plannedLogs);
 
-      // 3. 農薬マスターと使用回数集計
-      const basePesticides: PesticideDisplayItem[] = [
-        {
-          id: 'p-1',
-          name: 'カスケード乳剤',
-          type: '殺虫剤',
-          racCode: 'IR 15',
-          targetPests: ['ミナミキイロアザミウマ', 'アザミウマ類', 'コナジラミ類'],
-          maxCount: 3,
-          usedCount: 0,
-          dilution: '1000〜2000倍',
-          usageTime: '収穫前日まで',
-          method: '散布'
-        },
-        {
-          id: 'p-2',
-          name: 'コロマイト乳剤',
-          type: '殺虫剤',
-          racCode: 'IR 6',
-          targetPests: ['コナジラミ類', 'ハダニ類', 'サビダニ類'],
-          maxCount: 2,
-          usedCount: 1,
-          dilution: '1000〜1500倍',
-          usageTime: '収穫前日まで',
-          method: '散布'
-        },
-        {
-          id: 'p-3',
-          name: 'ダブルシューターSE',
-          type: '殺虫剤',
-          racCode: 'FR 「-」',
-          targetPests: ['オオタバコガ', 'アザミウマ類', 'コナジラミ類', 'ハダニ類'],
-          maxCount: 3,
-          usedCount: 1,
-          dilution: '1000倍',
-          usageTime: '収穫7日前まで',
-          method: '散布'
-        },
-        {
-          id: 'p-4',
-          name: 'フーモン',
-          type: '殺虫剤',
-          racCode: 'IR 「-」',
-          targetPests: ['コナジラミ類', 'うどんこ病', 'ハダニ類', 'アブラムシ類'],
-          maxCount: 0,
-          usedCount: 2,
-          dilution: '800〜1000倍',
-          usageTime: '収穫前日まで',
-          method: '散布'
-        },
-        {
-          id: 'p-5',
-          name: 'ダコニール1000',
-          type: '殺菌剤',
-          racCode: 'FR M5',
-          targetPests: ['べと病', '疫病', '炭疽病', '斑点病', 'うどんこ病'],
-          maxCount: 4,
-          usedCount: 1,
-          dilution: '1000倍',
-          usageTime: '収穫前日まで',
-          method: '散布'
-        },
-        {
-          id: 'p-6',
-          name: 'アミスター20フロアブル',
-          type: '殺菌剤',
-          racCode: 'FR 11',
-          targetPests: ['うどんこ病', '炭疽病', '灰色かび病'],
-          maxCount: 3,
-          usedCount: 0,
-          dilution: '2000倍',
-          usageTime: '収穫前日まで',
-          method: '散布'
-        },
-        {
-          id: 'p-7',
-          name: 'ラウンドアップマックスロード',
-          type: '除草剤',
-          racCode: 'HR 9',
-          targetPests: ['一年生雑草', '多年生雑草'],
-          maxCount: 3,
-          usedCount: 0,
-          dilution: '100倍',
-          usageTime: '定植前または畦間処理',
-          method: '散布'
-        },
-        {
-          id: 'p-8',
-          name: 'バスタ液剤',
-          type: '除草剤',
-          racCode: 'HR 10',
-          targetPests: ['スギナ', '一年生雑草'],
-          maxCount: 3,
-          usedCount: 0,
-          dilution: '100〜200倍',
-          usageTime: '畦間散布',
-          method: '散布'
-        },
-        {
-          id: 'p-9',
-          name: '展着剤 まくぴか',
-          type: 'その他',
-          racCode: '展着剤',
-          targetPests: ['付着性・浸透性向上'],
-          maxCount: 0,
-          usedCount: 3,
-          dilution: '3000〜5000倍',
-          usageTime: '混用時',
-          method: '混用'
-        }
-      ];
-
-      // 過去ログから各農薬の散布回数をカウント
-      basePesticides.forEach(p => {
-        const count = completedLogs.filter(log => 
-          log.memo && log.memo.includes(p.name)
-        ).length;
-        if (count > 0) p.usedCount = count;
-      });
-
-      setPesticides(basePesticides);
+      // 3. 選択作物のFAMIC公的農薬マスタ ＆ 自社散布実績の集計
+      if (initialCropId) {
+        await loadPesticidesForCrop(initialCropId, fetchedCrops, completedLogs);
+      }
 
     } catch (err) {
       console.error('Error fetching data in cultivations hub:', err);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // 作物ごとのFAMIC農薬データ取得 ＆ 自社散布実績カウント結合
+  const [isLoadingPesticides, setIsLoadingPesticides] = useState(false);
+
+  const loadPesticidesForCrop = async (cropId: string, cropList: any[], logsList: any[]) => {
+    const targetCrop = cropList.find(c => c.id === cropId);
+    if (!targetCrop || !targetCrop.name) return;
+
+    setIsLoadingPesticides(true);
+    try {
+      // 1. FAMIC公的農薬APIから作物に適用のある農薬一覧を取得
+      const res = await fetch('/api/pesticide-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cropName: targetCrop.name })
+      });
+
+      let fetchedItems: any[] = [];
+      if (res.ok) {
+        const resJson = await res.json();
+        if (resJson.pesticides && Array.isArray(resJson.pesticides)) {
+          fetchedItems = resJson.pesticides;
+        }
+      }
+
+      // 2. 自社テナントの散布ログから使用回数を集計
+      const cropLogs = logsList.filter(l => {
+        const isSpray = l.work_type?.includes('農薬') || l.memo?.includes('[散布管理]');
+        const matchCrop = l.crop_id === cropId || (l.crops && l.crops.name === targetCrop.name);
+        return isSpray && matchCrop;
+      });
+
+      const formattedPesticides: PesticideDisplayItem[] = fetchedItems.map((p: any) => {
+        // 使用回数上限のパース
+        let maxCount = 0;
+        const countMatch = String(p.usage_count || '').match(/(\d+)回/);
+        if (countMatch) {
+          maxCount = parseInt(countMatch[1], 10);
+        }
+
+        // 自社実績ログでの使用回数をカウント
+        const pName = p.name || '';
+        let usedCount = 0;
+        cropLogs.forEach(log => {
+          const memoStr = log.memo || '';
+          if (memoStr.includes(pName) || (p.active_ingredients && p.active_ingredients.some((ing: string) => memoStr.includes(ing)))) {
+            usedCount++;
+          }
+        });
+
+        // カテゴリの正規化
+        let category: '殺虫剤' | '殺菌剤' | '除草剤' | 'その他' = 'その他';
+        const rawType = String(p.type || p.usage_type || '');
+        if (rawType.includes('殺虫')) {
+          category = '殺虫剤';
+        } else if (rawType.includes('殺菌')) {
+          category = '殺菌剤';
+        } else if (rawType.includes('除草')) {
+          category = '除草剤';
+        }
+
+        // RACコード
+        const rac = p.rac_code || p.racCode || (category === '殺虫剤' ? 'IR 「-」' : category === '殺菌剤' ? 'FR 「-」' : 'HR 「-」');
+
+        return {
+          id: p.id || `famic-${p.name}`,
+          name: p.name,
+          type: category,
+          racCode: rac,
+          targetPests: p.target_pests_array || (p.target_pest ? p.target_pest.split(',').map((s: string) => s.trim()) : ['適用害虫・病害']),
+          maxCount: maxCount,
+          usedCount: usedCount,
+          dilution: p.usage_amount || '1000倍',
+          usageTime: p.usage_time || '収穫前日まで',
+          method: p.usage_method || '散布'
+        };
+      });
+
+      setPesticides(formattedPesticides);
+    } catch (err) {
+      console.error('Error loading crop pesticides:', err);
+    } finally {
+      setIsLoadingPesticides(false);
+    }
+  };
+
+  // 作物プルダウン変更時の連動
+  const handleCropChange = async (newCropId: string) => {
+    setSelectedSprayCropId(newCropId);
+    setSelectedPesticideIds([]);
+    await loadPesticidesForCrop(newCropId, crops, workLogs);
   };
 
   useEffect(() => {
@@ -725,13 +702,19 @@ function CultivationsHubContent() {
                   <span className="text-xs font-bold text-slate-600">対象作目:</span>
                   <select
                     value={selectedSprayCropId}
-                    onChange={(e) => setSelectedSprayCropId(e.target.value)}
-                    className="px-3 py-1.5 text-xs font-bold bg-rose-50 border border-rose-300 text-rose-900 rounded-xl focus:outline-none"
+                    onChange={(e) => handleCropChange(e.target.value)}
+                    disabled={isLoadingPesticides}
+                    className="px-3 py-1.5 text-xs font-bold bg-rose-50 border border-rose-300 text-rose-900 rounded-xl focus:outline-none cursor-pointer"
                   >
                     {crops.map(c => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
+                  {isLoadingPesticides && (
+                    <span className="text-xs text-rose-600 font-bold flex items-center gap-1 animate-pulse">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> 公的マスタ照合中...
+                    </span>
+                  )}
                 </div>
 
                 <div className="relative flex-1 max-w-xs">
@@ -750,6 +733,7 @@ function CultivationsHubContent() {
               <div className="grid grid-cols-4 border-b border-slate-200 text-center pt-1">
                 {(['殺虫剤', '殺菌剤', '除草剤', 'その他'] as const).map((tab) => {
                   const isActive = sprayCategoryTab === tab;
+                  const count = pesticides.filter(p => p.type === tab).length;
                   return (
                     <button
                       key={tab}
@@ -759,7 +743,8 @@ function CultivationsHubContent() {
                         isActive ? 'text-rose-600 font-extrabold' : 'text-slate-500 hover:text-slate-800'
                       }`}
                     >
-                      {tab}
+                      <span>{tab}</span>
+                      <span className="text-[10px] ml-1 opacity-70">({count})</span>
                       {isActive && (
                         <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-rose-600 rounded-full" />
                       )}
@@ -771,6 +756,21 @@ function CultivationsHubContent() {
             </div>
 
             {/* 農薬カードリスト */}
+            {isLoadingPesticides ? (
+              <div className="py-16 text-center bg-white rounded-3xl border border-slate-200 p-8 shadow-xs">
+                <Loader2 className="w-8 h-8 text-rose-500 animate-spin mx-auto mb-3" />
+                <h3 className="text-sm font-bold text-slate-800 mb-1">公的FAMIC農薬マスタ ＆ 自社散布履歴を照合中...</h3>
+                <p className="text-xs text-slate-400">作物の公的適用データと残回数を集計しています。</p>
+              </div>
+            ) : filteredPesticides.length === 0 ? (
+              <div className="py-12 text-center bg-white rounded-3xl border border-slate-200 p-8 shadow-xs">
+                <FlaskConical className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                <h3 className="text-sm font-bold text-slate-700 mb-1">
+                  {searchSprayQuery ? '検索条件に一致する農薬がありません' : `${sprayCategoryTab}の登録農薬が見つかりません`}
+                </h3>
+                <p className="text-xs text-slate-400">他のカテゴリタブを選択するか、農薬カルテ画面から検索してください。</p>
+              </div>
+            ) : (
             <div className="space-y-3">
               {filteredPesticides.map((p) => {
                 const isSelected = selectedPesticideIds.includes(p.id);
@@ -861,6 +861,7 @@ function CultivationsHubContent() {
                 );
               })}
             </div>
+            )}
 
             {/* 散布選択アクションバー */}
             {selectedPesticideIds.length > 0 && (
