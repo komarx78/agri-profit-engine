@@ -328,29 +328,32 @@ export default function DashboardPage() {
             <h1 className="text-2xl md:text-4xl font-black text-slate-800 tracking-tight mb-2">経営ダッシュボード</h1>
             <p className="text-sm md:text-base text-slate-500 font-medium">作業・売上データから農園の健康状態（P&L）をリアルタイムに可視化します。</p>
 
-            {/* 現場用URL（従業員URL）の表示 */}
+            {/* 現場用URL（農園専用URL）の表示 */}
             {tenantId && (
               <div className="mt-4 bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm w-full md:max-w-2xl">
                 <div>
                   <h3 className="font-black text-emerald-800 flex items-center gap-2 text-sm">
-                    <UserCheck className="w-4 h-4" /> 現場タブレット（従業員）用 URL
+                    <UserCheck className="w-4 h-4" /> 🌾 貴農園専用・現場タブレット用URL
                   </h3>
-                  <p className="text-xs text-emerald-600 mt-1 font-medium">※現場の端末で開く際は、必ず管理者アカウントからログアウトしてください。</p>
+                  <p className="text-xs text-emerald-600 mt-1 font-medium">
+                    ※この専用URLを現場の従業員に配布（LINE送信等）してください。現場端末で開くだけで貴農園のスタッフ一覧が表示されます。
+                  </p>
                 </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
                   <input 
                     type="text" 
                     readOnly
-                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/portal`}
+                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/portal?farm=${tenantId}`}
                     className="flex-1 sm:w-64 px-3 py-2 bg-white border border-emerald-200 rounded-lg text-xs font-mono text-slate-600 focus:outline-none"
                     onClick={(e) => e.currentTarget.select()}
                   />
                   <button 
                     onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/portal`);
-                      alert('現場ポータルURL（/portal）をコピーしました！\n現場タブレット等でこのURLを開くだけで、スタッフ選択・出退勤打刻・タスク確認をご利用いただけます。');
+                      const farmUrl = `${window.location.origin}/portal?farm=${tenantId}`;
+                      navigator.clipboard.writeText(farmUrl);
+                      alert('【貴農園専用URL】をコピーしました！\n\n' + farmUrl + '\n\n現場タブレットや従業員のスマホでこのURLを開くだけで、貴農園のスタッフ選択・打刻画面が即座に表示されます。');
                     }}
-                    className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors whitespace-nowrap shadow-sm"
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors whitespace-nowrap shadow-sm active:scale-95"
                   >
                     コピー
                   </button>

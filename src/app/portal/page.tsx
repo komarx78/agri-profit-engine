@@ -154,9 +154,19 @@ export default function PortalPage() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         
+        let ownerId = '';
         let currentRole = 'worker';
         let profile = null;
-        let ownerId = '';
+
+        // URLクエリパラメータ（?farm=xxx または ?tenant=xxx）の最優先取得
+        if (typeof window !== 'undefined') {
+          const urlParams = new URLSearchParams(window.location.search);
+          const farmParam = urlParams.get('farm') || urlParams.get('tenant');
+          if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
+            localStorage.setItem('agri_owner_id', farmParam);
+            ownerId = farmParam;
+          }
+        }
 
         if (session) {
           // --- 管理者(またはAuth登録されたユーザー) ---

@@ -31,11 +31,22 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
   useEffect(() => {
     async function fetchWorkers() {
       try {
-        const ownerId = localStorage.getItem('agri_owner_id') || '';
+        let ownerId = localStorage.getItem('agri_owner_id') || '';
+
+        // URLクエリパラメータ（?farm=xxx または ?tenant=xxx）を最優先で取得・保存
+        if (typeof window !== 'undefined') {
+          const params = new URLSearchParams(window.location.search);
+          const paramFarmId = params.get('farm') || params.get('tenant');
+          if (paramFarmId && paramFarmId !== 'null' && paramFarmId !== 'undefined') {
+            ownerId = paramFarmId;
+            localStorage.setItem('agri_owner_id', paramFarmId);
+          }
+        }
+
         setDebugOwnerId(ownerId || '未設定');
 
         if (!ownerId || ownerId === 'null' || ownerId === 'undefined') {
-          setErrorMsg('農園が設定されていません。一度管理者アカウントでログインして現場ポータルを設定してください。');
+          setErrorMsg('農園IDが指定されていません。管理者から共有された農園専用URL（?farm=...）からアクセスしてください。');
           setIsLoading(false);
           return;
         }

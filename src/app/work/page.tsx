@@ -143,6 +143,15 @@ export default function WorkEntryPage() {
   // 初回マウント確認
   useEffect(() => {
     setIsMounted(true);
+
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const farmParam = urlParams.get('farm') || urlParams.get('tenant');
+      if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
+        localStorage.setItem('agri_owner_id', farmParam);
+      }
+    }
+
     const savedUser = localStorage.getItem('agri_current_worker');
     const savedLang = localStorage.getItem('agri_lang') || localStorage.getItem('agri_lang_sales') as LanguageCode;
     if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
