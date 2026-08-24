@@ -2054,7 +2054,7 @@ export default function PortalPage() {
                             onChange={(e) => {
                               const file = e.target.files?.[0];
                               if (file && file.size > 50 * 1024 * 1024) {
-                                alert('動画のサイズは50MB以下にしてください。');
+                                alert('動画の容量が大きすぎます（50MB以下にしてください）。現場のスマホでスムーズに再生できるよう、1〜2分程度の短い動画または720p前後の画質を推奨します。');
                                 e.target.value = '';
                                 setNewVideoFile(null);
                               } else {
@@ -2063,8 +2063,8 @@ export default function PortalPage() {
                             }}
                             className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-rose-100 file:text-rose-700 hover:file:bg-rose-200 cursor-pointer"
                           />
-                          <p className="text-[11px] text-slate-400 font-medium">
-                            💡 推奨形式: MP4 (H.264) / 1080p以下。スマホ撮影の動画をそのままアップロード可能です。
+                          <p className="text-[11px] text-slate-400 font-medium leading-relaxed">
+                            💡 <strong>スマホ最適化の目安:</strong> MP4形式 / 720p〜1080p / 1〜2分程度（30MB以下推奨）。長時間の動画はチャプターごとに分けて登録すると、現場でサクサク快適に再生できます。
                           </p>
                         </div>
                       </div>

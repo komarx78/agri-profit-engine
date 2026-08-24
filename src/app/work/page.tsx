@@ -581,10 +581,10 @@ export default function WorkEntryPage() {
         let uploadedVideoUrl = null;
 
         if (photoFile) {
-            const options = { maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true };
+            const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1024, useWebWorker: true, fileType: 'image/jpeg' };
             const compressedFile = await imageCompression(photoFile, options);
             const fileName = `${workerProfile?.user_id || 'unknown'}/${currentUser.id}/${Date.now()}.jpg`;
-            const { error: uploadError } = await supabase.storage.from('work_photos').upload(fileName, compressedFile);
+            const { error: uploadError } = await supabase.storage.from('work_photos').upload(fileName, compressedFile, { contentType: 'image/jpeg' });
             if (uploadError) throw uploadError;
             uploadedPhotoUrl = supabase.storage.from('work_photos').getPublicUrl(fileName).data.publicUrl;
         }
@@ -667,10 +667,10 @@ export default function WorkEntryPage() {
         let uploadedVideoUrl = null;
 
         if (photoFile) {
-            const options = { maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true };
+            const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1024, useWebWorker: true, fileType: 'image/jpeg' };
             const compressedFile = await imageCompression(photoFile, options);
             const fileName = `${workerProfile?.user_id || 'unknown'}/${currentUser.id}/${Date.now()}.jpg`;
-            const { error: uploadError } = await supabase.storage.from('work_photos').upload(fileName, compressedFile);
+            const { error: uploadError } = await supabase.storage.from('work_photos').upload(fileName, compressedFile, { contentType: 'image/jpeg' });
             if (uploadError) throw uploadError;
             uploadedPhotoUrl = supabase.storage.from('work_photos').getPublicUrl(fileName).data.publicUrl;
         }
