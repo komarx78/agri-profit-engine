@@ -219,6 +219,14 @@ export default function PortalPage() {
         }
         
         await fetchPortalData(ownerId, currentRole, profile);
+
+        // URLクエリに manual=1 または openManual=true があればマニュアルモーダルを開く
+        if (typeof window !== 'undefined') {
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('manual') || params.get('openManual')) {
+            handleOpenManualModal('video');
+          }
+        }
       } catch (err) {
         console.error(err);
       } finally {
