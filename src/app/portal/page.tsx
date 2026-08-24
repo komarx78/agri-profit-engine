@@ -1770,17 +1770,36 @@ export default function PortalPage() {
                   {/* 動画プレイヤー表示（再生中の場合） */}
                   {playingVideoUrl && (
                     <div className="bg-slate-900 rounded-3xl p-4 sm:p-6 shadow-xl border border-slate-800 animate-in slide-in-from-top-4">
-                      <div className="flex items-center justify-between mb-3 text-white">
+                      <div className="flex flex-wrap items-center justify-between gap-3 mb-3 text-white">
                         <div className="flex items-center gap-2">
                           <Play className="w-4 h-4 text-rose-400" />
                           <span className="font-bold text-sm">動画を再生中（多言語テロップ連動）</span>
                         </div>
-                        <button
-                          onClick={() => setPlayingVideoUrl(null)}
-                          className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
-                        >
-                          <X className="w-4 h-4" /> プレイヤーを閉じる
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {/* 字幕言語セレクター */}
+                          <div className="flex items-center gap-1.5 bg-slate-800 px-3 py-1 rounded-xl border border-slate-700">
+                            <Languages className="w-3.5 h-3.5 text-rose-400" />
+                            <span className="text-[11px] font-bold text-slate-300">字幕言語:</span>
+                            <select
+                              value={language}
+                              onChange={(e) => setLanguage(e.target.value as LanguageCode)}
+                              className="bg-transparent text-xs font-bold text-white outline-none cursor-pointer"
+                            >
+                              {LANGUAGES.map(l => (
+                                <option key={l.code} value={l.code} className="bg-slate-900 text-white">
+                                  {l.flag} {l.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <button
+                            onClick={() => setPlayingVideoUrl(null)}
+                            className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                          >
+                            <X className="w-4 h-4" /> プレイヤーを閉じる
+                          </button>
+                        </div>
                       </div>
                       <VideoPlayerWithSubtitles
                         videoUrl={playingVideoUrl}
