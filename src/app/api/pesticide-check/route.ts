@@ -112,49 +112,89 @@ export async function POST(request: Request) {
     const cleanTargetPest = targetPest?.trim() || '';
     const cleanPesticideName = pesticideName?.trim() || '';
 
-    if (!cleanCropName) {
-      return NextResponse.json({ error: '作物名は必須です。' }, { status: 400 });
+    if (!cleanCropName && !cleanPesticideName && !cleanTargetPest) {
+      return NextResponse.json({ error: '作物名、農薬名、または病害虫名のいずれかを入力してください。' }, { status: 400 });
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 作物名の正規化展開
-    const searchCrops = getNormalizedCrops(cleanCropName);
-
-    // 1. m_pesticide_usages から厳密に対象作物のレコードを取得
     let allUsages: any[] = [];
-    for (const c of searchCrops) {
-      if (!c) continue;
-      const cKata = toKatakana(c);
-      const cHalf = toHalfWidthKana(cKata);
 
-      let q = supabase
+    // パターンA: 作物名が指定されている場合
+    if (cleanCropName) {
+      const searchCrops = getNormalizedCrops(cleanCropName);
+      for (const c of searchCrops) {
+        if (!c) continue;
+        const cKata = toKatakana(c);
+        const cHalf = toHalfWidthKana(cKata);
+
+        let q = supabase
+          .from('m_pesticide_usages')
+          .select('*')
+          .or(`crop_name.eq.${c},crop_name.eq.${cKata},crop_name.eq.${cHalf},crop_name.ilike.%${c}%`);
+
+        if (cleanTargetPest) {
+          const pestKana = toKatakana(cleanTargetPest);
+          const pestHalf = toHalfWidthKana(pestKana);
+          q = q.or(`target_pest.like.%${cleanTargetPest}%,target_pest.like.%${pestKana}%,target_pest.like.%${pestHalf}%`);
+        }
+
+        const { data } = await q.limit(1000);
+        if (data) {
+          const filtered = data.filter((row: any) => {
+            const rowCrop = (row.crop_name || '').toLowerCase();
+            if (cleanCropName.includes('たまねぎ') || cleanCropName.includes('玉ねぎ') || cleanCropName.includes('タマネギ')) {
+              return rowCrop.includes('たまねぎ') || rowCrop.includes('タマネギ') || rowCrop.includes('ﾀﾏﾈｷﾞ');
+            }
+            if (cleanCropName === 'ねぎ' || cleanCropName === 'ネギ') {
+              return !rowCrop.includes('たまねぎ') && !rowCrop.includes('タマネギ');
+            }
+            return true;
+          });
+          allUsages = allUsages.concat(filtered);
+        }
+      }
+    } 
+    // パターンB: 作物名がなく、農薬名が指定されている場合
+    else if (cleanPesticideName) {
+      const pKana = toKatakana(cleanPesticideName);
+      const pHira = toHiragana(cleanPesticideName);
+      const pHalf = toHalfWidthKana(pKana);
+
+      const { data: matchedPests } = await supabase
+        .from('m_pesticides')
+        .select('registration_no, pesticide_name')
+        .or(`pesticide_name.ilike.%${cleanPesticideName}%,pesticide_name.ilike.%${pKana}%,pesticide_name.ilike.%${pHira}%,pesticide_name.ilike.%${pHalf}%`)
+        .limit(100);
+
+      if (matchedPests && matchedPests.length > 0) {
+        const regNos = matchedPests.map(p => p.registration_no);
+        const { data: usageData } = await supabase
+          .from('m_pesticide_usages')
+          .select('*')
+          .in('registration_no', regNos)
+          .limit(1500);
+
+        if (usageData) {
+          allUsages = usageData;
+        }
+      }
+    }
+    // パターンC: 病害虫名のみが指定されている場合
+    else if (cleanTargetPest) {
+      const pestKana = toKatakana(cleanTargetPest);
+      const pestHalf = toHalfWidthKana(pestKana);
+
+      const { data: pestUsages } = await supabase
         .from('m_pesticide_usages')
         .select('*')
-        .or(`crop_name.eq.${c},crop_name.eq.${cKata},crop_name.eq.${cHalf},crop_name.ilike.%${c}%`);
+        .or(`target_pest.ilike.%${cleanTargetPest}%,target_pest.ilike.%${pestKana}%,target_pest.ilike.%${pestHalf}%`)
+        .limit(1000);
 
-      if (cleanTargetPest) {
-        const pestKana = toKatakana(cleanTargetPest);
-        const pestHalf = toHalfWidthKana(pestKana);
-        q = q.or(`target_pest.like.%${cleanTargetPest}%,target_pest.like.%${pestKana}%,target_pest.like.%${pestHalf}%`);
-      }
-
-      const { data } = await q.limit(1000);
-      if (data) {
-        // 「ねぎ」で「たまねぎ」が混ざったり、逆に「たまねぎ」で「ねぎ」が混ざるのを厳密にフィルタ
-        const filtered = data.filter((row: any) => {
-          const rowCrop = (row.crop_name || '').toLowerCase();
-          if (cleanCropName.includes('たまねぎ') || cleanCropName.includes('玉ねぎ') || cleanCropName.includes('タマネギ')) {
-            return rowCrop.includes('たまねぎ') || rowCrop.includes('タマネギ') || rowCrop.includes('ﾀﾏﾈｷﾞ');
-          }
-          if (cleanCropName === 'ねぎ' || cleanCropName === 'ネギ') {
-            return !rowCrop.includes('たまねぎ') && !rowCrop.includes('タマネギ');
-          }
-          return true;
-        });
-        allUsages = allUsages.concat(filtered);
+      if (pestUsages) {
+        allUsages = pestUsages;
       }
     }
 

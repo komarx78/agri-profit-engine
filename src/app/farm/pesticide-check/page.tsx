@@ -141,7 +141,7 @@ export default function PesticideCheckPage() {
   // 検索実行
   const handleCheck = async (e?: React.FormEvent, stageOverride?: string) => {
     if (e) e.preventDefault();
-    if (!cropName.trim()) return;
+    if (!cropName.trim() && !pesticideName.trim() && !targetPest.trim()) return;
 
     const targetStage = stageOverride !== undefined ? stageOverride : selectedStageFilter;
 
@@ -374,7 +374,7 @@ export default function PesticideCheckPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-black text-slate-300 mb-1.5">
-                      対象作物名 <span className="text-emerald-400 font-bold">*</span>
+                      対象作物名（任意）
                     </label>
                     <input
                       type="text"
@@ -382,7 +382,6 @@ export default function PesticideCheckPage() {
                       onChange={(e) => setCropName(e.target.value)}
                       placeholder="例: とうがらし, トマト, キャベツ"
                       className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
-                      required
                     />
                   </div>
 
@@ -413,11 +412,15 @@ export default function PesticideCheckPage() {
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-2">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-3 pt-2">
+                  <p className="text-[11px] font-bold text-slate-400">
+                    💡 「作物名」「農薬名」「病害虫名」のいずれか1つ以上の入力で検索できます
+                  </p>
+
                   <button
                     type="submit"
-                    disabled={loading || !cropName.trim()}
-                    className="w-full md:w-auto flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-8 py-3.5 rounded-2xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={loading || (!cropName.trim() && !pesticideName.trim() && !targetPest.trim())}
+                    className="w-full md:w-auto flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-8 py-3.5 rounded-2xl shadow-lg shadow-emerald-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                   >
                     {loading ? (
                       <>
