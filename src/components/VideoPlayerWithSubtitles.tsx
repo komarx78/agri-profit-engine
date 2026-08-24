@@ -54,12 +54,20 @@ export default function VideoPlayerWithSubtitles({
     }
   }, [initialLanguage]);
 
-  // トリミング初期位置の設定
+  // トリミング初期位置の設定 & モバイル安全再生
   useEffect(() => {
-    if (videoRef.current && trimStart > 0) {
-      videoRef.current.currentTime = trimStart;
+    if (videoRef.current) {
+      if (trimStart > 0) {
+        videoRef.current.currentTime = trimStart;
+      }
+      if (autoPlay) {
+        // モバイルでオートプレイが拒否されてもクラッシュしないようにハンドリング
+        videoRef.current.play().catch(() => {
+          // ユーザー操作待ち
+        });
+      }
     }
-  }, [trimStart, videoUrl]);
+  }, [trimStart, videoUrl, autoPlay]);
 
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
@@ -117,7 +125,9 @@ export default function VideoPlayerWithSubtitles({
         src={videoUrl}
         className="w-full h-full object-contain"
         controls
-        autoPlay={autoPlay}
+        playsInline
+        preload="metadata"
+        crossOrigin="anonymous"
         controlsList="nodownload"
         onTimeUpdate={handleTimeUpdate}
       />
@@ -185,8 +195,8 @@ export default function VideoPlayerWithSubtitles({
 
       {/* 🎬 映画風リアルタイムテロップオーバーレイ */}
       {showSubtitles && currentSubtitle && (
-        <div className="absolute bottom-14 sm:bottom-16 left-0 right-0 flex justify-center px-4 pointer-events-none z-10 animate-in fade-in zoom-in-95 duration-150">
-          <div className="bg-black/80 text-white px-5 py-2.5 sm:px-6 sm:py-3 rounded-2xl text-sm sm:text-base md:text-lg font-black max-w-3xl text-center shadow-2xl backdrop-blur-md border border-white/20 tracking-wide leading-relaxed drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+        <div className="absolute bottom-8 sm:bottom-14 left-0 right-0 flex justify-center px-3 sm:px-6 pointer-events-none z-10 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-black/85 text-white px-3.5 py-1.5 sm:px-6 sm:py-3 rounded-xl sm:rounded-2xl text-xs sm:text-base md:text-lg font-black max-w-[95%] sm:max-w-3xl text-center shadow-2xl backdrop-blur-md border border-white/20 tracking-wide leading-relaxed drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
             {currentSubtitle}
           </div>
         </div>
