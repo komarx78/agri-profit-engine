@@ -209,7 +209,7 @@ export async function POST(request: Request) {
          const chunk = regNos.slice(i, i + chunkSize);
          const { data: pestData } = await supabase
            .from('m_pesticides')
-           .select('registration_no, pesticide_name, pesticide_type, applicant_name')
+           .select('registration_no, pesticide_name, pesticide_type, applicant_name, purpose')
            .in('registration_no', chunk);
            
          if (pestData) {
@@ -219,10 +219,46 @@ export async function POST(request: Request) {
 
        let pesticides = usages.map((u: any) => {
           const pInfo = pestMap.get(u.registration_no) || {};
+          
+          // 有効成分情報のパース
+          const rawIngredients = [
+            u.active_ingredient_count_1,
+            u.active_ingredient_count_2,
+            u.active_ingredient_count_3,
+            u.active_ingredient_count_4,
+            u.active_ingredient_count_5
+          ].filter(Boolean);
+
+          const activeIngredients = rawIngredients.map((raw: string) => {
+            const clean = String(raw).trim();
+            if (!clean || clean === '-') return null;
+            
+            const countMatch = clean.match(/(\d+)回以内/);
+            const maxCount = countMatch ? parseInt(countMatch[1], 10) : null;
+            
+            let name = '';
+            if (clean.includes('：') || clean.includes(':')) {
+              name = clean.split(/[：:]/)[0].trim().replace(/を含む農薬の総使用回数/, '');
+            } else if (clean.includes('を含む農薬の総使用回数')) {
+              name = clean.split('を含む農薬の総使用回数')[0].trim();
+            } else {
+              const pType = pInfo.pesticide_type && pInfo.pesticide_type !== '-' ? pInfo.pesticide_type : '';
+              name = pType || pInfo.pesticide_name || '有効成分';
+            }
+
+            return {
+              raw: clean,
+              name: name || '有効成分',
+              maxCount,
+              limitDetails: clean
+            };
+          }).filter(Boolean);
+
           return {
             name: pInfo.pesticide_name || '名称不明',
             type: pInfo.pesticide_type || '-',
             applicant: pInfo.applicant_name || '-',
+            purpose: pInfo.purpose || '-',
             registration_no: u.registration_no,
             crop_name: u.crop_name,
             match_type: u.match_type || 'direct',
@@ -231,7 +267,17 @@ export async function POST(request: Request) {
             usage_amount: u.usage_amount || '-',
             usage_time: u.usage_time || '-',
             usage_method: u.usage_method || '-',
-            usage_count: u.usage_count || '-'
+            usage_count: u.usage_count || '-',
+            application_place: u.application_place || '-',
+            usage_purpose: u.usage_purpose || '-',
+            spray_amount: u.spray_amount || '-',
+            fumigation_time: u.fumigation_time || '-',
+            fumigation_temp: u.fumigation_temp || '-',
+            applicable_soil: u.applicable_soil || '-',
+            applicable_region: u.applicable_region || '-',
+            applicable_pesticide: u.applicable_pesticide || '-',
+            mix_count: u.mix_count || '-',
+            active_ingredients: activeIngredients
           };
        });
 
