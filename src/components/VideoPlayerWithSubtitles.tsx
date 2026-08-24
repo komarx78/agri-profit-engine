@@ -217,15 +217,18 @@ export default function VideoPlayerWithSubtitles({
 
       {/* ⚠️ 再生エラー時のフォールバック */}
       {hasError && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/95 text-white p-4 text-center z-10 space-y-3">
-          <AlertTriangle className="w-10 h-10 text-amber-400" />
-          <div className="max-w-sm">
-            <p className="text-xs sm:text-sm font-bold text-white">動画の読み込みに失敗しました</p>
-            <p className="text-[11px] text-slate-400 mt-1">
-              端末のコーデック非対応または通信エラーの可能性があります
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/95 text-white p-4 text-center z-10 space-y-2.5">
+          <AlertTriangle className="w-9 h-9 text-amber-400" />
+          <div className="max-w-sm space-y-1">
+            <p className="text-xs sm:text-sm font-black text-white">動画の読み込みに失敗しました</p>
+            <p className="text-[11px] text-slate-300">
+              ストレージ内に動画ファイルが存在しない（404）か、非対応フォーマットの可能性があります。
             </p>
+            <div className="p-2 bg-slate-950/80 rounded-lg border border-slate-800 text-[10px] text-slate-400 font-mono break-all line-clamp-2">
+              URL: {videoUrl}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pt-1">
             <button
               type="button"
               onClick={() => {
@@ -243,9 +246,9 @@ export default function VideoPlayerWithSubtitles({
               href={videoUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition-all shadow-md active:scale-95"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition-all shadow-md active:scale-95"
             >
-              <span>外部プレイヤーで再生</span>
+              <span>直接リンクを開く</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           </div>
