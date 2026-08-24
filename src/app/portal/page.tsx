@@ -2038,7 +2038,7 @@ export default function PortalPage() {
                         <label className="block text-xs font-black text-slate-700 mb-1">
                           {t('manual_videoFileLabel', language)} <span className="text-rose-500">*</span>
                         </label>
-                        <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 border-dashed">
+                        <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 border-dashed space-y-2">
                           <input 
                             type="file" 
                             accept="video/mp4,video/quicktime,video/webm,video/*" 
@@ -2055,6 +2055,9 @@ export default function PortalPage() {
                             }}
                             className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-rose-100 file:text-rose-700 hover:file:bg-rose-200 cursor-pointer"
                           />
+                          <p className="text-[11px] text-slate-400 font-medium">
+                            💡 推奨形式: MP4 (H.264) / 1080p以下。スマホ撮影の動画をそのままアップロード可能です。
+                          </p>
                         </div>
                       </div>
 
