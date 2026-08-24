@@ -68,6 +68,14 @@ export default function PortalPage() {
   const [manualTab, setManualTab] = useState<'video' | 'guide'>('video');
   const [videoManuals, setVideoManuals] = useState<any[]>([]);
   const [isLoadingManuals, setIsLoadingManuals] = useState(false);
+  const [playingVideoUrl, setPlayingVideoUrl] = useState<string | null>(null);
+  const [activeGuideStep, setActiveGuideStep] = useState<number>(1);
+  const [showAddVideoModal, setShowAddVideoModal] = useState(false);
+  const [newVideoTitle, setNewVideoTitle] = useState('');
+  const [newVideoDescription, setNewVideoDescription] = useState('');
+  const [newVideoFile, setNewVideoFile] = useState<File | null>(null);
+  const [isSubmittingVideo, setIsSubmittingVideo] = useState(false);
+  const [videoModalMessage, setVideoModalMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   // 🎬 動画編集スタジオ（テロップ・トリミング）用ステート
   const [editingManual, setEditingManual] = useState<any | null>(null);
   const [editingVideoUrl, setEditingVideoUrl] = useState<string | null>(null);
