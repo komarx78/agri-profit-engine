@@ -56,8 +56,21 @@ export default function DashboardPage() {
           supabase.auth.getUser()
         ]);
 
-        if (userRes.data.user) {
-          setTenantId(userRes.data.user.id);
+        let currentOwnerId = userRes.data.user?.id || '';
+        if (!currentOwnerId && typeof window !== 'undefined') {
+          currentOwnerId = localStorage.getItem('agri_owner_id') || '';
+          if (!currentOwnerId) {
+            const savedWorker = localStorage.getItem('agri_current_worker');
+            if (savedWorker) {
+              try {
+                const wObj = JSON.parse(savedWorker);
+                currentOwnerId = wObj.user_id || '';
+              } catch (e) {}
+            }
+          }
+        }
+        if (currentOwnerId) {
+          setTenantId(currentOwnerId);
         }
 
         const rawWorkLogs = workRes.data || [];
