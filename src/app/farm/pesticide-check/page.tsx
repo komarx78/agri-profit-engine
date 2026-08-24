@@ -620,14 +620,55 @@ export default function PesticideCheckPage() {
                                 </div>
                               </div>
 
-                              <button
-                                type="button"
-                                onClick={() => setExpandedCardId(isExpanded ? null : cardId)}
-                                className="text-xs font-bold bg-slate-700/80 hover:bg-slate-700 text-slate-200 hover:text-white px-4 py-2.5 rounded-xl border border-slate-600 flex items-center gap-1.5 transition-all self-start md:self-center shrink-0"
-                              >
-                                {isExpanded ? 'メーカー別適用表を閉じる' : `各メーカー（${variants.length}社）の適用表を展開`}
-                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                              </button>
+                              {/* 親カード右側アクションエリア（表側常時表示） */}
+                              <div className="flex flex-wrap items-center gap-2 shrink-0 self-start md:self-center">
+                                {/* ワンクリック自社マスタ登録ボタン */}
+                                {registeredMasterNames.includes(p.name) || variants.some((v: any) => registeredMasterNames.includes(v.full_name)) ? (
+                                  <span className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-black bg-emerald-950/60 border border-emerald-500/50 text-emerald-400">
+                                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                                    ✓ 自社マスタ登録済
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled={isRegisteringMaster === p.name}
+                                    onClick={() => handleRegisterToMaster({ ...p, name: variants[0]?.full_name || p.name })}
+                                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-slate-950 shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50"
+                                  >
+                                    {isRegisteringMaster === p.name ? (
+                                      <>
+                                        <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                                        登録中...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Plus className="w-4 h-4 text-slate-950" />
+                                        自社マスタに登録
+                                      </>
+                                    )}
+                                  </button>
+                                )}
+
+                                {/* 成分重複判定追加ボタン */}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSimulatorItem({ ...p, name: variants[0]?.full_name || p.name })}
+                                  className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-black bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white border border-slate-600 transition-all"
+                                >
+                                  <Zap className="w-4 h-4 text-amber-400" />
+                                  重複判定に追加
+                                </button>
+
+                                {/* メーカー別詳細アコーディオン開閉ボタン */}
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedCardId(isExpanded ? null : cardId)}
+                                  className="text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3.5 py-2.5 rounded-xl border border-slate-700 flex items-center gap-1.5 transition-all"
+                                >
+                                  {isExpanded ? '閉じる' : `メーカー別詳細 (${variants.length}社)`}
+                                  {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                </button>
+                              </div>
                             </div>
                           </div>
 
