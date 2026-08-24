@@ -448,13 +448,15 @@ export default function PesticideCheckPage() {
               <div className="space-y-4">
                 {/* サマリーバー */}
                 <div className="bg-slate-800/40 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div>
-                    <span className="text-xs font-bold text-slate-400">検索結果:</span>
-                    <span className="text-lg font-black text-white ml-2">
-                      {result.pesticides?.length || 0} 件ヒット
-                    </span>
-                    <span className="text-xs font-bold text-slate-400 ml-3">
-                      （直接適用: {result.directCount || 0}件 / 包括適用: {result.groupCount || 0}件）
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div>
+                      <span className="text-xs font-bold text-slate-400">検索結果:</span>
+                      <span className="text-lg font-black text-white ml-2">
+                        {result.pesticides?.length || 0} 系統ヒット
+                      </span>
+                    </div>
+                    <span className="inline-flex items-center gap-1 bg-indigo-500/20 text-indigo-300 text-xs font-bold px-2.5 py-1 rounded-full border border-indigo-500/30">
+                      🔤 あいうえお順（五十音順）
                     </span>
                   </div>
 
@@ -553,132 +555,87 @@ export default function PesticideCheckPage() {
                   </div>
                 )}
 
-                {/* カルテカード一覧 */}
+                {/* カルテカード一覧（代表商品名で五十音順） */}
                 {result.pesticides && result.pesticides.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-4">
+                  <div className="grid grid-cols-1 gap-5">
                     {result.pesticides.map((p: any, idx: number) => {
-                      const cardId = `${p.registration_no}_${idx}`;
+                      const cardId = `group_${p.name}_${idx}`;
                       const isExpanded = expandedCardId === cardId;
-                      const isSelected = simulatorList.some(item => 
-                        item.id === `${p.registration_no}_${p.crop_name}_${p.target_pest}_${p.usage_amount}`
-                      );
+                      const variants = p.variants || [p];
 
                       return (
                         <div 
                           key={cardId}
-                          className={`bg-slate-800/70 border rounded-2xl transition-all overflow-hidden ${
-                            isSelected 
-                              ? 'border-indigo-500/80 shadow-lg shadow-indigo-500/10 ring-1 ring-indigo-500/50' 
-                              : 'border-slate-700/60 hover:border-slate-600'
-                          }`}
+                          className="bg-slate-800/70 border border-slate-700/60 hover:border-slate-600 rounded-3xl transition-all overflow-hidden shadow-lg"
                         >
-                          {/* カードヘッダー */}
-                          <div className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-700/40">
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                                <span className={`text-[11px] font-black px-2.5 py-0.5 rounded-full border ${
-                                  p.match_type === 'direct' 
-                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' 
-                                    : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
-                                }`}>
-                                  {p.scope_label}
-                                </span>
+                          {/* 親カードヘッダー（代表商品名） */}
+                          <div className="p-6 border-b border-slate-700/40">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2 mb-2">
+                                  {p.stage_badge && (
+                                    <span className={`text-[11px] font-black px-2.5 py-0.5 rounded-full border ${
+                                      p.stage_badge.includes('採種')
+                                        ? 'bg-amber-400/20 text-amber-300 border-amber-400/40'
+                                        : p.stage_badge.includes('育苗')
+                                        ? 'bg-teal-400/20 text-teal-300 border-teal-400/40'
+                                        : 'bg-slate-700/60 text-slate-300 border-slate-600'
+                                    }`}>
+                                      {p.stage_badge}
+                                    </span>
+                                  )}
 
-                                {p.stage_badge && (
-                                  <span className={`text-[11px] font-black px-2.5 py-0.5 rounded-full border ${
-                                    p.stage_category === 'seed'
-                                      ? 'bg-amber-400/20 text-amber-300 border-amber-400/40'
-                                      : p.stage_category === 'nursery'
-                                      ? 'bg-teal-400/20 text-teal-300 border-teal-400/40'
-                                      : 'bg-slate-700/60 text-slate-300 border-slate-600'
-                                  }`}>
-                                    {p.stage_badge}
+                                  {p.purpose && p.purpose !== '-' && (
+                                    <span className="bg-amber-500/20 text-amber-300 text-[11px] font-bold px-2.5 py-0.5 rounded-md border border-amber-500/30">
+                                      {p.purpose}
+                                    </span>
+                                  )}
+
+                                  <span className="bg-indigo-500/20 text-indigo-300 text-[11px] font-bold px-2.5 py-0.5 rounded-md border border-indigo-500/30">
+                                    🏢 同一系列商品: {variants.length}社登録
                                   </span>
-                                )}
+                                </div>
 
-                                <span className="bg-slate-700/80 text-slate-300 text-[11px] font-bold px-2 py-0.5 rounded-md">
-                                  登録番号: {p.registration_no}
-                                </span>
+                                <h3 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
+                                  {p.name}
+                                  {p.type && p.type !== '-' && (
+                                    <span className="text-xs font-bold text-slate-400">
+                                      （{p.type}）
+                                    </span>
+                                  )}
+                                </h3>
 
-                                {p.purpose && p.purpose !== '-' && (
-                                  <span className="bg-amber-500/20 text-amber-300 text-[11px] font-bold px-2 py-0.5 rounded-md border border-amber-500/30">
-                                    {p.purpose}
-                                  </span>
-                                )}
+                                {/* 同一系列メーカー商品バッジ一覧 */}
+                                <div className="flex flex-wrap gap-1.5 mt-2">
+                                  {variants.map((v: any, vIdx: number) => (
+                                    <span 
+                                      key={vIdx}
+                                      className="text-xs font-bold bg-slate-900/80 border border-slate-700/80 text-slate-300 px-2.5 py-1 rounded-lg flex items-center gap-1.5"
+                                    >
+                                      <span className="text-emerald-400 font-extrabold">{v.prefix ? `[${v.prefix}]` : ''}</span>
+                                      <span>{v.full_name}</span>
+                                      <span className="text-[10px] text-slate-500">#{v.registration_no}</span>
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
 
-                              <h3 className="text-lg font-black text-white tracking-tight flex items-center gap-2">
-                                {p.name}
-                                {p.type && p.type !== '-' && (
-                                  <span className="text-xs font-bold text-slate-400">
-                                    （{p.type}）
-                                  </span>
-                                )}
-                              </h3>
-                              <p className="text-xs font-bold text-slate-400 mt-0.5">
-                                メーカー・登録者: <span className="text-slate-300">{p.applicant}</span>
-                              </p>
-                            </div>
-
-                            {/* アクションボタン */}
-                            <div className="flex flex-wrap items-center gap-2 shrink-0">
-                              {/* ワンクリック農薬マスタ登録ボタン */}
-                              {registeredMasterNames.includes(p.name) ? (
-                                <span className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-black bg-emerald-950/60 border border-emerald-500/50 text-emerald-400">
-                                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                                  ✓ 自社マスタ登録済
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  disabled={isRegisteringMaster === p.name}
-                                  onClick={() => handleRegisterToMaster(p)}
-                                  className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-slate-950 shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50"
-                                >
-                                  {isRegisteringMaster === p.name ? (
-                                    <>
-                                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
-                                      登録中...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Plus className="w-4 h-4 text-slate-950" />
-                                      自社マスタに登録
-                                    </>
-                                  )}
-                                </button>
-                              )}
-
-                              {/* 成分重複チェッカー追加ボタン */}
                               <button
                                 type="button"
-                                onClick={() => toggleSimulatorItem(p)}
-                                className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all ${
-                                  isSelected
-                                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                                    : 'bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white border border-slate-600'
-                                }`}
+                                onClick={() => setExpandedCardId(isExpanded ? null : cardId)}
+                                className="text-xs font-bold bg-slate-700/80 hover:bg-slate-700 text-slate-200 hover:text-white px-4 py-2.5 rounded-xl border border-slate-600 flex items-center gap-1.5 transition-all self-start md:self-center shrink-0"
                               >
-                                {isSelected ? (
-                                  <>
-                                    <Check className="w-4 h-4 text-emerald-400" />
-                                    シミュレーター追加中
-                                  </>
-                                ) : (
-                                  <>
-                                    <Zap className="w-4 h-4 text-amber-400" />
-                                    重複判定に追加
-                                  </>
-                                )}
+                                {isExpanded ? 'メーカー別適用表を閉じる' : `各メーカー（${variants.length}社）の適用表を展開`}
+                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                               </button>
                             </div>
                           </div>
 
-                          {/* 主要スペック・グリッド */}
+                          {/* 代表スペック（病害虫・倍率） */}
                           <div className="p-5 bg-slate-900/40 space-y-3">
                             <div>
-                              <p className="text-[10px] font-bold text-slate-400 mb-1.5 flex items-center justify-between">
-                                <span>適用病害虫・雑草 ({p.target_pests_array?.length || 1}件):</span>
+                              <p className="text-[10px] font-bold text-slate-400 mb-1.5">
+                                適用病害虫・雑草 ({p.target_pests_array?.length || 1}件):
                               </p>
                               <div className="flex flex-wrap gap-1.5">
                                 {p.target_pests_array && p.target_pests_array.length > 0 ? (
@@ -710,90 +667,152 @@ export default function PesticideCheckPage() {
                               </div>
 
                               <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
-                                <p className="text-[10px] font-bold text-slate-400 mb-1">散布液量(10a)</p>
-                                <p className="text-sm font-black text-slate-200">{p.spray_amount || '-'}</p>
+                                <p className="text-[10px] font-bold text-slate-400 mb-1">本剤使用回数</p>
+                                <p className="text-sm font-black text-slate-200">{p.usage_count || '-'}</p>
                               </div>
                             </div>
                           </div>
 
-                          {/* 有効成分・ステージ制限バッジ */}
-                          <div className="px-5 py-3 bg-slate-900/20 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-[11px] font-black text-slate-400 flex items-center gap-1">
-                                <Zap className="w-3.5 h-3.5 text-amber-400" />
-                                有効成分制限:
-                              </span>
-                              {p.active_ingredients && p.active_ingredients.length > 0 ? (
-                                p.active_ingredients.map((ing: any, i: number) => (
-                                  <span 
-                                    key={i}
-                                    className="bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 text-[11px] font-bold px-2.5 py-0.5 rounded-lg"
-                                  >
-                                    {ing.raw}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="text-xs font-bold text-slate-500">
-                                  本剤回数: {p.usage_count}
+                          {/* 有効成分情報 */}
+                          <div className="px-5 py-3 bg-slate-900/20 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
+                            <span className="text-[11px] font-black text-slate-400 flex items-center gap-1">
+                              <Zap className="w-3.5 h-3.5 text-amber-400" />
+                              有効成分制限:
+                            </span>
+                            {p.active_ingredients && p.active_ingredients.length > 0 ? (
+                              p.active_ingredients.map((ing: any, i: number) => (
+                                <span 
+                                  key={i}
+                                  className="bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 text-[11px] font-bold px-2.5 py-0.5 rounded-lg"
+                                >
+                                  {ing.raw}
                                 </span>
-                              )}
-                            </div>
-
-                            <button
-                              onClick={() => setExpandedCardId(isExpanded ? null : cardId)}
-                              className="text-xs font-bold text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors"
-                            >
-                              {isExpanded ? '詳細カルテを閉じる' : '病害虫ごとの適用詳細を展開'}
-                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                            </button>
+                              ))
+                            ) : (
+                              <span className="text-xs font-bold text-slate-500">
+                                本剤回数: {p.usage_count}
+                              </span>
+                            )}
                           </div>
 
-                          {/* 展開された詳細情報 */}
+                          {/* 【アコーディオン展開：メーカー別・登録番号別の完全適用表】 */}
                           {isExpanded && (
-                            <div className="p-5 bg-slate-950/60 border-t border-slate-800 space-y-4 text-xs">
-                              {p.usages_list && p.usages_list.length > 1 && (
-                                <div>
-                                  <p className="font-black text-slate-300 mb-2">📋 対象病害虫ごとの適用条件一覧:</p>
-                                  <div className="overflow-x-auto">
-                                    <table className="w-full text-left border-collapse">
-                                      <thead>
-                                        <tr className="border-b border-slate-800 text-slate-500">
-                                          <th className="py-2 px-3">対象病害虫</th>
-                                          <th className="py-2 px-3">希釈・使用量</th>
-                                          <th className="py-2 px-3">使用時期</th>
-                                          <th className="py-2 px-3">使用方法</th>
-                                          <th className="py-2 px-3">回数</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {p.usages_list.map((u: any, uIdx: number) => (
-                                          <tr key={uIdx} className="border-b border-slate-900/60 hover:bg-slate-900/40 text-slate-300">
-                                            <td className="py-2 px-3 font-bold text-rose-400">{u.target_pest}</td>
-                                            <td className="py-2 px-3">{u.usage_amount}</td>
-                                            <td className="py-2 px-3 text-emerald-400">{u.usage_time}</td>
-                                            <td className="py-2 px-3 text-cyan-300">{u.usage_method}</td>
-                                            <td className="py-2 px-3">{u.usage_count}</td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </div>
-                              )}
+                            <div className="p-6 bg-slate-950/80 border-t border-slate-800 space-y-6">
+                              <h4 className="text-xs font-black text-slate-300 flex items-center gap-2">
+                                <span>📋 同一系列メーカー別 登録番号＆適用表一覧</span>
+                                <span className="text-[10px] font-normal text-slate-400">（※農林水産省登録情報）</span>
+                              </h4>
 
-                              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-2 border-t border-slate-800/60">
-                                <div>
-                                  <p className="font-bold text-slate-500 mb-0.5">本剤の使用回数制限</p>
-                                  <p className="font-black text-slate-200">{p.usage_count || '-'}</p>
-                                </div>
-                                <div>
-                                  <p className="font-bold text-slate-500 mb-0.5">適用場所</p>
-                                  <p className="font-black text-slate-200">{p.application_place || '-'}</p>
-                                </div>
-                                <div>
-                                  <p className="font-bold text-slate-500 mb-0.5">使用目的</p>
-                                  <p className="font-black text-slate-200">{p.usage_purpose || '-'}</p>
-                                </div>
+                              <div className="space-y-4">
+                                {variants.map((v: any, vIdx: number) => {
+                                  const isVariantSelected = simulatorList.some(item => 
+                                    item.id === `${v.registration_no}_${v.full_name}`
+                                  );
+
+                                  return (
+                                    <div 
+                                      key={vIdx}
+                                      className="bg-slate-900/90 border border-slate-700/80 rounded-2xl p-5 space-y-4 shadow-md"
+                                    >
+                                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                                        <div>
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <span className="bg-slate-800 text-slate-300 text-xs font-black px-2.5 py-0.5 rounded-md border border-slate-700">
+                                              登録番号: {v.registration_no}
+                                            </span>
+                                            <span className="text-xs font-bold text-slate-400">
+                                              製造・販売元: <strong className="text-white">{v.applicant}</strong>
+                                            </span>
+                                          </div>
+                                          <h5 className="text-base font-black text-white">
+                                            {v.full_name}
+                                          </h5>
+                                        </div>
+
+                                        {/* 各メーカー商品のアクションボタン */}
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                          {/* ワンクリック自社マスタ登録 */}
+                                          {registeredMasterNames.includes(v.full_name) ? (
+                                            <span className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black bg-emerald-950/60 border border-emerald-500/50 text-emerald-400">
+                                              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                                              ✓ 自社マスタ登録済
+                                            </span>
+                                          ) : (
+                                            <button
+                                              type="button"
+                                              disabled={isRegisteringMaster === v.full_name}
+                                              onClick={() => handleRegisterToMaster({ ...v, name: v.full_name })}
+                                              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-slate-950 shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50"
+                                            >
+                                              {isRegisteringMaster === v.full_name ? (
+                                                <>
+                                                  <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                                                  登録中...
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <Plus className="w-4 h-4 text-slate-950" />
+                                                  自社マスタに登録
+                                                </>
+                                              )}
+                                            </button>
+                                          )}
+
+                                          {/* 重複チェッカー追加 */}
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleSimulatorItem({ ...v, name: v.full_name })}
+                                            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black transition-all ${
+                                              isVariantSelected
+                                                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                                                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700'
+                                            }`}
+                                          >
+                                            {isVariantSelected ? (
+                                              <>
+                                                <Check className="w-4 h-4 text-emerald-400" />
+                                                重複判定に追加中
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Zap className="w-4 h-4 text-amber-400" />
+                                                重複判定に追加
+                                              </>
+                                            )}
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {/* 病害虫別適用表テーブル */}
+                                      {v.usages_list && v.usages_list.length > 0 && (
+                                        <div className="overflow-x-auto">
+                                          <table className="w-full text-left border-collapse text-xs">
+                                            <thead>
+                                              <tr className="border-b border-slate-800 text-slate-500">
+                                                <th className="py-2 px-3">対象病害虫</th>
+                                                <th className="py-2 px-3">希釈倍数・使用量</th>
+                                                <th className="py-2 px-3">使用時期</th>
+                                                <th className="py-2 px-3">使用方法</th>
+                                                <th className="py-2 px-3">本剤回数</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {v.usages_list.map((u: any, uIdx: number) => (
+                                                <tr key={uIdx} className="border-b border-slate-800/40 hover:bg-slate-800/30 text-slate-300">
+                                                  <td className="py-2 px-3 font-bold text-rose-400">{u.target_pest}</td>
+                                                  <td className="py-2 px-3">{u.usage_amount}</td>
+                                                  <td className="py-2 px-3 text-emerald-400">{u.usage_time}</td>
+                                                  <td className="py-2 px-3 text-cyan-300">{u.usage_method}</td>
+                                                  <td className="py-2 px-3">{u.usage_count}</td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           )}

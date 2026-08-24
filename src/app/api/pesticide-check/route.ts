@@ -33,6 +33,44 @@ function toHalfWidthKana(str: string): string {
   return str.split('').map(c => kanaMap[c] || c).join('');
 }
 
+// 冠名（メーカープレフィックス）抽出＆正規化関数
+const MANUFACTURER_PREFIXES = [
+  '住化', '住友化学', '住友',
+  '日農', '日本農薬',
+  'ホクコー', '北興化学', '北興',
+  'クミアイ化学', 'クミアイ',
+  'サンケイ化学', 'サンケイ',
+  '三井化学', '三井',
+  '協友アグリ', '協友',
+  '科研製薬', '科研',
+  '丸和バイオケミカル', '丸和',
+  '日産化学', '日産',
+  '石原バイオサイエンス', '石原産業', '石原',
+  '日本曹達', '日曹',
+  'OATアグリオ', 'OAT',
+  'アグロカネショウ', 'カネショウ',
+  'シンジェンタジャパン', 'シンジェンタ',
+  'バイエルクロップサイエンス', 'バイエル',
+  'BASFジャパン', 'BASF',
+  'コルテバ', '丸紅', 'イハラ'
+];
+
+function extractCanonicalPesticideName(fullName: string): { canonicalName: string; prefix: string } {
+  const clean = fullName.trim();
+  for (const prefix of MANUFACTURER_PREFIXES) {
+    if (clean.startsWith(prefix) && clean.length > prefix.length) {
+      return {
+        canonicalName: clean.slice(prefix.length).trim(),
+        prefix: prefix
+      };
+    }
+  }
+  return {
+    canonicalName: clean,
+    prefix: ''
+  };
+}
+
 // 作物の正規化マップ（厳格な直接同義語のみ）
 const CROP_SYNONYMS: { [key: string]: string[] } = {
   'たまねぎ': ['たまねぎ', 'タマネギ', '玉ねぎ', '玉葱', 'たまねぎ(本畑)', 'ﾀﾏﾈｷﾞ'],
@@ -82,7 +120,7 @@ export async function POST(request: Request) {
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 作物名の正規化展開（半角カナ・全角カタカナ・ひらがな・漢字の完全網羅）
+    // 作物名の正規化展開
     const searchCrops = getNormalizedCrops(cleanCropName);
 
     // 1. m_pesticide_usages から厳密に対象作物のレコードを取得
@@ -151,25 +189,16 @@ export async function POST(request: Request) {
       }
     }
 
-    // 3. 【最重要】農薬単位（登録番号単位）でグルーピング＆多次元ステージ判定
-    const groupedMap = new Map<string, any>();
+    // 3. 【最重要】まず登録番号（メーカー商品）ごとに適用データを整理
+    const productVariantMap = new Map<string, any>();
 
     allUsages.forEach((u: any) => {
       const regNo = u.registration_no;
       const pInfo = pestMap.get(regNo) || {};
-      const pName = pInfo.pesticide_name || '名称不明';
+      const fullName = pInfo.pesticide_name || '名称不明';
 
-      // 農薬名検索フィルター
-      if (cleanPesticideName) {
-        const matchesName = pName.includes(cleanPesticideName) ||
-          toKatakana(pName).includes(toKatakana(cleanPesticideName)) ||
-          toHiragana(pName).includes(toHiragana(cleanPesticideName));
-        if (!matchesName) return;
-      }
-
-      // 多次元ステージ判定（作物名だけでなく、時期・方法・病害虫・回数内訳から全方位解析）
+      // 多次元ステージ判定
       const combinedText = `${u.crop_name} ${u.usage_time} ${u.usage_method} ${u.target_pest} ${u.usage_purpose} ${u.active_ingredient_count_1 || ''} ${u.active_ingredient_count_2 || ''}`;
-      
       const isSeed = combinedText.includes('採種') || combinedText.includes('種用') || combinedText.includes('母球') || combinedText.includes('種子');
       const isNursery = combinedText.includes('育苗') || combinedText.includes('苗床') || combinedText.includes('床土') || combinedText.includes('セル成型') || combinedText.includes('トレイ') || combinedText.includes('苗立枯');
       const isEdible = !isSeed || combinedText.includes('本圃') || combinedText.includes('本畑') || combinedText.includes('収穫');
@@ -194,25 +223,26 @@ export async function POST(request: Request) {
         } else if (clean.includes('を含む農薬の総使用回数')) {
           name = clean.split('を含む農薬の総使用回数')[0].trim();
         } else {
-          name = pInfo.pesticide_type && pInfo.pesticide_type !== '-' ? pInfo.pesticide_type : pInfo.pesticide_name || '有効成分';
+          name = pInfo.pesticide_type && pInfo.pesticide_type !== '-' ? pInfo.pesticide_type : fullName || '有効成分';
         }
         return { raw: clean, name: name || '有効成分', maxCount, limitDetails: clean };
       }).filter(Boolean);
 
-      if (!groupedMap.has(regNo)) {
-        groupedMap.set(regNo, {
+      if (!productVariantMap.has(regNo)) {
+        const { canonicalName, prefix } = extractCanonicalPesticideName(fullName);
+        productVariantMap.set(regNo, {
           registration_no: regNo,
-          name: pName,
-          type: pInfo.pesticide_type || '-',
+          full_name: fullName,
+          canonical_name: canonicalName,
+          prefix: prefix,
           applicant: pInfo.applicant_name || '-',
+          type: pInfo.pesticide_type || '-',
           purpose: pInfo.purpose || '-',
           crop_name: u.crop_name,
-          match_type: 'direct',
           scope_label: `🎯 ${u.crop_name} 正式登録`,
           is_edible: false,
           is_seed: false,
           is_nursery: false,
-          stage_badge: '🧅 食用（本圃）認可',
           target_pests: new Set<string>(),
           usages_list: [],
           active_ingredients: activeIngredients,
@@ -225,20 +255,15 @@ export async function POST(request: Request) {
         });
       }
 
-      const group = groupedMap.get(regNo)!;
-      if (isEdible) group.is_edible = true;
-      if (isSeed) group.is_seed = true;
-      if (isNursery) group.is_nursery = true;
-
-      // 代表バッジの設定
-      if (group.is_seed) group.stage_badge = '🌱 採種用（種採り）認可';
-      else if (group.is_nursery && !group.is_edible) group.stage_badge = '🌿 育苗期 専用認可';
-      else group.stage_badge = '🧅 食用（本圃）認可';
+      const variant = productVariantMap.get(regNo)!;
+      if (isEdible) variant.is_edible = true;
+      if (isSeed) variant.is_seed = true;
+      if (isNursery) variant.is_nursery = true;
 
       if (u.target_pest && u.target_pest !== '-') {
-        group.target_pests.add(u.target_pest);
+        variant.target_pests.add(u.target_pest);
       }
-      group.usages_list.push({
+      variant.usages_list.push({
         target_pest: u.target_pest || '-',
         usage_amount: u.usage_amount || '-',
         usage_time: u.usage_time || '-',
@@ -247,13 +272,88 @@ export async function POST(request: Request) {
       });
     });
 
-    const pesticides = Array.from(groupedMap.values()).map(g => ({
-      ...g,
-      target_pest: Array.from(g.target_pests).join(', ') || '全般',
-      target_pests_array: Array.from(g.target_pests)
-    })).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ja'));
+    // 4. 【代表商品名（冠名除去名）でさらに親グループ化！】
+    // 例: 「住化スミレックス水和剤」「日農スミレックス水和剤」 -> 代表「スミレックス水和剤」
+    const canonicalGroupsMap = new Map<string, any>();
 
-    // ステージ集計（必ず全ステージを集計して常設返却）
+    productVariantMap.forEach((v) => {
+      // 農薬名検索フィルター
+      if (cleanPesticideName) {
+        const matches = v.full_name.includes(cleanPesticideName) ||
+          v.canonical_name.includes(cleanPesticideName) ||
+          toKatakana(v.full_name).includes(toKatakana(cleanPesticideName)) ||
+          toHiragana(v.full_name).includes(toHiragana(cleanPesticideName));
+        if (!matches) return;
+      }
+
+      const cName = v.canonical_name;
+      if (!canonicalGroupsMap.has(cName)) {
+        canonicalGroupsMap.set(cName, {
+          name: cName, // 代表商品名（あいうえお順の基準）
+          type: v.type, // 種類名 (例: プロシミドン水和剤)
+          purpose: v.purpose, // 用途 (例: 殺菌剤)
+          active_ingredients: v.active_ingredients,
+          is_edible: false,
+          is_seed: false,
+          is_nursery: false,
+          stage_badge: '🧅 食用（本圃）認可',
+          variants: [],
+          all_target_pests: new Set<string>()
+        });
+      }
+
+      const parent = canonicalGroupsMap.get(cName)!;
+      if (v.is_edible) parent.is_edible = true;
+      if (v.is_seed) parent.is_seed = true;
+      if (v.is_nursery) parent.is_nursery = true;
+
+      // 病害虫の統合
+      v.target_pests.forEach((pest: string) => parent.all_target_pests.add(pest));
+
+      // 代表バッジの設定
+      if (parent.is_seed) parent.stage_badge = '🌱 採種用（種採り）認可';
+      else if (parent.is_nursery && !parent.is_edible) parent.stage_badge = '🌿 育苗期 専用認可';
+      else parent.stage_badge = '🧅 食用（本圃）認可';
+
+      parent.variants.push({
+        registration_no: v.registration_no,
+        full_name: v.full_name,
+        prefix: v.prefix,
+        applicant: v.applicant,
+        type: v.type,
+        purpose: v.purpose,
+        scope_label: v.scope_label,
+        usage_amount: v.usage_amount,
+        usage_time: v.usage_time,
+        usage_method: v.usage_method,
+        usage_count: v.usage_count,
+        spray_amount: v.spray_amount,
+        target_pests_array: Array.from(v.target_pests),
+        target_pest: Array.from(v.target_pests).join(', ') || '全般',
+        usages_list: v.usages_list,
+        active_ingredients: v.active_ingredients
+      });
+    });
+
+    // 5. 【あいうえお順ソート】代表商品名（冠名除去名）で五十音順ソート！
+    const pesticides = Array.from(canonicalGroupsMap.values()).map(g => {
+      // 最初のバリアントを代表値としてフラットプロパティも付与（後方互換性）
+      const primary = g.variants[0] || {};
+      return {
+        ...g,
+        registration_no: primary.registration_no || '',
+        applicant: g.variants.map((v: any) => v.prefix || v.applicant).filter(Boolean).join(', ') || primary.applicant,
+        target_pest: Array.from(g.all_target_pests).join(', ') || '全般',
+        target_pests_array: Array.from(g.all_target_pests),
+        usage_amount: primary.usage_amount || '-',
+        usage_time: primary.usage_time || '-',
+        usage_method: primary.usage_method || '-',
+        usage_count: primary.usage_count || '-',
+        spray_amount: primary.spray_amount || '-'
+      };
+    }).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ja'));
+
+    // ステージ集計
     const edibleCount = pesticides.filter(p => p.is_edible).length;
     const seedCount = pesticides.filter(p => p.is_seed).length;
     const nurseryCount = pesticides.filter(p => p.is_nursery).length;
@@ -281,7 +381,7 @@ export async function POST(request: Request) {
       groupCount: 0,
       availableStages,
       activeStage: stageFilter || 'all',
-      message: `作物「${cleanCropName}」に正式登録されている農薬一覧です。（計${filteredPesticides.length}剤）`,
+      message: `作物「${cleanCropName}」に正式登録されている代表農薬一覧です。（計${filteredPesticides.length}系統）`,
       pesticides: filteredPesticides
     });
 
