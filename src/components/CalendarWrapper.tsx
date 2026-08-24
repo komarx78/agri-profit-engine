@@ -102,7 +102,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
             }`}
           >
             <Users className="w-3.5 h-3.5" />
-            <span>全員の予定</span>
+            <span>{t('cal_allEvents', language)}</span>
           </button>
           <button
             type="button"
@@ -114,7 +114,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
             }`}
           >
             <Star className="w-3.5 h-3.5" />
-            <span>担当タスクのみ {myEventsCount > 0 && `(${myEventsCount})`}</span>
+            <span>{t('cal_myTasksOnly', language)} {myEventsCount > 0 && `(${myEventsCount})`}</span>
           </button>
         </div>
 
@@ -122,21 +122,21 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
             <UserCheck className="w-3.5 h-3.5 text-amber-500" />
-            <span>担当者表示:</span>
+            <span>{t('cal_targetWorker', language)}</span>
           </span>
           <select
             value={selectedTargetWorker}
             onChange={(e) => setSelectedTargetWorker(e.target.value)}
             className="px-3 py-1.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs font-black text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer shadow-xs"
           >
-            <option value="">（未選択・全員対象）</option>
+            <option value="">{t('cal_allStaffOption', language)}</option>
             {allWorkers.map((w: any) => (
               <option key={w.id} value={w.name}>{w.name}</option>
             ))}
           </select>
           {selectedTargetWorker && (
             <span className="text-[11px] font-bold text-amber-600 hidden sm:inline-block">
-              🟡「{selectedTargetWorker}」をハイライト中
+              🟡「{selectedTargetWorker}」{t('cal_highlighting', language)}
             </span>
           )}
         </div>
@@ -185,7 +185,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                             <div className={`w-6 h-1 rounded-full ${isMine ? 'bg-amber-500' : day.isToday ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
                             {isMine && (
                               <span className="text-[9px] font-black bg-amber-500 text-white px-1.5 py-0.2 rounded-md flex items-center gap-0.5">
-                                <Star className="w-2.5 h-2.5 fill-white" /> あなた
+                                <Star className="w-2.5 h-2.5 fill-white" /> {t('cal_you', language)}
                               </span>
                             )}
                           </div>
@@ -198,7 +198,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                             {event.workerName && (
                               <div className={`flex items-center gap-1 text-[10px] font-bold truncate ${isMine ? 'text-amber-800' : 'text-slate-500'}`}>
                                 <Users className={`w-3 h-3 flex-shrink-0 ${isMine ? 'text-amber-600' : 'text-blue-500'}`} />
-                                <span className="truncate">{event.workerName} {isMine && '(自分)'}</span>
+                                <span className="truncate">{event.workerName} {isMine && ` ${t('cal_meTag', language)}`}</span>
                               </div>
                             )}
                             {(event.fieldName || event.cropName) && (

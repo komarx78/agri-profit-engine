@@ -533,7 +533,7 @@ export default function PortalPage() {
               <div className="flex items-center gap-2">
                 <div className="text-xs md:text-sm font-black text-slate-800 bg-emerald-50 border border-emerald-200 px-3.5 py-1.5 rounded-2xl flex items-center gap-2 shadow-xs">
                   <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                  <span className="text-[11px] text-emerald-700 font-bold">ログイン中:</span>
+                  <span className="text-[11px] text-emerald-700 font-bold">{t('portal_loggedIn', language)}</span>
                   <span className="text-slate-900 font-black">{getTranslatedName(currentUser, language)}</span>
                 </div>
                 <button
@@ -543,7 +543,7 @@ export default function PortalPage() {
                   title="別の現場スタッフとしてログインし直す"
                 >
                   <UserCheck className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">スタッフ切替</span>
+                  <span className="hidden sm:inline">{t('switchWorker', language)}</span>
                 </button>
               </div>
             )}
@@ -587,12 +587,12 @@ export default function PortalPage() {
                       {currentUser.name ? currentUser.name.charAt(0) : 'ユ'}
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold text-emerald-700">現在の作業者</p>
-                      <p className="text-sm font-black text-slate-800">{getTranslatedName(currentUser, language)} さん</p>
+                      <p className="text-[10px] font-bold text-emerald-700">{t('currentWorkerLabel', language)}</p>
+                      <p className="text-sm font-black text-slate-800">{getTranslatedName(currentUser, language)}{t('workerHonorific', language)}</p>
                     </div>
                   </div>
                   <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg">
-                    {role === 'admin' ? '管理者' : '現場スタッフ'}
+                    {role === 'admin' ? t('adminMode', language) : t('workerMode', language)}
                   </span>
                 </div>
               )}
@@ -643,7 +643,7 @@ export default function PortalPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs font-black text-slate-700">
                     <Coffee className="w-4 h-4 text-amber-500" />
-                    <span>有給休暇・残日数</span>
+                    <span>{t('leave_title', language)}</span>
                   </div>
                   <button
                     type="button"
@@ -651,22 +651,22 @@ export default function PortalPage() {
                     className="text-[11px] font-black bg-amber-500 hover:bg-amber-600 active:scale-95 text-white px-3 py-1 rounded-lg flex items-center gap-1 shadow-xs transition-all"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>有給を申請</span>
+                    <span>{t('leave_applyBtn', language)}</span>
                   </button>
                 </div>
 
                 {leaveBalance ? (
                   <div className="bg-amber-50/60 border border-amber-200/70 p-3.5 rounded-2xl">
                     <div className="flex items-baseline justify-between">
-                      <span className="text-[11px] font-bold text-amber-800">現在の利用可能残日数</span>
+                      <span className="text-[11px] font-bold text-amber-800">{t('leave_availableDays', language)}</span>
                       <div className="flex items-baseline gap-1">
                         <span className="text-2xl font-black text-amber-600">{leaveBalance.total}</span>
-                        <span className="text-xs font-bold text-amber-800">日</span>
+                        <span className="text-xs font-bold text-amber-800">{t('daysUnit', language)}</span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between text-[10px] text-amber-700 font-medium mt-1 pt-1.5 border-t border-amber-200/50">
-                      <span>繰越: <strong>{leaveBalance.carryover}日</strong></span>
-                      <span>今年度付与: <strong>{leaveBalance.balance}日</strong></span>
+                      <span>{t('leave_carriedOver', language)}<strong>{leaveBalance.carryover}{t('daysUnit', language)}</strong></span>
+                      <span>{t('leave_grantedThisYear', language)}<strong>{leaveBalance.balance}{t('daysUnit', language)}</strong></span>
                     </div>
                   </div>
                 ) : (
@@ -785,7 +785,7 @@ export default function PortalPage() {
                 className="w-full py-2.5 text-sm font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-xl transition-colors border border-purple-100 flex items-center justify-center gap-2"
               >
                 <MessageSquare className="w-4 h-4" />
-                掲示板を開く・投稿する
+                {t('board_openModal', language)}
               </button>
             </div>
             
