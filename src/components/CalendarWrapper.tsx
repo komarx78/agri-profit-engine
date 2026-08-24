@@ -13,7 +13,11 @@ interface CalendarProps {
 }
 
 export default function CalendarWrapper({ events, t, language, currentWorkerId, currentWorkerName, allWorkers = [] }: CalendarProps) {
-  const today = new Date();
+  const [today] = useState(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<'all' | 'mine'>('all');
   const [selectedTargetWorker, setSelectedTargetWorker] = useState<string>(currentWorkerName || '');
@@ -44,6 +48,19 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
     return `${year}-${month}-${day}`;
   };
 
+  const normalizeDateStr = (d: any) => {
+    if (!d) return '';
+    if (typeof d === 'string') {
+      const clean = d.split('T')[0].replace(/\//g, '-');
+      const parts = clean.split('-');
+      if (parts.length === 3) {
+        return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      }
+      return clean;
+    }
+    return '';
+  };
+
   const isEventForMe = (event: any) => {
     const target = selectedTargetWorker || currentWorkerName;
     if (!target) return false;
@@ -66,7 +83,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
     };
   });
 
-  const selectedDayEvents = selectedDate ? events.filter(e => e.date === selectedDate) : [];
+  const selectedDayEvents = selectedDate ? events.filter(e => normalizeDateStr(e.date) === selectedDate) : [];
   const selectedDayObj = weekDays.find(d => d.dateStr === selectedDate);
 
   return (
@@ -129,7 +146,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
       <div className="overflow-x-auto pb-4">
         <div className="grid grid-cols-7 gap-2 min-w-[800px]">
           {weekDays.map(day => {
-            let dayEvents = events.filter(e => e.date === day.dateStr || (e.date && e.date.startsWith(day.dateStr)));
+            let dayEvents = events.filter(e => normalizeDateStr(e.date) === day.dateStr);
             if (filterMode === 'mine') {
               dayEvents = dayEvents.filter(isEventForMe);
             }
