@@ -107,17 +107,21 @@ export default function PesticideCheckPage() {
       const data = await res.json();
       setResult(data);
 
-      // 履歴保存（バックグラウンド）
-      const { data: userData } = await supabase.auth.getUser();
-      await supabase.from('pesticide_checks').insert({
-        farm_id: '00000000-0000-0000-0000-000000000001',
-        user_id: userData?.user?.id || null,
-        crop_name: cropName,
-        pesticide_name: pesticideName,
-        target_pest: targetPest,
-        judgment: data.judgment,
-        message: data.message
-      }).catch(() => {});
+      // 履歴保存（バックグラウンド・失敗しても検索結果表示を妨げない）
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        await supabase.from('pesticide_checks').insert({
+          farm_id: '00000000-0000-0000-0000-000000000001',
+          user_id: userData?.user?.id || null,
+          crop_name: cropName,
+          pesticide_name: pesticideName,
+          target_pest: targetPest,
+          judgment: data.judgment,
+          message: data.message
+        });
+      } catch (insertErr) {
+        console.warn('Failed to save search history:', insertErr);
+      }
 
     } catch (err: any) {
       setError(err.message || 'エラーが発生しました');
