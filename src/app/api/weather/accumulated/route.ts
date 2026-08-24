@@ -7,6 +7,7 @@ export async function GET(req: NextRequest) {
     const latStr = searchParams.get('lat') || '35.6895'; // デフォルト東京
     const lngStr = searchParams.get('lng') || '139.6917';
     const startDate = searchParams.get('startDate') || new Date().toISOString().split('T')[0];
+    const endDate = searchParams.get('endDate') || undefined;
     const cropName = searchParams.get('crop') || 'トマト';
     const targetTempStr = searchParams.get('targetTemp');
 
@@ -19,7 +20,8 @@ export async function GET(req: NextRequest) {
       lng,
       startDate,
       cropName,
-      customTargetTemp
+      customTargetTemp,
+      endDate
     );
 
     return NextResponse.json({

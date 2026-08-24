@@ -656,7 +656,7 @@ function CultivationsHubContent() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-4 shrink-0">
+                      <div className="flex items-center gap-3 shrink-0">
                         <div className="text-right">
                           <div className="text-sm font-bold text-slate-800 flex items-center justify-end gap-1">
                             <MapPin className="w-3.5 h-3.5 text-slate-400" />
@@ -667,7 +667,22 @@ function CultivationsHubContent() {
                           </div>
                         </div>
 
-                        <div className="pl-2">
+                        {item.fieldId && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/admin/fields/${item.fieldId}`);
+                            }}
+                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 rounded-xl text-xs font-black transition-colors flex items-center gap-1 border border-slate-200"
+                            title="圃場の気象AIカルテ・生育記録を開く"
+                          >
+                            <Sparkles className="w-3 h-3 text-emerald-600" />
+                            <span>カルテ</span>
+                          </button>
+                        )}
+
+                        <div className="pl-1">
                           <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
                             isSelected
                               ? 'bg-emerald-600 border-emerald-600 text-white'

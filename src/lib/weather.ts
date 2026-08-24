@@ -81,6 +81,9 @@ export interface DailyWeatherData {
 }
 
 export interface AccumulatedWeatherResult {
+  address?: string;             // 逆引き住所（都道府県・市区町村）
+  latitude: number;
+  longitude: number;
   startDate: string;
   endDate: string;
   totalDays: number;
@@ -111,35 +114,74 @@ export interface AccumulatedWeatherResult {
 }
 
 /**
- * 緯度経度・作業開始日から積算気象データおよび収穫予測を取得・計算する
+ * 緯度経度から住所を逆引き取得する（BigDataCloud / OSM）
+ */
+export async function fetchReverseGeocode(lat: number, lng: number): Promise<string> {
+  try {
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=ja`
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const addr = `${data.principalSubdivision || ''}${data.locality || ''}${data.city || ''}`;
+      if (addr.trim()) return addr;
+    }
+  } catch (e) {
+    // フォールバック
+  }
+
+  try {
+    const osmRes = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`,
+      { headers: { 'Accept-Language': 'ja' } }
+    );
+    if (osmRes.ok) {
+      const osmData = await osmRes.json();
+      if (osmData.display_name) {
+        return osmData.display_name.split(',').slice(0, 3).reverse().join(' ');
+      }
+    }
+  } catch (e) {}
+
+  return `北緯${lat.toFixed(4)}°, 東経${lng.toFixed(4)}° 付近`;
+}
+
+/**
+ * 緯度経度・作業開始日・終了日から積算気象データおよび収穫予測を取得・計算する
  */
 export async function fetchFieldAccumulatedWeather(
   latitude: number,
   longitude: number,
   startDateStr: string,
   cropName: string,
-  customTargetTemp?: number
+  customTargetTemp?: number,
+  customEndDateStr?: string
 ): Promise<AccumulatedWeatherResult> {
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
   const startDate = new Date(startDateStr);
+  const targetEndStr = customEndDateStr || todayStr;
   
-  // 日付の安全チェック（未来日の場合は今日を開始日とする）
+  // 日付の安全チェック
   const actualStartStr = startDate > today ? todayStr : startDateStr;
+
+  // 住所の逆引きを並行取得
+  const addressPromise = fetchReverseGeocode(latitude, longitude);
 
   // 目標積算温度の決定
   const cropSetting = getCropTargetTemp(cropName);
   const targetTemp = customTargetTemp || cropSetting.targetTemp;
 
-  // 1. Open-Meteo API から過去実績 + 向こう7日間の予報を取得
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,sunshine_duration,precipitation_sum&start_date=${actualStartStr}&end_date=${addDaysStr(todayStr, 14)}&timezone=Asia%2FTokyo`;
+  // 1. Open-Meteo API から過去実績 + 向こう14日間の予報を取得
+  const forecastEndStr = addDaysStr(targetEndStr > todayStr ? targetEndStr : todayStr, 14);
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,sunshine_duration,precipitation_sum&start_date=${actualStartStr}&end_date=${forecastEndStr}&timezone=Asia%2FTokyo`;
 
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`気象データ取得失敗: ${res.statusText}`);
   }
 
-  const data = await res.json();
+  const [data, resolvedAddress] = await Promise.all([res.json(), addressPromise]);
   const daily = data.daily || {};
   const dates: string[] = daily.time || [];
   const maxTemps: number[] = daily.temperature_2m_max || [];
@@ -273,8 +315,11 @@ export async function fetchFieldAccumulatedWeather(
   }
 
   return {
+    address: resolvedAddress,
+    latitude,
+    longitude,
     startDate: actualStartStr,
-    endDate: todayStr,
+    endDate: targetEndStr,
     totalDays: historyList.length,
     accumulatedTemp: accTemp,
     accumulatedSunshine: accSun,
