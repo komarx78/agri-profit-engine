@@ -141,10 +141,12 @@ export default function PortalPage() {
 
     // 1. タスク (カレンダー用)
     const targetUserId = userId; // userId には既に ownerId が渡されている
-    const { data: taskData } = await supabase.from('work_logs')
-      .select('id, task_title, work_date, status, crops(name), fields(name), workers(id, name)')
+    const { data: taskData, error: taskErr } = await supabase.from('work_logs')
+      .select('id, task_title, work_type, work_date, status, crop_id, field_id, worker_id, crops(name), fields(name), workers(name)')
       .eq('user_id', targetUserId)
-      .eq('status', 'planned');
+      .eq('status', 'planned')
+      .order('work_date', { ascending: true });
+    if (taskErr) console.error('Task fetch error:', taskErr);
     if (taskData) setTasks(taskData);
 
     // 2. 承認待ち (現場スタッフが完了報告した作業: status='completed' かつ approval_status='pending')
@@ -468,16 +470,25 @@ export default function PortalPage() {
     );
   }
 
-  const calendarEvents = tasks.map(t => ({
-    id: t.id,
-    title: t.task_title || '作業',
-    date: t.work_date,
-    workerId: t.workers?.id || '',
-    workerName: t.workers ? t.workers.name : '全体',
-    fieldName: t.fields ? t.fields.name : '',
-    cropName: t.crops ? t.crops.name : '',
-    color: '#10B981'
-  }));
+  const calendarEvents = tasks.map(t => {
+    let wName = t.workers ? t.workers.name : '';
+    if (!wName && t.worker_id && allWorkers && allWorkers.length > 0) {
+      const foundW = allWorkers.find((w: any) => w.id === t.worker_id);
+      if (foundW) wName = foundW.name;
+    }
+    if (!wName) wName = '全体';
+
+    return {
+      id: t.id,
+      title: t.task_title || t.work_type || '作業',
+      date: t.work_date,
+      workerId: t.worker_id || (t.workers?.id || ''),
+      workerName: wName,
+      fieldName: t.fields ? t.fields.name : '',
+      cropName: t.crops ? t.crops.name : '',
+      color: '#10B981'
+    };
+  });
 
   const hasClockedIn = attendance && attendance.clock_in;
   const hasClockedOut = attendance && attendance.clock_out;
