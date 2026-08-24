@@ -13,14 +13,14 @@ export async function getFarmInfo(tenantId: string): Promise<{ success: boolean;
   try {
     const supabase = createAdminClient();
     
-    if (!tenantId || tenantId.length !== 36) {
+    if (!tenantId) {
       return { success: false, error: '農園URL（ID）が正しくありません。' };
     }
 
     const { data, error } = await supabase
       .from('company_settings')
-      .select('user_id, company_name, plan_type')
-      .eq('user_id', tenantId)
+      .select('id, user_id, company_name, plan_type')
+      .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
       .maybeSingle();
 
     if (error || !data) {
@@ -30,7 +30,7 @@ export async function getFarmInfo(tenantId: string): Promise<{ success: boolean;
     return { 
       success: true, 
       data: { 
-        id: data.user_id, 
+        id: data.user_id || data.id, 
         company_name: data.company_name || '名称未設定の農園',
         plan_type: data.plan_type || 'standard'
       } 
@@ -50,11 +50,22 @@ export async function getFarmWorkers(tenantId: string) {
       return { success: false, error: '農園IDが指定されていません。' };
     }
 
-    // 指定された農園（tenantId）の作業者のみを厳格に取得
+    // まず tenantId から実際の ownerId (user_id) を解決
+    let ownerId = tenantId;
+    const { data: comp } = await supabase
+      .from('company_settings')
+      .select('user_id')
+      .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+      .maybeSingle();
+    if (comp && comp.user_id) {
+      ownerId = comp.user_id;
+    }
+
+    // 指定された農園（ownerId）の作業者のみを厳格に取得
     const { data, error } = await supabase
       .from('workers')
-      .select('id, name')
-      .eq('user_id', tenantId)
+      .select('id, name, name_en, name_vi, name_id, name_zh, name_si, name_km, role, pin_code, user_id')
+      .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`)
       .order('name');
       
     if (error) throw error;
@@ -68,11 +79,23 @@ export async function getFarmWorkers(tenantId: string) {
 export async function verifyWorkerPin(tenantId: string, workerId: string, pinCode: string) {
   try {
     const supabase = createAdminClient();
+
+    // ownerId を解決
+    let ownerId = tenantId;
+    const { data: comp } = await supabase
+      .from('company_settings')
+      .select('user_id')
+      .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+      .maybeSingle();
+    if (comp && comp.user_id) {
+      ownerId = comp.user_id;
+    }
+
     const { data, error } = await supabase
       .from('workers')
       .select('id, name, pin_code, role, user_id')
       .eq('id', workerId)
-      .eq('user_id', tenantId)
+      .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`)
       .single();
 
     if (error || !data) {
@@ -87,7 +110,7 @@ export async function verifyWorkerPin(tenantId: string, workerId: string, pinCod
     // パスワード等は除外して返す
     return { 
       success: true, 
-      data: { id: data.id, name: data.name, role: data.role || 'staff' } 
+      data: { id: data.id, name: data.name, role: data.role || 'staff', user_id: data.user_id } 
     };
   } catch (error: any) {
     return { success: false, error: '認証エラーが発生しました。' };
@@ -104,10 +127,21 @@ export async function getFarmMasters(tenantId: string) {
       return { success: false, error: '農園IDが指定されていません。' };
     }
 
+    // ownerId を解決
+    let ownerId = tenantId;
+    const { data: comp } = await supabase
+      .from('company_settings')
+      .select('user_id')
+      .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+      .maybeSingle();
+    if (comp && comp.user_id) {
+      ownerId = comp.user_id;
+    }
+
     const [cRes, fRes, mRes, pRes] = await Promise.all([
-      supabase.from('crops').select('id, name').eq('user_id', tenantId).order('name'),
-      supabase.from('fields').select('id, name, area_size').eq('user_id', tenantId).order('name'),
-      supabase.from('materials').select('*').eq('user_id', tenantId).order('name'),
+      supabase.from('crops').select('id, name').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).order('name'),
+      supabase.from('fields').select('id, name, area_size').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).order('name'),
+      supabase.from('materials').select('*').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).order('name'),
       supabase.from('cultivation_plans_v2').select(`
         id, 
         field_id, 
@@ -116,7 +150,7 @@ export async function getFarmMasters(tenantId: string) {
         start_month, 
         end_month,
         crops ( name )
-      `).eq('user_id', tenantId).eq('year', currentYear)
+      `).or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).eq('year', currentYear)
     ]);
 
     return {
@@ -280,11 +314,21 @@ export async function getPortalTasks(tenantId: string) {
     const supabase = createAdminClient();
     if (!tenantId) return { success: false, data: [] };
 
+    // ownerId を解決
+    let ownerId = tenantId;
+    const { data: comp } = await supabase
+      .from('company_settings')
+      .select('user_id')
+      .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+      .maybeSingle();
+    if (comp && comp.user_id) {
+      ownerId = comp.user_id;
+    }
+
     const { data, error } = await supabase
       .from('work_logs')
       .select('id, task_title, work_type, work_date, status, crop_id, field_id, worker_id, crops(name), fields(name), workers(name)')
-      .eq('user_id', tenantId)
-      .eq('status', 'planned')
+      .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`)
       .order('work_date', { ascending: true });
 
     if (error) throw error;
