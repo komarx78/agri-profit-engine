@@ -37,6 +37,13 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
     }
   };
 
+  const formatLocalDate = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const isEventForMe = (event: any) => {
     const target = selectedTargetWorker || currentWorkerName;
     if (!target) return false;
@@ -50,9 +57,10 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
   const weekDays = Array.from({ length: 7 }).map((_, i) => {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
+    const dateStr = formatLocalDate(d);
     return {
       dateObj: d,
-      dateStr: d.toISOString().split('T')[0],
+      dateStr: dateStr,
       dayName: getWeekDaysArray(language)[d.getDay()],
       isToday: i === 0
     };
@@ -121,7 +129,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
       <div className="overflow-x-auto pb-4">
         <div className="grid grid-cols-7 gap-2 min-w-[800px]">
           {weekDays.map(day => {
-            let dayEvents = events.filter(e => e.date === day.dateStr);
+            let dayEvents = events.filter(e => e.date === day.dateStr || (e.date && e.date.startsWith(day.dateStr)));
             if (filterMode === 'mine') {
               dayEvents = dayEvents.filter(isEventForMe);
             }
