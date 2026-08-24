@@ -107,7 +107,8 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           name_zh: data.name_zh,
           name_si: data.name_si,
           name_km: data.name_km,
-          role: data.role || 'staff'
+          role: data.role || 'staff',
+          user_id: data.user_id
         };
 
         localStorage.setItem('agri_current_worker', JSON.stringify(user));

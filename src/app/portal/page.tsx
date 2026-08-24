@@ -109,7 +109,21 @@ export default function PortalPage() {
             profile = workerData;
             setWorkerProfile(workerData);
             setCurrentUser(workerData);
-            ownerId = localStorage.getItem('agri_owner_id') || ''; // 正しいオーナーIDを取得
+            
+            // ワーカーの所属農園ID（user_id）を最優先で確定
+            ownerId = workerData.user_id || localStorage.getItem('agri_owner_id') || '';
+            
+            // 旧キャッシュ対策：もしownerIdが空なら、自身(workerData.id)からDBを参照して農園IDを自己修復
+            if (!ownerId && workerData.id) {
+              const { data: wRecord } = await supabase.from('workers').select('user_id').eq('id', workerData.id).maybeSingle();
+              if (wRecord && wRecord.user_id) {
+                ownerId = wRecord.user_id;
+              }
+            }
+
+            if (ownerId) {
+              localStorage.setItem('agri_owner_id', ownerId);
+            }
             
             // ワーカー用に会社名を取得 (ownerIdから)
             const { data: companyData } = await supabase.from('company_settings').select('company_name').eq('user_id', ownerId).maybeSingle();
