@@ -199,7 +199,7 @@ export default function PortalPage() {
     } else {
       // クライアント側でもフォールバック試行
       const { data: taskData } = await supabase.from('work_logs')
-        .select('id, task_title, work_type, work_date, status, crop_id, field_id, worker_id, crops(*), fields(*), workers(*)')
+        .select('*, crops(*), fields(*), workers(*)')
         .eq('user_id', targetUserId)
         .eq('status', 'planned')
         .order('work_date', { ascending: true });

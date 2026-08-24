@@ -411,8 +411,8 @@ export function getTranslatedWorkType(text: string, lang: LanguageCode = 'ja'): 
     return dict[text][lang];
   }
 
-  // テスト1, テスト2 などの正規表現対応
-  const testMatch = text.match(/^テスト(\d+)$/);
+  // テスト1, テスト 2 などの正規表現対応
+  const testMatch = text.match(/^テスト\s*([0-9０-９]+)$/);
   if (testMatch) {
     const num = testMatch[1];
     const prefix = dict['テスト']?.[lang] || 'Test';

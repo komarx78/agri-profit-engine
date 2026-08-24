@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Clock, MapPin, Sprout, Users, X, Calendar as CalendarIcon, ChevronRight, UserCheck, Star, Sparkles } from 'lucide-react';
+import { getTranslatedWorkType } from '@/lib/i18n';
 
 interface CalendarProps {
   t: (key: string, lang?: any) => string;
@@ -190,7 +191,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                             )}
                           </div>
                           <h4 className={`text-xs leading-snug break-words ${isMine ? 'font-black text-amber-950' : 'font-black text-slate-800'}`}>
-                            {event.title}
+                            {getTranslatedWorkType(event.title, language as any) || event.title}
                           </h4>
                           
                           {/* 誰が・どこで の簡易表示 */}
@@ -198,13 +199,16 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                             {event.workerName && (
                               <div className={`flex items-center gap-1 text-[10px] font-bold truncate ${isMine ? 'text-amber-800' : 'text-slate-500'}`}>
                                 <Users className={`w-3 h-3 flex-shrink-0 ${isMine ? 'text-amber-600' : 'text-blue-500'}`} />
-                                <span className="truncate">{event.workerName} {isMine && ` ${t('cal_meTag', language)}`}</span>
+                                <span className="truncate">{getTranslatedWorkType(event.workerName, language as any) || event.workerName} {isMine && ` ${t('cal_meTag', language)}`}</span>
                               </div>
                             )}
                             {(event.fieldName || event.cropName) && (
                               <div className="flex items-center gap-1 text-[10px] text-slate-500 font-bold truncate">
                                 <MapPin className="w-3 h-3 text-emerald-500 flex-shrink-0" />
-                                <span className="truncate">{event.fieldName} {event.cropName && `(${event.cropName})`}</span>
+                                <span className="truncate">
+                                  {getTranslatedWorkType(event.fieldName, language as any) || event.fieldName} 
+                                  {event.cropName && ` (${getTranslatedWorkType(event.cropName, language as any) || event.cropName})`}
+                                </span>
                               </div>
                             )}
                           </div>
@@ -276,7 +280,9 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                             </span>
                           )}
                         </div>
-                        <h4 className="font-black text-slate-800 text-base mb-3">{event.title}</h4>
+                        <h4 className="font-black text-slate-800 text-base mb-3">
+                          {getTranslatedWorkType(event.title, language as any) || event.title}
+                        </h4>
                         
                         <div className="grid grid-cols-2 gap-3">
                           <div className={`p-3 rounded-xl border ${isMine ? 'bg-amber-50/60 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
@@ -284,7 +290,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                               <Users className="w-3 h-3" /> 担当者 (誰が)
                             </div>
                             <div className={`font-bold text-sm ${isMine ? 'text-amber-900 font-black' : 'text-slate-700'}`}>
-                              {event.workerName || '全体'} {isMine && '(自分)'}
+                              {getTranslatedWorkType(event.workerName, language as any) || event.workerName || '全体'} {isMine && '(自分)'}
                             </div>
                           </div>
                           
@@ -293,8 +299,8 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                               <MapPin className="w-3 h-3" /> 場所 (どこで)
                             </div>
                             <div className="font-bold text-slate-700 text-sm line-clamp-2">
-                              {event.fieldName || '-'} 
-                              {event.cropName && <span className="text-amber-600 ml-1">({event.cropName})</span>}
+                              {getTranslatedWorkType(event.fieldName, language as any) || event.fieldName || '-'} 
+                              {event.cropName && <span className="text-amber-600 ml-1">({getTranslatedWorkType(event.cropName, language as any) || event.cropName})</span>}
                             </div>
                           </div>
                         </div>
