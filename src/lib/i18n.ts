@@ -340,3 +340,51 @@ export function getTranslatedName(item: any, lang: LanguageCode = 'ja'): string 
   // 翻訳名が存在すればそれを返し、なければ英語名、それでもなければ日本語名をフォールバックとして返す
   return item[langKey] || item.name_en || item.name || '';
 }
+
+// 作業種別・タスクタイトルの多言語翻訳関数
+export function getTranslatedWorkType(text: string, lang: LanguageCode = 'ja'): string {
+  if (!text) return '';
+  if (lang === 'ja') return text;
+
+  // 1. 翻訳辞書に完全一致するもの
+  if (TRANSLATIONS[text] && TRANSLATIONS[text][lang]) {
+    return TRANSLATIONS[text][lang];
+  }
+
+  // 2. 代表的な農作業用語・テスト等のキーワード辞書
+  const dict: Record<string, Record<string, string>> = {
+    'テスト': { en: 'Test', vi: 'Kiểm tra (Test)', id: 'Uji Coba', zh: '测试', si: 'පරීක්ෂණය', km: 'ការសាកល្បង' },
+    '作業': { en: 'Work', vi: 'Công việc', id: 'Pekerjaan', zh: '作业', si: 'වැඩ', km: 'ការងារ' },
+    '播種': { en: 'Sowing', vi: 'Gieo hạt', id: 'Menabur', zh: '播种', si: 'බීජ වැපිරීම', km: 'ការសាបព្រោះ' },
+    '定植': { en: 'Planting', vi: 'Trồng cây', id: 'Menanam', zh: '定植', si: 'පැල සිටුවීම', km: 'ការដាំកូនឈើ' },
+    '水やり': { en: 'Watering', vi: 'Tưới nước', id: 'Menyiram', zh: '浇水', si: 'වතුර දැමීම', km: 'ការស្រោចទឹក' },
+    '水やり・追肥': { en: 'Watering/Fertilizing', vi: 'Tưới nước/Bón phân', id: 'Menyiram/Memupuk', zh: '浇水/追肥', si: 'වතුර දැමීම / පොහොර යෙදීම', km: 'ស្រោចទឹក / ដាក់ជី' },
+    '追肥': { en: 'Fertilizing', vi: 'Bón phân', id: 'Pemupukan', zh: '追肥', si: 'පොහොර යෙදීම', km: 'ការដាក់ជី' },
+    '収穫': { en: 'Harvesting', vi: 'Thu hoạch', id: 'Memanen', zh: '收获', si: 'අස්වනු නෙලීම', km: 'ការប្រមូលផល' },
+    '収穫・調整': { en: 'Harvesting/Adjustment', vi: 'Thu hoạch/Điều chỉnh', id: 'Memanen/Penyesuaian', zh: '采收/分选', si: 'අස්වනු නෙලීම / සකස් කිරීම', km: 'ប្រមូលផល / កែសម្រួល' },
+    '草引き': { en: 'Weeding', vi: 'Nhổ cỏ', id: 'Mencabut rumput', zh: '拔草', si: 'වල් නෙලීම', km: 'ការដកស្មៅ' },
+    '草刈り': { en: 'Mowing', vi: 'Cắt cỏ', id: 'Membabat rumput', zh: '除草', si: 'තණකොළ කැපීම', km: 'ការកាត់ស្មៅ' },
+    '除草': { en: 'Weeding', vi: 'Diệt cỏ', id: 'Pengendalian gulma', zh: '除草', si: 'වල් මර්දනය', km: 'ការកម្ចាត់ស្មៅ' },
+    '草引き・防除': { en: 'Weeding/Pest control', vi: 'Làm cỏ/Kiểm soát dịch hại', id: 'Menyiangi/Pengendalian hama', zh: '除草/病虫害防治', si: 'වල් නෙලීම / පළිබෝධ පාලනය', km: 'ដកស្មៅ / កម្ចាត់សត្វល្អិត' },
+    '防除': { en: 'Pest Control', vi: 'Phòng trừ sâu bệnh', id: 'Pengendalian Hama', zh: '病虫防治', si: 'පළිබෝධ පාලනය', km: 'ការគ្រប់គ្រងសត្វល្អិត' },
+    '消毒': { en: 'Disinfection', vi: 'Khử trùng / Phun thuốc', id: 'Disinfeksi', zh: '消毒', si: 'විෂබීජහරණය', km: 'ការសម្លាប់មេរោគ' },
+    '片付け': { en: 'Cleanup', vi: 'Dọn dẹp', id: 'Pembersihan', zh: '清理', si: 'පිරිසිදු කිරීම', km: 'ការសម្អាត' },
+    '片付け・その他': { en: 'Cleanup/Other', vi: 'Dọn dẹp/Khác', id: 'Pembersihan/Lainnya', zh: '整理/其他', si: 'පිරිසිදු කිරීම / වෙනත්', km: 'ការសម្អាត / ផ្សេងៗ' },
+    '出荷': { en: 'Shipping', vi: 'Xuất hàng', id: 'Pengiriman', zh: '发货', si: 'නැව්ගත කිරීම', km: 'ការដឹកជញ្ជូន' },
+    '選別': { en: 'Sorting', vi: 'Phân loại', id: 'Sortir', zh: '分选', si: 'වර්ග කිරීම', km: 'ការតម្រៀប' },
+    '袋詰め': { en: 'Bagging / Packing', vi: 'Đóng gói túi', id: 'Pengemasan', zh: '装袋打包', si: 'ඇසුරුම් කිරීම', km: 'ការវេចខ្ចប់' }
+  };
+
+  if (dict[text] && dict[text][lang]) {
+    return dict[text][lang];
+  }
+
+  // 部分一致照合
+  for (const key of Object.keys(dict)) {
+    if (text.includes(key) && dict[key][lang]) {
+      return text.replace(key, dict[key][lang]);
+    }
+  }
+
+  return text;
+}

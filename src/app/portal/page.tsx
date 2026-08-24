@@ -11,9 +11,10 @@ import {
   Coffee, CalendarPlus, CheckCircle, UserCheck
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
+import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
 import { getPortalTasks } from '@/app/actions/farm';
+import { translateSingleText } from '@/app/actions/translate';
 
 const CalendarWrapper = dynamic(() => import('@/components/CalendarWrapper'), { 
   ssr: false, 
@@ -43,6 +44,7 @@ export default function PortalPage() {
   
   // Data States
   const [tasks, setTasks] = useState<any[]>([]);
+  const [dynamicTranslations, setDynamicTranslations] = useState<{ [rawText: string]: string }>({});
   const [pendingApprovals, setPendingApprovals] = useState<any[]>([]);
   const [boardPosts, setBoardPosts] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<any>(null);
@@ -56,6 +58,41 @@ export default function PortalPage() {
   const [replyInputs, setReplyInputs] = useState<{ [postId: string]: string }>({});
   const [isSubmittingReply, setIsSubmittingReply] = useState<{ [postId: string]: boolean }>({});
   const [openReplyThread, setOpenReplyThread] = useState<{ [postId: string]: boolean }>({});
+
+  // 自由入力タスクタイトルのリアルタイム自動翻訳
+  useEffect(() => {
+    if (language === 'ja' || tasks.length === 0) return;
+
+    const translateTitles = async () => {
+      const untranslated: string[] = [];
+      tasks.forEach(t => {
+        const title = t.task_title || t.work_type;
+        if (title && !dynamicTranslations[title]) {
+          untranslated.push(title);
+        }
+      });
+
+      if (untranslated.length === 0) return;
+
+      const uniqueList = Array.from(new Set(untranslated));
+      const newMap = { ...dynamicTranslations };
+
+      await Promise.all(
+        uniqueList.map(async (rawText) => {
+          try {
+            const trans = await translateSingleText(rawText, language);
+            if (trans) newMap[rawText] = trans;
+          } catch (e) {
+            console.error('Translation error:', e);
+          }
+        })
+      );
+
+      setDynamicTranslations(newMap);
+    };
+
+    translateTitles();
+  }, [language, tasks]);
 
   // 有給・休暇関連ステート
   const [leaveBalance, setLeaveBalance] = useState<{ carryover: number; balance: number; total: number } | null>(null);
@@ -491,21 +528,31 @@ export default function PortalPage() {
   }
 
   const calendarEvents = tasks.map(t => {
-    let wName = t.workers ? t.workers.name : '';
-    if (!wName && t.worker_id && allWorkers && allWorkers.length > 0) {
-      const foundW = allWorkers.find((w: any) => w.id === t.worker_id);
-      if (foundW) wName = foundW.name;
+    let wObj = t.workers;
+    let wName = '';
+    if (!wObj && t.worker_id && allWorkers && allWorkers.length > 0) {
+      wObj = allWorkers.find((w: any) => w.id === t.worker_id);
     }
-    if (!wName) wName = '全体';
+    if (wObj) {
+      wName = getTranslatedName(wObj, language);
+    } else {
+      wName = language === 'vi' ? 'Toàn bộ' : language === 'en' ? 'All' : '全体';
+    }
+
+    const fieldName = t.fields ? getTranslatedName(t.fields, language) : '';
+    const cropName = t.crops ? getTranslatedName(t.crops, language) : '';
+    
+    const rawTitle = t.task_title || t.work_type || '作業';
+    const translatedTitle = dynamicTranslations[rawTitle] || getTranslatedWorkType(rawTitle, language);
 
     return {
       id: t.id,
-      title: t.task_title || t.work_type || '作業',
+      title: translatedTitle,
       date: t.work_date,
       workerId: t.worker_id || (t.workers?.id || ''),
       workerName: wName,
-      fieldName: t.fields ? t.fields.name : '',
-      cropName: t.crops ? t.crops.name : '',
+      fieldName: fieldName,
+      cropName: cropName,
       color: '#10B981'
     };
   });

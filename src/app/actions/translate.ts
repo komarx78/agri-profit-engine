@@ -62,3 +62,11 @@ export async function autoTranslateMasterData(name: string) {
     return { name_en: '', name_vi: '', name_id: '', name_zh: '', name_si: '', name_km: '' };
   }
 }
+
+// 自由入力テキスト（タスク名など）を任意の言語へ単発翻訳する関数
+export async function translateSingleText(text: string, targetLang: string): Promise<string> {
+  if (!text || targetLang === 'ja') return text;
+  const langCode = targetLang === 'zh' ? 'zh-CN' : targetLang;
+  return await translateTextFree(text, langCode);
+}
+
