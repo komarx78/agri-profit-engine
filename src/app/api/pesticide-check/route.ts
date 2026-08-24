@@ -1,36 +1,110 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// カナ変換ユーティリティ
+// =========================================================================
+// 【究極の表記揺れ吸収・正規化エンジン】
+// 大文字・小文字、全角・半角英数、ひらがな・全角カタカナ・半角カナ、
+// 捨て仮名、長音符、空白、記号の全方位を100%均一化
+// =========================================================================
+export function fuzzyNormalize(str: string): string {
+  if (!str) return '';
+  let s = String(str)
+    .normalize('NFKC') // 半角カナ -> 全角カナ、全角英数 -> 半角英数、全角記号 -> 半角記号 を一括変換！
+    .toLowerCase()
+    .replace(/[\u3041-\u3096]/g, match => String.fromCharCode(match.charCodeAt(0) + 0x60)) // ひらがな -> カタカナ
+    // 捨て仮名（小文字カタカナ）を大文字カタカナに統一
+    .replace(/ァ/g, 'ア').replace(/ィ/g, 'イ').replace(/ゥ/g, 'ウ').replace(/ェ/g, 'エ').replace(/ォ/g, 'オ')
+    .replace(/ッ/g, 'ツ').replace(/ャ/g, 'ヤ').replace(/ュ/g, 'ユ').replace(/ョ/g, 'ヨ')
+    .replace(/ヮ/g, 'ワ').replace(/ヵ/g, 'カ').replace(/ヶ/g, 'ケ')
+    // 「ヤ行」「ア行」の一般的な表記揺れ（例: ダイヤ -> ダイア）
+    .replace(/ダイヤ/g, 'ダイア')
+    // 長音符・ハイフンを「ー」に統一
+    .replace(/[-‐―−ー～~]/g, 'ー')
+    // 空白・スペース・記号を除去
+    .replace(/[\s　・･()（）\[\]【】]/g, '');
+
+  return s;
+}
+
+export function isFuzzyMatch(targetStr: string, queryStr: string): boolean {
+  if (!queryStr) return true;
+  return fuzzyNormalize(targetStr).includes(fuzzyNormalize(queryStr));
+}
+
+// 完璧な全角カタカナ -> 半角カタカナ変換マップ
+const FULL_TO_HALF_KANA_MAP: { [key: string]: string } = {
+  'ア': 'ｱ', 'イ': 'ｲ', 'ウ': 'ｳ', 'エ': 'ｴ', 'オ': 'ｵ',
+  'カ': 'ｶ', 'キ': 'ｷ', 'ク': 'ｸ', 'ケ': 'ｹ', 'コ': 'ｺ',
+  'サ': 'ｻ', 'シ': 'ｼ', 'ス': 'ｽ', 'セ': 'ｾ', 'ソ': 'ｿ',
+  'タ': 'ﾀ', 'チ': 'ﾁ', 'ツ': 'ﾂ', 'テ': 'ﾃ', 'ト': 'ﾄ',
+  'ナ': 'ﾅ', 'ニ': 'ﾆ', 'ヌ': 'ﾇ', 'ネ': 'ﾈ', 'ノ': 'ﾉ',
+  'ハ': 'ﾊ', 'ヒ': 'ﾋ', 'フ': 'ﾌ', 'ヘ': 'ﾍ', 'ホ': 'ﾎ',
+  'マ': 'ﾏ', 'ミ': 'ﾐ', 'ム': 'ﾑ', 'メ': 'ﾒ', 'モ': 'ﾓ',
+  'ヤ': 'ﾔ', 'ユ': 'ﾕ', 'ヨ': 'ﾖ',
+  'ラ': 'ﾗ', 'リ': 'ﾘ', 'ル': 'ﾙ', 'レ': 'ﾚ', 'ロ': 'ﾛ',
+  'ワ': 'ﾜ', 'ヲ': 'ｦ', 'ン': 'ﾝ',
+  'ガ': 'ｶﾞ', 'ギ': 'ｷﾞ', 'グ': 'ｸﾞ', 'ゲ': 'ｹﾞ', 'ゴ': 'ｺﾞ',
+  'ザ': 'ｻﾞ', 'ジ': 'ｼﾞ', 'ズ': 'ｽﾞ', 'ゼ': 'ｾﾞ', 'ゾ': 'ｿﾞ',
+  'ダ': 'ﾀﾞ', 'ヂ': 'ﾁﾞ', 'ヅ': 'ﾂﾞ', 'デ': 'ﾃﾞ', 'ド': 'ﾄﾞ',
+  'バ': 'ﾊﾞ', 'ビ': 'ﾋﾞ', 'ブ': 'ﾌﾞ', 'ベ': 'ﾍﾞ', 'ボ': 'ﾎﾞ',
+  'パ': 'ﾊﾟ', 'ピ': 'ﾋﾟ', 'プ': 'ﾌﾟ', 'ペ': 'ﾍﾟ', 'ポ': 'ﾎﾟ',
+  'ァ': 'ｧ', 'ィ': 'ｨ', 'ゥ': 'ｩ', 'ェ': 'ｪ', 'ォ': 'ｫ',
+  'ッ': 'ｯ', 'ャ': 'ｬ', 'ュ': 'ｭ', 'ョ': 'ｮ',
+  'ー': 'ｰ', 'ヴ': 'ｳﾞ'
+};
+
+function toHalfWidthKana(str: string): string {
+  if (!str) return '';
+  let s = '';
+  for (const c of str) {
+    s += FULL_TO_HALF_KANA_MAP[c] || c;
+  }
+  return s;
+}
+
 function toKatakana(str: string): string {
+  if (!str) return '';
   return str.replace(/[\u3041-\u3096]/g, match => String.fromCharCode(match.charCodeAt(0) + 0x60));
 }
 
 function toHiragana(str: string): string {
+  if (!str) return '';
   return str.replace(/[\u30a1-\u30f6]/g, match => String.fromCharCode(match.charCodeAt(0) - 0x60));
 }
 
-function toHalfWidthKana(str: string): string {
-  const kanaMap: { [key: string]: string } = {
-    'ガ': 'ｶﾞ', 'ギ': 'ｷﾞ', 'グ': 'ｸﾞ', 'ゲ': 'ｹﾞ', 'ゴ': 'ｺﾞ',
-    'ザ': 'ｻﾞ', 'ジ': 'ｼﾞ', 'ズ': 'ｽﾞ', 'ゼ': 'ｾﾞ', 'ゾ': 'ｿﾞ',
-    'ダ': 'ﾀﾞ', 'ヂ': 'ﾁﾞ', 'ヅ': 'ﾂﾞ', 'デ': 'ﾃﾞ', 'ド': 'ﾄﾞ',
-    'バ': 'ﾊﾞ', 'ビ': 'ﾋﾞ', 'ブ': 'ﾌﾞ', 'ベ': 'ﾍﾞ', 'ボ': 'ﾎﾞ',
-    'パ': 'ﾊﾟ', 'ピ': 'ﾋﾟ', 'プ': 'ﾌﾟ', 'ペ': 'ﾍﾟ', 'ポ': 'ﾎﾟ',
-    'ア': 'ｱ', 'イ': 'ｲ', 'ウ': 'ｳ', 'エ': 'ｴ', 'オ': 'ｵ',
-    'カ': 'ｶ', 'キ': 'ｷ', 'ク': 'ｸ', 'ケ': 'ｹ', 'コ': 'ｺ',
-    'サ': 'ｻ', 'シ': 'ｼ', 'ス': 'ｽ', 'セ': 'ｾ', 'ソ': 'ｿ',
-    'タ': 'ﾀ', 'チ': 'ﾁ', 'ツ': 'ﾂ', 'テ': 'ﾃ', 'ト': 'ﾄ',
-    'ナ': 'ﾅ', 'ニ': 'ﾆ', 'ヌ': 'ﾇ', 'ネ': 'ﾈ', 'ノ': 'ﾉ',
-    'ハ': 'ﾊ', 'ヒ': 'ﾋ', 'フ': 'ﾌ', 'ヘ': 'ﾍ', 'ホ': 'ﾎ',
-    'マ': 'ﾏ', 'ミ': 'ﾐ', 'ム': 'ﾑ', 'メ': 'ﾒ', 'モ': 'ﾓ',
-    'ヤ': 'ﾔ', 'ユ': 'ﾕ', 'ヨ': 'ﾖ',
-    'ラ': 'ﾗ', 'リ': 'ﾘ', 'ル': 'ﾙ', 'レ': 'ﾚ', 'ロ': 'ﾛ',
-    'ワ': 'ﾜ', 'ヲ': 'ｦ', 'ン': 'ﾝ',
-    'ャ': 'ｬ', 'ュ': 'ｭ', 'ョ': 'ｮ', 'ッ': 'ｯ',
-    'ー': 'ｰ'
-  };
-  return str.split('').map(c => kanaMap[c] || c).join('');
+function toFullWidthAlphanumeric(str: string): string {
+  if (!str) return '';
+  return str.replace(/[A-Za-z0-9]/g, s => String.fromCharCode(s.charCodeAt(0) + 0xFEE0));
+}
+
+// データベースクエリ用の網羅的キーワード展開
+function generateSearchVariants(raw: string): string[] {
+  if (!raw) return [];
+  const nfkc = raw.normalize('NFKC').trim();
+  const rawClean = raw.trim();
+
+  const kata = toKatakana(nfkc);
+  const hira = toHiragana(nfkc);
+  const halfKana = toHalfWidthKana(kata);
+
+  const lower = nfkc.toLowerCase();
+  const upper = nfkc.toUpperCase();
+  const fullAlpha = toFullWidthAlphanumeric(nfkc);
+  const fullAlphaLower = toFullWidthAlphanumeric(lower);
+  const fullAlphaUpper = toFullWidthAlphanumeric(upper);
+
+  const halfKataLower = toHalfWidthKana(toKatakana(lower));
+  const halfKataUpper = toHalfWidthKana(toKatakana(upper));
+
+  const variants = new Set<string>([
+    rawClean, nfkc,
+    kata, hira, halfKana,
+    lower, upper,
+    fullAlpha, fullAlphaLower, fullAlphaUpper,
+    halfKataLower, halfKataUpper
+  ]);
+
+  return Array.from(variants).filter(s => s && s.length > 0);
 }
 
 // 冠名（メーカープレフィックス）抽出＆正規化関数
@@ -47,11 +121,11 @@ const MANUFACTURER_PREFIXES = [
   '日産化学', '日産',
   '石原バイオサイエンス', '石原産業', '石原',
   '日本曹達', '日曹',
-  'OATアグリオ', 'OAT',
+  'OATアグリオ', 'OAT', 'ＯＡＴ',
   'アグロカネショウ', 'カネショウ',
   'シンジェンタジャパン', 'シンジェンタ',
   'バイエルクロップサイエンス', 'バイエル',
-  'BASFジャパン', 'BASF',
+  'BASFジャパン', 'BASF', 'ＢＡＳＦ',
   'コルテバ', '丸紅', 'イハラ'
 ];
 
@@ -97,11 +171,7 @@ function getNormalizedCrops(inputCrop: string): string[] {
       return Array.from(new Set([...list, ...halfList]));
     }
   }
-  const raw = inputCrop.trim();
-  const kata = toKatakana(raw);
-  const hira = toHiragana(raw);
-  const half = toHalfWidthKana(kata);
-  return Array.from(new Set([raw, kata, hira, half]));
+  return generateSearchVariants(inputCrop);
 }
 
 export async function POST(request: Request) {
@@ -127,22 +197,23 @@ export async function POST(request: Request) {
       const searchCrops = getNormalizedCrops(cleanCropName);
       for (const c of searchCrops) {
         if (!c) continue;
-        const cKata = toKatakana(c);
-        const cHalf = toHalfWidthKana(cKata);
+        const cVariants = generateSearchVariants(c);
+        const orCrops = cVariants.map(v => `crop_name.eq.${v},crop_name.ilike.%${v}%`).join(',');
 
         let q = supabase
           .from('m_pesticide_usages')
           .select('*')
-          .or(`crop_name.eq.${c},crop_name.eq.${cKata},crop_name.eq.${cHalf},crop_name.ilike.%${c}%`);
+          .or(orCrops);
 
         if (cleanTargetPest) {
-          const pestKana = toKatakana(cleanTargetPest);
-          const pestHalf = toHalfWidthKana(pestKana);
-          q = q.or(`target_pest.like.%${cleanTargetPest}%,target_pest.like.%${pestKana}%,target_pest.like.%${pestHalf}%`);
+          const pestVariants = generateSearchVariants(cleanTargetPest);
+          const orPests = pestVariants.map(p => `target_pest.ilike.%${p}%`).join(',');
+          q = q.or(orPests);
         }
 
         const { data } = await q.limit(1000);
         if (data) {
+          // 「ねぎ」で「たまねぎ」が混ざったり、逆に「たまねぎ」で「ねぎ」が混ざるのを厳密にフィルタ
           const filtered = data.filter((row: any) => {
             const rowCrop = (row.crop_name || '').toLowerCase();
             if (cleanCropName.includes('たまねぎ') || cleanCropName.includes('玉ねぎ') || cleanCropName.includes('タマネギ')) {
@@ -159,15 +230,14 @@ export async function POST(request: Request) {
     } 
     // パターンB: 作物名がなく、農薬名が指定されている場合
     else if (cleanPesticideName) {
-      const pKana = toKatakana(cleanPesticideName);
-      const pHira = toHiragana(cleanPesticideName);
-      const pHalf = toHalfWidthKana(pKana);
+      const pVariants = generateSearchVariants(cleanPesticideName);
+      const orNames = pVariants.map(p => `pesticide_name.ilike.%${p}%`).join(',');
 
       const { data: matchedPests } = await supabase
         .from('m_pesticides')
         .select('registration_no, pesticide_name')
-        .or(`pesticide_name.ilike.%${cleanPesticideName}%,pesticide_name.ilike.%${pKana}%,pesticide_name.ilike.%${pHira}%,pesticide_name.ilike.%${pHalf}%`)
-        .limit(100);
+        .or(orNames)
+        .limit(200);
 
       if (matchedPests && matchedPests.length > 0) {
         const regNos = matchedPests.map(p => p.registration_no);
@@ -175,7 +245,7 @@ export async function POST(request: Request) {
           .from('m_pesticide_usages')
           .select('*')
           .in('registration_no', regNos)
-          .limit(1500);
+          .limit(2000);
 
         if (usageData) {
           allUsages = usageData;
@@ -184,14 +254,14 @@ export async function POST(request: Request) {
     }
     // パターンC: 病害虫名のみが指定されている場合
     else if (cleanTargetPest) {
-      const pestKana = toKatakana(cleanTargetPest);
-      const pestHalf = toHalfWidthKana(pestKana);
+      const pestVariants = generateSearchVariants(cleanTargetPest);
+      const orPests = pestVariants.map(p => `target_pest.ilike.%${p}%`).join(',');
 
       const { data: pestUsages } = await supabase
         .from('m_pesticide_usages')
         .select('*')
-        .or(`target_pest.ilike.%${cleanTargetPest}%,target_pest.ilike.%${pestKana}%,target_pest.ilike.%${pestHalf}%`)
-        .limit(1000);
+        .or(orPests)
+        .limit(1500);
 
       if (pestUsages) {
         allUsages = pestUsages;
@@ -201,7 +271,7 @@ export async function POST(request: Request) {
     if (allUsages.length === 0) {
       return NextResponse.json({
         judgment: '該当なし',
-        message: `データベース内には、作物「${cleanCropName}」に対して適用可能な農薬情報が見つかりませんでした。`,
+        message: `データベース内には、指定の条件に一致する適用可能な農薬情報が見つかりませんでした。`,
         pesticides: [],
         availableStages: [
           { key: 'all', label: 'すべて', count: 0 },
@@ -317,13 +387,17 @@ export async function POST(request: Request) {
     const canonicalGroupsMap = new Map<string, any>();
 
     productVariantMap.forEach((v) => {
-      // 農薬名検索フィルター
+      // 【最重要】農薬名検索フィルター（究極の表記揺れ吸収判定）
       if (cleanPesticideName) {
-        const matches = v.full_name.includes(cleanPesticideName) ||
-          v.canonical_name.includes(cleanPesticideName) ||
-          toKatakana(v.full_name).includes(toKatakana(cleanPesticideName)) ||
-          toHiragana(v.full_name).includes(toHiragana(cleanPesticideName));
-        if (!matches) return;
+        const matchesFullName = isFuzzyMatch(v.full_name, cleanPesticideName);
+        const matchesCanonical = isFuzzyMatch(v.canonical_name, cleanPesticideName);
+        if (!matchesFullName && !matchesCanonical) return;
+      }
+
+      // 病害虫名フィルター（病害虫が指定されている場合）
+      if (cleanTargetPest) {
+        const hasMatchingPest = Array.from(v.target_pests as Set<string>).some(p => isFuzzyMatch(p, cleanTargetPest));
+        if (!hasMatchingPest) return;
       }
 
       const cName = v.canonical_name;
@@ -377,7 +451,6 @@ export async function POST(request: Request) {
 
     // 5. 【あいうえお順ソート】代表商品名（冠名除去名）で五十音順ソート！
     const pesticides = Array.from(canonicalGroupsMap.values()).map(g => {
-      // 最初のバリアントを代表値としてフラットプロパティも付与（後方互換性）
       const primary = g.variants[0] || {};
       return {
         ...g,
@@ -421,7 +494,7 @@ export async function POST(request: Request) {
       groupCount: 0,
       availableStages,
       activeStage: stageFilter || 'all',
-      message: `作物「${cleanCropName}」に正式登録されている代表農薬一覧です。（計${filteredPesticides.length}系統）`,
+      message: `正式登録されている農薬一覧です。（計${filteredPesticides.length}系統）`,
       pesticides: filteredPesticides
     });
 
