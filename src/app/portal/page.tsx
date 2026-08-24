@@ -69,6 +69,12 @@ export default function PortalPage() {
   const [isLoadingManuals, setIsLoadingManuals] = useState(false);
   const [playingVideoUrl, setPlayingVideoUrl] = useState<string | null>(null);
   const [activeGuideStep, setActiveGuideStep] = useState<number>(1);
+  const [showAddVideoModal, setShowAddVideoModal] = useState(false);
+  const [newVideoTitle, setNewVideoTitle] = useState('');
+  const [newVideoDescription, setNewVideoDescription] = useState('');
+  const [newVideoFile, setNewVideoFile] = useState<File | null>(null);
+  const [isSubmittingVideo, setIsSubmittingVideo] = useState(false);
+  const [videoModalMessage, setVideoModalMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   // 自由入力タスクタイトルのリアルタイム自動翻訳
   useEffect(() => {
@@ -377,6 +383,86 @@ export default function PortalPage() {
     } catch (e) {
       console.error('Error creating video signed url:', e);
       setPlayingVideoUrl(videoUrl);
+    }
+  };
+
+  const handleAddVideoSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newVideoTitle.trim() || !newVideoFile) {
+      setVideoModalMessage({ text: 'タイトルと動画ファイルを選択してください。', type: 'error' });
+      return;
+    }
+
+    setIsSubmittingVideo(true);
+    setVideoModalMessage(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const ownerId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
+      
+      const fileExt = newVideoFile.name.split('.').pop();
+      const fileName = `${ownerId || 'manuals'}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+      // 1. Storageにアップロード
+      let uploadError = null;
+      const { error: err1 } = await supabase.storage
+        .from('work_videos')
+        .upload(fileName, newVideoFile, { cacheControl: '31536000', upsert: false });
+
+      if (err1) {
+        const { error: err2 } = await supabase.storage
+          .from('videos')
+          .upload(fileName, newVideoFile, { cacheControl: '31536000', upsert: false });
+        if (err2) {
+          uploadError = err2;
+        }
+      }
+
+      if (uploadError) throw new Error('動画のアップロードに失敗しました: ' + uploadError.message);
+
+      // 2. video_manuals にレコード登録
+      const payload: any = {
+        title: newVideoTitle,
+        description: newVideoDescription,
+        video_url: fileName
+      };
+      if (ownerId) payload.user_id = ownerId;
+
+      const { error: dbError } = await supabase.from('video_manuals').insert([payload]);
+      if (dbError) throw dbError;
+
+      setVideoModalMessage({ text: '動画マニュアルを登録しました！', type: 'success' });
+      
+      // 一覧再取得
+      await loadVideoManuals();
+
+      setTimeout(() => {
+        setShowAddVideoModal(false);
+        setNewVideoTitle('');
+        setNewVideoDescription('');
+        setNewVideoFile(null);
+        setVideoModalMessage(null);
+      }, 1200);
+
+    } catch (err: any) {
+      console.error(err);
+      setVideoModalMessage({ text: err.message || '登録に失敗しました', type: 'error' });
+    } finally {
+      setIsSubmittingVideo(false);
+    }
+  };
+
+  const handleDeleteVideoManual = async (manualId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('本当にこの動画マニュアルを削除しますか？')) return;
+    try {
+      const { error } = await supabase.from('video_manuals').delete().eq('id', manualId);
+      if (error) throw error;
+      setVideoManuals(prev => prev.filter(m => m.id !== manualId));
+      if (playingVideoUrl) setPlayingVideoUrl(null);
+    } catch (err: any) {
+      console.error(err);
+      alert('動画の削除に失敗しました: ' + err.message);
     }
   };
 
@@ -1512,11 +1598,11 @@ export default function PortalPage() {
 
                     {role === 'admin' && (
                       <button
-                        onClick={() => router.push('/admin/manuals')}
-                        className="flex-shrink-0 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                        onClick={() => setShowAddVideoModal(true)}
+                        className="flex-shrink-0 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs"
                       >
                         <Plus className="w-4 h-4" />
-                        <span>新規動画を管理・登録</span>
+                        <span>新規動画を登録</span>
                       </button>
                     )}
                   </div>
@@ -1538,13 +1624,24 @@ export default function PortalPage() {
                           ステップごとの詳しい操作手順は「スタートガイド」タブから画像付きでご確認いただけます。
                         </p>
                       </div>
-                      <button
-                        onClick={() => setManualTab('guide')}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors shadow-sm inline-flex items-center gap-2"
-                      >
-                        <BookOpen className="w-4 h-4" />
-                        <span>操作スタートガイドを見る</span>
-                      </button>
+                      <div className="flex justify-center gap-3">
+                        <button
+                          onClick={() => setManualTab('guide')}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors shadow-sm inline-flex items-center gap-2"
+                        >
+                          <BookOpen className="w-4 h-4" />
+                          <span>操作スタートガイドを見る</span>
+                        </button>
+                        {role === 'admin' && (
+                          <button
+                            onClick={() => setShowAddVideoModal(true)}
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors shadow-sm inline-flex items-center gap-2"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>最初の動画を登録する</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1552,7 +1649,7 @@ export default function PortalPage() {
                         <div
                           key={manual.id}
                           onClick={() => handlePlayManualVideo(manual.video_url)}
-                          className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg hover:border-rose-300 transition-all group cursor-pointer flex flex-col"
+                          className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg hover:border-rose-300 transition-all group cursor-pointer flex flex-col relative"
                         >
                           <div className="aspect-video bg-slate-900 relative flex items-center justify-center group-hover:bg-slate-800 transition-colors">
                             <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform backdrop-blur-xs">
@@ -1561,6 +1658,15 @@ export default function PortalPage() {
                             <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur-xs">
                               再生
                             </span>
+                            {role === 'admin' && (
+                              <button
+                                onClick={(e) => handleDeleteVideoManual(manual.id, e)}
+                                title="動画を削除"
+                                className="absolute top-2 right-2 p-2 bg-black/60 hover:bg-rose-600 text-white rounded-xl transition-colors opacity-0 group-hover:opacity-100 backdrop-blur-xs"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                           <div className="p-5 flex flex-col flex-1">
                             <h3 className="font-black text-slate-800 text-base mb-1.5 group-hover:text-rose-600 transition-colors line-clamp-1">
@@ -1585,6 +1691,115 @@ export default function PortalPage() {
                     </div>
                   )}
 
+                </div>
+              )}
+
+              {/* 📤 新規動画マニュアル登録モーダル (子モーダル) */}
+              {showAddVideoModal && (
+                <div 
+                  className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in"
+                  onClick={() => !isSubmittingVideo && setShowAddVideoModal(false)}
+                >
+                  <div 
+                    className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden border border-slate-200"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 bg-rose-100 text-rose-600 rounded-xl">
+                          <Video className="w-5 h-5" />
+                        </div>
+                        <h2 className="text-base font-black text-slate-800">新規動画マニュアルを登録</h2>
+                      </div>
+                      <button 
+                        onClick={() => setShowAddVideoModal(false)} 
+                        disabled={isSubmittingVideo}
+                        className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                    
+                    <form onSubmit={handleAddVideoSubmit} className="p-6 space-y-4">
+                      {videoModalMessage && (
+                        <div className={`p-3.5 rounded-xl flex items-center gap-2.5 font-bold text-xs ${
+                          videoModalMessage.type === 'success' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          <CheckCircle2 className="w-4 h-4 shrink-0" />
+                          <span>{videoModalMessage.text}</span>
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-xs font-black text-slate-700 mb-1">
+                          動画タイトル <span className="text-rose-500">*</span>
+                        </label>
+                        <input 
+                          type="text" 
+                          value={newVideoTitle} 
+                          onChange={e => setNewVideoTitle(e.target.value)} 
+                          required 
+                          placeholder="例: トラクターの基本操作と安全点検"
+                          className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-rose-500 focus:bg-white" 
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-black text-slate-700 mb-1">
+                          説明・重要ポイント <span className="text-slate-400 font-normal">(任意)</span>
+                        </label>
+                        <textarea 
+                          value={newVideoDescription} 
+                          onChange={e => setNewVideoDescription(e.target.value)} 
+                          placeholder="例: エンジン始動前の点検項目と作業後の清掃手順を説明しています。"
+                          className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-rose-500 focus:bg-white min-h-[80px]" 
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-black text-slate-700 mb-1">
+                          動画ファイル (MP4 / WebM / QuickTime, 最大50MB) <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 border-dashed">
+                          <input 
+                            type="file" 
+                            accept="video/mp4,video/quicktime,video/webm,video/*" 
+                            required
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file && file.size > 50 * 1024 * 1024) {
+                                alert('動画のサイズは50MB以下にしてください。');
+                                e.target.value = '';
+                                setNewVideoFile(null);
+                              } else {
+                                setNewVideoFile(file || null);
+                              }
+                            }}
+                            className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-rose-100 file:text-rose-700 hover:file:bg-rose-200 cursor-pointer"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+                        <button 
+                          type="button" 
+                          onClick={() => setShowAddVideoModal(false)} 
+                          disabled={isSubmittingVideo} 
+                          className="px-4 py-2 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-100 transition-colors"
+                        >
+                          キャンセル
+                        </button>
+                        <button 
+                          type="submit" 
+                          disabled={isSubmittingVideo || !newVideoTitle.trim() || !newVideoFile} 
+                          className="px-5 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 disabled:opacity-50 text-white font-black text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5"
+                        >
+                          {isSubmittingVideo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                          <span>{isSubmittingVideo ? '動画をアップロード中...' : '登録する'}</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
                 </div>
               )}
 
