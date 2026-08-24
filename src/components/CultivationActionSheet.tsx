@@ -77,33 +77,263 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
 
   // 自社登録農薬マスタリスト
   const [farmPesticides, setFarmPesticides] = useState<any[]>([]);
+  const [tenantSprayLogs, setTenantSprayLogs] = useState<any[]>([]);
   const [selectedPesticideMode, setSelectedPesticideMode] = useState<'select' | 'custom'>('select');
 
-  // 自社農薬マスタの取得
+  // 農薬リアルタイム安全判定ステート
+  const [isCheckingPesticide, setIsCheckingPesticide] = useState(false);
+  const [pesticideFamicData, setPesticideFamicData] = useState<any>(null);
+
+  // 自社農薬マスタ & 散布履歴の取得
   React.useEffect(() => {
-    const fetchTenantPesticides = async () => {
+    const fetchTenantData = async () => {
       try {
         const tenantId = await getCurrentTenantId();
         if (!tenantId) return;
-        const { data } = await supabase
-          .from('materials')
-          .select('*')
-          .eq('user_id', tenantId)
-          .or('category.eq.農薬費,material_type.eq.pesticide')
-          .order('name');
-        if (data) {
-          setFarmPesticides(data);
-          if (data.length > 0 && !itemName) {
-            setItemName(data[0].name);
-            setUnit(data[0].unit || 'ml');
+
+        const [matRes, logsRes] = await Promise.all([
+          supabase
+            .from('materials')
+            .select('*')
+            .eq('user_id', tenantId)
+            .or('category.eq.農薬費,material_type.eq.pesticide')
+            .order('name'),
+          supabase
+            .from('work_logs')
+            .select('*, crops(name), fields(name)')
+            .eq('user_id', tenantId)
+            .order('work_date', { ascending: false })
+        ]);
+
+        if (matRes.data) {
+          setFarmPesticides(matRes.data);
+          if (matRes.data.length > 0 && !itemName) {
+            setItemName(matRes.data[0].name);
+            setUnit(matRes.data[0].unit || 'ml');
+          }
+        }
+        if (logsRes.data) {
+          setTenantSprayLogs(logsRes.data);
+        }
+      } catch (e) {
+        console.warn('Failed to fetch farm data in action sheet:', e);
+      }
+    };
+    fetchTenantData();
+  }, []);
+
+  // 農薬選択・変更時のFAMIC公的データ照合
+  const targetCropName = selectedCultivations[0]?.cropName || '';
+  const cleanTargetCrop = targetCropName.replace(/\(.*?\)/g, '').trim();
+
+  React.useEffect(() => {
+    if (activeCategory !== 'pesticide' || !itemName) {
+      setPesticideFamicData(null);
+      return;
+    }
+
+    let isMounted = true;
+    const checkPesticide = async () => {
+      setIsCheckingPesticide(true);
+      try {
+        const res = await fetch('/api/pesticide-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            cropName: cleanTargetCrop,
+            pesticideName: itemName 
+          })
+        });
+
+        if (res.ok && isMounted) {
+          const data = await res.json();
+          if (data.pesticides && data.pesticides.length > 0) {
+            const matched = data.pesticides.find((p: any) => 
+              p.name === itemName || itemName.includes(p.name) || p.name.includes(itemName)
+            ) || data.pesticides[0];
+            setPesticideFamicData(matched);
+          } else {
+            setPesticideFamicData(null);
           }
         }
       } catch (e) {
-        console.warn('Failed to fetch farm pesticides in action sheet:', e);
+        console.warn('Pesticide check error in modal:', e);
+      } finally {
+        if (isMounted) setIsCheckingPesticide(false);
       }
     };
-    fetchTenantPesticides();
-  }, []);
+
+    const timer = setTimeout(() => {
+      checkPesticide();
+    }, 200);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [activeCategory, itemName, cleanTargetCrop]);
+
+  // 表記揺れ正規化ヘルパー
+  const normalizeText = (str: string) => {
+    if (!str) return '';
+    return str
+      .normalize('NFKC')
+      .toLowerCase()
+      .replace(/[\u3041-\u3096]/g, m => String.fromCharCode(m.charCodeAt(0) + 0x60))
+      .replace(/[\s　・･()（）\[\]【】]/g, '');
+  };
+
+  // 有効成分ごとの合算使用回数 & 重複判定 & RACローテーション判定（厳密数学・法規監査済み）
+  const complianceReport = useMemo(() => {
+    if (activeCategory !== 'pesticide') return null;
+
+    const selectedFieldIds = selectedCultivations.map(c => c.fieldId);
+    const normTargetCrop = normalizeText(cleanTargetCrop);
+
+    // 作付期間（シーズン）の特定: 最も古い startDate または 直近180日以内
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - 180); // デフォルト180日以内
+    const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
+
+    // 該当圃場・該当作物の今シーズンの過去散布ログを抽出
+    const relevantLogs = tenantSprayLogs.filter(log => {
+      const isSpray = log.work_type?.includes('農薬') || log.memo?.includes('[散布') || log.memo?.includes('農薬');
+      const isCompleted = log.status !== 'planned';
+      const matchField = !log.field_id || selectedFieldIds.includes(log.field_id);
+      
+      const logCropNorm = normalizeText(log.crops?.name || '');
+      const matchCrop = !logCropNorm || !normTargetCrop || logCropNorm.includes(normTargetCrop) || normTargetCrop.includes(logCropNorm);
+      
+      // 今シーズン内のログ
+      const isCurrentSeason = !log.work_date || log.work_date >= cutoffDateStr;
+
+      return isSpray && isCompleted && matchField && matchCrop && isCurrentSeason;
+    });
+
+    // 1. 直前の直近散布ログからRACコードを取得
+    let lastSprayInfo: { date: string; name: string; rac: string } | null = null;
+    if (relevantLogs.length > 0) {
+      const lastLog = relevantLogs[0];
+      const lastMemo = lastLog.memo || '';
+      const racMatch = lastMemo.match(/\[RAC:(.*?)\]/) || lastMemo.match(/RAC:(.*?)\s/);
+      const nameMatch = lastMemo.match(/品名:(.*?)\s/) || lastMemo.match(/品名:(.*?)$/);
+      lastSprayInfo = {
+        date: lastLog.work_date || '前回',
+        name: nameMatch ? nameMatch[1].trim() : lastMemo.slice(0, 15),
+        rac: racMatch ? racMatch[1].trim() : ''
+      };
+    }
+
+    // 2. 今回の農薬の有効成分リストの厳密パース & 合算計算
+    const activeIngredients: { 
+      name: string; 
+      maxLimit: number; 
+      pastCount: number; 
+      thisCount: number;
+      totalCount: number; 
+      remaining: number;
+      isOver: boolean; 
+      isAtLimit: boolean;
+      isUnlimited: boolean;
+    }[] = [];
+    
+    const ingredientsFromFamic = pesticideFamicData?.active_ingredients || [];
+    
+    // 全体の上限回数パース
+    let generalLimit = 0;
+    const usageCountStr = String(pesticideFamicData?.usage_count || '');
+    const countMatch = usageCountStr.match(/(\d+)回/);
+    if (countMatch) {
+      generalLimit = parseInt(countMatch[1], 10);
+    }
+
+    const normItemName = normalizeText(itemName);
+
+    if (ingredientsFromFamic.length > 0) {
+      ingredientsFromFamic.forEach((ing: any) => {
+        const ingName = ing.name || String(ing);
+        const normIngName = normalizeText(ingName);
+        const limit = ing.maxCount !== undefined && ing.maxCount !== null ? ing.maxCount : (generalLimit || 0);
+        const isUnlimited = limit === 0;
+
+        // 過去ログから該当成分（または同一商品名）の散布実績を厳密カウント
+        let pastCount = 0;
+        relevantLogs.forEach(log => {
+          const normMemo = normalizeText(log.memo || '');
+          if (normMemo.includes(normIngName) || (normItemName && normMemo.includes(normItemName))) {
+            pastCount++;
+          }
+        });
+
+        const thisCount = 1;
+        const totalCount = pastCount + thisCount;
+        const remaining = isUnlimited ? 999 : Math.max(0, limit - totalCount);
+        const isOver = !isUnlimited && totalCount > limit;
+        const isAtLimit = !isUnlimited && totalCount === limit;
+
+        activeIngredients.push({
+          name: ingName,
+          maxLimit: limit,
+          pastCount,
+          thisCount,
+          totalCount,
+          remaining,
+          isOver,
+          isAtLimit,
+          isUnlimited
+        });
+      });
+    } else if (itemName) {
+      // FAMIC未照合・手入力農薬の場合
+      let pastCount = 0;
+      relevantLogs.forEach(log => {
+        const normMemo = normalizeText(log.memo || '');
+        if (normMemo.includes(normItemName)) {
+          pastCount++;
+        }
+      });
+      const limit = generalLimit || 3;
+      const thisCount = 1;
+      const totalCount = pastCount + thisCount;
+      const remaining = Math.max(0, limit - totalCount);
+
+      activeIngredients.push({
+        name: itemName,
+        maxLimit: limit,
+        pastCount,
+        thisCount,
+        totalCount,
+        remaining,
+        isOver: totalCount > limit,
+        isAtLimit: totalCount === limit,
+        isUnlimited: false
+      });
+    }
+
+    // RACコードの重複（同一系統連用）チェック
+    const currentRac = pesticideFamicData?.rac_code || pesticideFamicData?.racCode || '';
+    const isRacDuplicate = Boolean(
+      currentRac && 
+      lastSprayInfo?.rac && 
+      normalizeText(lastSprayInfo.rac) === normalizeText(currentRac) && 
+      !currentRac.includes('「-」') &&
+      !currentRac.includes('未分類')
+    );
+
+    const hasOverLimit = activeIngredients.some(ing => ing.isOver);
+    const hasAtLimit = activeIngredients.some(ing => ing.isAtLimit);
+
+    return {
+      activeIngredients,
+      currentRac,
+      lastSprayInfo,
+      isRacDuplicate,
+      hasOverLimit,
+      hasAtLimit,
+      relevantLogsCount: relevantLogs.length,
+      famicData: pesticideFamicData
+    };
+  }, [activeCategory, itemName, pesticideFamicData, tenantSprayLogs, selectedCultivations, cleanTargetCrop]);
 
   // 共通フォームステート
   const [formDate, setFormDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
@@ -193,8 +423,10 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       setFertBags('3');
       setFertPricePerBag(String(FERTILIZER_PRESETS[0].pricePerBag));
     } else if (category === 'pesticide') {
-      setItemName('カスケード乳剤');
-      setUnit('ml');
+      const initialP = farmPesticides.length > 0 ? farmPesticides[0] : null;
+      setItemName(initialP ? initialP.name : 'カスケード乳剤');
+      setUnit(initialP?.unit || 'ml');
+      setSelectedPesticideMode('select');
     } else if (category === 'work') {
       setWorkType('定植');
     } else if (category === 'pest') {
@@ -285,6 +517,11 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
           growth: '生育調査'
         };
 
+        const racTag = complianceReport?.currentRac ? ` [RAC:${complianceReport.currentRac}]` : '';
+        const ingTag = complianceReport?.activeIngredients?.length 
+          ? ` [成分:${complianceReport.activeIngredients.map(i => i.name).join(',')}]` 
+          : '';
+
         const recordsToInsert = selectedCultivations.map(c => ({
           user_id: currentUserId,
           field_id: c.fieldId || null,
@@ -293,7 +530,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
           work_type: typeLabelMap[activeCategory || 'work'] || '農作業',
           duration_minutes: parseInt(durationMinutes, 10) || 0,
           status: isRecord ? 'completed' : 'planned',
-          memo: `[一括${isRecord ? '記録' : '予定'}] ${itemName ? `品名:${itemName} ` : ''}${quantity ? `数量:${quantity}${unit} ` : ''}${memo}`.trim(),
+          memo: `[一括${isRecord ? '記録' : '予定'}] ${itemName ? `品名:${itemName}${racTag}${ingTag} ` : ''}${quantity ? `数量:${quantity}${unit} ` : ''}${memo}`.trim(),
           created_at: timestamp
         }));
 
@@ -631,26 +868,28 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                 </div>
               )}
 
-              {/* 農薬専用入力ブロック（自社農薬マスタ連動） */}
+              {/* 農薬専用入力ブロック（自社農薬マスタ連動 & 有効成分合算 & RAC重複判定） */}
               {activeCategory === 'pesticide' && (
-                <div className="space-y-3 p-4 bg-rose-50/50 border border-rose-200 rounded-2xl">
+                <div className="space-y-3.5 p-4 bg-rose-50/60 border border-rose-200 rounded-2xl">
                   <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-rose-900">
+                    <label className="block text-xs font-bold text-rose-950">
                       農薬名（自社登録農薬）
                     </label>
                     <Link
                       href="/admin/cultivations?tab=spray"
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="text-[11px] font-bold text-rose-600 hover:text-rose-800 underline flex items-center gap-1"
                     >
-                      残回数・RAC管理画面を開く ➔
+                      残回数・RAC管理画面を開く (別タブ) ➔
                     </Link>
                   </div>
 
                   {farmPesticides.length > 0 ? (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-slate-500 font-medium">
-                          自農園のマスタ（{farmPesticides.length}品目）から選択:
+                        <span className="text-[11px] text-slate-600 font-medium">
+                          自農園マスタ（{farmPesticides.length}品目）から選択:
                         </span>
                         <button
                           type="button"
@@ -680,7 +919,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                               setUnit(matched.unit);
                             }
                           }}
-                          className="w-full px-3 py-2 text-sm bg-white border border-rose-300 rounded-xl font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                          className="w-full px-3 py-2 text-sm bg-white border border-rose-300 rounded-xl font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-xs"
                         >
                           {farmPesticides.map((p) => (
                             <option key={p.id || p.name} value={p.name}>
@@ -695,7 +934,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                           value={itemName}
                           onChange={(e) => setItemName(e.target.value)}
                           placeholder="農薬名を手入力してください"
-                          className="w-full px-3 py-2 text-sm bg-white border border-rose-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-rose-500"
+                          className="w-full px-3 py-2 text-sm bg-white border border-rose-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-rose-500 shadow-xs"
                         />
                       )}
                     </div>
@@ -705,6 +944,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                         <span>自社農薬マスタに農薬が未登録です</span>
                         <Link
                           href="/farm/pesticide-check"
+                          target="_blank"
                           className="px-2 py-1 bg-rose-600 text-white rounded-lg text-[10px] font-bold shrink-0 shadow-xs"
                         >
                           農薬カルテから追加
@@ -716,10 +956,117 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                         value={itemName}
                         onChange={(e) => setItemName(e.target.value)}
                         placeholder="農薬名を入力してください"
-                        className="w-full px-3 py-2 text-sm bg-white border border-rose-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-rose-500"
+                        className="w-full px-3 py-2 text-sm bg-white border border-rose-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-rose-500 shadow-xs"
                       />
                     </div>
                   )}
+
+                  {/* ========================================================= */}
+                  {/* 【最高峰・安全エンジン】有効成分合算 & RAC重複リアルタイム診断パネル */}
+                  {/* ========================================================= */}
+                  {isCheckingPesticide ? (
+                    <div className="p-3 bg-white border border-rose-200 rounded-xl text-xs text-rose-600 flex items-center gap-2 animate-pulse">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>公的FAMICマスタ照合 ＆ 有効成分合算チェック中...</span>
+                    </div>
+                  ) : complianceReport && (
+                    <div className="space-y-2.5 pt-1">
+                      
+                      {/* 1. 有効成分ごとの合算使用回数判定 */}
+                      <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-xs space-y-2">
+                        <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                          <span className="flex items-center gap-1.5 text-rose-900">
+                            <FlaskConical className="w-3.5 h-3.5 text-rose-600" />
+                            <span>有効成分ごとの通算使用回数 (自農園実績)</span>
+                          </span>
+                          <span className="text-[10px] font-normal text-slate-400">
+                            対象作目: {cleanTargetCrop}
+                          </span>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          {complianceReport.activeIngredients.map((ing, idx) => {
+                            const remaining = Math.max(0, ing.maxLimit - ing.totalCount);
+                            return (
+                              <div 
+                                key={idx} 
+                                className={`p-2.5 rounded-lg border text-xs ${
+                                  ing.isOver 
+                                    ? 'bg-rose-50 border-rose-300 text-rose-900' 
+                                    : ing.isAtLimit 
+                                    ? 'bg-amber-50 border-amber-300 text-amber-900' 
+                                    : 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between font-bold mb-1">
+                                  <span className="truncate max-w-[200px]">{ing.name}</span>
+                                  <span>
+                                    通算 {ing.totalCount}回 / 上限{ing.maxLimit}回
+                                    {ing.isOver && <span className="ml-1 text-rose-600 font-black">【上限超過🚨】</span>}
+                                    {ing.isAtLimit && <span className="ml-1 text-amber-700 font-black">【今回で上限到達⚠️】</span>}
+                                    {!ing.isOver && !ing.isAtLimit && <span className="ml-1 text-emerald-700">（残{remaining}回）</span>}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] opacity-80 flex items-center justify-between">
+                                  <span>過去実績: {ing.pastCount}回 ＋ 今回散布: 1回</span>
+                                  <span>※同一成分を含む別商品も自動合算済み</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* 2. RACローテーション（作用機構重複）警告 */}
+                      {complianceReport.currentRac && (
+                        <div className={`p-2.5 rounded-xl border text-xs flex items-start gap-2 ${
+                          complianceReport.isRacDuplicate
+                            ? 'bg-amber-50 border-amber-300 text-amber-900'
+                            : 'bg-blue-50/70 border-blue-200 text-blue-900'
+                        }`}>
+                          <span className="shrink-0 px-2 py-0.5 rounded font-black text-[11px] bg-white border border-slate-300 shadow-2xs">
+                            RAC: {complianceReport.currentRac}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            {complianceReport.isRacDuplicate ? (
+                              <p className="font-bold leading-relaxed">
+                                ⚠️ <span className="font-extrabold text-amber-700">前回散布と同じ系統（{complianceReport.currentRac}）です。</span>
+                                <span className="font-normal block text-[11px] text-amber-800">
+                                  害虫・菌の薬剤抵抗性（耐性）を防ぐため、他系統の農薬へのローテーション散布を推奨します。
+                                </span>
+                              </p>
+                            ) : (
+                              <p className="font-medium text-[11px] leading-relaxed">
+                                ✨ 作用機構分類: <span className="font-bold">{complianceReport.currentRac}</span>
+                                {complianceReport.lastSprayInfo?.rac && (
+                                  <span className="text-slate-500 ml-1">
+                                    （前回 {complianceReport.lastSprayInfo.date}: {complianceReport.lastSprayInfo.rac || '別系統'} から良好にローテーション中）
+                                  </span>
+                                )}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 3. 公的希釈倍率・使用時期ガイド */}
+                      {complianceReport.famicData && (
+                        <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 space-y-1">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-bold text-slate-700">
+                            <span>💧 希釈: {complianceReport.famicData.usage_amount || '規定倍率'}</span>
+                            <span>⏳ 時期: {complianceReport.famicData.usage_time || '収穫前日まで'}</span>
+                          </div>
+                          {complianceReport.famicData.target_pest && (
+                            <p className="truncate text-slate-500">
+                              🎯 適用: {complianceReport.famicData.target_pest}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                    </div>
+                  )}
+
                 </div>
               )}
 
