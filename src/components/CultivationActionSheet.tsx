@@ -18,9 +18,12 @@ import {
   FileText,
   MapPin,
   Calculator,
-  Layers
+  Layers,
+  Plus
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
+import Link from 'next/link';
 
 export interface CultivationTarget {
   id: string; // plan_id または field_id + crop_id
@@ -71,6 +74,36 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
   const [activeCategory, setActiveCategory] = useState<ActionCategory>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // 自社登録農薬マスタリスト
+  const [farmPesticides, setFarmPesticides] = useState<any[]>([]);
+  const [selectedPesticideMode, setSelectedPesticideMode] = useState<'select' | 'custom'>('select');
+
+  // 自社農薬マスタの取得
+  React.useEffect(() => {
+    const fetchTenantPesticides = async () => {
+      try {
+        const tenantId = await getCurrentTenantId();
+        if (!tenantId) return;
+        const { data } = await supabase
+          .from('materials')
+          .select('*')
+          .eq('user_id', tenantId)
+          .or('category.eq.農薬費,material_type.eq.pesticide')
+          .order('name');
+        if (data) {
+          setFarmPesticides(data);
+          if (data.length > 0 && !itemName) {
+            setItemName(data[0].name);
+            setUnit(data[0].unit || 'ml');
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to fetch farm pesticides in action sheet:', e);
+      }
+    };
+    fetchTenantPesticides();
+  }, []);
 
   // 共通フォームステート
   const [formDate, setFormDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
@@ -190,9 +223,8 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       const isRecord = activeTab === 'record';
       const timestamp = new Date().toISOString();
 
-      // ログイン中のユーザーIDを取得（マルチテナント会社分離用）
-      const { data: authData } = await supabase.auth.getUser();
-      const currentUserId = authData?.user?.id || null;
+      // ログイン中のテナントIDを取得（マルチテナント会社分離の鉄則）
+      const currentUserId = await getCurrentTenantId();
 
       if (activeCategory === 'fertilizer') {
         // 肥料（施肥）の登録: work_logs と material_costs に連動
@@ -599,26 +631,107 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                 </div>
               )}
 
-              {/* 農薬・病害虫・生育調査・出荷・売上の一般名称入力 */}
-              {(activeCategory === 'pesticide' || activeCategory === 'pest' || activeCategory === 'growth' || activeCategory === 'shipment' || activeCategory === 'sales') && (
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-bold text-slate-700">
-                      {activeCategory === 'pesticide' && '農薬名'}
-                      {activeCategory === 'pest' && '病害虫・雑草名'}
-                      {activeCategory === 'growth' && '調査項目'}
-                      {activeCategory === 'shipment' && '出荷先 / 販路'}
-                      {activeCategory === 'sales' && '販売先・用途'}
+              {/* 農薬専用入力ブロック（自社農薬マスタ連動） */}
+              {activeCategory === 'pesticide' && (
+                <div className="space-y-3 p-4 bg-rose-50/50 border border-rose-200 rounded-2xl">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-rose-900">
+                      農薬名（自社登録農薬）
                     </label>
-                    {activeCategory === 'pesticide' && (
-                      <a
-                        href="/admin/spray-management"
-                        className="text-[11px] font-bold text-rose-600 hover:text-rose-800 underline flex items-center gap-1"
-                      >
-                        残回数・RAC管理画面を開く ➔
-                      </a>
-                    )}
+                    <Link
+                      href="/admin/cultivations?tab=spray"
+                      className="text-[11px] font-bold text-rose-600 hover:text-rose-800 underline flex items-center gap-1"
+                    >
+                      残回数・RAC管理画面を開く ➔
+                    </Link>
                   </div>
+
+                  {farmPesticides.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          自農園のマスタ（{farmPesticides.length}品目）から選択:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (selectedPesticideMode === 'select') {
+                              setSelectedPesticideMode('custom');
+                              setItemName('');
+                            } else {
+                              setSelectedPesticideMode('select');
+                              setItemName(farmPesticides[0]?.name || '');
+                            }
+                          }}
+                          className="text-[11px] text-rose-700 font-bold underline"
+                        >
+                          {selectedPesticideMode === 'select' ? '手入力に切り替え' : 'マスタ選択に戻る'}
+                        </button>
+                      </div>
+
+                      {selectedPesticideMode === 'select' ? (
+                        <select
+                          value={itemName}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setItemName(val);
+                            const matched = farmPesticides.find(p => p.name === val);
+                            if (matched && matched.unit) {
+                              setUnit(matched.unit);
+                            }
+                          }}
+                          className="w-full px-3 py-2 text-sm bg-white border border-rose-300 rounded-xl font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                        >
+                          {farmPesticides.map((p) => (
+                            <option key={p.id || p.name} value={p.name}>
+                              {p.name} {p.unit ? `(${p.unit})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          required
+                          value={itemName}
+                          onChange={(e) => setItemName(e.target.value)}
+                          placeholder="農薬名を手入力してください"
+                          className="w-full px-3 py-2 text-sm bg-white border border-rose-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-rose-500"
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="p-2.5 bg-rose-100/70 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center justify-between gap-2">
+                        <span>自社農薬マスタに農薬が未登録です</span>
+                        <Link
+                          href="/farm/pesticide-check"
+                          className="px-2 py-1 bg-rose-600 text-white rounded-lg text-[10px] font-bold shrink-0 shadow-xs"
+                        >
+                          農薬カルテから追加
+                        </Link>
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        value={itemName}
+                        onChange={(e) => setItemName(e.target.value)}
+                        placeholder="農薬名を入力してください"
+                        className="w-full px-3 py-2 text-sm bg-white border border-rose-300 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-rose-500"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 病害虫・生育調査・出荷・売上の一般名称入力 */}
+              {(activeCategory === 'pest' || activeCategory === 'growth' || activeCategory === 'shipment' || activeCategory === 'sales') && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    {activeCategory === 'pest' && '病害虫・雑草名'}
+                    {activeCategory === 'growth' && '調査項目'}
+                    {activeCategory === 'shipment' && '出荷先 / 販路'}
+                    {activeCategory === 'sales' && '販売先・用途'}
+                  </label>
                   <input
                     type="text"
                     required
