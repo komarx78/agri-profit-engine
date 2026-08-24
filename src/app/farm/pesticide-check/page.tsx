@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShieldCheck, Search, AlertTriangle, CheckCircle2, ArrowLeft, Loader2, 
   ChevronDown, ChevronUp, Layers, Zap, Plus, Minus, Trash2, Info, 
