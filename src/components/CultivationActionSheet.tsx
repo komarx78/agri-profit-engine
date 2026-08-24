@@ -70,12 +70,15 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
   onClearSelection,
   onSuccess
 }) => {
+  // =========================================================================
+  // 1. すべての useState 宣言（最上部に配置してTDZ参照エラーを完全防止）
+  // =========================================================================
   const [activeTab, setActiveTab] = useState<'record' | 'plan'>('record');
   const [activeCategory, setActiveCategory] = useState<ActionCategory>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // 自社登録農薬マスタリスト
+  // 自社登録農薬マスタリスト & 散布履歴
   const [farmPesticides, setFarmPesticides] = useState<any[]>([]);
   const [tenantSprayLogs, setTenantSprayLogs] = useState<any[]>([]);
   const [selectedPesticideMode, setSelectedPesticideMode] = useState<'select' | 'custom'>('select');
@@ -84,94 +87,38 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
   const [isCheckingPesticide, setIsCheckingPesticide] = useState(false);
   const [pesticideFamicData, setPesticideFamicData] = useState<any>(null);
 
-  // 自社農薬マスタ & 散布履歴の取得
-  React.useEffect(() => {
-    const fetchTenantData = async () => {
-      try {
-        const tenantId = await getCurrentTenantId();
-        if (!tenantId) return;
+  // 共通フォームステート
+  const [formDate, setFormDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [durationMinutes, setDurationMinutes] = useState<string>('60');
+  const [durationMode, setDurationMode] = useState<'total_proportional' | 'uniform'>('total_proportional');
+  const [memo, setMemo] = useState<string>('');
 
-        const [matRes, logsRes] = await Promise.all([
-          supabase
-            .from('materials')
-            .select('*')
-            .eq('user_id', tenantId)
-            .or('category.eq.農薬費,material_type.eq.pesticide')
-            .order('name'),
-          supabase
-            .from('work_logs')
-            .select('*, crops(name), fields(name)')
-            .eq('user_id', tenantId)
-            .order('work_date', { ascending: false })
-        ]);
+  // 作業用
+  const [workType, setWorkType] = useState<string>('定植');
 
-        if (matRes.data) {
-          setFarmPesticides(matRes.data);
-          if (matRes.data.length > 0 && !itemName) {
-            setItemName(matRes.data[0].name);
-            setUnit(matRes.data[0].unit || 'ml');
-          }
-        }
-        if (logsRes.data) {
-          setTenantSprayLogs(logsRes.data);
-        }
-      } catch (e) {
-        console.warn('Failed to fetch farm data in action sheet:', e);
-      }
-    };
-    fetchTenantData();
-  }, []);
+  // 肥料専用ステート
+  const [selectedFertilizerName, setSelectedFertilizerName] = useState<string>(FERTILIZER_PRESETS[0].name);
+  const [fertilizerType, setFertilizerType] = useState<'元肥' | '追肥1回目' | '追肥2回目' | '土壌改良' | '葉面散布'>('元肥');
+  const [fertInputMode, setFertInputMode] = useState<'bags' | 'kg'>('bags');
+  const [fertBags, setFertBags] = useState<string>('3'); // 袋数
+  const [fertTotalKg, setFertTotalKg] = useState<string>('60'); // kg
+  const [customN, setCustomN] = useState<string>('8');
+  const [customP, setCustomP] = useState<string>('8');
+  const [customK, setCustomK] = useState<string>('8');
+  const [fertPricePerBag, setFertPricePerBag] = useState<string>('2400');
 
-  // 農薬選択・変更時のFAMIC公的データ照合
+  // その他の品名・数量・金額 ＆ 複数圃場スマート面積按分ステート
+  const [itemName, setItemName] = useState<string>('');
+  const [quantity, setQuantity] = useState<string>('');
+  const [quantityMode, setQuantityMode] = useState<'total_proportional' | 'per_10a' | 'uniform'>('total_proportional');
+  const [unit, setUnit] = useState<string>('ml');
+  const [priceAmount, setPriceAmount] = useState<string>('');
+
+  // =========================================================================
+  // 2. ヘルパー関数 & useMemo 計算プロパティ
+  // =========================================================================
   const targetCropName = selectedCultivations[0]?.cropName || '';
   const cleanTargetCrop = targetCropName.replace(/\(.*?\)/g, '').trim();
-
-  React.useEffect(() => {
-    if (activeCategory !== 'pesticide' || !itemName) {
-      setPesticideFamicData(null);
-      return;
-    }
-
-    let isMounted = true;
-    const checkPesticide = async () => {
-      setIsCheckingPesticide(true);
-      try {
-        const res = await fetch('/api/pesticide-check', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            cropName: cleanTargetCrop,
-            pesticideName: itemName 
-          })
-        });
-
-        if (res.ok && isMounted) {
-          const data = await res.json();
-          if (data.pesticides && data.pesticides.length > 0) {
-            const matched = data.pesticides.find((p: any) => 
-              p.name === itemName || itemName.includes(p.name) || p.name.includes(itemName)
-            ) || data.pesticides[0];
-            setPesticideFamicData(matched);
-          } else {
-            setPesticideFamicData(null);
-          }
-        }
-      } catch (e) {
-        console.warn('Pesticide check error in modal:', e);
-      } finally {
-        if (isMounted) setIsCheckingPesticide(false);
-      }
-    };
-
-    const timer = setTimeout(() => {
-      checkPesticide();
-    }, 200);
-
-    return () => {
-      isMounted = false;
-      clearTimeout(timer);
-    };
-  }, [activeCategory, itemName, cleanTargetCrop]);
 
   // 表記揺れ正規化ヘルパー
   const normalizeText = (str: string) => {
@@ -182,6 +129,92 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       .replace(/[\u3041-\u3096]/g, m => String.fromCharCode(m.charCodeAt(0) + 0x60))
       .replace(/[\s　・･()（）\[\]【】]/g, '');
   };
+
+  // 選択中圃場の合計面積(a)
+  const totalAreaAcre = useMemo(() => {
+    return selectedCultivations.reduce((sum, c) => sum + (c.areaAcre || 10), 0);
+  }, [selectedCultivations]);
+
+  // 複数圃場におけるスマート面積比例配分（自動按分計算エンジン）
+  const fieldDistributions = useMemo(() => {
+    const numFields = selectedCultivations.length;
+    const parsedQty = parseFloat(quantity) || 0;
+    const parsedDuration = parseFloat(durationMinutes) || 0;
+
+    return selectedCultivations.map(c => {
+      const fieldArea = c.areaAcre || 10;
+      const ratio = totalAreaAcre > 0 ? fieldArea / totalAreaAcre : 1 / (numFields || 1);
+
+      let fieldQty = 0;
+      if (quantityMode === 'total_proportional') {
+        fieldQty = numFields > 1 ? Math.round(parsedQty * ratio * 10) / 10 : parsedQty;
+      } else if (quantityMode === 'per_10a') {
+        fieldQty = Math.round(((parsedQty * fieldArea) / 10) * 10) / 10;
+      } else {
+        fieldQty = parsedQty;
+      }
+
+      let fieldDur = 0;
+      if (durationMode === 'total_proportional' && numFields > 1) {
+        fieldDur = Math.round(parsedDuration * ratio);
+      } else {
+        fieldDur = Math.round(parsedDuration);
+      }
+
+      return {
+        id: c.id,
+        fieldId: c.fieldId,
+        fieldName: c.fieldName,
+        cropId: c.cropId,
+        cropName: c.cropName,
+        areaAcre: fieldArea,
+        ratioPercent: Math.round(ratio * 1000) / 10,
+        quantity: fieldQty,
+        durationMinutes: fieldDur
+      };
+    });
+  }, [selectedCultivations, quantity, durationMinutes, quantityMode, durationMode, totalAreaAcre]);
+
+  // 肥料成分のリアルタイム計算
+  const fertCalculation = useMemo(() => {
+    const preset = FERTILIZER_PRESETS.find(p => p.name === selectedFertilizerName);
+    const nRatio = preset && preset.name !== 'その他（手入力）' ? preset.n : (parseFloat(customN) || 0);
+    const pRatio = preset && preset.name !== 'その他（手入力）' ? preset.p : (parseFloat(customP) || 0);
+    const kRatio = preset && preset.name !== 'その他（手入力）' ? preset.k : (parseFloat(customK) || 0);
+    const bagKg = preset ? preset.bagWeight : 20;
+    const bagPrice = preset && preset.name !== 'その他（手入力）' ? preset.pricePerBag : (parseFloat(fertPricePerBag) || 0);
+
+    let totalWeightKg = 0;
+    let bagsCount = 0;
+
+    if (fertInputMode === 'bags') {
+      bagsCount = parseFloat(fertBags) || 0;
+      totalWeightKg = bagsCount * bagKg;
+    } else {
+      totalWeightKg = parseFloat(fertTotalKg) || 0;
+      bagsCount = bagKg > 0 ? totalWeightKg / bagKg : 0;
+    }
+
+    // 10a (1反) あたりの施肥量
+    const weightPer10a = totalAreaAcre > 0 ? (totalWeightKg / totalAreaAcre) * 10 : totalWeightKg;
+
+    // N-P-K 純成分量 (kg/10a)
+    const nPer10a = (weightPer10a * nRatio) / 100;
+    const pPer10a = (weightPer10a * pRatio) / 100;
+    const kPer10a = (weightPer10a * kRatio) / 100;
+
+    // 概算総コスト (円)
+    const totalCost = bagsCount * bagPrice;
+
+    return {
+      totalWeightKg: Math.round(totalWeightKg * 10) / 10,
+      bagsCount: Math.round(bagsCount * 10) / 10,
+      nPer10a: Math.round(nPer10a * 10) / 10,
+      pPer10a: Math.round(pPer10a * 10) / 10,
+      kPer10a: Math.round(kPer10a * 10) / 10,
+      totalCost: Math.round(totalCost)
+    };
+  }, [selectedFertilizerName, fertInputMode, fertBags, fertTotalKg, customN, customP, customK, fertPricePerBag, totalAreaAcre]);
 
   // 有効成分ごとの合算使用回数 & 重複判定 & RACローテーション判定（厳密数学・法規監査済み）
   const complianceReport = useMemo(() => {
@@ -335,118 +368,92 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
     };
   }, [activeCategory, itemName, pesticideFamicData, tenantSprayLogs, selectedCultivations, cleanTargetCrop]);
 
-  // 共通フォームステート
-  const [formDate, setFormDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [durationMinutes, setDurationMinutes] = useState<string>('60');
-  const [durationMode, setDurationMode] = useState<'total_proportional' | 'uniform'>('total_proportional');
-  const [memo, setMemo] = useState<string>('');
+  // =========================================================================
+  // 3. useEffect 副作用（マスタ取得 & 農薬FAMIC照合）
+  // =========================================================================
+  React.useEffect(() => {
+    const fetchTenantData = async () => {
+      try {
+        const tenantId = await getCurrentTenantId();
+        if (!tenantId) return;
 
-  // 作業用
-  const [workType, setWorkType] = useState<string>('定植');
+        const [matRes, logsRes] = await Promise.all([
+          supabase
+            .from('materials')
+            .select('*')
+            .eq('user_id', tenantId)
+            .or('category.eq.農薬費,material_type.eq.pesticide')
+            .order('name'),
+          supabase
+            .from('work_logs')
+            .select('*, crops(name), fields(name)')
+            .eq('user_id', tenantId)
+            .order('work_date', { ascending: false })
+        ]);
 
-  // 肥料専用ステート
-  const [selectedFertilizerName, setSelectedFertilizerName] = useState<string>(FERTILIZER_PRESETS[0].name);
-  const [fertilizerType, setFertilizerType] = useState<'元肥' | '追肥1回目' | '追肥2回目' | '土壌改良' | '葉面散布'>('元肥');
-  const [fertInputMode, setFertInputMode] = useState<'bags' | 'kg'>('bags');
-  const [fertBags, setFertBags] = useState<string>('3'); // 袋数
-  const [fertTotalKg, setFertTotalKg] = useState<string>('60'); // kg
-  const [customN, setCustomN] = useState<string>('8');
-  const [customP, setCustomP] = useState<string>('8');
-  const [customK, setCustomK] = useState<string>('8');
-  const [fertPricePerBag, setFertPricePerBag] = useState<string>('2400');
-
-  // その他の品名・数量・金額 ＆ 複数圃場スマート面積按分ステート
-  const [itemName, setItemName] = useState<string>('');
-  const [quantity, setQuantity] = useState<string>('');
-  const [quantityMode, setQuantityMode] = useState<'total_proportional' | 'per_10a' | 'uniform'>('total_proportional');
-  const [unit, setUnit] = useState<string>('ml');
-  const [priceAmount, setPriceAmount] = useState<string>('');
-
-  // 選択中圃場の合計面積(a)
-  const totalAreaAcre = useMemo(() => {
-    return selectedCultivations.reduce((sum, c) => sum + (c.areaAcre || 10), 0);
-  }, [selectedCultivations]);
-
-  // 複数圃場におけるスマート面積比例配分（自動按分計算エンジン）
-  const fieldDistributions = useMemo(() => {
-    const numFields = selectedCultivations.length;
-    const parsedQty = parseFloat(quantity) || 0;
-    const parsedDuration = parseFloat(durationMinutes) || 0;
-
-    return selectedCultivations.map(c => {
-      const fieldArea = c.areaAcre || 10;
-      const ratio = totalAreaAcre > 0 ? fieldArea / totalAreaAcre : 1 / (numFields || 1);
-
-      let fieldQty = 0;
-      if (quantityMode === 'total_proportional') {
-        fieldQty = numFields > 1 ? Math.round(parsedQty * ratio * 10) / 10 : parsedQty;
-      } else if (quantityMode === 'per_10a') {
-        fieldQty = Math.round(((parsedQty * fieldArea) / 10) * 10) / 10;
-      } else {
-        fieldQty = parsedQty;
+        if (matRes.data) {
+          setFarmPesticides(matRes.data);
+          if (matRes.data.length > 0 && !itemName) {
+            setItemName(matRes.data[0].name);
+            setUnit(matRes.data[0].unit || 'ml');
+          }
+        }
+        if (logsRes.data) {
+          setTenantSprayLogs(logsRes.data);
+        }
+      } catch (e) {
+        console.warn('Failed to fetch farm data in action sheet:', e);
       }
+    };
+    fetchTenantData();
+  }, []);
 
-      let fieldDur = 0;
-      if (durationMode === 'total_proportional' && numFields > 1) {
-        fieldDur = Math.round(parsedDuration * ratio);
-      } else {
-        fieldDur = Math.round(parsedDuration);
-      }
-
-      return {
-        id: c.id,
-        fieldId: c.fieldId,
-        fieldName: c.fieldName,
-        cropId: c.cropId,
-        cropName: c.cropName,
-        areaAcre: fieldArea,
-        ratioPercent: Math.round(ratio * 1000) / 10,
-        quantity: fieldQty,
-        durationMinutes: fieldDur
-      };
-    });
-  }, [selectedCultivations, quantity, durationMinutes, quantityMode, durationMode, totalAreaAcre]);
-
-  // 肥料成分のリアルタイム計算
-  const fertCalculation = useMemo(() => {
-    const preset = FERTILIZER_PRESETS.find(p => p.name === selectedFertilizerName);
-    const nRatio = preset && preset.name !== 'その他（手入力）' ? preset.n : (parseFloat(customN) || 0);
-    const pRatio = preset && preset.name !== 'その他（手入力）' ? preset.p : (parseFloat(customP) || 0);
-    const kRatio = preset && preset.name !== 'その他（手入力）' ? preset.k : (parseFloat(customK) || 0);
-    const bagKg = preset ? preset.bagWeight : 20;
-    const bagPrice = preset && preset.name !== 'その他（手入力）' ? preset.pricePerBag : (parseFloat(fertPricePerBag) || 0);
-
-    let totalWeightKg = 0;
-    let bagsCount = 0;
-
-    if (fertInputMode === 'bags') {
-      bagsCount = parseFloat(fertBags) || 0;
-      totalWeightKg = bagsCount * bagKg;
-    } else {
-      totalWeightKg = parseFloat(fertTotalKg) || 0;
-      bagsCount = bagKg > 0 ? totalWeightKg / bagKg : 0;
+  React.useEffect(() => {
+    if (activeCategory !== 'pesticide' || !itemName) {
+      setPesticideFamicData(null);
+      return;
     }
 
-    // 10a (1反) あたりの施肥量
-    const weightPer10a = totalAreaAcre > 0 ? (totalWeightKg / totalAreaAcre) * 10 : totalWeightKg;
+    let isMounted = true;
+    const checkPesticide = async () => {
+      setIsCheckingPesticide(true);
+      try {
+        const res = await fetch('/api/pesticide-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            cropName: cleanTargetCrop,
+            pesticideName: itemName 
+          })
+        });
 
-    // N-P-K 純成分量 (kg/10a)
-    const nPer10a = (weightPer10a * nRatio) / 100;
-    const pPer10a = (weightPer10a * pRatio) / 100;
-    const kPer10a = (weightPer10a * kRatio) / 100;
-
-    // 概算総コスト (円)
-    const totalCost = bagsCount * bagPrice;
-
-    return {
-      totalWeightKg: Math.round(totalWeightKg * 10) / 10,
-      bagsCount: Math.round(bagsCount * 10) / 10,
-      nPer10a: Math.round(nPer10a * 10) / 10,
-      pPer10a: Math.round(pPer10a * 10) / 10,
-      kPer10a: Math.round(kPer10a * 10) / 10,
-      totalCost: Math.round(totalCost)
+        if (res.ok && isMounted) {
+          const data = await res.json();
+          if (data.pesticides && data.pesticides.length > 0) {
+            const matched = data.pesticides.find((p: any) => 
+              p.name === itemName || itemName.includes(p.name) || p.name.includes(itemName)
+            ) || data.pesticides[0];
+            setPesticideFamicData(matched);
+          } else {
+            setPesticideFamicData(null);
+          }
+        }
+      } catch (e) {
+        console.warn('Pesticide check error in modal:', e);
+      } finally {
+        if (isMounted) setIsCheckingPesticide(false);
+      }
     };
-  }, [selectedFertilizerName, fertInputMode, fertBags, fertTotalKg, customN, customP, customK, fertPricePerBag, totalAreaAcre]);
+
+    const timer = setTimeout(() => {
+      checkPesticide();
+    }, 200);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [activeCategory, itemName, cleanTargetCrop]);
 
   if (selectedCultivations.length === 0) {
     return null;
