@@ -175,9 +175,14 @@ export default function PortalPage() {
       if (aLog) setAttendance(aLog);
     }
 
-    // 5. 有給休暇・残高と申請履歴の取得
+    // 5. 有給休暇・残高と申請履歴の取得 (自農園のワーカーのみ厳格に取得)
     try {
-      const { data: wList } = await supabase.from('workers').select('id, name, paid_leave_carryover, paid_leave_balance').order('name');
+      const { data: wList } = await supabase
+        .from('workers')
+        .select('id, name, paid_leave_carryover, paid_leave_balance')
+        .eq('user_id', targetUserId)
+        .order('name');
+
       if (wList) {
         setAllWorkers(wList);
         
@@ -186,7 +191,7 @@ export default function PortalPage() {
         if (profile && profile.id) {
           targetWorker = wList.find(w => w.id === profile.id);
         } else if (wList.length > 0) {
-          targetWorker = wList[0]; // 管理者でワーカー紐付けがない場合は最初のスタッフを参考表示
+          targetWorker = wList[0]; // 管理者でワーカー紐付けがない場合は自農園の最初のスタッフを参考表示
         }
 
         if (targetWorker) {
@@ -200,7 +205,8 @@ export default function PortalPage() {
       // 直近の休暇申請履歴
       let reqQuery = supabase
         .from('leave_requests')
-        .select('*, workers(name)')
+        .select('*, workers!inner(name, user_id)')
+        .eq('workers.user_id', targetUserId)
         .order('created_at', { ascending: false })
         .limit(5);
 
