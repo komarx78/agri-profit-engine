@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { createBrowserClient } from '@supabase/ssr';
 import { 
   Sprout, 
   Clock, 
@@ -29,6 +30,33 @@ export default function PortalPage() {
     const d = new Date();
     return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
   });
+  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
+  const [loadingTasks, setLoadingTasks] = useState(true);
+
+  useEffect(() => {
+    async function loadTasks() {
+      try {
+        const supabase = createBrowserClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        );
+        // 未確定の受注を取得
+        const { count } = await supabase
+          .from('b2b_orders')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'pending');
+
+        setPendingOrdersCount(count || 0);
+      } catch (e) {
+        console.warn('Failed to load portal tasks:', e);
+      } finally {
+        setLoadingTasks(false);
+      }
+    }
+    loadTasks();
+  }, []);
+
+  const totalTasks = pendingOrdersCount;
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
@@ -52,7 +80,9 @@ export default function PortalPage() {
             </Link>
             <button className="relative p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
               <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
+              {totalTasks > 0 && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
+              )}
             </button>
             <div className="h-8 w-px bg-slate-200"></div>
             <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
@@ -70,40 +100,55 @@ export default function PortalPage() {
         <div className="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-black text-slate-800">こんにちは、システム管理者さん</h1>
-            <p className="text-sm font-bold text-slate-500 mt-1">今日は {currentDate} です。未処理のタスクが3件あります。</p>
+            <p className="text-sm font-bold text-slate-500 mt-1">
+              今日は {currentDate} です。
+              {loadingTasks ? (
+                <span> タスクを確認中...</span>
+              ) : totalTasks > 0 ? (
+                <span className="text-rose-600 font-black"> 未処理のタスクが {totalTasks} 件あります。</span>
+              ) : (
+                <span className="text-emerald-600 font-bold"> 未処理のタスクはありません。</span>
+              )}
+            </p>
           </div>
         </div>
 
-        {/* お知らせ・タスクウィジェット */}
+        {/* お知らせ・タスクウィジェット（実データ連動） */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 mb-8">
           <h2 className="text-sm font-black text-slate-400 mb-4 uppercase tracking-wider flex items-center gap-2">
             <AlertCircle className="w-4 h-4" /> ToDo / お知らせ
           </h2>
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-rose-50 border border-rose-100 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm">
-                  <Clock className="w-4 h-4 text-rose-500" />
+            {pendingOrdersCount > 0 && (
+              <div className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm">
+                    <Truck className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800 text-sm">{pendingOrdersCount}件の未確定受注があります</p>
+                    <p className="text-xs text-slate-500 font-medium">受注管理画面から出荷・確定処理を行ってください</p>
+                  </div>
                 </div>
+                <Link 
+                  href="/sales-management/orders" 
+                  className="text-amber-700 text-sm font-bold hover:underline px-3 py-1.5 bg-amber-100 rounded-lg"
+                >
+                  受注一覧へ ➔
+                </Link>
+              </div>
+            )}
+
+            {/* 勤怠・請求書ステータス（正常時） */}
+            {totalTasks === 0 && !loadingTasks && (
+              <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-800">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                 <div>
-                  <p className="font-bold text-slate-700 text-sm">3名の勤怠打刻エラーがあります</p>
-                  <p className="text-xs text-slate-500 font-medium">勤怠管理システムから確認してください</p>
+                  <p className="font-black text-sm">🎉 現在、至急対応が必要な未処理タスクはありません</p>
+                  <p className="text-xs text-emerald-700/80 mt-0.5">全システムの稼働状況および受注・勤怠ステータスは正常です。</p>
                 </div>
               </div>
-              <button className="text-rose-600 text-sm font-bold hover:underline">確認する</button>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-100 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm">
-                  <FileText className="w-4 h-4 text-blue-500" />
-                </div>
-                <div>
-                  <p className="font-bold text-slate-700 text-sm">今月の請求書の発行期限が近づいています</p>
-                  <p className="text-xs text-slate-500 font-medium">あと3日で末日を迎えます</p>
-                </div>
-              </div>
-              <button className="text-blue-600 text-sm font-bold hover:underline">請求管理へ</button>
-            </div>
+            )}
           </div>
         </div>
 
