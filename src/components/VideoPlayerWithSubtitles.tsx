@@ -47,7 +47,7 @@ export default function VideoPlayerWithSubtitles({
   const [showSubtitles, setShowSubtitles] = useState<boolean>(true);
   const [isLangMenuOpen, setIsLangMenuOpen] = useState<boolean>(false);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [hasError, setHasError] = useState<boolean>(false);
 
   // 初期言語の同期
@@ -60,7 +60,7 @@ export default function VideoPlayerWithSubtitles({
   // 動画URL変更時のリセット
   useEffect(() => {
     if (videoUrl) {
-      setIsLoading(true);
+      setIsLoading(false);
       setHasError(false);
       setIsPlaying(false);
       setCurrentSubtitle('');
@@ -90,14 +90,18 @@ export default function VideoPlayerWithSubtitles({
     if (!videoRef.current) return;
 
     if (videoRef.current.paused) {
+      setIsLoading(true);
       videoRef.current.play().then(() => {
         setIsPlaying(true);
+        setIsLoading(false);
       }).catch((err) => {
         console.error('Play error:', err);
+        setIsLoading(false);
       });
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
+      setIsLoading(false);
     }
   };
 
@@ -168,10 +172,11 @@ export default function VideoPlayerWithSubtitles({
       <video
         key={videoUrl}
         ref={videoRef}
+        src={videoUrl}
         className="w-full h-full object-contain cursor-pointer"
         controls
         playsInline
-        preload="auto"
+        preload="metadata"
         controlsList="nodownload"
         onLoadedMetadata={handleLoadedMetadata}
         onCanPlay={() => {
@@ -183,8 +188,14 @@ export default function VideoPlayerWithSubtitles({
           setIsLoading(false);
           setIsPlaying(true);
         }}
-        onPause={() => setIsPlaying(false)}
-        onEnded={() => setIsPlaying(false)}
+        onPause={() => {
+          setIsPlaying(false);
+          setIsLoading(false);
+        }}
+        onEnded={() => {
+          setIsPlaying(false);
+          setIsLoading(false);
+        }}
         onError={(e) => {
           if (videoUrl && videoRef.current?.error) {
             console.error('Video error event:', videoRef.current.error);
@@ -194,19 +205,13 @@ export default function VideoPlayerWithSubtitles({
         }}
         onTimeUpdate={handleTimeUpdate}
         onClick={handlePlayPauseToggle}
-      >
-        <source src={videoUrl} type="video/mp4" />
-        <source src={videoUrl} type="video/webm" />
-        <source src={videoUrl} type="video/quicktime" />
-        <source src={videoUrl} />
-        お使いの端末は動画タグをサポートしていません。
-      </video>
+      />
 
-      {/* ⏳ ローディングスピナー */}
-      {isLoading && !hasError && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-xs pointer-events-none z-10 animate-in fade-in">
+      {/* ⏳ バッファリング中スピナー (再生中のみ) */}
+      {isLoading && isPlaying && !hasError && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 backdrop-blur-xs pointer-events-none z-10 animate-in fade-in">
           <Loader2 className="w-10 h-10 text-rose-500 animate-spin mb-2" />
-          <span className="text-white text-xs font-bold tracking-wider">動画を読み込み中...</span>
+          <span className="text-white text-xs font-bold tracking-wider">読み込み中...</span>
         </div>
       )}
 
@@ -217,7 +222,7 @@ export default function VideoPlayerWithSubtitles({
           <div className="max-w-sm">
             <p className="text-xs sm:text-sm font-bold text-white">動画の読み込みに失敗しました</p>
             <p className="text-[11px] text-slate-400 mt-1">
-              端末のコーデック非対応（MOV/HEVC等）または通信エラーの可能性があります
+              端末のコーデック非対応または通信エラーの可能性があります
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -247,12 +252,12 @@ export default function VideoPlayerWithSubtitles({
         </div>
       )}
 
-      {/* ▶️ 画面中央の大きな再生ボタン（停止中・モバイルで確実にタップ再生させる） */}
-      {!isPlaying && !isLoading && !hasError && (
+      {/* ▶️ 画面中央の大きな再生ボタン（停止中に確実にタップして再生させる） */}
+      {!isPlaying && !hasError && (
         <button
           type="button"
           onClick={handlePlayPauseToggle}
-          className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors z-10 group/btn"
+          className="absolute inset-0 flex items-center justify-center bg-black/25 hover:bg-black/35 transition-colors z-10 group/btn"
           aria-label="再生"
         >
           <div className="w-16 h-16 sm:w-20 sm:h-20 bg-rose-600/90 hover:bg-rose-600 text-white rounded-full flex items-center justify-center shadow-2xl group-hover/btn:scale-110 active:scale-95 transition-all backdrop-blur-xs">
