@@ -8,7 +8,10 @@ import {
   MapPin, LogOut, LayoutDashboard, Briefcase, FileText,
   AlertCircle, Loader2, ArrowRight, ArrowLeft, PlayCircle, Globe2,
   MessageSquare, Plus, Trash2, X, Send, Sparkles, CornerDownRight, RefreshCw,
-  Coffee, CalendarPlus, CheckCircle, UserCheck
+  Coffee, CalendarPlus, CheckCircle, UserCheck, BookOpen, Video, Play,
+  PackageOpen, Sprout, Smartphone, Receipt, TrendingUp, Pointer, Banknote,
+  FileSpreadsheet, Store, Calculator, Database, Camera, ExternalLink, HelpCircle,
+  Truck
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode } from '@/lib/i18n';
@@ -58,6 +61,14 @@ export default function PortalPage() {
   const [replyInputs, setReplyInputs] = useState<{ [postId: string]: string }>({});
   const [isSubmittingReply, setIsSubmittingReply] = useState<{ [postId: string]: boolean }>({});
   const [openReplyThread, setOpenReplyThread] = useState<{ [postId: string]: boolean }>({});
+
+  // マニュアル・動画モーダル用ステート
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualTab, setManualTab] = useState<'video' | 'guide'>('video');
+  const [videoManuals, setVideoManuals] = useState<any[]>([]);
+  const [isLoadingManuals, setIsLoadingManuals] = useState(false);
+  const [playingVideoUrl, setPlayingVideoUrl] = useState<string | null>(null);
+  const [activeGuideStep, setActiveGuideStep] = useState<number>(1);
 
   // 自由入力タスクタイトルのリアルタイム自動翻訳
   useEffect(() => {
@@ -314,6 +325,58 @@ export default function PortalPage() {
       alert('有給申請に失敗しました: ' + err.message);
     } finally {
       setIsSubmittingLeave(false);
+    }
+  };
+
+  // マニュアル・動画モーダル制御
+  const loadVideoManuals = async () => {
+    setIsLoadingManuals(true);
+    try {
+      const { data, error } = await supabase
+        .from('video_manuals')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (!error && data) {
+        setVideoManuals(data);
+      }
+    } catch (err) {
+      console.error('Error loading video manuals:', err);
+    } finally {
+      setIsLoadingManuals(false);
+    }
+  };
+
+  const handleOpenManualModal = async (initialTab: 'video' | 'guide' = 'video') => {
+    setManualTab(initialTab);
+    setShowManualModal(true);
+    await loadVideoManuals();
+  };
+
+  const handlePlayManualVideo = async (videoUrl: string) => {
+    if (!videoUrl) return;
+    if (videoUrl.startsWith('http://') || videoUrl.startsWith('https://')) {
+      setPlayingVideoUrl(videoUrl);
+      return;
+    }
+    try {
+      const { data, error } = await supabase.storage
+        .from('work_videos')
+        .createSignedUrl(videoUrl, 3600);
+      
+      if (!error && data?.signedUrl) {
+        setPlayingVideoUrl(data.signedUrl);
+      } else {
+        const { data: pubData } = supabase.storage.from('videos').getPublicUrl(videoUrl);
+        if (pubData?.publicUrl) {
+          setPlayingVideoUrl(pubData.publicUrl);
+        } else {
+          setPlayingVideoUrl(videoUrl);
+        }
+      }
+    } catch (e) {
+      console.error('Error creating video signed url:', e);
+      setPlayingVideoUrl(videoUrl);
     }
   };
 
@@ -752,15 +815,31 @@ export default function PortalPage() {
 
             {/* マニュアル動画 */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
-              <h2 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2">
-                <PlayCircle className="w-5 h-5 text-rose-500" /> {t('manualVideo', language)}
-              </h2>
-              <button 
-                onClick={() => router.push('/admin/manuals')}
-                className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors border border-rose-100"
-              >
-                {t('watchVideo', language)} <ArrowRight className="w-4 h-4" />
-              </button>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                  <PlayCircle className="w-5 h-5 text-rose-500" /> {t('manualVideo', language)}
+                </h2>
+                <span className="text-[10px] font-black px-2 py-0.5 bg-rose-50 text-rose-600 rounded-lg border border-rose-100">
+                  動画 & ガイド
+                </span>
+              </div>
+              <div className="space-y-2">
+                <button 
+                  onClick={() => handleOpenManualModal('video')}
+                  className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl flex items-center justify-center gap-2 transition-all border border-rose-100 active:scale-95 shadow-xs"
+                >
+                  <Play className="w-4 h-4 text-rose-600" />
+                  <span>{t('watchVideo', language)}</span>
+                  <ArrowRight className="w-4 h-4 text-rose-400" />
+                </button>
+                <button 
+                  onClick={() => handleOpenManualModal('guide')}
+                  className="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all border border-slate-200"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-slate-500" />
+                  <span>ご利用スタートガイドを見る</span>
+                </button>
+              </div>
             </div>
 
             {/* 承認待ち */}
@@ -1292,6 +1371,591 @@ export default function PortalPage() {
         <div className="fixed bottom-6 right-6 z-50 bg-emerald-700 text-white px-5 py-3 rounded-2xl shadow-xl font-black text-xs flex items-center gap-2 animate-in slide-in-from-bottom">
           <CheckCircle className="w-4 h-4 text-emerald-300" />
           <span>{leaveToast}</span>
+        </div>
+      )}
+
+      {/* 🎬📖 フルスクリーン統合マニュアル・動画モーダル */}
+      {showManualModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex flex-col animate-in fade-in duration-200">
+          
+          {/* 上部ヘッダーバー */}
+          <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-8 shadow-sm flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setShowManualModal(false)}
+                className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors flex items-center gap-1.5 font-bold text-sm"
+              >
+                <ArrowLeft className="w-5 h-5" />
+                <span className="hidden sm:inline">ポータルへ戻る</span>
+              </button>
+              <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-rose-100 text-rose-600 rounded-xl">
+                  {manualTab === 'video' ? <Video className="w-5 h-5" /> : <BookOpen className="w-5 h-5" />}
+                </div>
+                <div>
+                  <h1 className="font-black text-slate-800 text-base sm:text-lg leading-none">
+                    マニュアル・動画ガイド
+                  </h1>
+                  <span className="text-[11px] sm:text-xs font-bold text-slate-400">
+                    操作手順と解説動画を1つの画面で確認できます
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* タブ切り替えボタン */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setManualTab('video')}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-bold text-xs transition-all ${
+                  manualTab === 'video'
+                    ? 'bg-white text-rose-600 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Play className="w-3.5 h-3.5" />
+                <span>動画マニュアル</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setManualTab('guide')}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-bold text-xs transition-all ${
+                  manualTab === 'guide'
+                    ? 'bg-white text-emerald-600 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>スタートガイド</span>
+              </button>
+            </div>
+
+            {/* 右側操作ボタン */}
+            <div className="flex items-center gap-2 sm:gap-3">
+              {manualTab === 'video' && (
+                <button
+                  onClick={loadVideoManuals}
+                  className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+                  title="動画一覧を更新"
+                >
+                  <RefreshCw className={`w-5 h-5 ${isLoadingManuals ? 'animate-spin text-rose-600' : ''}`} />
+                </button>
+              )}
+              <button 
+                onClick={() => setShowManualModal(false)}
+                className="p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+                title="閉じる"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+          </header>
+
+          {/* メインスクロールエリア */}
+          <div className="flex-1 overflow-y-auto bg-slate-100 p-4 sm:p-8">
+            <div className="max-w-6xl mx-auto space-y-6">
+
+              {/* ======================================================== */}
+              {/* TAB 1: 🎬 動画マニュアル集                                */}
+              {/* ======================================================== */}
+              {manualTab === 'video' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  
+                  {/* 動画プレイヤー表示（再生中の場合） */}
+                  {playingVideoUrl && (
+                    <div className="bg-slate-900 rounded-3xl p-4 sm:p-6 shadow-xl border border-slate-800 animate-in slide-in-from-top-4">
+                      <div className="flex items-center justify-between mb-3 text-white">
+                        <div className="flex items-center gap-2">
+                          <Play className="w-4 h-4 text-rose-400" />
+                          <span className="font-bold text-sm">動画を再生中</span>
+                        </div>
+                        <button
+                          onClick={() => setPlayingVideoUrl(null)}
+                          className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                        >
+                          <X className="w-4 h-4" /> プレイヤーを閉じる
+                        </button>
+                      </div>
+                      <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl relative flex items-center justify-center">
+                        <video
+                          src={playingVideoUrl}
+                          controls
+                          autoPlay
+                          className="w-full h-full object-contain"
+                        >
+                          お使いのブラウザは動画の再生に対応していません。
+                        </video>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 動画一覧ヘッダー */}
+                  <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="bg-rose-100 text-rose-700 text-xs font-black px-2.5 py-0.5 rounded-full">
+                          MOVIE TUTORIALS
+                        </span>
+                        <span className="text-xs font-bold text-slate-400">
+                          全 {videoManuals.length} 本
+                        </span>
+                      </div>
+                      <h2 className="text-xl sm:text-2xl font-black text-slate-800">
+                        システム使い方動画集
+                      </h2>
+                      <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+                        現場での操作方法や初期設定の流れをわかりやすく動画で解説します。見たい動画をクリックして再生してください。
+                      </p>
+                    </div>
+
+                    {role === 'admin' && (
+                      <button
+                        onClick={() => router.push('/admin/manuals')}
+                        className="flex-shrink-0 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>新規動画を管理・登録</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 動画グリッド */}
+                  {isLoadingManuals ? (
+                    <div className="bg-white rounded-3xl p-16 text-center border border-slate-200">
+                      <Loader2 className="w-10 h-10 text-rose-500 animate-spin mx-auto mb-3" />
+                      <p className="text-sm font-bold text-slate-500">動画マニュアルを読み込み中...</p>
+                    </div>
+                  ) : videoManuals.length === 0 ? (
+                    <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 space-y-4">
+                      <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mx-auto text-rose-400">
+                        <Video className="w-8 h-8" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-black text-slate-800 mb-1">現在、登録されている解説動画はありません</h3>
+                        <p className="text-xs text-slate-500 max-w-md mx-auto">
+                          ステップごとの詳しい操作手順は「スタートガイド」タブから画像付きでご確認いただけます。
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setManualTab('guide')}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors shadow-sm inline-flex items-center gap-2"
+                      >
+                        <BookOpen className="w-4 h-4" />
+                        <span>操作スタートガイドを見る</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {videoManuals.map((manual) => (
+                        <div
+                          key={manual.id}
+                          onClick={() => handlePlayManualVideo(manual.video_url)}
+                          className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg hover:border-rose-300 transition-all group cursor-pointer flex flex-col"
+                        >
+                          <div className="aspect-video bg-slate-900 relative flex items-center justify-center group-hover:bg-slate-800 transition-colors">
+                            <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform backdrop-blur-xs">
+                              <Play className="w-7 h-7 text-white ml-0.5" />
+                            </div>
+                            <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur-xs">
+                              再生
+                            </span>
+                          </div>
+                          <div className="p-5 flex flex-col flex-1">
+                            <h3 className="font-black text-slate-800 text-base mb-1.5 group-hover:text-rose-600 transition-colors line-clamp-1">
+                              {manual.title}
+                            </h3>
+                            {manual.description ? (
+                              <p className="text-xs text-slate-500 font-medium line-clamp-2 leading-relaxed flex-1">
+                                {manual.description}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-slate-400 italic flex-1">説明はありません</p>
+                            )}
+                            <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-bold">
+                              <span>{manual.created_at ? new Date(manual.created_at).toLocaleDateString() : ''}</span>
+                              <span className="text-rose-600 font-black flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                                動画を見る <ArrowRight className="w-3.5 h-3.5" />
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                </div>
+              )}
+
+              {/* ======================================================== */}
+              {/* TAB 2: 📖 スタートガイド（操作マニュアル）                */}
+              {/* ======================================================== */}
+              {manualTab === 'guide' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  
+                  {/* ガイドヘッダー */}
+                  <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="bg-emerald-100 text-emerald-700 text-xs font-black px-2.5 py-0.5 rounded-full">
+                        START GUIDE
+                      </span>
+                    </div>
+                    <h2 className="text-xl sm:text-2xl font-black text-slate-800">
+                      農業経営システム ご利用スタートガイド
+                    </h2>
+                    <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+                      「どの畑で・どの作物を育てると・いくら儲かるのか」を正確に把握するためのステップです。<br className="hidden sm:block" />
+                      この順序通りに進めるだけで、誰でも簡単にシステムを活用できます。
+                    </p>
+
+                    {/* ステップナビゲーション */}
+                    <div className="flex overflow-x-auto pb-2 mt-6 gap-2 hide-scrollbar">
+                      {[
+                        { id: 1, title: '1. 作付地図で圃場登録', icon: MapPin },
+                        { id: 2, title: '2. 基本マスタ登録', icon: UserCheck },
+                        { id: 3, title: '3. 栽培計画作成', icon: Sprout },
+                        { id: 4, title: '4. 現場スマホ入力', icon: Smartphone },
+                        { id: 5, title: '5. 月末請求・経費', icon: Receipt },
+                        { id: 6, title: '6. 利益の確認・分析', icon: TrendingUp },
+                        { id: 0, title: '補足: 画面の見方', icon: LayoutDashboard },
+                      ].map((step) => {
+                        const Icon = step.icon;
+                        const isActive = activeGuideStep === step.id;
+                        return (
+                          <button
+                            key={step.id}
+                            onClick={() => setActiveGuideStep(step.id)}
+                            className={`flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-xs transition-all border-2 ${
+                              isActive
+                                ? 'bg-emerald-50 border-emerald-500 text-emerald-800 shadow-xs'
+                                : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-white hover:border-slate-300'
+                            }`}
+                          >
+                            <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
+                            <span className="whitespace-nowrap">{step.title}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* ステップ詳細カード */}
+                  <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 sm:p-10 space-y-6">
+                    
+                    {/* STEP 1: 作付地図で圃場登録 */}
+                    {activeGuideStep === 1 && (
+                      <div className="space-y-6 animate-in fade-in">
+                        <div className="border-b border-slate-100 pb-4">
+                          <h3 className="text-xl font-black text-slate-800 mb-1">
+                            【ステップ1】 作付地図で圃場（畑・ハウス）を登録しよう
+                          </h3>
+                          <p className="text-sm text-slate-600 leading-relaxed">
+                            Googleマップの航空写真を使って、持っている畑やビニールハウスを直感的に登録します。
+                            自分の畑を地図上で囲むだけで、面積（アール: a）が自動計算されます！
+                          </p>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="bg-emerald-50/70 p-5 rounded-2xl border border-emerald-100 space-y-2">
+                            <div className="flex items-center gap-2 text-emerald-900 font-bold text-sm">
+                              <MapPin className="w-4 h-4 text-emerald-600" /> 1. 地図を開いて畑を追加
+                            </div>
+                            <p className="text-xs text-emerald-800 leading-relaxed">
+                              左メニューの「作付地図」を開き、画面上の「＋ 地図に畑を追加」ボタンを押します。
+                            </p>
+                          </div>
+
+                          <div className="bg-emerald-50/70 p-5 rounded-2xl border border-emerald-100 space-y-2">
+                            <div className="flex items-center gap-2 text-emerald-900 font-bold text-sm">
+                              <Pointer className="w-4 h-4 text-emerald-600" /> 2. 地図上をクリックして畑を囲む
+                            </div>
+                            <p className="text-xs text-emerald-800 leading-relaxed">
+                              畑の角をポチポチとクリックして囲むと、右上に「現在の面積: 〇〇 a」と自動表示され、正確な面積が計算されます。
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-1">
+                          <strong className="flex items-center gap-1 font-bold"><CheckCircle2 className="w-4 h-4 text-amber-600" /> ここがポイント！</strong>
+                          <p>ここで登録した畑の面積をもとに、あとで全体の電気代や資材費が自動的に公平に按分（割り振り）されます。</p>
+                        </div>
+
+                        <div className="flex justify-end pt-2">
+                          <button onClick={() => setActiveGuideStep(2)} className="bg-slate-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl hover:bg-slate-700 transition-colors flex items-center gap-1">
+                            次のステップ（マスタ登録）へ <ArrowRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* STEP 2: 基本マスタ登録 */}
+                    {activeGuideStep === 2 && (
+                      <div className="space-y-6 animate-in fade-in">
+                        <div className="border-b border-slate-100 pb-4">
+                          <h3 className="text-xl font-black text-slate-800 mb-1">
+                            【ステップ2】 その他の初期設定（基本データの登録）
+                          </h3>
+                          <p className="text-sm text-slate-600 leading-relaxed">
+                            圃場の登録が終わったら、育てる作物・働くスタッフ・使う資材などを登録します。
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                            <strong className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                              <Sprout className="w-4 h-4 text-emerald-600" /> 1. 作目（作物）の登録
+                            </strong>
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                              キャベツやトマトなど育てる作物を登録します。10aあたりの概算経費を設定しておくと予算管理が自動化されます。
+                            </p>
+                          </div>
+
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                            <strong className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                              <UserCheck className="w-4 h-4 text-emerald-600" /> 2. 作業者（スタッフ）の登録
+                            </strong>
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                              一緒に働く従業員やご自身を登録します。時給と現場用4桁PINコードを設定します。
+                            </p>
+                          </div>
+
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                            <strong className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                              <PackageOpen className="w-4 h-4 text-emerald-600" /> 3. 資材・農薬の登録
+                            </strong>
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                              肥料や農薬、段ボール等の購入単価を登録しておくと、現場で「1袋使った」と選ぶだけで原価計算されます。
+                            </p>
+                          </div>
+
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                            <strong className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                              <Banknote className="w-4 h-4 text-emerald-600" /> 4. 出荷先・販売単価
+                            </strong>
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                              JAや直売所、スーパーごとの単価を設定しておくと、出荷記録をつけるだけで売上が即時集計されます。
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs text-emerald-900 flex items-center gap-2">
+                          <Globe2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                          <span><strong>多言語AI自動翻訳:</strong> 作目や資材を日本語で登録するだけで、英語・ベトナム語・インドネシア語・中国語へ自動翻訳されます。</span>
+                        </div>
+
+                        <div className="flex justify-between pt-2">
+                          <button onClick={() => setActiveGuideStep(1)} className="text-slate-500 font-bold text-xs px-4 py-2 hover:bg-slate-100 rounded-lg">前へ</button>
+                          <button onClick={() => setActiveGuideStep(3)} className="bg-slate-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl hover:bg-slate-700 transition-colors flex items-center gap-1">
+                            次のステップ（栽培計画）へ <ArrowRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* STEP 3: 栽培計画作成 */}
+                    {activeGuideStep === 3 && (
+                      <div className="space-y-6 animate-in fade-in">
+                        <div className="border-b border-slate-100 pb-4">
+                          <h3 className="text-xl font-black text-slate-800 mb-1">
+                            【ステップ3】 栽培計画を立てよう
+                          </h3>
+                          <p className="text-sm text-slate-600 leading-relaxed">
+                            基本データの登録が終わったら、カレンダー表で今年の栽培スケジュールを計画します。
+                          </p>
+                        </div>
+
+                        <div className="p-5 bg-emerald-50/70 rounded-2xl border border-emerald-100 space-y-3">
+                          <strong className="text-sm font-bold text-emerald-900 block">栽培計画の作成手順:</strong>
+                          <ol className="list-decimal ml-5 space-y-2 text-xs text-emerald-800 leading-relaxed font-medium">
+                            <li>「栽培・予実管理表」を開き、計画を立てたい <strong>「畑（圃場）」</strong> と <strong>「開始月」</strong> のマス目をクリックします。</li>
+                            <li><strong>「育てる作物（作目）」</strong> と <strong>「終了月」</strong> を選んで「保存する」を押します。</li>
+                            <li>圃場の面積と作物の基準値から <strong>「必要苗数」「資材予算」「売上目標」</strong> が自動計算され、カレンダー上に計画バーが表示されます。</li>
+                          </ol>
+                        </div>
+
+                        <div className="flex justify-between pt-2">
+                          <button onClick={() => setActiveGuideStep(2)} className="text-slate-500 font-bold text-xs px-4 py-2 hover:bg-slate-100 rounded-lg">前へ</button>
+                          <button onClick={() => setActiveGuideStep(4)} className="bg-slate-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl hover:bg-slate-700 transition-colors flex items-center gap-1">
+                            次のステップ（現場スマホ入力）へ <ArrowRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* STEP 4: 現場スマホ入力 */}
+                    {activeGuideStep === 4 && (
+                      <div className="space-y-6 animate-in fade-in">
+                        <div className="border-b border-slate-100 pb-4">
+                          <h3 className="text-xl font-black text-slate-800 mb-1">
+                            【ステップ4】 日常の記録（現場からスマホで簡単入力！）
+                          </h3>
+                          <p className="text-sm text-slate-600 leading-relaxed">
+                            毎日の作業や収穫記録を、農場（現場）からスマートフォンでワンタップで入力できます。
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                            <strong className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                              <Smartphone className="w-4 h-4 text-blue-600" /> スマホでPINログイン
+                            </strong>
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                              名前を選んで4桁暗証番号を入れるだけ。多言語切り替え（日・英・越・尼・中）に対応しています。
+                            </p>
+                          </div>
+
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                            <strong className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                              <Clock className="w-4 h-4 text-emerald-600" /> タイマー / 手入力モード
+                            </strong>
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                              「作業開始」ボタンで自動計測するタイマーモードと、後からまとめて入力できる手入力モードを選べます。
+                            </p>
+                          </div>
+
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                            <strong className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                              <Camera className="w-4 h-4 text-purple-600" /> 写真・動画を添付
+                            </strong>
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                              病害虫の様子や野菜の生育状態をカメラで撮影して日報に添付できます。画像は自動で高速圧縮されます。
+                            </p>
+                          </div>
+
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                            <strong className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                              <Truck className="w-4 h-4 text-amber-600" /> 出荷・売上の記録
+                            </strong>
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                              出荷した数量を入力すると、登録単価から売上金額が自動計算され、畑ごとの採算に直結します。
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between pt-2">
+                          <button onClick={() => setActiveGuideStep(3)} className="text-slate-500 font-bold text-xs px-4 py-2 hover:bg-slate-100 rounded-lg">前へ</button>
+                          <button onClick={() => setActiveGuideStep(5)} className="bg-slate-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl hover:bg-slate-700 transition-colors flex items-center gap-1">
+                            次のステップ（月末請求・経費）へ <ArrowRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* STEP 5: 月末請求・経費 */}
+                    {activeGuideStep === 5 && (
+                      <div className="space-y-6 animate-in fade-in">
+                        <div className="border-b border-slate-100 pb-4">
+                          <h3 className="text-xl font-black text-slate-800 mb-1">
+                            【ステップ5】 月末・決算の経理作業
+                          </h3>
+                          <p className="text-sm text-slate-600 leading-relaxed">
+                            月末の請求書発行や、月に1回の経費入力、そして決算時の会計データ出力を行います。
+                          </p>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+                            <strong className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                              <FileText className="w-4 h-4 text-blue-600" /> 1. 請求書の一括発行（月末）
+                            </strong>
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                              日々の出荷記録を自動集計し、取引先ごとのインボイス対応請求書をPDFダウンロードまたはメール送信できます。
+                            </p>
+                          </div>
+
+                          <div className="p-4 bg-emerald-50/70 rounded-2xl border border-emerald-100 space-y-1">
+                            <strong className="text-sm font-bold text-emerald-900 flex items-center gap-1.5">
+                              <Calculator className="w-4 h-4 text-emerald-600" /> 2. 月次全体経費の入力（自動按分）
+                            </strong>
+                            <p className="text-xs text-emerald-800 leading-relaxed">
+                              電気代や燃料代など「農場全体にかかったお金」を入力すると、システムが畑の面積に合わせて自動按分して各作物の原価に反映します。
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between pt-2">
+                          <button onClick={() => setActiveGuideStep(4)} className="text-slate-500 font-bold text-xs px-4 py-2 hover:bg-slate-100 rounded-lg">前へ</button>
+                          <button onClick={() => setActiveGuideStep(6)} className="bg-slate-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl hover:bg-slate-700 transition-colors flex items-center gap-1">
+                            次のステップ（利益分析）へ <ArrowRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* STEP 6: 利益の確認・分析 */}
+                    {activeGuideStep === 6 && (
+                      <div className="space-y-6 animate-in fade-in">
+                        <div className="border-b border-slate-100 pb-4">
+                          <h3 className="text-xl font-black text-slate-800 mb-1">
+                            【ステップ6】 利益の確認・分析（経営の見える化）
+                          </h3>
+                          <p className="text-sm text-slate-600 leading-relaxed">
+                            日々の作業時間・資材使用・出荷売上・按分経費が合算され、畑ごと・作目ごとの真の収支が判明します。
+                          </p>
+                        </div>
+
+                        <div className="p-5 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200 space-y-3">
+                          <strong className="text-sm font-bold text-emerald-900 flex items-center gap-1.5">
+                            <TrendingUp className="w-5 h-5 text-emerald-600" /> 「どの畑が一番儲かっているか？」が一目で分かる！
+                          </strong>
+                          <ul className="space-y-1.5 list-disc ml-5 text-xs text-emerald-800 leading-relaxed font-medium">
+                            <li><strong>作目別 採算分析:</strong> 作物ごとの売上・直接原価・按分経費・人件費・粗利率をグラフで比較。</li>
+                            <li><strong>圃場別 レポート:</strong> 畑ごとの実質時給（売上−経費 ÷ 総労働時間）を算出。</li>
+                            <li><strong>来期の作付戦略へ:</strong> 儲かる作物に面積を集中させ、無駄なコストを削減するデータ経営が実現します。</li>
+                          </ul>
+                        </div>
+
+                        <div className="flex justify-between pt-2">
+                          <button onClick={() => setActiveGuideStep(5)} className="text-slate-500 font-bold text-xs px-4 py-2 hover:bg-slate-100 rounded-lg">前へ</button>
+                          <button onClick={() => setManualTab('video')} className="bg-rose-600 text-white text-xs font-bold px-5 py-2.5 rounded-xl hover:bg-rose-700 transition-colors flex items-center gap-1">
+                            動画マニュアルを見る <Video className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* STEP 0: 補足 */}
+                    {activeGuideStep === 0 && (
+                      <div className="space-y-6 animate-in fade-in">
+                        <div className="border-b border-slate-100 pb-4">
+                          <h3 className="text-xl font-black text-slate-800 mb-1">
+                            【補足】 画面の見方とおすすめの運用ルーティン
+                          </h3>
+                          <p className="text-sm text-slate-600 leading-relaxed">
+                            日々の農業経営を効率よく回すための基本ルーティンです。
+                          </p>
+                        </div>
+
+                        <div className="space-y-3 text-xs text-slate-700 leading-relaxed">
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                            <strong className="text-slate-900 block font-bold mb-1">☀️ 朝のルーティン:</strong>
+                            ポータル画面で今日のタスク予定と社内掲示板を確認し、「出勤」を打刻します。
+                          </div>
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                            <strong className="text-slate-900 block font-bold mb-1">🌾 日中のルーティン:</strong>
+                            畑で作業を行いながらスマホで作業時間や資材使用を記録します。
+                          </div>
+                          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                            <strong className="text-slate-900 block font-bold mb-1">🌙 夕方のルーティン:</strong>
+                            収穫・出荷の数量を記録し、「退勤」を打刻。管理者は承認インボックスを確認してワンクリック承認します。
+                          </div>
+                        </div>
+
+                        <div className="flex justify-start pt-2">
+                          <button onClick={() => setActiveGuideStep(1)} className="text-slate-500 font-bold text-xs px-4 py-2 hover:bg-slate-100 rounded-lg">ステップ1へ戻る</button>
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+
+                </div>
+              )}
+
+            </div>
+          </div>
+
         </div>
       )}
 
