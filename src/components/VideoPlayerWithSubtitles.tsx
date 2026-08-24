@@ -168,7 +168,6 @@ export default function VideoPlayerWithSubtitles({
       <video
         key={videoUrl}
         ref={videoRef}
-        src={videoUrl}
         className="w-full h-full object-contain cursor-pointer"
         controls
         playsInline
@@ -187,7 +186,6 @@ export default function VideoPlayerWithSubtitles({
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
         onError={(e) => {
-          // videoUrl が有効な場合のみエラー処理
           if (videoUrl && videoRef.current?.error) {
             console.error('Video error event:', videoRef.current.error);
             setIsLoading(false);
@@ -196,7 +194,13 @@ export default function VideoPlayerWithSubtitles({
         }}
         onTimeUpdate={handleTimeUpdate}
         onClick={handlePlayPauseToggle}
-      />
+      >
+        <source src={videoUrl} type="video/mp4" />
+        <source src={videoUrl} type="video/webm" />
+        <source src={videoUrl} type="video/quicktime" />
+        <source src={videoUrl} />
+        お使いの端末は動画タグをサポートしていません。
+      </video>
 
       {/* ⏳ ローディングスピナー */}
       {isLoading && !hasError && (
@@ -208,21 +212,38 @@ export default function VideoPlayerWithSubtitles({
 
       {/* ⚠️ 再生エラー時のフォールバック */}
       {hasError && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 text-white p-4 text-center z-10 space-y-3">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/95 text-white p-4 text-center z-10 space-y-3">
           <AlertTriangle className="w-10 h-10 text-amber-400" />
-          <div>
-            <p className="text-xs sm:text-sm font-bold">お使いの端末でこの動画形式を直接再生できませんでした</p>
-            <p className="text-[11px] text-slate-400 mt-1">下のボタンからブラウザで直接再生をお試しください</p>
+          <div className="max-w-sm">
+            <p className="text-xs sm:text-sm font-bold text-white">動画の読み込みに失敗しました</p>
+            <p className="text-[11px] text-slate-400 mt-1">
+              端末のコーデック非対応（MOV/HEVC等）または通信エラーの可能性があります
+            </p>
           </div>
-          <a
-            href={videoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition-all shadow-md"
-          >
-            <span>外部プレイヤーで再生</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setHasError(false);
+                setIsLoading(true);
+                if (videoRef.current) {
+                  videoRef.current.load();
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl border border-slate-700 transition-all shadow-md active:scale-95"
+            >
+              <span>🔄 再試行</span>
+            </button>
+            <a
+              href={videoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition-all shadow-md active:scale-95"
+            >
+              <span>外部プレイヤーで再生</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </div>
         </div>
       )}
 

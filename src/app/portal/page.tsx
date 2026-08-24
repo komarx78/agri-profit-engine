@@ -644,16 +644,22 @@ export default function PortalPage() {
       const fileExt = newVideoFile.name.split('.').pop();
       const fileName = `${ownerId || 'manuals'}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-      // 1. Storageにアップロード
+      // 1. Storageにアップロード (明示的なcontentType指定)
       let uploadError = null;
+      const uploadOptions = { 
+        cacheControl: '31536000', 
+        upsert: false,
+        contentType: newVideoFile.type || 'video/mp4'
+      };
+
       const { error: err1 } = await supabase.storage
         .from('work_videos')
-        .upload(fileName, newVideoFile, { cacheControl: '31536000', upsert: false });
+        .upload(fileName, newVideoFile, uploadOptions);
 
       if (err1) {
         const { error: err2 } = await supabase.storage
           .from('videos')
-          .upload(fileName, newVideoFile, { cacheControl: '31536000', upsert: false });
+          .upload(fileName, newVideoFile, uploadOptions);
         if (err2) {
           uploadError = err2;
         }
