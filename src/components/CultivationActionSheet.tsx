@@ -1,4 +1,5 @@
 "use client";
+// CultivationActionSheet v2.1 (Smart Multi-Field Allocation & TDZ Safe)
 
 import React, { useState, useMemo } from 'react';
 import { 
