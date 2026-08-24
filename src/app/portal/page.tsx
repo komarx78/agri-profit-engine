@@ -11,9 +11,10 @@ import {
   Coffee, CalendarPlus, CheckCircle, UserCheck, BookOpen, Video, Play,
   PackageOpen, Sprout, Smartphone, Receipt, TrendingUp, Pointer, Banknote,
   FileSpreadsheet, Store, Calculator, Database, Camera, ExternalLink, HelpCircle,
-  Truck
+  Truck, Scissors, Sliders, Check, Languages, Wand2, Edit3, Save, RotateCcw
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import VideoPlayerWithSubtitles, { Narration } from '@/components/VideoPlayerWithSubtitles';
 import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
 import { getPortalTasks } from '@/app/actions/farm';
@@ -67,14 +68,28 @@ export default function PortalPage() {
   const [manualTab, setManualTab] = useState<'video' | 'guide'>('video');
   const [videoManuals, setVideoManuals] = useState<any[]>([]);
   const [isLoadingManuals, setIsLoadingManuals] = useState(false);
-  const [playingVideoUrl, setPlayingVideoUrl] = useState<string | null>(null);
-  const [activeGuideStep, setActiveGuideStep] = useState<number>(1);
-  const [showAddVideoModal, setShowAddVideoModal] = useState(false);
-  const [newVideoTitle, setNewVideoTitle] = useState('');
-  const [newVideoDescription, setNewVideoDescription] = useState('');
-  const [newVideoFile, setNewVideoFile] = useState<File | null>(null);
-  const [isSubmittingVideo, setIsSubmittingVideo] = useState(false);
-  const [videoModalMessage, setVideoModalMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  // 🎬 動画編集スタジオ（テロップ・トリミング）用ステート
+  const [editingManual, setEditingManual] = useState<any | null>(null);
+  const [editingVideoUrl, setEditingVideoUrl] = useState<string | null>(null);
+  const [editingNarrations, setEditingNarrations] = useState<Narration[]>([]);
+  const [isLoadingNarrations, setIsLoadingNarrations] = useState(false);
+  const [studioPlaybackTime, setStudioPlaybackTime] = useState<number>(0);
+  const [trimStartInput, setTrimStartInput] = useState<string>('0');
+  const [trimEndInput, setTrimEndInput] = useState<string>('');
+  
+  // テロップ作成フォーム
+  const [telopStartSec, setTelopStartSec] = useState<string>('0');
+  const [telopEndSec, setTelopEndSec] = useState<string>('3');
+  const [telopJa, setTelopJa] = useState<string>('');
+  const [telopTranslations, setTelopTranslations] = useState<Record<string, string>>({});
+  const [isTranslatingTelop, setIsTranslatingTelop] = useState(false);
+  const [isSavingStudio, setIsSavingStudio] = useState(false);
+  const [studioToast, setStudioToast] = useState<string | null>(null);
+
+  // 再生中動画用のテロップ一覧・トリミング
+  const [playingNarrations, setPlayingNarrations] = useState<Narration[]>([]);
+  const [playingTrimStart, setPlayingTrimStart] = useState<number>(0);
+  const [playingTrimEnd, setPlayingTrimEnd] = useState<number | undefined>(undefined);
 
   // 自由入力タスクタイトルのリアルタイム自動翻訳
   useEffect(() => {
@@ -359,30 +374,225 @@ export default function PortalPage() {
     await loadVideoManuals();
   };
 
-  const handlePlayManualVideo = async (videoUrl: string) => {
-    if (!videoUrl) return;
-    if (videoUrl.startsWith('http://') || videoUrl.startsWith('https://')) {
-      setPlayingVideoUrl(videoUrl);
-      return;
+  const resolveVideoUrl = async (videoPath: string): Promise<string> => {
+    if (!videoPath) return '';
+    if (videoPath.startsWith('http://') || videoPath.startsWith('https://')) {
+      return videoPath;
     }
     try {
       const { data, error } = await supabase.storage
         .from('work_videos')
-        .createSignedUrl(videoUrl, 3600);
+        .createSignedUrl(videoPath, 7200);
       
       if (!error && data?.signedUrl) {
-        setPlayingVideoUrl(data.signedUrl);
+        return data.signedUrl;
+      }
+      const { data: pubData } = supabase.storage.from('videos').getPublicUrl(videoPath);
+      return pubData?.publicUrl || videoPath;
+    } catch (e) {
+      console.error('Error resolving video url:', e);
+      return videoPath;
+    }
+  };
+
+  // 動画再生（多言語字幕・トリミング付き）
+  const handlePlayManualVideo = async (manual: any) => {
+    if (!manual) return;
+    const url = await resolveVideoUrl(manual.video_url);
+    setPlayingVideoUrl(url);
+    setPlayingTrimStart(Number(manual.trim_start) || 0);
+    setPlayingTrimEnd(manual.trim_end ? Number(manual.trim_end) : undefined);
+
+    // テロップ一覧を取得
+    try {
+      const { data, error } = await supabase
+        .from('video_narrations')
+        .select('*')
+        .eq('video_id', manual.id)
+        .order('start_time', { ascending: true });
+      
+      if (!error && data) {
+        setPlayingNarrations(data);
       } else {
-        const { data: pubData } = supabase.storage.from('videos').getPublicUrl(videoUrl);
-        if (pubData?.publicUrl) {
-          setPlayingVideoUrl(pubData.publicUrl);
-        } else {
-          setPlayingVideoUrl(videoUrl);
-        }
+        setPlayingNarrations([]);
       }
     } catch (e) {
-      console.error('Error creating video signed url:', e);
-      setPlayingVideoUrl(videoUrl);
+      console.error('Error loading narrations for player:', e);
+      setPlayingNarrations([]);
+    }
+  };
+
+  // 🎬 動画編集スタジオ（エディタ）を開く
+  const handleOpenStudio = async (manual: any) => {
+    setEditingManual(manual);
+    setTrimStartInput(manual.trim_start ? String(manual.trim_start) : '0');
+    setTrimEndInput(manual.trim_end ? String(manual.trim_end) : '');
+    setTelopStartSec('0');
+    setTelopEndSec('3');
+    setTelopJa('');
+    setTelopTranslations({});
+    setIsLoadingNarrations(true);
+
+    const url = await resolveVideoUrl(manual.video_url);
+    setEditingVideoUrl(url);
+
+    try {
+      const { data, error } = await supabase
+        .from('video_narrations')
+        .select('*')
+        .eq('video_id', manual.id)
+        .order('start_time', { ascending: true });
+      
+      if (!error && data) {
+        setEditingNarrations(data);
+      } else {
+        setEditingNarrations([]);
+      }
+    } catch (e) {
+      console.error('Error loading narrations for studio:', e);
+      setEditingNarrations([]);
+    } finally {
+      setIsLoadingNarrations(false);
+    }
+  };
+
+  // テロップのAI多言語一括自動翻訳
+  const handleTranslateTelop = async () => {
+    if (!telopJa.trim()) {
+      alert('日本語のテロップを入力してください。');
+      return;
+    }
+
+    setIsTranslatingTelop(true);
+    try {
+      const res = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: telopJa,
+          targetLanguages: ['en', 'vi', 'id', 'zh', 'si', 'km']
+        })
+      });
+      const data = await res.json();
+      if (data && data.translations) {
+        setTelopTranslations(data.translations);
+      } else {
+        // フォールバック
+        setTelopTranslations({
+          en: telopJa,
+          vi: telopJa,
+          id: telopJa,
+          zh: telopJa
+        });
+      }
+    } catch (e) {
+      console.error('Telop translation error:', e);
+      alert('AI翻訳中にエラーが発生しました。');
+    } finally {
+      setIsTranslatingTelop(false);
+    }
+  };
+
+  // タイムラインにテロップを追加
+  const handleAddNarrationToStudio = () => {
+    const s = parseFloat(telopStartSec);
+    const e = parseFloat(telopEndSec);
+
+    if (isNaN(s) || isNaN(e) || s < 0 || e <= s) {
+      alert('開始秒数と終了秒数を正しく設定してください（終了秒数は開始秒数より大きくする必要があります）。');
+      return;
+    }
+    if (!telopJa.trim()) {
+      alert('テロップ内容を入力してください。');
+      return;
+    }
+
+    const newNarration: Narration = {
+      start_time: s,
+      end_time: e,
+      script_ja: telopJa.trim(),
+      script_en: telopTranslations['en'] || '',
+      script_vi: telopTranslations['vi'] || '',
+      script_id: telopTranslations['id'] || '',
+      script_zh: telopTranslations['zh'] || '',
+      script_si: telopTranslations['si'] || '',
+      script_km: telopTranslations['km'] || '',
+      translations: { ...telopTranslations, ja: telopJa.trim() }
+    };
+
+    // タイムラインに追加して開始時間順にソート
+    setEditingNarrations(prev => [...prev, newNarration].sort((a, b) => a.start_time - b.start_time));
+
+    // フォームをリセットし、次の開始秒を今回の終了秒にセット
+    setTelopStartSec(e.toFixed(1));
+    setTelopEndSec((e + 3).toFixed(1));
+    setTelopJa('');
+    setTelopTranslations({});
+  };
+
+  // タイムラインからテロップを削除
+  const handleDeleteNarrationFromStudio = (index: number) => {
+    setEditingNarrations(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  // スタジオでの編集内容（トリミング＋テロップ）を一括保存
+  const handleSaveStudio = async () => {
+    if (!editingManual) return;
+    setIsSavingStudio(true);
+
+    try {
+      const trimStart = parseFloat(trimStartInput) || 0;
+      const trimEnd = trimEndInput ? parseFloat(trimEndInput) : null;
+
+      // 1. video_manuals のトリミング秒数を更新
+      const { error: manualError } = await supabase
+        .from('video_manuals')
+        .update({
+          trim_start: trimStart,
+          trim_end: trimEnd
+        })
+        .eq('id', editingManual.id);
+
+      if (manualError) throw manualError;
+
+      // 2. 既存の video_narrations を一旦削除
+      await supabase.from('video_narrations').delete().eq('video_id', editingManual.id);
+
+      // 3. 新しいテロップ一覧を挿入
+      if (editingNarrations.length > 0) {
+        const insertPayloads = editingNarrations.map(n => ({
+          video_id: editingManual.id,
+          start_time: n.start_time,
+          end_time: n.end_time,
+          script_ja: n.script_ja,
+          script_en: n.script_en || n.translations?.['en'] || null,
+          script_vi: n.script_vi || n.translations?.['vi'] || null,
+          script_id: n.script_id || n.translations?.['id'] || null,
+          script_zh: n.script_zh || n.translations?.['zh'] || null,
+          script_si: n.script_si || n.translations?.['si'] || null,
+          script_km: n.script_km || n.translations?.['km'] || null,
+          translations: n.translations || {}
+        }));
+
+        const { error: narrError } = await supabase
+          .from('video_narrations')
+          .insert(insertPayloads);
+
+        if (narrError) throw narrError;
+      }
+
+      setStudioToast('動画のトリミングとテロップを保存しました！');
+      setTimeout(() => setStudioToast(null), 3500);
+
+      // スタジオを閉じて一覧を再取得
+      setEditingManual(null);
+      await loadVideoManuals();
+
+    } catch (err: any) {
+      console.error(err);
+      alert('保存に失敗しました: ' + err.message);
+    } finally {
+      setIsSavingStudio(false);
     }
   };
 
@@ -1555,7 +1765,7 @@ export default function PortalPage() {
                       <div className="flex items-center justify-between mb-3 text-white">
                         <div className="flex items-center gap-2">
                           <Play className="w-4 h-4 text-rose-400" />
-                          <span className="font-bold text-sm">動画を再生中</span>
+                          <span className="font-bold text-sm">動画を再生中（多言語テロップ連動）</span>
                         </div>
                         <button
                           onClick={() => setPlayingVideoUrl(null)}
@@ -1564,16 +1774,14 @@ export default function PortalPage() {
                           <X className="w-4 h-4" /> プレイヤーを閉じる
                         </button>
                       </div>
-                      <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl relative flex items-center justify-center">
-                        <video
-                          src={playingVideoUrl}
-                          controls
-                          autoPlay
-                          className="w-full h-full object-contain"
-                        >
-                          お使いのブラウザは動画の再生に対応していません。
-                        </video>
-                      </div>
+                      <VideoPlayerWithSubtitles
+                        videoUrl={playingVideoUrl}
+                        narrations={playingNarrations}
+                        language={language}
+                        trimStart={playingTrimStart}
+                        trimEnd={playingTrimEnd}
+                        autoPlay={true}
+                      />
                     </div>
                   )}
 
@@ -1648,7 +1856,7 @@ export default function PortalPage() {
                       {videoManuals.map((manual) => (
                         <div
                           key={manual.id}
-                          onClick={() => handlePlayManualVideo(manual.video_url)}
+                          onClick={() => handlePlayManualVideo(manual)}
                           className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg hover:border-rose-300 transition-all group cursor-pointer flex flex-col relative"
                         >
                           <div className="aspect-video bg-slate-900 relative flex items-center justify-center group-hover:bg-slate-800 transition-colors">
@@ -1681,9 +1889,24 @@ export default function PortalPage() {
                             )}
                             <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-bold">
                               <span>{manual.created_at ? new Date(manual.created_at).toLocaleDateString() : ''}</span>
-                              <span className="text-rose-600 font-black flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                                動画を見る <ArrowRight className="w-3.5 h-3.5" />
-                              </span>
+                              <div className="flex items-center gap-2">
+                                {role === 'admin' && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenStudio(manual);
+                                    }}
+                                    className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-xs"
+                                    title="動画のトリミングとテロップを編集"
+                                  >
+                                    <Scissors className="w-3 h-3 text-rose-500" />
+                                    <span>編集・テロップ</span>
+                                  </button>
+                                )}
+                                <span className="text-rose-600 font-black flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                                  動画を見る <ArrowRight className="w-3.5 h-3.5" />
+                                </span>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -2171,6 +2394,382 @@ export default function PortalPage() {
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* 🎬✂️ フルスクリーン動画編集・テロップスタジオモーダル */}
+      {editingManual && (
+        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-[130] flex flex-col animate-in fade-in duration-200 text-slate-100">
+          
+          {/* スタジオヘッダー */}
+          <header className="h-16 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 sm:px-8 flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setEditingManual(null)}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors flex items-center gap-1.5 font-bold text-xs"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>スタジオを閉じる</span>
+              </button>
+              <div className="h-6 w-px bg-slate-800"></div>
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/30">
+                  <Scissors className="w-4 h-4" />
+                </div>
+                <div>
+                  <h1 className="font-black text-white text-sm sm:text-base leading-none flex items-center gap-2">
+                    <span>動画・テロップ編集スタジオ</span>
+                    <span className="text-[10px] bg-rose-600 text-white font-bold px-2 py-0.5 rounded-md">
+                      {editingManual.title}
+                    </span>
+                  </h1>
+                  <span className="text-[10px] text-slate-400">
+                    不要な部分をカットし、秒数を指定してAI多言語テロップを追加できます
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {/* 言語プレビュー切り替え */}
+              <div className="flex items-center gap-1.5 bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700">
+                <Languages className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-[10px] font-bold text-slate-400">プレビュー言語:</span>
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value as LanguageCode)}
+                  className="bg-transparent text-xs font-bold text-white outline-none cursor-pointer"
+                >
+                  {LANGUAGES.map(l => (
+                    <option key={l.code} value={l.code} className="bg-slate-900 text-white">{l.flag} {l.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                onClick={handleSaveStudio}
+                disabled={isSavingStudio}
+                className="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs px-5 py-2.5 rounded-xl transition-all shadow-lg flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {isSavingStudio ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                <span>{isSavingStudio ? '保存中...' : 'スタジオで保存する'}</span>
+              </button>
+            </div>
+          </header>
+
+          {/* スタジオメインエリア (2カラム) */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            {/* 左側: 動画プレビュー & トリミング設定 */}
+            <div className="lg:col-span-7 space-y-5">
+              
+              {/* プレビュープレイヤー */}
+              <div className="bg-slate-900 rounded-3xl p-4 sm:p-5 border border-slate-800 shadow-xl space-y-3">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                  <div className="flex items-center gap-2">
+                    <Play className="w-4 h-4 text-rose-400" />
+                    <span>リアルタイム プレビュー</span>
+                  </div>
+                  <div className="bg-slate-800 px-3 py-1 rounded-lg border border-slate-700 font-mono text-emerald-400 font-black">
+                    再生位置: {studioPlaybackTime.toFixed(1)} 秒
+                  </div>
+                </div>
+
+                {editingVideoUrl ? (
+                  <VideoPlayerWithSubtitles
+                    videoUrl={editingVideoUrl}
+                    narrations={editingNarrations}
+                    language={language}
+                    trimStart={parseFloat(trimStartInput) || 0}
+                    trimEnd={trimEndInput ? parseFloat(trimEndInput) : undefined}
+                    onTimeUpdate={(t) => setStudioPlaybackTime(t)}
+                  />
+                ) : (
+                  <div className="aspect-video bg-black rounded-2xl flex items-center justify-center">
+                    <Loader2 className="w-8 h-8 text-rose-500 animate-spin" />
+                  </div>
+                )}
+
+                {/* タイムスタンプワンタップボタンバー */}
+                <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
+                  <span className="text-slate-400">現在秒数をテロップ開始に指定:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTelopStartSec(studioPlaybackTime.toFixed(1));
+                      setTelopEndSec((studioPlaybackTime + 3).toFixed(1));
+                    }}
+                    className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded-xl font-black transition-all flex items-center gap-1"
+                  >
+                    <span>📌 {studioPlaybackTime.toFixed(1)}秒を開始にセット</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* ✂️ カット・トリミング設定パネル */}
+              <div className="bg-slate-900 rounded-3xl p-5 border border-slate-800 shadow-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-black text-white flex items-center gap-2">
+                    <Scissors className="w-4 h-4 text-amber-400" />
+                    動画のカット・トリミング設定
+                  </h2>
+                  <span className="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                    余分な前後をスキップ再生
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* 先頭カット */}
+                  <div className="bg-slate-800/60 p-3.5 rounded-2xl border border-slate-700/60 space-y-2">
+                    <label className="block text-xs font-bold text-slate-300">
+                      再生開始秒数（先頭カット）
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={trimStartInput}
+                        onChange={e => setTrimStartInput(e.target.value)}
+                        className="w-24 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs font-black text-white focus:outline-none focus:border-amber-400 font-mono"
+                      />
+                      <span className="text-xs text-slate-400">秒</span>
+                      <button
+                        type="button"
+                        onClick={() => setTrimStartInput(studioPlaybackTime.toFixed(1))}
+                        className="ml-auto px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded-lg transition-colors"
+                      >
+                        現在秒をセット
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 末尾カット */}
+                  <div className="bg-slate-800/60 p-3.5 rounded-2xl border border-slate-700/60 space-y-2">
+                    <label className="block text-xs font-bold text-slate-300">
+                      再生終了秒数（末尾カット）
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        placeholder="最後まで"
+                        value={trimEndInput}
+                        onChange={e => setTrimEndInput(e.target.value)}
+                        className="w-24 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs font-black text-white focus:outline-none focus:border-amber-400 font-mono"
+                      />
+                      <span className="text-xs text-slate-400">秒</span>
+                      <button
+                        type="button"
+                        onClick={() => setTrimEndInput(studioPlaybackTime.toFixed(1))}
+                        className="ml-auto px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded-lg transition-colors"
+                      >
+                        現在秒をセット
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* 右側: テロップ作成 & タイムライン一覧 */}
+            <div className="lg:col-span-5 space-y-5 flex flex-col">
+              
+              {/* テロップ作成カード */}
+              <div className="bg-slate-900 rounded-3xl p-5 border border-slate-800 shadow-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-black text-white flex items-center gap-2">
+                    <Wand2 className="w-4 h-4 text-purple-400" />
+                    テロップ（字幕）を追加
+                  </h2>
+                  <span className="text-[10px] font-bold text-purple-300 bg-purple-500/20 px-2 py-0.5 rounded-md border border-purple-500/30">
+                    Gemini AI翻訳対応
+                  </span>
+                </div>
+
+                {/* 表示時間（何秒から何秒まで出す） */}
+                <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                    <span>⏱️ 表示時間（秒）を指定:</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const s = parseFloat(telopStartSec) || 0;
+                          setTelopEndSec((s + 3).toFixed(1));
+                        }}
+                        className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[10px] text-slate-200"
+                      >
+                        +3秒
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const s = parseFloat(telopStartSec) || 0;
+                          setTelopEndSec((s + 5).toFixed(1));
+                        }}
+                        className="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[10px] text-slate-200"
+                      >
+                        +5秒
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={telopStartSec}
+                      onChange={e => setTelopStartSec(e.target.value)}
+                      className="w-20 px-2.5 py-1.5 bg-slate-900 border border-slate-600 rounded-xl text-xs font-mono font-black text-emerald-400 text-center"
+                    />
+                    <span className="text-xs text-slate-400 font-bold">秒 〜</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={telopEndSec}
+                      onChange={e => setTelopEndSec(e.target.value)}
+                      className="w-20 px-2.5 py-1.5 bg-slate-900 border border-slate-600 rounded-xl text-xs font-mono font-black text-rose-400 text-center"
+                    />
+                    <span className="text-xs text-slate-400 font-bold">秒</span>
+                    <span className="text-[10px] text-slate-400 ml-auto font-mono">
+                      (表示: {((parseFloat(telopEndSec) || 0) - (parseFloat(telopStartSec) || 0)).toFixed(1)}秒間)
+                    </span>
+                  </div>
+                </div>
+
+                {/* 日本語テロップ入力 */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-black text-slate-300">
+                      日本語テロップ <span className="text-rose-400">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleTranslateTelop}
+                      disabled={isTranslatingTelop || !telopJa.trim()}
+                      className="px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-black transition-all shadow-md flex items-center gap-1 active:scale-95"
+                    >
+                      {isTranslatingTelop ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                      <span>{isTranslatingTelop ? 'AI翻訳中...' : '✨ AI多言語一括翻訳'}</span>
+                    </button>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={telopJa}
+                    onChange={e => setTelopJa(e.target.value)}
+                    placeholder="例: トラクターのエンジンをかける前に、周囲の安全を確認してください。"
+                    className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-2xl text-xs font-bold text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
+                  />
+                </div>
+
+                {/* AI翻訳プレビュー */}
+                {Object.keys(telopTranslations).length > 0 && (
+                  <div className="bg-slate-800/60 p-3 rounded-2xl border border-purple-500/30 space-y-2 text-[11px]">
+                    <div className="flex items-center gap-1.5 text-purple-300 font-bold">
+                      <Check className="w-3.5 h-3.5 text-purple-400" />
+                      <span>AI翻訳結果（自動生成）:</span>
+                    </div>
+                    <div className="space-y-1 text-slate-300">
+                      {telopTranslations.en && <p><span className="text-slate-400">🇺🇸 EN:</span> {telopTranslations.en}</p>}
+                      {telopTranslations.vi && <p><span className="text-slate-400">🇻🇳 VI:</span> {telopTranslations.vi}</p>}
+                      {telopTranslations.id && <p><span className="text-slate-400">🇮🇩 ID:</span> {telopTranslations.id}</p>}
+                      {telopTranslations.zh && <p><span className="text-slate-400">🇨🇳 ZH:</span> {telopTranslations.zh}</p>}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleAddNarrationToStudio}
+                  className="w-full py-2.5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-black text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>タイムラインにテロップを追加</span>
+                </button>
+              </div>
+
+              {/* タイムライン一覧 */}
+              <div className="bg-slate-900 rounded-3xl p-5 border border-slate-800 shadow-xl flex-1 flex flex-col min-h-[300px]">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-sm font-black text-white flex items-center gap-2">
+                    <Sliders className="w-4 h-4 text-emerald-400" />
+                    タイムラインテロップ一覧
+                  </h2>
+                  <span className="text-xs font-bold text-slate-400">
+                    全 {editingNarrations.length} 件
+                  </span>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-2.5 max-h-[350px] pr-1">
+                  {isLoadingNarrations ? (
+                    <div className="py-12 text-center text-slate-500">
+                      <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-rose-500" />
+                      <span>テロップデータを読み込み中...</span>
+                    </div>
+                  ) : editingNarrations.length === 0 ? (
+                    <div className="py-12 text-center text-slate-500 text-xs">
+                      まだテロップが登録されていません。<br/>
+                      上のフォームから秒数を指定して追加してください。
+                    </div>
+                  ) : (
+                    editingNarrations.map((n, idx) => (
+                      <div
+                        key={idx}
+                        className={`p-3 rounded-2xl border transition-all ${
+                          studioPlaybackTime >= n.start_time && studioPlaybackTime <= n.end_time
+                            ? 'bg-rose-500/20 border-rose-500/50 shadow-md'
+                            : 'bg-slate-800/80 border-slate-700/80 hover:border-slate-600'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[10px] font-black font-mono px-2 py-0.5 bg-slate-900 text-emerald-400 rounded-md border border-slate-700">
+                            ⏱️ {n.start_time.toFixed(1)}s 〜 {n.end_time.toFixed(1)}s
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteNarrationFromStudio(idx)}
+                            className="p-1 text-slate-400 hover:text-rose-400 transition-colors"
+                            title="テロップを削除"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <p className="text-xs font-bold text-white mb-1">
+                          {n.script_ja}
+                        </p>
+                        {(n.script_vi || n.translations?.vi || n.script_en || n.translations?.en) && (
+                          <div className="text-[10px] text-slate-400 space-y-0.5 border-t border-slate-700/50 pt-1 mt-1">
+                            {(n.script_vi || n.translations?.vi) && (
+                              <p className="truncate">🇻🇳 {n.script_vi || n.translations?.vi}</p>
+                            )}
+                            {(n.script_en || n.translations?.en) && (
+                              <p className="truncate">🇺🇸 {n.script_en || n.translations?.en}</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* スタジオトースト通知 */}
+      {studioToast && (
+        <div className="fixed bottom-6 right-6 z-[140] bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-2xl font-black text-xs flex items-center gap-2 animate-in slide-in-from-bottom">
+          <Check className="w-4 h-4 text-emerald-200" />
+          <span>{studioToast}</span>
         </div>
       )}
 
