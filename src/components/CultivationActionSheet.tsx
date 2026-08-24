@@ -338,6 +338,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
   // 共通フォームステート
   const [formDate, setFormDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [durationMinutes, setDurationMinutes] = useState<string>('60');
+  const [durationMode, setDurationMode] = useState<'total_proportional' | 'uniform'>('total_proportional');
   const [memo, setMemo] = useState<string>('');
 
   // 作業用
@@ -354,16 +355,57 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
   const [customK, setCustomK] = useState<string>('8');
   const [fertPricePerBag, setFertPricePerBag] = useState<string>('2400');
 
-  // その他の品名・数量・金額
+  // その他の品名・数量・金額 ＆ 複数圃場スマート面積按分ステート
   const [itemName, setItemName] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('');
-  const [unit, setUnit] = useState<string>('kg');
+  const [quantityMode, setQuantityMode] = useState<'total_proportional' | 'per_10a' | 'uniform'>('total_proportional');
+  const [unit, setUnit] = useState<string>('ml');
   const [priceAmount, setPriceAmount] = useState<string>('');
 
   // 選択中圃場の合計面積(a)
   const totalAreaAcre = useMemo(() => {
     return selectedCultivations.reduce((sum, c) => sum + (c.areaAcre || 10), 0);
   }, [selectedCultivations]);
+
+  // 複数圃場におけるスマート面積比例配分（自動按分計算エンジン）
+  const fieldDistributions = useMemo(() => {
+    const numFields = selectedCultivations.length;
+    const parsedQty = parseFloat(quantity) || 0;
+    const parsedDuration = parseFloat(durationMinutes) || 0;
+
+    return selectedCultivations.map(c => {
+      const fieldArea = c.areaAcre || 10;
+      const ratio = totalAreaAcre > 0 ? fieldArea / totalAreaAcre : 1 / (numFields || 1);
+
+      let fieldQty = 0;
+      if (quantityMode === 'total_proportional') {
+        fieldQty = numFields > 1 ? Math.round(parsedQty * ratio * 10) / 10 : parsedQty;
+      } else if (quantityMode === 'per_10a') {
+        fieldQty = Math.round(((parsedQty * fieldArea) / 10) * 10) / 10;
+      } else {
+        fieldQty = parsedQty;
+      }
+
+      let fieldDur = 0;
+      if (durationMode === 'total_proportional' && numFields > 1) {
+        fieldDur = Math.round(parsedDuration * ratio);
+      } else {
+        fieldDur = Math.round(parsedDuration);
+      }
+
+      return {
+        id: c.id,
+        fieldId: c.fieldId,
+        fieldName: c.fieldName,
+        cropId: c.cropId,
+        cropName: c.cropName,
+        areaAcre: fieldArea,
+        ratioPercent: Math.round(ratio * 1000) / 10,
+        quantity: fieldQty,
+        durationMinutes: fieldDur
+      };
+    });
+  }, [selectedCultivations, quantity, durationMinutes, quantityMode, durationMode, totalAreaAcre]);
 
   // 肥料成分のリアルタイム計算
   const fertCalculation = useMemo(() => {
@@ -493,13 +535,13 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
         }
 
       } else if (activeCategory === 'shipment' || activeCategory === 'sales') {
-        // sales_logs に一括登録
-        const recordsToInsert = selectedCultivations.map(c => ({
+        // sales_logs に一括登録（面積按分または一律）
+        const recordsToInsert = fieldDistributions.map(dist => ({
           user_id: currentUserId,
-          field_id: c.fieldId || null,
-          crop_id: c.cropId || null,
+          field_id: dist.fieldId || null,
+          crop_id: dist.cropId || null,
           sales_date: formDate,
-          quantity: activeCategory === 'shipment' ? (parseFloat(quantity) || 0) : (parseFloat(quantity) || 1),
+          quantity: activeCategory === 'shipment' ? (dist.quantity || 0) : 1,
           unit: unit || 'kg',
           total_sales: activeCategory === 'sales' ? (parseFloat(priceAmount) || 0) : null,
           memo: `[一括${isRecord ? '記録' : '予定'}:${activeCategory === 'shipment' ? '出荷' : '売上'}] ${itemName} ${memo}`.trim(),
@@ -522,15 +564,15 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
           ? ` [成分:${complianceReport.activeIngredients.map(i => i.name).join(',')}]` 
           : '';
 
-        const recordsToInsert = selectedCultivations.map(c => ({
+        const recordsToInsert = fieldDistributions.map(dist => ({
           user_id: currentUserId,
-          field_id: c.fieldId || null,
-          crop_id: c.cropId || null,
+          field_id: dist.fieldId || null,
+          crop_id: dist.cropId || null,
           work_date: formDate,
           work_type: typeLabelMap[activeCategory || 'work'] || '農作業',
-          duration_minutes: parseInt(durationMinutes, 10) || 0,
+          duration_minutes: dist.durationMinutes || 0,
           status: isRecord ? 'completed' : 'planned',
-          memo: `[一括${isRecord ? '記録' : '予定'}] ${itemName ? `品名:${itemName}${racTag}${ingTag} ` : ''}${quantity ? `数量:${quantity}${unit} ` : ''}${memo}`.trim(),
+          memo: `[一括${isRecord ? '記録' : '予定'}] ${itemName ? `品名:${itemName}${racTag}${ingTag} ` : ''}${dist.quantity ? `数量:${dist.quantity}${unit} ` : ''}${memo}`.trim(),
           created_at: timestamp
         }));
 
@@ -1092,27 +1134,83 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
 
               {/* 数量・単位 (出荷・売上・農薬等) */}
               {(activeCategory === 'pesticide' || activeCategory === 'shipment' || activeCategory === 'sales') && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">数量 (各圃場あたり)</label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={quantity}
-                      onChange={(e) => setQuantity(e.target.value)}
-                      placeholder="例: 10"
-                      className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">単位</label>
-                    <input
-                      type="text"
-                      value={unit}
-                      onChange={(e) => setUnit(e.target.value)}
-                      placeholder="kg, L, 箱 など"
-                      className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
-                    />
+                <div className="space-y-2.5">
+                  {/* 複数圃場選択時の配分モード選択 */}
+                  {selectedCultivations.length > 1 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-slate-700">
+                          数量の配分方法 ({selectedCultivations.length}圃場 / 計{totalAreaAcre.toFixed(1)}a)
+                        </label>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setQuantityMode('total_proportional')}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all border ${
+                            quantityMode === 'total_proportional'
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          📊 合計から面積按分
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setQuantityMode('per_10a')}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all border ${
+                            quantityMode === 'per_10a'
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          🌱 10aあたり基準量
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setQuantityMode('uniform')}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all border ${
+                            quantityMode === 'uniform'
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          📝 各圃場一律
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        {selectedCultivations.length > 1 ? (
+                          quantityMode === 'total_proportional' 
+                            ? `合計使用量 (計${totalAreaAcre.toFixed(1)}a分)` 
+                            : quantityMode === 'per_10a' 
+                            ? '10a(1反)あたり使用量' 
+                            : '各圃場あたりの数量'
+                        ) : '使用数量'}
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={quantity}
+                        onChange={(e) => setQuantity(e.target.value)}
+                        placeholder={quantityMode === 'total_proportional' ? '例: 200' : '例: 10'}
+                        className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">単位</label>
+                      <input
+                        type="text"
+                        value={unit}
+                        onChange={(e) => setUnit(e.target.value)}
+                        placeholder="ml, g, L, kg など"
+                        className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -1136,17 +1234,83 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
 
               {/* 所要時間 */}
               {activeCategory !== 'sales' && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">所要時間 (分/圃場)</label>
-                  <div className="relative">
-                    <Clock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="number"
-                      value={durationMinutes}
-                      onChange={(e) => setDurationMinutes(e.target.value)}
-                      placeholder="60"
-                      className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium"
-                    />
+                <div className="space-y-2.5">
+                  {selectedCultivations.length > 1 && (
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-slate-700">所要時間の計算</label>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setDurationMode('total_proportional')}
+                          className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
+                            durationMode === 'total_proportional'
+                              ? 'bg-slate-800 text-white border-slate-800'
+                              : 'bg-white text-slate-600 border-slate-200'
+                          }`}
+                        >
+                          合計時間を面積按分
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDurationMode('uniform')}
+                          className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
+                            durationMode === 'uniform'
+                              ? 'bg-slate-800 text-white border-slate-800'
+                              : 'bg-white text-slate-600 border-slate-200'
+                          }`}
+                        >
+                          各圃場一律
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      {selectedCultivations.length > 1 && durationMode === 'total_proportional'
+                        ? `合計所要時間 (計${totalAreaAcre.toFixed(1)}a分・分)`
+                        : '所要時間 (分/圃場)'}
+                    </label>
+                    <div className="relative">
+                      <Clock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="number"
+                        value={durationMinutes}
+                        onChange={(e) => setDurationMinutes(e.target.value)}
+                        placeholder="60"
+                        className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 複数圃場選択時の自動按分内訳プレビューカード */}
+              {selectedCultivations.length > 1 && (parseFloat(quantity) > 0 || parseFloat(durationMinutes) > 0) && (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between font-bold text-slate-700 text-[11px] border-b border-slate-200 pb-1">
+                    <span className="flex items-center gap-1 text-emerald-800">
+                      <MapPin className="w-3 h-3 text-emerald-600" />
+                      <span>圃場ごとの自動配分プレビュー (面積比例)</span>
+                    </span>
+                    <span>合計 {totalAreaAcre.toFixed(1)}a</span>
+                  </div>
+                  <div className="space-y-1 max-h-32 overflow-y-auto pt-0.5">
+                    {fieldDistributions.map((dist, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-[11px] bg-white p-1.5 rounded border border-slate-100">
+                        <span className="font-semibold text-slate-800 truncate max-w-[140px]">
+                          {dist.fieldName} <span className="text-slate-400 font-normal">({dist.areaAcre}a / {dist.ratioPercent}%)</span>
+                        </span>
+                        <div className="flex items-center gap-2 font-bold text-slate-700 shrink-0">
+                          {dist.quantity > 0 && (
+                            <span className="text-emerald-700">{dist.quantity} {unit}</span>
+                          )}
+                          {dist.durationMinutes > 0 && (
+                            <span className="text-slate-500 font-normal">{dist.durationMinutes}分</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
