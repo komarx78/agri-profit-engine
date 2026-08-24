@@ -69,6 +69,10 @@ export default function PesticideCheckPage() {
   const [simulatorList, setSimulatorList] = useState<SimulatorItem[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // 自社農薬マスタ（materials）に登録済みの農薬名リスト
+  const [registeredMasterNames, setRegisteredMasterNames] = useState<string[]>([]);
+  const [isRegisteringMaster, setIsRegisteringMaster] = useState<string | null>(null);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -78,6 +82,61 @@ export default function PesticideCheckPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
+
+  // 自社農薬マスタの既存登録リストを取得
+  useEffect(() => {
+    const fetchMasterPesticides = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('materials')
+          .select('name')
+          .or("category.eq.農薬費,material_type.eq.pesticide");
+
+        if (data) {
+          setRegisteredMasterNames(data.map(d => d.name));
+        }
+      } catch (e) {
+        console.warn('Failed to fetch existing materials:', e);
+      }
+    };
+    fetchMasterPesticides();
+  }, []);
+
+  // ワンクリックで自社農薬マスタ（materials）に登録
+  const handleRegisterToMaster = async (p: any) => {
+    if (registeredMasterNames.includes(p.name)) {
+      showToast(`「${p.name}」は既に自社農薬マスタに登録されています。`);
+      return;
+    }
+
+    setIsRegisteringMaster(p.name);
+    try {
+      const pType = (p.purpose && p.purpose !== '-') ? p.purpose : (p.type && p.type !== '-') ? p.type : '殺虫剤';
+      const maxCountNum = typeof p.usage_count === 'string' ? parseInt(p.usage_count.match(/\d+/)?.[0] || '4', 10) : 4;
+
+      const { error } = await supabase.from('materials').insert({
+        name: p.name,
+        category: '農薬費',
+        material_type: 'pesticide',
+        pesticide_type: pType,
+        dilution: p.usage_amount || '',
+        target_pests: p.target_pest || '',
+        usage_time: p.usage_time || '',
+        max_count: maxCountNum,
+        unit: '本'
+      });
+
+      if (error) throw error;
+
+      setRegisteredMasterNames(prev => [...prev, p.name]);
+      showToast(`🎉 「${p.name}」を自社農薬マスタに登録しました！`);
+    } catch (err: any) {
+      console.error('Master registration error:', err);
+      showToast(`⚠️ マスタ登録に失敗しました: ${err.message || 'エラー'}`);
+    } finally {
+      setIsRegisteringMaster(null);
+    }
+  };
 
   // 検索実行
   const handleCheck = async (e?: React.FormEvent, stageOverride?: string) => {
@@ -562,10 +621,39 @@ export default function PesticideCheckPage() {
                             </div>
 
                             {/* アクションボタン */}
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex flex-wrap items-center gap-2 shrink-0">
+                              {/* ワンクリック農薬マスタ登録ボタン */}
+                              {registeredMasterNames.includes(p.name) ? (
+                                <span className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-black bg-emerald-950/60 border border-emerald-500/50 text-emerald-400">
+                                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                                  ✓ 自社マスタ登録済
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={isRegisteringMaster === p.name}
+                                  onClick={() => handleRegisterToMaster(p)}
+                                  className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-slate-950 shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50"
+                                >
+                                  {isRegisteringMaster === p.name ? (
+                                    <>
+                                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                                      登録中...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Plus className="w-4 h-4 text-slate-950" />
+                                      自社マスタに登録
+                                    </>
+                                  )}
+                                </button>
+                              )}
+
+                              {/* 成分重複チェッカー追加ボタン */}
                               <button
+                                type="button"
                                 onClick={() => toggleSimulatorItem(p)}
-                                className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black transition-all ${
+                                className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all ${
                                   isSelected
                                     ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
                                     : 'bg-slate-700 hover:bg-slate-600 text-slate-200 hover:text-white border border-slate-600'
@@ -578,7 +666,7 @@ export default function PesticideCheckPage() {
                                   </>
                                 ) : (
                                   <>
-                                    <Plus className="w-4 h-4 text-amber-400" />
+                                    <Zap className="w-4 h-4 text-amber-400" />
                                     重複判定に追加
                                   </>
                                 )}

@@ -251,7 +251,7 @@ export async function POST(request: Request) {
       ...g,
       target_pest: Array.from(g.target_pests).join(', ') || '全般',
       target_pests_array: Array.from(g.target_pests)
-    }));
+    })).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ja'));
 
     // ステージ集計（必ず全ステージを集計して常設返却）
     const edibleCount = pesticides.filter(p => p.is_edible).length;
