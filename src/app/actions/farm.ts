@@ -273,3 +273,24 @@ export async function submitAttendance(tenantId: string, workerId: string, actio
     return { success: false, error: '打刻に失敗しました' };
   }
 }
+
+// 現場ポータル用タスク一覧の確実な取得（RLS回避）
+export async function getPortalTasks(tenantId: string) {
+  try {
+    const supabase = createAdminClient();
+    if (!tenantId) return { success: false, data: [] };
+
+    const { data, error } = await supabase
+      .from('work_logs')
+      .select('id, task_title, work_type, work_date, status, crop_id, field_id, worker_id, crops(name), fields(name), workers(name)')
+      .eq('user_id', tenantId)
+      .eq('status', 'planned')
+      .order('work_date', { ascending: true });
+
+    if (error) throw error;
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    console.error('getPortalTasks error:', err);
+    return { success: false, data: [] };
+  }
+}

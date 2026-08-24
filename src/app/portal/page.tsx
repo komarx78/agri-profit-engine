@@ -13,6 +13,7 @@ import {
 import dynamic from 'next/dynamic';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
+import { getPortalTasks } from '@/app/actions/farm';
 
 const CalendarWrapper = dynamic(() => import('@/components/CalendarWrapper'), { 
   ssr: false, 
@@ -153,15 +154,20 @@ export default function PortalPage() {
   const fetchPortalData = async (userId: string, currentRole: string, profile: any) => {
     const today = getJSTDate();
 
-    // 1. タスク (カレンダー用)
-    const targetUserId = userId; // userId には既に ownerId が渡されている
-    const { data: taskData, error: taskErr } = await supabase.from('work_logs')
-      .select('id, task_title, work_type, work_date, status, crop_id, field_id, worker_id, crops(name), fields(name), workers(name)')
-      .eq('user_id', targetUserId)
-      .eq('status', 'planned')
-      .order('work_date', { ascending: true });
-    if (taskErr) console.error('Task fetch error:', taskErr);
-    if (taskData) setTasks(taskData);
+    // 1. タスク (カレンダー用: サーバーアクション経由でRLSを回避し確実に取得)
+    const targetUserId = userId;
+    const taskRes = await getPortalTasks(targetUserId);
+    if (taskRes.success && taskRes.data && taskRes.data.length > 0) {
+      setTasks(taskRes.data);
+    } else {
+      // クライアント側でもフォールバック試行
+      const { data: taskData } = await supabase.from('work_logs')
+        .select('id, task_title, work_type, work_date, status, crop_id, field_id, worker_id, crops(name), fields(name), workers(name)')
+        .eq('user_id', targetUserId)
+        .eq('status', 'planned')
+        .order('work_date', { ascending: true });
+      if (taskData) setTasks(taskData);
+    }
 
     // 2. 承認待ち (現場スタッフが完了報告した作業: status='completed' かつ approval_status='pending')
     if (currentRole === 'admin') {
