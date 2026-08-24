@@ -7,6 +7,7 @@ import { getCurrentTenantId } from '@/lib/tenant';
 import { MapPin, ArrowLeft, Loader2, Calendar, Edit, History, Sprout, Leaf } from 'lucide-react';
 import Link from 'next/link';
 import { GoogleMap, useJsApiLoader, Polygon } from '@react-google-maps/api';
+import FieldWeatherCard from '@/components/FieldWeatherCard';
 
 const containerStyle = {
   width: '100%',
@@ -286,6 +287,34 @@ export default function FieldDetailPage() {
 
         </div>
       </div>
+
+      {/* ☀️ 圃場ピンポイント積算気象 & 収穫予測カルテ */}
+      {(() => {
+        const center = getCenter();
+        const cropName = currentPlan?.crops?.name || '一般作物';
+        // 開始日の計算（計画の月または30日前）
+        let startDateStr = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        if (currentPlan?.start_month && currentPlan?.year) {
+          const m = String(currentPlan.start_month).padStart(2, '0');
+          startDateStr = `${currentPlan.year}-${m}-01`;
+        } else if (recentWorks.length > 0) {
+          const sorted = [...recentWorks].sort((a, b) => new Date(a.work_date).getTime() - new Date(b.work_date).getTime());
+          startDateStr = sorted[0].work_date;
+        }
+
+        return (
+          <div className="mt-8">
+            <FieldWeatherCard
+              fieldId={field.id}
+              fieldName={field.name}
+              latitude={center.lat}
+              longitude={center.lng}
+              startDate={startDateStr}
+              cropName={cropName}
+            />
+          </div>
+        );
+      })()}
     </div>
   );
 }

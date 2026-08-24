@@ -306,11 +306,13 @@ export default function MapPage() {
         error = res.error;
       } else {
         // 新規作成（Insert）
+        const tenantId = await getCurrentTenantId();
         const tNames = await autoTranslate(newFieldName);
         const res = await supabase
           .from('fields')
           .insert([
             { 
+              user_id: tenantId,
               name: newFieldName,
               name_vi: tNames.vi,
               name_id: tNames.id,
