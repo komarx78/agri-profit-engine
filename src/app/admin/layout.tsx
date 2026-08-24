@@ -74,11 +74,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [router]);
 
   const handleCopyUrl = async () => {
-    let tId = tenantId;
-    if (!tId && typeof window !== 'undefined') {
-      tId = localStorage.getItem('agri_owner_id') || '';
-    }
-    const url = tId ? `${window.location.origin}/farm/${tId}` : `${window.location.origin}/work`;
+    const url = `${window.location.origin}/portal`;
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);

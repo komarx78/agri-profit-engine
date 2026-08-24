@@ -341,14 +341,14 @@ export default function DashboardPage() {
                   <input 
                     type="text" 
                     readOnly
-                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/farm/${tenantId}`}
+                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/portal`}
                     className="flex-1 sm:w-64 px-3 py-2 bg-white border border-emerald-200 rounded-lg text-xs font-mono text-slate-600 focus:outline-none"
                     onClick={(e) => e.currentTarget.select()}
                   />
                   <button 
                     onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/farm/${tenantId}`);
-                      alert('URLをコピーしました！\n現場の端末で開く際は、必ずこのアカウントからログアウトするか、シークレットウィンドウをご利用ください。');
+                      navigator.clipboard.writeText(`${window.location.origin}/portal`);
+                      alert('現場ポータルURL（/portal）をコピーしました！\n現場タブレット等でこのURLを開くだけで、スタッフ選択・出退勤打刻・タスク確認をご利用いただけます。');
                     }}
                     className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors whitespace-nowrap shadow-sm"
                   >
