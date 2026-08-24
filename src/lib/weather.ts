@@ -88,34 +88,58 @@ export function getCropTargetTemp(cropName: string): { targetTemp: number; baseT
 }
 
 /**
- * 緯度経度から住所を逆引き取得する
+ * 緯度経度から住所を逆引き取得する（市町村名の重複除去・高精度フォーマット）
  */
 export async function fetchReverseGeocode(lat: number, lng: number): Promise<string> {
+  // 1. BigDataCloud（重複除去ロジック）
   try {
     const res = await fetch(
       `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=ja`
     );
     if (res.ok) {
       const data = await res.json();
-      const addr = `${data.principalSubdivision || ''}${data.locality || ''}${data.city || ''}`;
-      if (addr.trim()) return addr;
+      const pref = data.principalSubdivision || '';
+      const city = data.city || '';
+      const locality = data.locality || '';
+
+      const parts: string[] = [];
+      if (pref) parts.push(pref);
+      if (city && !parts.some(p => p.includes(city))) {
+        parts.push(city);
+      }
+      if (locality && locality !== city && !parts.some(p => p.includes(locality))) {
+        parts.push(locality);
+      }
+
+      const formatted = parts.join('');
+      if (formatted.trim()) return formatted;
     }
   } catch (e) {}
 
+  // 2. OpenStreetMap (OSM)
   try {
     const osmRes = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`,
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=15&addressdetails=1`,
       { headers: { 'Accept-Language': 'ja' } }
     );
     if (osmRes.ok) {
       const osmData = await osmRes.json();
-      if (osmData.display_name) {
-        return osmData.display_name.split(',').slice(0, 3).reverse().join(' ');
-      }
+      const addr = osmData.address || {};
+      const pref = addr.province || addr.state || '';
+      const city = addr.city || addr.town || addr.village || addr.county || '';
+      const suburb = addr.suburb || addr.quarter || addr.neighbourhood || '';
+
+      const parts: string[] = [];
+      if (pref) parts.push(pref);
+      if (city && !parts.includes(city)) parts.push(city);
+      if (suburb && !parts.includes(suburb)) parts.push(suburb);
+
+      const formatted = parts.join('');
+      if (formatted.trim()) return formatted;
     }
   } catch (e) {}
 
-  return `北緯${lat.toFixed(4)}°, 東経${lng.toFixed(4)}° 付近`;
+  return `北緯${lat.toFixed(4)}°, 東経${lng.toFixed(4)}°`;
 }
 
 /**
