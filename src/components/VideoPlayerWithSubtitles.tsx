@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { LanguageCode, LANGUAGES } from '@/lib/i18n';
-import { Globe2, MessageSquare, Volume2, Subtitles, Check } from 'lucide-react';
+import { Globe2, MessageSquare, Volume2, Subtitles, Check, Play, Pause, Loader2, AlertTriangle, ExternalLink } from 'lucide-react';
 
 export interface Narration {
   id?: string;
@@ -46,6 +46,9 @@ export default function VideoPlayerWithSubtitles({
   const [activeLang, setActiveLang] = useState<string>(initialLanguage);
   const [showSubtitles, setShowSubtitles] = useState<boolean>(true);
   const [isLangMenuOpen, setIsLangMenuOpen] = useState<boolean>(false);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [hasError, setHasError] = useState<boolean>(false);
 
   // 初期言語の同期
   useEffect(() => {
@@ -54,20 +57,46 @@ export default function VideoPlayerWithSubtitles({
     }
   }, [initialLanguage]);
 
-  // トリミング初期位置の設定 & モバイル安全再生
+  // 動画URL変更時のリセット
   useEffect(() => {
+    setIsLoading(true);
+    setHasError(false);
+    setIsPlaying(false);
+    setCurrentSubtitle('');
+  }, [videoUrl]);
+
+  // メタデータロード完了時の処理
+  const handleLoadedMetadata = () => {
+    setIsLoading(false);
     if (videoRef.current) {
       if (trimStart > 0) {
         videoRef.current.currentTime = trimStart;
       }
       if (autoPlay) {
-        // モバイルでオートプレイが拒否されてもクラッシュしないようにハンドリング
-        videoRef.current.play().catch(() => {
-          // ユーザー操作待ち
+        videoRef.current.play().then(() => {
+          setIsPlaying(true);
+        }).catch(() => {
+          setIsPlaying(false);
         });
       }
     }
-  }, [trimStart, videoUrl, autoPlay]);
+  };
+
+  const handlePlayPauseToggle = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!videoRef.current) return;
+
+    if (videoRef.current.paused) {
+      videoRef.current.play().then(() => {
+        setIsPlaying(true);
+      }).catch((err) => {
+        console.error('Play error:', err);
+      });
+    } else {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+  };
 
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
@@ -81,6 +110,8 @@ export default function VideoPlayerWithSubtitles({
     if (trimEnd && trimEnd > 0 && time >= trimEnd) {
       if (videoRef.current) {
         videoRef.current.currentTime = trimStart || 0;
+        videoRef.current.pause();
+        setIsPlaying(false);
       }
     }
 
@@ -119,28 +150,89 @@ export default function VideoPlayerWithSubtitles({
   const currentLangObj = LANGUAGES.find(l => l.code === activeLang) || { name: '日本語', flag: '🇯🇵' };
 
   return (
-    <div className={`relative w-full bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 group ${className}`} style={{ aspectRatio: '16/9' }}>
+    <div 
+      className={`relative w-full bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 group select-none ${className}`} 
+      style={{ aspectRatio: '16/9' }}
+    >
       <video
         ref={videoRef}
         src={videoUrl}
-        className="w-full h-full object-contain"
+        className="w-full h-full object-contain cursor-pointer"
         controls
         playsInline
-        preload="metadata"
-        crossOrigin="anonymous"
+        preload="auto"
         controlsList="nodownload"
+        onLoadedMetadata={handleLoadedMetadata}
+        onCanPlay={() => setIsLoading(false)}
+        onWaiting={() => setIsLoading(true)}
+        onPlaying={() => {
+          setIsLoading(false);
+          setIsPlaying(true);
+        }}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => setIsPlaying(false)}
+        onError={() => {
+          setIsLoading(false);
+          setHasError(true);
+        }}
         onTimeUpdate={handleTimeUpdate}
+        onClick={handlePlayPauseToggle}
       />
+
+      {/* ⏳ ローディングスピナー */}
+      {isLoading && !hasError && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-xs pointer-events-none z-10 animate-in fade-in">
+          <Loader2 className="w-10 h-10 text-rose-500 animate-spin mb-2" />
+          <span className="text-white text-xs font-bold tracking-wider">動画を読み込み中...</span>
+        </div>
+      )}
+
+      {/* ⚠️ 再生エラー時のフォールバック */}
+      {hasError && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 text-white p-4 text-center z-10 space-y-3">
+          <AlertTriangle className="w-10 h-10 text-amber-400" />
+          <div>
+            <p className="text-xs sm:text-sm font-bold">お使いの端末でこの動画形式を直接再生できませんでした</p>
+            <p className="text-[11px] text-slate-400 mt-1">下のボタンからブラウザで直接再生をお試しください</p>
+          </div>
+          <a
+            href={videoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition-all shadow-md"
+          >
+            <span>外部プレイヤーで再生</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
+      )}
+
+      {/* ▶️ 画面中央の大きな再生ボタン（停止中・モバイルで確実にタップ再生させる） */}
+      {!isPlaying && !isLoading && !hasError && (
+        <button
+          type="button"
+          onClick={handlePlayPauseToggle}
+          className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors z-10 group/btn"
+          aria-label="再生"
+        >
+          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-rose-600/90 hover:bg-rose-600 text-white rounded-full flex items-center justify-center shadow-2xl group-hover/btn:scale-110 active:scale-95 transition-all backdrop-blur-xs">
+            <Play className="w-8 h-8 sm:w-10 sm:h-10 ml-1 fill-white" />
+          </div>
+        </button>
+      )}
       
       {/* 🌐 字幕言語クイック切り替えバー（動画上部オーバーレイ） */}
-      {showLanguageSelector && narrations.length > 0 && (
+      {showLanguageSelector && narrations.length > 0 && !hasError && (
         <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
           {/* 字幕言語セレクター */}
           <div className="relative">
             <button
               type="button"
-              onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
-              className="bg-black/75 hover:bg-black/90 text-white backdrop-blur-md px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-white/20 shadow-lg transition-all active:scale-95"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsLangMenuOpen(!isLangMenuOpen);
+              }}
+              className="bg-black/75 hover:bg-black/90 text-white backdrop-blur-md px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold flex items-center gap-1.5 border border-white/20 shadow-lg transition-all active:scale-95"
               title="字幕言語を切り替える"
             >
               <Globe2 className="w-3.5 h-3.5 text-rose-400" />
@@ -194,7 +286,7 @@ export default function VideoPlayerWithSubtitles({
       )}
 
       {/* 🎬 映画風リアルタイムテロップオーバーレイ */}
-      {showSubtitles && currentSubtitle && (
+      {showSubtitles && currentSubtitle && !hasError && (
         <div className="absolute bottom-8 sm:bottom-14 left-0 right-0 flex justify-center px-3 sm:px-6 pointer-events-none z-10 animate-in fade-in zoom-in-95 duration-150">
           <div className="bg-black/85 text-white px-3.5 py-1.5 sm:px-6 sm:py-3 rounded-xl sm:rounded-2xl text-xs sm:text-base md:text-lg font-black max-w-[95%] sm:max-w-3xl text-center shadow-2xl backdrop-blur-md border border-white/20 tracking-wide leading-relaxed drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
             {currentSubtitle}

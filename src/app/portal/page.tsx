@@ -443,6 +443,14 @@ export default function PortalPage() {
       console.error('Error loading narrations for player:', e);
       setPlayingNarrations([]);
     }
+
+    // プレイヤー位置へスムーズスクロール
+    setTimeout(() => {
+      const playerEl = document.getElementById('manual-video-player-container');
+      if (playerEl) {
+        playerEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
   };
 
   // 🎬 動画編集スタジオ（エディタ）を開く
@@ -1783,7 +1791,7 @@ export default function PortalPage() {
                   
                   {/* 動画プレイヤー表示（再生中の場合） */}
                   {playingVideoUrl && (
-                    <div className="bg-slate-900 rounded-3xl p-4 sm:p-6 shadow-xl border border-slate-800 animate-in slide-in-from-top-4">
+                    <div id="manual-video-player-container" className="bg-slate-900 rounded-3xl p-4 sm:p-6 shadow-xl border border-slate-800 animate-in slide-in-from-top-4">
                       <div className="flex flex-wrap items-center justify-between gap-3 mb-3 text-white">
                         <div className="flex items-center gap-2">
                           <Play className="w-4 h-4 text-rose-400" />
