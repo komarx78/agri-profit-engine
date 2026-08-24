@@ -71,6 +71,7 @@ function CultivationsHubContent() {
   // マスタ
   const [crops, setCrops] = useState<any[]>([]);
   const [fields, setFields] = useState<any[]>([]);
+  const [farmRegisteredPesticides, setFarmRegisteredPesticides] = useState<any[]>([]);
 
   // --- タブ1: 作付け一覧ステート ---
   const [cultivations, setCultivations] = useState<CultivationItem[]>([]);
@@ -108,20 +109,23 @@ function CultivationsHubContent() {
         return;
       }
 
-      const [fRes, cRes, pRes, logsRes] = await Promise.all([
+      const [fRes, cRes, pRes, logsRes, matRes] = await Promise.all([
         supabase.from('fields').select('*').eq('user_id', tenantId).order('name'),
         supabase.from('crops').select('*').eq('user_id', tenantId).order('name'),
         supabase.from('cultivation_plans_v2').select('*, crops(*)').eq('user_id', tenantId).order('created_at', { ascending: false }),
-        supabase.from('work_logs').select('*, crops(name), fields(name), workers(name)').eq('user_id', tenantId).order('work_date', { ascending: false })
+        supabase.from('work_logs').select('*, crops(name), fields(name), workers(name)').eq('user_id', tenantId).order('work_date', { ascending: false }),
+        supabase.from('materials').select('*').eq('user_id', tenantId).or('category.eq.農薬費,material_type.eq.pesticide').order('name')
       ]);
 
       const fetchedFields = fRes.data || [];
       const fetchedCrops = cRes.data || [];
       const fetchedPlans = pRes.data || [];
       const fetchedLogs = logsRes.data || [];
+      const fetchedMaterials = matRes.data || [];
 
       setFields(fetchedFields);
       setCrops(fetchedCrops);
+      setFarmRegisteredPesticides(fetchedMaterials);
 
       let initialCropId = selectedSprayCropId;
       if (fetchedCrops.length > 0 && !initialCropId) {
@@ -182,9 +186,9 @@ function CultivationsHubContent() {
       setWorkLogs(completedLogs);
       setPlannedTasks(plannedLogs);
 
-      // 3. 選択作物のFAMIC公的農薬マスタ ＆ 自社散布実績の集計
+      // 3. 【自農園登録農薬に限定】選択作物の適用情報 ＆ 自社散布実績の集計
       if (initialCropId) {
-        await loadPesticidesForCrop(initialCropId, fetchedCrops, completedLogs);
+        await loadPesticidesForCrop(initialCropId, fetchedCrops, completedLogs, fetchedMaterials);
       }
 
     } catch (err) {
@@ -194,27 +198,34 @@ function CultivationsHubContent() {
     }
   };
 
-  // 作物ごとのFAMIC農薬データ取得 ＆ 自社散布実績カウント結合
+  // 自農園登録農薬（materials）に限定し、作物ごとのFAMIC適用情報と散布実績を結合
   const [isLoadingPesticides, setIsLoadingPesticides] = useState(false);
 
-  const loadPesticidesForCrop = async (cropId: string, cropList: any[], logsList: any[]) => {
+  const loadPesticidesForCrop = async (
+    cropId: string, 
+    cropList: any[], 
+    logsList: any[], 
+    farmPesticidesList?: any[]
+  ) => {
     const targetCrop = cropList.find(c => c.id === cropId);
     if (!targetCrop || !targetCrop.name) return;
 
+    const materialsToUse = farmPesticidesList || farmRegisteredPesticides;
+
     setIsLoadingPesticides(true);
     try {
-      // 1. FAMIC公的農薬APIから作物に適用のある農薬一覧を取得
+      // 1. FAMIC公的農薬APIから作物に適用のある農薬一覧を取得（照合用辞書）
       const res = await fetch('/api/pesticide-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cropName: targetCrop.name })
       });
 
-      let fetchedItems: any[] = [];
+      let famicItems: any[] = [];
       if (res.ok) {
         const resJson = await res.json();
         if (resJson.pesticides && Array.isArray(resJson.pesticides)) {
-          fetchedItems = resJson.pesticides;
+          famicItems = resJson.pesticides;
         }
       }
 
@@ -225,29 +236,42 @@ function CultivationsHubContent() {
         return isSpray && matchCrop;
       });
 
-      const formattedPesticides: PesticideDisplayItem[] = fetchedItems.map((p: any) => {
+      // 3. 【自農園登録農薬のみ】をベースにリストを生成
+      const formattedPesticides: PesticideDisplayItem[] = materialsToUse.map((mat: any) => {
+        const matName = mat.name || '';
+        
+        // FAMIC公的マスタから該当農薬の適用情報を探す
+        const famicMatch = famicItems.find((f: any) => 
+          f.name === matName || matName.includes(f.name) || (f.name && f.name.includes(matName))
+        );
+
         // 使用回数上限のパース
         let maxCount = 0;
-        const countMatch = String(p.usage_count || '').match(/(\d+)回/);
-        if (countMatch) {
-          maxCount = parseInt(countMatch[1], 10);
+        if (famicMatch && famicMatch.usage_count) {
+          const countMatch = String(famicMatch.usage_count).match(/(\d+)回/);
+          if (countMatch) {
+            maxCount = parseInt(countMatch[1], 10);
+          }
         }
 
         // 自社実績ログでの使用回数をカウント
-        const pName = p.name || '';
         let usedCount = 0;
         cropLogs.forEach(log => {
           const memoStr = log.memo || '';
-          if (memoStr.includes(pName) || (p.active_ingredients && p.active_ingredients.some((ing: string) => memoStr.includes(ing)))) {
+          if (memoStr.includes(matName) || (famicMatch?.active_ingredients && famicMatch.active_ingredients.some((ing: string) => memoStr.includes(ing)))) {
             usedCount++;
           }
         });
 
         // カテゴリの正規化
         let category: '殺虫剤' | '殺菌剤' | '除草剤' | 'その他' = 'その他';
-        const rawType = String(p.type || p.usage_type || '');
-        if (rawType.includes('殺虫')) {
-          category = '殺虫剤';
+        const rawType = String(famicMatch?.type || famicMatch?.usage_type || mat.unit || '');
+        if (rawType.includes('殺虫') || matName.includes('乳剤') || matName.includes('フロアブル') || matName.includes('水和剤')) {
+          if (rawType.includes('殺菌')) {
+            category = '殺菌剤';
+          } else {
+            category = '殺虫剤';
+          }
         } else if (rawType.includes('殺菌')) {
           category = '殺菌剤';
         } else if (rawType.includes('除草')) {
@@ -255,19 +279,19 @@ function CultivationsHubContent() {
         }
 
         // RACコード
-        const rac = p.rac_code || p.racCode || (category === '殺虫剤' ? 'IR 「-」' : category === '殺菌剤' ? 'FR 「-」' : 'HR 「-」');
+        const rac = famicMatch?.rac_code || famicMatch?.racCode || (category === '殺虫剤' ? 'IR' : category === '殺菌剤' ? 'FR' : 'HR');
 
         return {
-          id: p.id || `famic-${p.name}`,
-          name: p.name,
+          id: mat.id || `mat-${matName}`,
+          name: matName,
           type: category,
           racCode: rac,
-          targetPests: p.target_pests_array || (p.target_pest ? p.target_pest.split(',').map((s: string) => s.trim()) : ['適用害虫・病害']),
+          targetPests: famicMatch?.target_pests_array || (famicMatch?.target_pest ? famicMatch.target_pest.split(',').map((s: string) => s.trim()) : ['自社登録農薬']),
           maxCount: maxCount,
           usedCount: usedCount,
-          dilution: p.usage_amount || '1000倍',
-          usageTime: p.usage_time || '収穫前日まで',
-          method: p.usage_method || '散布'
+          dilution: famicMatch?.usage_amount || '規定倍率',
+          usageTime: famicMatch?.usage_time || '収穫前日まで',
+          method: famicMatch?.usage_method || '散布'
         };
       });
 
@@ -283,7 +307,7 @@ function CultivationsHubContent() {
   const handleCropChange = async (newCropId: string) => {
     setSelectedSprayCropId(newCropId);
     setSelectedPesticideIds([]);
-    await loadPesticidesForCrop(newCropId, crops, workLogs);
+    await loadPesticidesForCrop(newCropId, crops, workLogs, farmRegisteredPesticides);
   };
 
   useEffect(() => {
@@ -717,15 +741,25 @@ function CultivationsHubContent() {
                   )}
                 </div>
 
-                <div className="relative flex-1 max-w-xs">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={searchSprayQuery}
-                    onChange={(e) => setSearchSprayQuery(e.target.value)}
-                    placeholder="農薬名・病害虫で検索..."
-                    className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none font-medium"
-                  />
+                <div className="flex items-center gap-2 flex-1 justify-end">
+                  <div className="relative flex-1 max-w-xs">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={searchSprayQuery}
+                      onChange={(e) => setSearchSprayQuery(e.target.value)}
+                      placeholder="自社農薬・病害虫で検索..."
+                      className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none font-medium"
+                    />
+                  </div>
+                  <Link
+                    href="/farm/pesticide-check"
+                    className="hidden sm:inline-flex items-center gap-1 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors shrink-0"
+                    title="農薬カルテでFAMICから探して自社マスタに追加"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>農薬を追加</span>
+                  </Link>
                 </div>
               </div>
 
@@ -759,16 +793,39 @@ function CultivationsHubContent() {
             {isLoadingPesticides ? (
               <div className="py-16 text-center bg-white rounded-3xl border border-slate-200 p-8 shadow-xs">
                 <Loader2 className="w-8 h-8 text-rose-500 animate-spin mx-auto mb-3" />
-                <h3 className="text-sm font-bold text-slate-800 mb-1">公的FAMIC農薬マスタ ＆ 自社散布履歴を照合中...</h3>
-                <p className="text-xs text-slate-400">作物の公的適用データと残回数を集計しています。</p>
+                <h3 className="text-sm font-bold text-slate-800 mb-1">自社農薬 ＆ FAMIC適用データを照合中...</h3>
+                <p className="text-xs text-slate-400">農園の登録農薬から該当作物の残回数を集計しています。</p>
+              </div>
+            ) : farmRegisteredPesticides.length === 0 ? (
+              <div className="py-14 text-center bg-white rounded-3xl border border-slate-200 p-8 shadow-xs">
+                <FlaskConical className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <h3 className="text-base font-bold text-slate-800 mb-1">自社農薬がまだ登録されていません</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto mb-5 leading-relaxed">
+                  農薬カルテ（FAMIC公的データベース）またはマスタ管理から、貴農園で使用する農薬を登録してください。
+                </p>
+                <div className="flex items-center justify-center gap-3">
+                  <Link
+                    href="/farm/pesticide-check"
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black transition-colors flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>農薬カルテから追加する</span>
+                  </Link>
+                  <Link
+                    href="/admin/masters"
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+                  >
+                    マスタ管理を開く
+                  </Link>
+                </div>
               </div>
             ) : filteredPesticides.length === 0 ? (
               <div className="py-12 text-center bg-white rounded-3xl border border-slate-200 p-8 shadow-xs">
                 <FlaskConical className="w-10 h-10 text-slate-300 mx-auto mb-2" />
                 <h3 className="text-sm font-bold text-slate-700 mb-1">
-                  {searchSprayQuery ? '検索条件に一致する農薬がありません' : `${sprayCategoryTab}の登録農薬が見つかりません`}
+                  {searchSprayQuery ? '検索条件に一致する農薬がありません' : `${sprayCategoryTab}に該当する自社農薬がありません`}
                 </h3>
-                <p className="text-xs text-slate-400">他のカテゴリタブを選択するか、農薬カルテ画面から検索してください。</p>
+                <p className="text-xs text-slate-400">他のカテゴリタブを選択するか、農薬カルテから新規登録してください。</p>
               </div>
             ) : (
             <div className="space-y-3">
