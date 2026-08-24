@@ -120,10 +120,12 @@ function getHierarchyKeywords(inputCrop: string) {
 
 export async function POST(request: Request) {
   try {
-    const { cropName, pesticideName, targetPest, usageAmount } = await request.json();
+    const { cropName, pesticideName, targetPest, stageFilter } = await request.json();
 
     const cleanCropName = cropName?.trim() || '';
     const cleanTargetPest = targetPest?.trim() || '';
+    const isSeedRequested = cleanCropName.includes('採種') || cleanCropName.includes('種用') || cleanCropName.includes('母球') || stageFilter === 'seed';
+    const isNurseryRequested = cleanCropName.includes('育苗') || cleanCropName.includes('苗') || stageFilter === 'nursery';
 
     if (!cleanCropName) {
       return NextResponse.json(
@@ -136,9 +138,12 @@ export async function POST(request: Request) {
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // ベース作物名の抽出（例: 「玉ねぎ 採種用」 -> 「玉ねぎ」）
+    const baseCrop = cleanCropName.replace(/[\s　]*(採種用|採種|種用|母球|育苗期|育苗|苗)[\s　]*/g, '').trim() || cleanCropName;
+
     // 作物の階層キーワードを展開
-    const hierarchy = getHierarchyKeywords(cleanCropName);
-    const searchDirects = Array.from(new Set([cleanCropName, ...hierarchy.direct, toKatakana(cleanCropName), toHiragana(cleanCropName)]));
+    const hierarchy = getHierarchyKeywords(baseCrop);
+    const searchDirects = Array.from(new Set([baseCrop, ...hierarchy.direct, toKatakana(baseCrop), toHiragana(baseCrop)]));
     const searchSubGroups = Array.from(new Set([...hierarchy.subGroups, ...hierarchy.subGroups.map(toKatakana)]));
     const searchBroadGroups = Array.from(new Set([...hierarchy.broadGroups, ...hierarchy.broadGroups.map(toKatakana)]));
 
@@ -166,34 +171,63 @@ export async function POST(request: Request) {
     // 1. 直接適用（トマト等）
     const directUsages = await fetchKeywordsRows(searchDirects);
     // 2. 小グループ包括適用（果菜類等）
-    const subGroupUsages = await fetchKeywordsRows(searchSubGroups);
+    const subGroupUsages = (!isSeedRequested && !isNurseryRequested) ? await fetchKeywordsRows(searchSubGroups) : [];
     // 3. 大グループ包括適用（野菜類等）
-    const broadGroupUsages = await fetchKeywordsRows(searchBroadGroups);
+    const broadGroupUsages = (!isSeedRequested && !isNurseryRequested) ? await fetchKeywordsRows(searchBroadGroups) : [];
 
-    // 重複を整理しながらスコープタグを付与
+    // 重複を整理しながらスコープタグとステージ分類を付与
     const processedMap = new Map<string, any>();
+
+    const classifyStage = (cName: string): { stage: 'seed' | 'nursery' | 'edible'; label: string } => {
+      if (cName.includes('採種') || cName.includes('種用') || cName.includes('母球')) {
+        return { stage: 'seed', label: '🌱 採種用 専用認可' };
+      }
+      if (cName.includes('育苗') || cName.includes('苗')) {
+        return { stage: 'nursery', label: '🌿 育苗期 専用認可' };
+      }
+      return { stage: 'edible', label: '🧅 食用（本圃）認可' };
+    };
 
     // 直接適用
     directUsages.forEach(u => {
-      const key = `${u.registration_no}_${u.target_pest}_${u.usage_amount}`;
+      const stageInfo = classifyStage(u.crop_name);
+      const key = `${u.registration_no}_${u.crop_name}_${u.target_pest}_${u.usage_amount}`;
       if (!processedMap.has(key)) {
-        processedMap.set(key, { ...u, match_type: 'direct', scope_label: `🎯 ${u.crop_name} 直接適用` });
+        processedMap.set(key, { 
+          ...u, 
+          match_type: 'direct', 
+          scope_label: `🎯 ${u.crop_name} 直接適用`,
+          stage_category: stageInfo.stage,
+          stage_badge: stageInfo.label
+        });
       }
     });
 
     // 小グループ（果菜類）
     subGroupUsages.forEach(u => {
-      const key = `${u.registration_no}_${u.target_pest}_${u.usage_amount}`;
+      const key = `${u.registration_no}_${u.crop_name}_${u.target_pest}_${u.usage_amount}`;
       if (!processedMap.has(key)) {
-        processedMap.set(key, { ...u, match_type: 'subgroup', scope_label: `🌱 ${u.crop_name} 包括適用` });
+        processedMap.set(key, { 
+          ...u, 
+          match_type: 'subgroup', 
+          scope_label: `🌱 ${u.crop_name} 包括適用`,
+          stage_category: 'edible',
+          stage_badge: '🥬 包括認可（小グループ）'
+        });
       }
     });
 
     // 大グループ（野菜類）
     broadGroupUsages.forEach(u => {
-      const key = `${u.registration_no}_${u.target_pest}_${u.usage_amount}`;
+      const key = `${u.registration_no}_${u.crop_name}_${u.target_pest}_${u.usage_amount}`;
       if (!processedMap.has(key)) {
-        processedMap.set(key, { ...u, match_type: 'broad_group', scope_label: `🥦 ${u.crop_name} 包括適用` });
+        processedMap.set(key, { 
+          ...u, 
+          match_type: 'broad_group', 
+          scope_label: `🥦 ${u.crop_name} 包括適用`,
+          stage_category: 'edible',
+          stage_badge: '🥦 野菜類 包括認可'
+        });
       }
     });
 
@@ -263,6 +297,8 @@ export async function POST(request: Request) {
             crop_name: u.crop_name,
             match_type: u.match_type || 'direct',
             scope_label: u.scope_label || `🎯 ${u.crop_name} 直接適用`,
+            stage_category: u.stage_category || 'edible',
+            stage_badge: u.stage_badge || '🧅 食用（本圃）認可',
             target_pest: u.target_pest || '-',
             usage_amount: u.usage_amount || '-',
             usage_time: u.usage_time || '-',
@@ -290,18 +326,42 @@ export async function POST(request: Request) {
          );
        }
 
-       const directCount = pesticides.filter(p => p.match_type === 'direct').length;
-       const groupCount = pesticides.filter(p => p.match_type !== 'direct').length;
+       // 利用可能なステージの集計
+       const edibleCount = pesticides.filter(p => p.stage_category === 'edible').length;
+       const seedCount = pesticides.filter(p => p.stage_category === 'seed').length;
+       const nurseryCount = pesticides.filter(p => p.stage_category === 'nursery').length;
+
+       const availableStages = [
+         { key: 'all', label: 'すべて', count: pesticides.length },
+         ...(edibleCount > 0 ? [{ key: 'edible', label: '🧅 食用（本圃）', count: edibleCount }] : []),
+         ...(seedCount > 0 ? [{ key: 'seed', label: '🌱 採種用（種採り）', count: seedCount }] : []),
+         ...(nurseryCount > 0 ? [{ key: 'nursery', label: '🌿 育苗期', count: nurseryCount }] : [])
+       ];
+
+       // フィルタリング適用
+       let filteredPesticides = pesticides;
+       if (stageFilter && stageFilter !== 'all') {
+         filteredPesticides = pesticides.filter(p => p.stage_category === stageFilter);
+       } else if (isSeedRequested) {
+         filteredPesticides = pesticides.filter(p => p.stage_category === 'seed');
+       } else if (isNurseryRequested) {
+         filteredPesticides = pesticides.filter(p => p.stage_category === 'nursery');
+       }
+
+       const directCount = filteredPesticides.filter(p => p.match_type === 'direct').length;
+       const groupCount = filteredPesticides.filter(p => p.match_type !== 'direct').length;
 
        return NextResponse.json({
           judgment: 'DB検索完了',
-          status: pesticides.length > 0 ? 'success' : 'warning',
+          status: filteredPesticides.length > 0 ? 'success' : 'warning',
           directCount,
           groupCount,
+          availableStages,
+          activeStage: isSeedRequested ? 'seed' : isNurseryRequested ? 'nursery' : stageFilter || 'all',
           message: cleanPesticideName 
-            ? `作物「${cleanCropName}」× 農薬「${cleanPesticideName}」の適用検索結果です。（直接登録: ${directCount}件 / 野菜類等の包括登録: ${groupCount}件）`
-            : `作物「${cleanCropName}」に使える登録農薬一覧です。（直接登録: ${directCount}件 / 野菜類等の包括登録: ${groupCount}件 計${pesticides.length}件）`,
-          pesticides: pesticides
+            ? `作物「${cleanCropName}」× 農薬「${cleanPesticideName}」の適用検索結果です。（直接登録: ${directCount}件 / 包括登録: ${groupCount}件）`
+            : `作物「${cleanCropName}」に使える登録農薬一覧です。（直接登録: ${directCount}件 / 包括登録: ${groupCount}件 計${filteredPesticides.length}件）`,
+          pesticides: filteredPesticides
        });
     } else {
        return NextResponse.json({

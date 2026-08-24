@@ -56,6 +56,7 @@ export default function PesticideCheckPage() {
   const [cropName, setCropName] = useState('とうがらし');
   const [pesticideName, setPesticideName] = useState('');
   const [targetPest, setTargetPest] = useState('');
+  const [selectedStageFilter, setSelectedStageFilter] = useState<string>('all');
   
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -79,20 +80,26 @@ export default function PesticideCheckPage() {
   );
 
   // 検索実行
-  const handleCheck = async (e?: React.FormEvent) => {
+  const handleCheck = async (e?: React.FormEvent, stageOverride?: string) => {
     if (e) e.preventDefault();
     if (!cropName.trim()) return;
 
+    const targetStage = stageOverride !== undefined ? stageOverride : selectedStageFilter;
+
     setLoading(true);
     setError(null);
-    setResult(null);
     setExpandedCardId(null);
 
     try {
       const res = await fetch('/api/pesticide-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cropName, pesticideName, targetPest })
+        body: JSON.stringify({ 
+          cropName, 
+          pesticideName, 
+          targetPest,
+          stageFilter: targetStage
+        })
       });
 
       if (!res.ok) {
@@ -106,6 +113,9 @@ export default function PesticideCheckPage() {
 
       const data = await res.json();
       setResult(data);
+      if (data.activeStage) {
+        setSelectedStageFilter(data.activeStage);
+      }
 
       // 履歴保存（バックグラウンド・失敗しても検索結果表示を妨げない）
       try {
@@ -400,10 +410,70 @@ export default function PesticideCheckPage() {
                   )}
                 </div>
 
+                {/* 【方法A：スマート用途・ステージセレクター】 */}
+                {result.availableStages && result.availableStages.length > 1 && (
+                  <div className="bg-slate-800/70 border border-slate-700/80 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-300 flex items-center gap-1.5">
+                        <Layers className="w-4 h-4 text-emerald-400" />
+                        用途・ステージを選択（農薬取締法 厳格適合）:
+                      </span>
+                      <span className="text-[11px] font-bold text-slate-400">
+                        ※用途によって使える農薬が法律で厳格に異なります
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {result.availableStages.map((st: any) => {
+                        const isSelected = selectedStageFilter === st.key;
+                        return (
+                          <button
+                            key={st.key}
+                            type="button"
+                            onClick={() => {
+                              setSelectedStageFilter(st.key);
+                              handleCheck(undefined, st.key);
+                            }}
+                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                              isSelected
+                                ? st.key === 'seed'
+                                  ? 'bg-amber-400 text-slate-950 shadow-lg shadow-amber-400/20 ring-2 ring-amber-300'
+                                  : 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20'
+                                : 'bg-slate-900/80 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-700'
+                            }`}
+                          >
+                            <span>{st.label}</span>
+                            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                              isSelected ? 'bg-black/20 text-slate-950' : 'bg-slate-800 text-slate-400'
+                            }`}>
+                              {st.count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 採種用モード特大アラートバナー */}
+                {selectedStageFilter === 'seed' && (
+                  <div className="bg-amber-950/40 border border-amber-500/60 rounded-2xl p-4 text-amber-200 flex items-start gap-3 shadow-lg">
+                    <Sparkles className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-black text-white">
+                        🌱 【農薬取締法完全遵守】採種用（種採り用）専用モード作動中
+                      </h4>
+                      <p className="text-xs font-bold text-amber-300/80 mt-0.5">
+                        種子採取用圃場に正式登録されている農薬のみを表示しています。食用の農薬は自動的に除外されているため、安心して適法な散布計画を策定できます。
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* カルテカード一覧 */}
                 {result.pesticides && result.pesticides.length > 0 ? (
                   <div className="grid grid-cols-1 gap-4">
-                    {result.pesticides.map((p: PesticideRecord, idx: number) => {
+                    {result.pesticides.map((p: any, idx: number) => {
                       const cardId = `${p.registration_no}_${idx}`;
                       const isExpanded = expandedCardId === cardId;
                       const isSelected = simulatorList.some(item => 
@@ -430,6 +500,18 @@ export default function PesticideCheckPage() {
                                 }`}>
                                   {p.scope_label}
                                 </span>
+
+                                {p.stage_badge && (
+                                  <span className={`text-[11px] font-black px-2.5 py-0.5 rounded-full border ${
+                                    p.stage_category === 'seed'
+                                      ? 'bg-amber-400/20 text-amber-300 border-amber-400/40'
+                                      : p.stage_category === 'nursery'
+                                      ? 'bg-teal-400/20 text-teal-300 border-teal-400/40'
+                                      : 'bg-slate-700/60 text-slate-300 border-slate-600'
+                                  }`}>
+                                    {p.stage_badge}
+                                  </span>
+                                )}
 
                                 <span className="bg-slate-700/80 text-slate-300 text-[11px] font-bold px-2 py-0.5 rounded-md">
                                   登録番号: {p.registration_no}
