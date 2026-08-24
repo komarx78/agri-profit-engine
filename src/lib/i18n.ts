@@ -337,8 +337,18 @@ export function getTranslatedName(item: any, lang: LanguageCode = 'ja'): string 
   if (lang === 'ja') return item.name || '';
   
   const langKey = `name_${lang}`;
-  // 翻訳名が存在すればそれを返し、なければ英語名、それでもなければ日本語名をフォールバックとして返す
-  return item[langKey] || item.name_en || item.name || '';
+  // 1. 専用の言語カラムがあればそれを返す
+  if (item[langKey]) return item[langKey];
+  // 2. 英語カラムがあればそれを返す（英語以外の言語で専用カラムがない場合でも日本語より英語が分かりやすい）
+  if (lang !== 'en' && item.name_en) return item.name_en;
+
+  // 3. 辞書・部分一致での翻訳フォールバック
+  if (item.name) {
+    const trans = getTranslatedWorkType(item.name, lang);
+    if (trans) return trans;
+    return item.name;
+  }
+  return '';
 }
 
 // 作業種別・タスクタイトルの多言語翻訳関数
@@ -351,9 +361,10 @@ export function getTranslatedWorkType(text: string, lang: LanguageCode = 'ja'): 
     return TRANSLATIONS[text][lang];
   }
 
-  // 2. 代表的な農作業用語・テスト等のキーワード辞書
+  // 2. 代表的な農作業用語・テスト・圃場・作目等のキーワード辞書
   const dict: Record<string, Record<string, string>> = {
     'テスト': { en: 'Test', vi: 'Kiểm tra (Test)', id: 'Uji Coba', zh: '测试', si: 'පරීක්ෂණය', km: 'ការសាកល្បង' },
+    'テスト2': { en: 'Test 2', vi: 'Kiểm tra 2', id: 'Uji Coba 2', zh: '测试2', si: 'පරීක්ෂණය 2', km: 'ការសាកល្បង 2' },
     '作業': { en: 'Work', vi: 'Công việc', id: 'Pekerjaan', zh: '作业', si: 'වැඩ', km: 'ការងារ' },
     '播種': { en: 'Sowing', vi: 'Gieo hạt', id: 'Menabur', zh: '播种', si: 'බීජ වැපිරීම', km: 'ការសាបព្រោះ' },
     '定植': { en: 'Planting', vi: 'Trồng cây', id: 'Menanam', zh: '定植', si: 'පැල සිටුවීම', km: 'ការដាំកូនឈើ' },
@@ -372,19 +383,54 @@ export function getTranslatedWorkType(text: string, lang: LanguageCode = 'ja'): 
     '片付け・その他': { en: 'Cleanup/Other', vi: 'Dọn dẹp/Khác', id: 'Pembersihan/Lainnya', zh: '整理/其他', si: 'පිරිසිදු කිරීම / වෙනත්', km: 'ការសម្អាត / ផ្សេងៗ' },
     '出荷': { en: 'Shipping', vi: 'Xuất hàng', id: 'Pengiriman', zh: '发货', si: 'නැව්ගත කිරීම', km: 'ការដឹកជញ្ជូន' },
     '選別': { en: 'Sorting', vi: 'Phân loại', id: 'Sortir', zh: '分选', si: 'වර්ග කිරීම', km: 'ការតម្រៀប' },
-    '袋詰め': { en: 'Bagging / Packing', vi: 'Đóng gói túi', id: 'Pengemasan', zh: '装袋打包', si: 'ඇසුරුම් කිරීම', km: 'ការវេចខ្ចប់' }
+    '袋詰め': { en: 'Bagging / Packing', vi: 'Đóng gói túi', id: 'Pengemasan', zh: '装袋打包', si: 'ඇසුරුම් කිරීම', km: 'ការវេចខ្ចប់' },
+    // 代表的な作物
+    'モロヘイヤ': { en: 'Molokhia', vi: 'Rau đay', id: 'Daun Molokhia', zh: '埃及野麻婴', si: 'මොරොහෙයියා', km: 'ម៉ូរ៉ូហ៊ីយ៉ា' },
+    'きゅうり': { en: 'Cucumber', vi: 'Dưa leo', id: 'Mentimun', zh: '黄瓜', si: 'පිපිඤ්ඤා', km: 'ត្រសក់' },
+    '枝豆': { en: 'Edamame', vi: 'Đậu nành non', id: 'Edamame', zh: '毛豆', si: 'එඩමාමේ', km: 'សណ្តែកសៀង' },
+    'トマト': { en: 'Tomato', vi: 'Cà chua', id: 'Tomat', zh: '番茄', si: 'තක්කාලි', km: 'ប៉េងប៉ោះ' },
+    'ミニトマト': { en: 'Cherry Tomato', vi: 'Cà chua bi', id: 'Tomat Ceri', zh: '圣女果', si: 'චෙරි තක්කාලි', km: 'ប៉េងប៉ោះតូច' },
+    'いちご': { en: 'Strawberry', vi: 'Dâu tây', id: 'Stroberi', zh: '草莓', si: 'ස්ට්‍රෝබෙරි', km: 'ផ្លែស្ត្របឺរី' },
+    'ナス': { en: 'Eggplant', vi: 'Cà tím', id: 'Terong', zh: '茄子', si: 'වම්බටු', km: 'ត្រប់' },
+    'なす': { en: 'Eggplant', vi: 'Cà tím', id: 'Terong', zh: '茄子', si: 'වම්බටු', km: 'ត្រប់' },
+    'ピーマン': { en: 'Bell Pepper', vi: 'Ớt chuông xanh', id: 'Paprika Hijau', zh: '青椒', si: 'බෙල් පෙපර්', km: 'ម្ទេសប្លោក' },
+    // 圃場・棟
+    '露地': { en: 'Open Field', vi: 'Đất trống', id: 'Ladang Terbuka', zh: '露天田地', si: 'එළිමහන් ක්ෂේත්‍රය', km: 'វាលស្រែបើកចំហ' },
+    'ハウス': { en: 'Greenhouse', vi: 'Nhà kính', id: 'Rumah Kaca', zh: '温室大棚', si: 'හරිතාගාරය', km: 'ផ្ទះកញ្ចក់' },
+    'D棟': { en: 'Building D', vi: 'Nhà D', id: 'Gedung D', zh: 'D栋', si: 'D ගොඩනැගිල්ල', km: 'អាគារ D' },
+    'A棟': { en: 'Building A', vi: 'Nhà A', id: 'Gedung A', zh: 'A栋', si: 'A ගොඩනැගිල්ල', km: 'អាគារ A' },
+    'B棟': { en: 'Building B', vi: 'Nhà B', id: 'Gedung B', zh: 'B栋', si: 'B ගොඩනැගිල්ල', km: 'អាគារ B' },
+    'C棟': { en: 'Building C', vi: 'Nhà C', id: 'Gedung C', zh: 'C栋', si: 'C ගොඩනැගිල්ල', km: 'អាគារ C' },
+    '南側': { en: 'South', vi: 'Phía Nam', id: 'Selatan', zh: '南侧', si: 'දකුණු පස', km: 'ខាងត្បូង' },
+    '北側': { en: 'North', vi: 'Phía Bắc', id: 'Utara', zh: '北侧', si: 'උතුරු පස', km: 'ខាងជើង' },
+    '東側': { en: 'East', vi: 'Phía Đông', id: 'Timur', zh: '东侧', si: 'නැගෙනහිර පස', km: 'ខាងកើត' },
+    '西側': { en: 'West', vi: 'Phía Tây', id: 'Barat', zh: '西侧', si: 'බටහිර පස', km: 'ខាងលិច' },
   };
 
   if (dict[text] && dict[text][lang]) {
     return dict[text][lang];
   }
 
-  // 部分一致照合
-  for (const key of Object.keys(dict)) {
-    if (text.includes(key) && dict[key][lang]) {
-      return text.replace(key, dict[key][lang]);
+  // テスト1, テスト2 などの正規表現対応
+  const testMatch = text.match(/^テスト(\d+)$/);
+  if (testMatch) {
+    const num = testMatch[1];
+    const prefix = dict['テスト']?.[lang] || 'Test';
+    return `${prefix} ${num}`;
+  }
+
+  // 部分一致照合（長い単語から順に置換）
+  let result = text;
+  let replaced = false;
+  const sortedKeys = Object.keys(dict).sort((a, b) => b.length - a.length);
+  for (const key of sortedKeys) {
+    if (result.includes(key) && dict[key][lang]) {
+      result = result.replaceAll(key, dict[key][lang]);
+      replaced = true;
     }
   }
+
+  if (replaced) return result;
 
   return text;
 }

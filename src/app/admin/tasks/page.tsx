@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Calendar, CheckCircle2, Clock, MapPin, Sprout, Loader2, Plus, Trash2, Edit2, Users, Briefcase, X, List, LayoutGrid, ChevronLeft, ChevronRight } from 'lucide-react';
+import { autoTranslateMasterData } from '@/app/actions/translate';
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<any[]>([]);
@@ -71,6 +72,17 @@ export default function TasksPage() {
     if (!formData.work_date || !formData.task_title) return;
     setIsSaving(true);
     try {
+      // タスクタイトルの多言語AI自動翻訳を生成
+      const trans = await autoTranslateMasterData(formData.task_title);
+      const transPayload = {
+        task_title_en: trans.name_en || formData.task_title,
+        task_title_vi: trans.name_vi || formData.task_title,
+        task_title_id: trans.name_id || formData.task_title,
+        task_title_zh: trans.name_zh || formData.task_title,
+        task_title_si: trans.name_si || formData.task_title,
+        task_title_km: trans.name_km || formData.task_title,
+      };
+
       if (editingTaskId) {
         // 編集保存（単一タスク更新）
         const assignment = formData.field_assignments[0] || { field_id: '', worker_ids: [] };
@@ -81,14 +93,15 @@ export default function TasksPage() {
           crop_id: formData.crop_id || null,
           field_id: assignment.field_id || null,
           worker_id: (assignment.worker_ids && assignment.worker_ids.length > 0) ? assignment.worker_ids[0] : null,
-          department_id: formData.department_id || null
+          department_id: formData.department_id || null,
+          ...transPayload
         };
 
         const { data, error } = await supabase
           .from('work_logs')
           .update(updatePayload)
           .eq('id', editingTaskId)
-          .select('id, work_date, task_title, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(name), fields(name), workers(name), departments(name)');
+          .select('id, work_date, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(*), fields(*), workers(*), departments(*)');
 
         if (error) throw error;
         if (data && data.length > 0) {
@@ -118,7 +131,8 @@ export default function TasksPage() {
                 department_id: formData.department_id || null,
                 status: 'planned',
                 duration_minutes: 0,
-                approval_status: null
+                approval_status: null,
+                ...transPayload
               });
             });
           } else {
@@ -133,7 +147,8 @@ export default function TasksPage() {
               department_id: formData.department_id || null,
               status: 'planned',
               duration_minutes: 0,
-              approval_status: null
+              approval_status: null,
+              ...transPayload
             });
           }
         });
@@ -141,7 +156,7 @@ export default function TasksPage() {
         const { data, error } = await supabase
           .from('work_logs')
           .insert(insertData)
-          .select('id, work_date, task_title, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(name), fields(name), workers(name), departments(name)');
+          .select('id, work_date, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(*), fields(*), workers(*), departments(*)');
         
         if (error) throw error;
         if (data) {

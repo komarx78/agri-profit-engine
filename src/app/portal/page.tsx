@@ -199,7 +199,7 @@ export default function PortalPage() {
     } else {
       // クライアント側でもフォールバック試行
       const { data: taskData } = await supabase.from('work_logs')
-        .select('id, task_title, work_type, work_date, status, crop_id, field_id, worker_id, crops(name), fields(name), workers(name)')
+        .select('id, task_title, work_type, work_date, status, crop_id, field_id, worker_id, crops(*), fields(*), workers(*)')
         .eq('user_id', targetUserId)
         .eq('status', 'planned')
         .order('work_date', { ascending: true });
@@ -543,7 +543,9 @@ export default function PortalPage() {
     const cropName = t.crops ? getTranslatedName(t.crops, language) : '';
     
     const rawTitle = t.task_title || t.work_type || '作業';
-    const translatedTitle = dynamicTranslations[rawTitle] || getTranslatedWorkType(rawTitle, language);
+    const langKey = `task_title_${language}`;
+    const dbTranslatedTitle = t[langKey] || (language !== 'en' && language !== 'ja' ? t.task_title_en : null);
+    const translatedTitle = (language === 'ja' ? rawTitle : (dbTranslatedTitle || dynamicTranslations[rawTitle] || getTranslatedWorkType(rawTitle, language)));
 
     return {
       id: t.id,

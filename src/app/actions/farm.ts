@@ -343,7 +343,7 @@ export async function getPortalTasks(tenantId: string) {
 
     const { data, error } = await supabase
       .from('work_logs')
-      .select('id, task_title, work_type, work_date, status, crop_id, field_id, worker_id, crops(name), fields(name), workers(name)')
+      .select('id, task_title, work_type, work_date, status, crop_id, field_id, worker_id, crops(*), fields(*), workers(*)')
       .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`)
       .order('work_date', { ascending: true });
 
