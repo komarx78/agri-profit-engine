@@ -59,15 +59,18 @@ export default function VideoPlayerWithSubtitles({
 
   // 動画URL変更時のリセット
   useEffect(() => {
-    setIsLoading(true);
-    setHasError(false);
-    setIsPlaying(false);
-    setCurrentSubtitle('');
+    if (videoUrl) {
+      setIsLoading(true);
+      setHasError(false);
+      setIsPlaying(false);
+      setCurrentSubtitle('');
+    }
   }, [videoUrl]);
 
   // メタデータロード完了時の処理
   const handleLoadedMetadata = () => {
     setIsLoading(false);
+    setHasError(false);
     if (videoRef.current) {
       if (trimStart > 0) {
         videoRef.current.currentTime = trimStart;
@@ -149,12 +152,21 @@ export default function VideoPlayerWithSubtitles({
 
   const currentLangObj = LANGUAGES.find(l => l.code === activeLang) || { name: '日本語', flag: '🇯🇵' };
 
+  if (!videoUrl) {
+    return (
+      <div className={`relative w-full bg-black rounded-2xl overflow-hidden flex items-center justify-center ${className}`} style={{ aspectRatio: '16/9' }}>
+        <Loader2 className="w-8 h-8 text-rose-500 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div 
       className={`relative w-full bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 group select-none ${className}`} 
       style={{ aspectRatio: '16/9' }}
     >
       <video
+        key={videoUrl}
         ref={videoRef}
         src={videoUrl}
         className="w-full h-full object-contain cursor-pointer"
@@ -163,7 +175,10 @@ export default function VideoPlayerWithSubtitles({
         preload="auto"
         controlsList="nodownload"
         onLoadedMetadata={handleLoadedMetadata}
-        onCanPlay={() => setIsLoading(false)}
+        onCanPlay={() => {
+          setIsLoading(false);
+          setHasError(false);
+        }}
         onWaiting={() => setIsLoading(true)}
         onPlaying={() => {
           setIsLoading(false);
@@ -171,9 +186,13 @@ export default function VideoPlayerWithSubtitles({
         }}
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
-        onError={() => {
-          setIsLoading(false);
-          setHasError(true);
+        onError={(e) => {
+          // videoUrl が有効な場合のみエラー処理
+          if (videoUrl && videoRef.current?.error) {
+            console.error('Video error event:', videoRef.current.error);
+            setIsLoading(false);
+            setHasError(true);
+          }
         }}
         onTimeUpdate={handleTimeUpdate}
         onClick={handlePlayPauseToggle}
