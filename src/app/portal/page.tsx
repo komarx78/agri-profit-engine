@@ -1690,7 +1690,7 @@ export default function PortalPage() {
                 className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors flex items-center gap-1.5 font-bold text-sm"
               >
                 <ArrowLeft className="w-5 h-5" />
-                <span className="hidden sm:inline">ポータルへ戻る</span>
+                <span className="hidden sm:inline">{t('manual_backToPortal', language)}</span>
               </button>
               <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
               <div className="flex items-center gap-2">
@@ -1699,10 +1699,10 @@ export default function PortalPage() {
                 </div>
                 <div>
                   <h1 className="font-black text-slate-800 text-base sm:text-lg leading-none">
-                    マニュアル・動画ガイド
+                    {t('manual_modalTitle', language)}
                   </h1>
                   <span className="text-[11px] sm:text-xs font-bold text-slate-400">
-                    操作手順と解説動画を1つの画面で確認できます
+                    {t('manual_modalSub', language)}
                   </span>
                 </div>
               </div>
@@ -1720,7 +1720,7 @@ export default function PortalPage() {
                 }`}
               >
                 <Play className="w-3.5 h-3.5" />
-                <span>動画マニュアル</span>
+                <span>{t('manual_tabVideo', language)}</span>
               </button>
               <button
                 type="button"
@@ -1732,7 +1732,7 @@ export default function PortalPage() {
                 }`}
               >
                 <BookOpen className="w-3.5 h-3.5" />
-                <span>スタートガイド</span>
+                <span>{t('manual_tabGuide', language)}</span>
               </button>
             </div>
 
@@ -1773,13 +1773,13 @@ export default function PortalPage() {
                       <div className="flex flex-wrap items-center justify-between gap-3 mb-3 text-white">
                         <div className="flex items-center gap-2">
                           <Play className="w-4 h-4 text-rose-400" />
-                          <span className="font-bold text-sm">動画を再生中（多言語テロップ連動）</span>
+                          <span className="font-bold text-sm">{t('manual_playingNow', language)}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           {/* 字幕言語セレクター */}
                           <div className="flex items-center gap-1.5 bg-slate-800 px-3 py-1 rounded-xl border border-slate-700">
                             <Languages className="w-3.5 h-3.5 text-rose-400" />
-                            <span className="text-[11px] font-bold text-slate-300">字幕言語:</span>
+                            <span className="text-[11px] font-bold text-slate-300">{t('manual_subtitleLang', language)}</span>
                             <select
                               value={language}
                               onChange={(e) => setLanguage(e.target.value as LanguageCode)}
@@ -1797,7 +1797,7 @@ export default function PortalPage() {
                             onClick={() => setPlayingVideoUrl(null)}
                             className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
                           >
-                            <X className="w-4 h-4" /> プレイヤーを閉じる
+                            <X className="w-4 h-4" /> {t('manual_closePlayer', language)}
                           </button>
                         </div>
                       </div>
@@ -1817,17 +1817,17 @@ export default function PortalPage() {
                     <div>
                       <div className="flex items-center gap-2 mb-1">
                         <span className="bg-rose-100 text-rose-700 text-xs font-black px-2.5 py-0.5 rounded-full">
-                          MOVIE TUTORIALS
+                          {t('manual_movieTutorialsTag', language)}
                         </span>
                         <span className="text-xs font-bold text-slate-400">
-                          全 {videoManuals.length} 本
+                          {language === 'ja' ? `全 ${videoManuals.length} 本` : `Total ${videoManuals.length}`}
                         </span>
                       </div>
                       <h2 className="text-xl sm:text-2xl font-black text-slate-800">
-                        システム使い方動画集
+                        {t('manual_videoHeading', language)}
                       </h2>
                       <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                        現場での操作方法や初期設定の流れをわかりやすく動画で解説します。見たい動画をクリックして再生してください。
+                        {t('manual_videoDesc', language)}
                       </p>
                     </div>
 
@@ -1837,7 +1837,7 @@ export default function PortalPage() {
                         className="flex-shrink-0 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs"
                       >
                         <Plus className="w-4 h-4" />
-                        <span>新規動画を登録</span>
+                        <span>{t('manual_addNewVideo', language)}</span>
                       </button>
                     )}
                   </div>
@@ -1854,9 +1854,9 @@ export default function PortalPage() {
                         <Video className="w-8 h-8" />
                       </div>
                       <div>
-                        <h3 className="text-lg font-black text-slate-800 mb-1">現在、登録されている解説動画はありません</h3>
+                        <h3 className="text-lg font-black text-slate-800 mb-1">{t('manual_noVideosTitle', language)}</h3>
                         <p className="text-xs text-slate-500 max-w-md mx-auto">
-                          ステップごとの詳しい操作手順は「スタートガイド」タブから画像付きでご確認いただけます。
+                          {t('manual_noVideosDesc', language)}
                         </p>
                       </div>
                       <div className="flex justify-center gap-3">
@@ -1865,7 +1865,7 @@ export default function PortalPage() {
                           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors shadow-sm inline-flex items-center gap-2"
                         >
                           <BookOpen className="w-4 h-4" />
-                          <span>操作スタートガイドを見る</span>
+                          <span>{t('manual_viewStartGuide', language)}</span>
                         </button>
                         {role === 'admin' && (
                           <button
@@ -1873,7 +1873,7 @@ export default function PortalPage() {
                             className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors shadow-sm inline-flex items-center gap-2"
                           >
                             <Plus className="w-4 h-4" />
-                            <span>最初の動画を登録する</span>
+                            <span>{t('manual_addFirstVideo', language)}</span>
                           </button>
                         )}
                       </div>
@@ -1891,7 +1891,7 @@ export default function PortalPage() {
                               <Play className="w-7 h-7 text-white ml-0.5" />
                             </div>
                             <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur-xs">
-                              再生
+                              {t('manual_playBadge', language)}
                             </span>
                             {role === 'admin' && (
                               <button
@@ -1912,7 +1912,7 @@ export default function PortalPage() {
                                 {manual.description}
                               </p>
                             ) : (
-                              <p className="text-xs text-slate-400 italic flex-1">説明はありません</p>
+                              <p className="text-xs text-slate-400 italic flex-1">{t('manual_noDescription', language)}</p>
                             )}
                             <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-bold">
                               <span>{manual.created_at ? new Date(manual.created_at).toLocaleDateString() : ''}</span>
@@ -1927,11 +1927,11 @@ export default function PortalPage() {
                                     title="動画のトリミングとテロップを編集"
                                   >
                                     <Scissors className="w-3 h-3 text-rose-500" />
-                                    <span>編集・テロップ</span>
+                                    <span>{t('manual_editTelopBtn', language)}</span>
                                   </button>
                                 )}
                                 <span className="text-rose-600 font-black flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                                  動画を見る <ArrowRight className="w-3.5 h-3.5" />
+                                  {t('manual_watchVideoBtn', language)} <ArrowRight className="w-3.5 h-3.5" />
                                 </span>
                               </div>
                             </div>
@@ -1959,7 +1959,7 @@ export default function PortalPage() {
                         <div className="p-2 bg-rose-100 text-rose-600 rounded-xl">
                           <Video className="w-5 h-5" />
                         </div>
-                        <h2 className="text-base font-black text-slate-800">新規動画マニュアルを登録</h2>
+                        <h2 className="text-base font-black text-slate-800">{t('manual_addModalTitle', language)}</h2>
                       </div>
                       <button 
                         onClick={() => setShowAddVideoModal(false)} 
@@ -1982,7 +1982,7 @@ export default function PortalPage() {
 
                       <div>
                         <label className="block text-xs font-black text-slate-700 mb-1">
-                          動画タイトル <span className="text-rose-500">*</span>
+                          {t('manual_videoTitleLabel', language)} <span className="text-rose-500">*</span>
                         </label>
                         <input 
                           type="text" 
@@ -1996,7 +1996,7 @@ export default function PortalPage() {
 
                       <div>
                         <label className="block text-xs font-black text-slate-700 mb-1">
-                          説明・重要ポイント <span className="text-slate-400 font-normal">(任意)</span>
+                          {t('manual_videoDescLabel', language)} <span className="text-slate-400 font-normal">(任意)</span>
                         </label>
                         <textarea 
                           value={newVideoDescription} 
@@ -2008,7 +2008,7 @@ export default function PortalPage() {
 
                       <div>
                         <label className="block text-xs font-black text-slate-700 mb-1">
-                          動画ファイル (MP4 / WebM / QuickTime, 最大50MB) <span className="text-rose-500">*</span>
+                          {t('manual_videoFileLabel', language)} <span className="text-rose-500">*</span>
                         </label>
                         <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 border-dashed">
                           <input 
@@ -2037,7 +2037,7 @@ export default function PortalPage() {
                           disabled={isSubmittingVideo} 
                           className="px-4 py-2 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-100 transition-colors"
                         >
-                          キャンセル
+                          {t('cancel', language)}
                         </button>
                         <button 
                           type="submit" 
@@ -2045,7 +2045,7 @@ export default function PortalPage() {
                           className="px-5 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 disabled:opacity-50 text-white font-black text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5"
                         >
                           {isSubmittingVideo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                          <span>{isSubmittingVideo ? '動画をアップロード中...' : '登録する'}</span>
+                          <span>{isSubmittingVideo ? t('manual_uploadingBtn', language) : t('manual_submitRegisterBtn', language)}</span>
                         </button>
                       </div>
                     </form>
