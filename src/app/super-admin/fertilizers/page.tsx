@@ -37,6 +37,7 @@ export default function AdminFertilizersPage() {
     ca_percent: '0',
     other_ingredients: ''
   });
+  const [tableMissing, setTableMissing] = useState(false);
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,9 +48,19 @@ export default function AdminFertilizersPage() {
     setPreviewLoading(true);
     try {
       // 1. 総件数
-      const { count } = await supabase
+      const { count, error: countErr } = await supabase
         .from('m_fertilizers')
         .select('*', { count: 'exact', head: true });
+      
+      if (countErr) {
+        if (countErr.code === 'PGRST205' || countErr.message?.includes('schema cache') || countErr.message?.includes('m_fertilizers')) {
+          setTableMissing(true);
+          return;
+        }
+      } else {
+        setTableMissing(false);
+      }
+
       setTotalCount(count || 0);
 
       // 2. 直近・検索一覧（最大100件）
@@ -67,7 +78,7 @@ export default function AdminFertilizersPage() {
       if (!error && data) {
         setFertilizers(data);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Fetch fertilizers error:', error);
     } finally {
       setPreviewLoading(false);
@@ -181,8 +192,6 @@ export default function AdminFertilizersPage() {
           setStatus({ type: 'info', message: `${uniqueData.length}件の肥料データをSupabaseに一括登録しています...` });
 
           const chunkSize = 500;
-          const totalChunks = Math.ceil(uniqueData.length / chunkSize);
-
           for (let i = 0; i < uniqueData.length; i += chunkSize) {
             const chunk = uniqueData.slice(i, i + chunkSize);
             const { error } = await supabase
@@ -190,10 +199,14 @@ export default function AdminFertilizersPage() {
               .upsert(chunk, { onConflict: 'registration_no' });
 
             if (error) {
-              // 登録番号のユニーク衝突等がある場合は通常insert
+              // テーブル未作成エラー等の場合
+              if (error.code === 'PGRST205' || error.message?.includes('schema cache') || error.message?.includes('m_fertilizers')) {
+                throw new Error('データベースに「m_fertilizers」テーブルが存在しません。SupabaseのSQL Editorでテーブル作成SQLを実行してください。');
+              }
+              // 通常のinsertで再試行
               const { error: insertErr } = await supabase.from('m_fertilizers').insert(chunk);
               if (insertErr) {
-                console.warn('Upsert fallback warning:', insertErr);
+                throw new Error(`DB保存エラー: ${insertErr.message}`);
               }
             }
 
@@ -346,6 +359,49 @@ export default function AdminFertilizersPage() {
           </button>
         </div>
       </div>
+
+      {/* テーブル未作成アラート */}
+      {tableMissing && (
+        <div className="p-6 rounded-3xl bg-amber-950/60 border border-amber-500/50 text-amber-200 shadow-xl space-y-3">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-6 h-6 text-amber-400 shrink-0" />
+            <div>
+              <h3 className="text-base font-black text-amber-300">
+                ⚠️ データベースに「m_fertilizers」テーブルがまだ作成されていません
+              </h3>
+              <p className="text-xs text-amber-200/80 mt-0.5">
+                CSVを登録するには、Supabaseの「SQL Editor」でテーブル作成SQLを実行していただく必要があります。
+              </p>
+            </div>
+          </div>
+          <div className="pt-2">
+            <p className="text-xs font-bold text-amber-300 mb-1">実行するSQLコード（クリックしてコピー可能）:</p>
+            <pre className="p-3 bg-slate-950 rounded-xl border border-amber-500/30 text-[11px] font-mono text-slate-300 overflow-x-auto select-all">
+{`CREATE TABLE IF NOT EXISTS public.m_fertilizers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    registration_no TEXT,
+    fertilizer_name TEXT NOT NULL,
+    fertilizer_type TEXT,
+    applicant_name TEXT,
+    n_percent NUMERIC(5,2) DEFAULT 0,
+    p_percent NUMERIC(5,2) DEFAULT 0,
+    k_percent NUMERIC(5,2) DEFAULT 0,
+    mg_percent NUMERIC(5,2) DEFAULT 0,
+    ca_percent NUMERIC(5,2) DEFAULT 0,
+    other_ingredients TEXT,
+    raw_data JSONB,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE public.m_fertilizers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read on m_fertilizers" ON public.m_fertilizers FOR SELECT USING (true);
+CREATE POLICY "Allow public insert on m_fertilizers" ON public.m_fertilizers FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update on m_fertilizers" ON public.m_fertilizers FOR UPDATE USING (true);
+CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR DELETE USING (true);`}
+            </pre>
+          </div>
+        </div>
+      )}
 
       {/* ステータスメッセージ */}
       {status && (
