@@ -19,6 +19,7 @@ import VideoPlayerWithSubtitles, { Narration } from '@/components/VideoPlayerWit
 import CultivationsHub from '@/components/CultivationsHub';
 import HrManagementHub from '@/components/HrManagementHub';
 import CloudPortalHub from '@/components/CloudPortalHub';
+import ManagementDashboardHub from '@/components/ManagementDashboardHub';
 import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
 import { getPortalTasks } from '@/app/actions/farm';
@@ -57,15 +58,20 @@ export default function PortalPage() {
 function PortalContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialTab = (searchParams.get('tab') as 'home' | 'cloud' | 'cultivations' | 'hr') || 'home';
+  const rawTab = searchParams.get('tab');
+  const initialTab = (rawTab === 'cultivations' ? 'dashboard' : rawTab as 'home' | 'cloud' | 'dashboard' | 'hr') || 'dashboard';
 
-  // 統合タブステート: home(現場ホーム) | cloud(CloudPortal総合管理) | cultivations(栽培司令塔) | hr(勤怠・労務)
-  const [activePortalTab, setActivePortalTab] = useState<'home' | 'cloud' | 'cultivations' | 'hr'>(initialTab);
+  // 統合タブステート: dashboard(経営ダッシュボード) | cloud(CloudPortal総合管理) | home(現場ホーム)
+  const [activePortalTab, setActivePortalTab] = useState<'home' | 'cloud' | 'dashboard' | 'cultivations' | 'hr'>(initialTab);
 
   useEffect(() => {
     const tabParam = searchParams.get('tab') as any;
-    if (tabParam && ['home', 'cloud', 'cultivations', 'hr'].includes(tabParam)) {
-      setActivePortalTab(tabParam);
+    if (tabParam) {
+      if (tabParam === 'cultivations') {
+        setActivePortalTab('dashboard');
+      } else if (['home', 'cloud', 'dashboard', 'hr'].includes(tabParam)) {
+        setActivePortalTab(tabParam);
+      }
     }
   }, [searchParams]);
 
@@ -1121,41 +1127,25 @@ function PortalContent() {
           </div>
         </div>
 
-        {/* 🌟 3大ビュー切替スイッチ（管理者モード時のみ表示） */}
+        {/* 🌟 2大ビュー切替スイッチ（管理者モード時のみ表示） */}
         {role === 'admin' && (
           <div className="bg-slate-100/90 border-t border-slate-200 backdrop-blur-xs py-2">
-            <div className="max-w-2xl mx-auto px-4 flex items-center justify-center">
+            <div className="max-w-md mx-auto px-4 flex items-center justify-center">
               <div className="bg-slate-200/80 p-1.5 rounded-2xl flex items-center gap-1.5 w-full border border-slate-300/60 shadow-inner">
                 <button
                   type="button"
                   onClick={() => {
-                    setActivePortalTab('cultivations');
-                    router.push('/portal?tab=cultivations');
+                    setActivePortalTab('dashboard');
+                    router.push('/portal?tab=dashboard');
                   }}
                   className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
-                    activePortalTab === 'cultivations'
+                    activePortalTab === 'dashboard' || activePortalTab === 'cultivations'
                       ? 'bg-emerald-600 text-white shadow-sm'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
-                  <Sprout className="w-4 h-4" />
-                  <span>🌾 栽培司令塔</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActivePortalTab('cloud');
-                    router.push('/portal?tab=cloud');
-                  }}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
-                    activePortalTab === 'cloud'
-                      ? 'bg-slate-900 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <Building className="w-4 h-4 text-emerald-400" />
-                  <span>🏢 総合管理 (CloudPortal)</span>
+                  <BarChart3 className="w-4 h-4" />
+                  <span>📊 経営ダッシュボード</span>
                 </button>
 
                 <button
@@ -1181,21 +1171,13 @@ function PortalContent() {
 
       <main className="max-w-7xl mx-auto px-4 py-8">
         
-        {/* 1. 🌾 栽培・防除司令塔ビュー */}
-        {role === 'admin' && activePortalTab === 'cultivations' && (
-          <CultivationsHub initialSubTab="cultivations" />
+        {/* 1. 📊 経営ダッシュボードビュー */}
+        {role === 'admin' && (activePortalTab === 'dashboard' || activePortalTab === 'cultivations') && (
+          <ManagementDashboardHub />
         )}
 
-        {/* 2. 🏢 CloudPortal（総合管理）ビュー */}
-        {role === 'admin' && activePortalTab === 'cloud' && (
-          <CloudPortalHub onSwitchToWork={() => {
-            setActivePortalTab('home');
-            router.push('/portal?tab=home');
-          }} />
-        )}
-
-        {/* 3. 📱 現場ホーム（一般スタッフモード時、または管理者でhome選択時） */}
-        {(role === 'worker' || activePortalTab === 'home' || (activePortalTab !== 'cultivations' && activePortalTab !== 'cloud')) && (
+        {/* 2. 📱 現場ホーム（一般スタッフモード時、または管理者でhome選択時、またはその他） */}
+        {(role === 'worker' || activePortalTab === 'home' || (activePortalTab !== 'dashboard' && activePortalTab !== 'cultivations')) && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* 左側カラム */}
