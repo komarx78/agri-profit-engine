@@ -84,10 +84,30 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
     };
   });
 
+  // 時間帯のソート順重み付け
+  const getTimeSlotWeight = (slot?: string) => {
+    if (!slot) return 5;
+    if (slot.includes('午前') || slot.includes('朝')) return 1;
+    if (slot.includes('午後') || slot.includes('昼')) return 2;
+    if (slot.includes('夕方')) return 3;
+    if (slot.includes('終日')) return 4;
+    return 5;
+  };
+
+  const sortEvents = (list: any[]) => {
+    return [...list].sort((a, b) => {
+      const weightA = getTimeSlotWeight(a.timeSlot);
+      const weightB = getTimeSlotWeight(b.timeSlot);
+      if (weightA !== weightB) return weightA - weightB;
+      const orderA = a.stepOrder || 1;
+      const orderB = b.stepOrder || 1;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.id || '').localeCompare(b.id || '');
+    });
+  };
+
   const selectedDayAllEvents = selectedDate 
-    ? events
-        .filter(e => normalizeDateStr(e.date) === selectedDate)
-        .sort((a, b) => (a.stepOrder || 1) - (b.stepOrder || 1))
+    ? sortEvents(events.filter(e => normalizeDateStr(e.date) === selectedDate))
     : [];
   const selectedDayEvents = filterMode === 'mine' ? selectedDayAllEvents.filter(isEventForMe) : selectedDayAllEvents;
   const selectedDayObj = weekDays.find(d => d.dateStr === selectedDate);
@@ -152,9 +172,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
       <div className="overflow-x-auto pb-4">
         <div className="grid grid-cols-7 gap-2 min-w-[800px]">
           {weekDays.map(day => {
-            let dayEvents = events
-              .filter(e => normalizeDateStr(e.date) === day.dateStr)
-              .sort((a, b) => (a.stepOrder || 1) - (b.stepOrder || 1));
+            let dayEvents = sortEvents(events.filter(e => normalizeDateStr(e.date) === day.dateStr));
 
             if (filterMode === 'mine') {
               dayEvents = dayEvents.filter(isEventForMe);
@@ -179,6 +197,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                   {dayEvents.length > 0 ? (
                     dayEvents.map((event, eventIdx) => {
                       const isMine = isEventForMe(event);
+                      const displayStep = eventIdx + 1;
                       return (
                         <div 
                           key={event.id} 
@@ -192,13 +211,11 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1.5">
-                              {event.stepOrder && (
-                                <span className={`w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center ${
-                                  isMine ? 'bg-amber-600 text-white' : 'bg-emerald-600 text-white'
-                                }`}>
-                                  {event.stepOrder}
-                                </span>
-                              )}
+                              <span className={`w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center ${
+                                isMine ? 'bg-amber-600 text-white' : 'bg-emerald-600 text-white'
+                              }`}>
+                                {displayStep}
+                              </span>
                               {event.timeSlot && (
                                 <span className="text-[9px] font-bold text-amber-700 bg-amber-100 px-1 py-0.2 rounded">
                                   {event.timeSlot}
@@ -317,7 +334,8 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                 <div className="space-y-4">
                   {selectedDayEvents.map((event, idx) => {
                     const isMine = isEventForMe(event);
-                    const stepNum = event.stepOrder || (idx + 1);
+                    // 表示用のステップ番号（1から始まる自動連番）
+                    const stepNum = idx + 1;
 
                     return (
                       <div key={event.id} className="relative">

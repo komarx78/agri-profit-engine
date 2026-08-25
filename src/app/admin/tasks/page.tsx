@@ -747,11 +747,24 @@ export default function TasksPage() {
                         
                         <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
                           <div className="flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-black flex items-center justify-center shadow-xs">
-                              {stepNum}
-                            </span>
+                            <select
+                              value={assignment.step_order || stepNum}
+                              onChange={(e) => {
+                                const newAssignments = [...formData.field_assignments];
+                                newAssignments[idx].step_order = Number(e.target.value);
+                                setFormData({ ...formData, field_assignments: newAssignments });
+                              }}
+                              className="px-2.5 py-1 bg-emerald-600 text-white rounded-xl text-xs font-black outline-none cursor-pointer shadow-xs hover:bg-emerald-500 transition-colors"
+                              title="巡回順番を選択"
+                            >
+                              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+                                <option key={num} value={num} className="bg-white text-slate-800 font-bold">
+                                  STEP {num}（{num}番目）
+                                </option>
+                              ))}
+                            </select>
                             <span className="text-xs font-black text-slate-800">
-                              {formData.field_assignments.length > 1 ? `第${stepNum}の圃場（STEP ${stepNum}）` : '担当圃場'}
+                              {formData.field_assignments.length > 1 ? `第${assignment.step_order || stepNum}の圃場` : '担当圃場'}
                             </span>
                           </div>
 
