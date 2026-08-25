@@ -1144,8 +1144,8 @@ function PortalContent() {
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
-                  <BarChart3 className="w-4 h-4" />
-                  <span>📊 経営ダッシュボード</span>
+                  <Sprout className="w-4 h-4" />
+                  <span>🌱 作付け・経営司令塔</span>
                 </button>
 
                 <button
@@ -1171,9 +1171,9 @@ function PortalContent() {
 
       <main className="max-w-7xl mx-auto px-4 py-8">
         
-        {/* 1. 📊 経営ダッシュボードビュー */}
+        {/* 1. 🌱 作付け・作業統合司令塔（経営ダッシュボード）ビュー */}
         {role === 'admin' && (activePortalTab === 'dashboard' || activePortalTab === 'cultivations') && (
-          <ManagementDashboardHub />
+          <CultivationsHub initialSubTab="cultivations" />
         )}
 
         {/* 2. 📱 現場ホーム（一般スタッフモード時、または管理者でhome選択時、またはその他） */}
