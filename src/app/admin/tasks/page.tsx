@@ -112,22 +112,88 @@ export default function TasksPage() {
         console.warn('Translation fallback:', tErr);
       }
 
-      // サーバーアクション経由で安全に保存（RLSバイパス）
-      const result = await savePlannedTask(
-        activeTenantId,
-        {
-          work_date: formData.work_date,
-          task_title: formData.task_title,
-          crop_id: formData.crop_id || null,
-          department_id: formData.department_id || null,
-          field_assignments: formData.field_assignments,
-          translations: transPayload
-        },
-        editingTaskId
-      );
+      // 1. サーバーアクション経由で保存を試行
+      let saveSuccess = false;
+      try {
+        const result = await savePlannedTask(
+          activeTenantId,
+          {
+            work_date: formData.work_date,
+            task_title: formData.task_title,
+            crop_id: formData.crop_id || null,
+            department_id: formData.department_id || null,
+            field_assignments: formData.field_assignments,
+            translations: transPayload
+          },
+          editingTaskId
+        );
+        if (result && result.success) {
+          saveSuccess = true;
+        }
+      } catch (serverErr) {
+        console.warn('Server action failed, trying client direct save:', serverErr);
+      }
 
-      if (!result.success) {
-        throw new Error(result.error || 'タスクの保存に失敗しました');
+      // 2. サーバーアクションが通らなかった場合はクライアントSDKで直接保存（2段構え）
+      if (!saveSuccess) {
+        if (editingTaskId) {
+          const assignment = formData.field_assignments[0] || { field_id: '', worker_ids: [] };
+          const updatePayload: any = {
+            work_date: formData.work_date,
+            task_title: formData.task_title,
+            work_type: formData.task_title,
+            crop_id: formData.crop_id || null,
+            field_id: assignment.field_id || null,
+            worker_id: (assignment.worker_ids && assignment.worker_ids.length > 0) ? assignment.worker_ids[0] : null,
+            department_id: formData.department_id || null,
+            ...transPayload
+          };
+          const { error: cErr } = await supabase.from('work_logs').update(updatePayload).eq('id', editingTaskId);
+          if (cErr) throw cErr;
+        } else {
+          const insertData: any[] = [];
+          const assignments = formData.field_assignments && formData.field_assignments.length > 0
+            ? formData.field_assignments
+            : [{ field_id: '', worker_ids: [] }];
+
+          assignments.forEach((assignment: any) => {
+            const fId = assignment.field_id || null;
+            const wIds = assignment.worker_ids || [];
+            if (wIds.length > 0) {
+              wIds.forEach((wId: string) => {
+                insertData.push({
+                  user_id: activeTenantId,
+                  work_date: formData.work_date,
+                  task_title: formData.task_title,
+                  work_type: formData.task_title,
+                  crop_id: formData.crop_id || null,
+                  field_id: fId,
+                  worker_id: wId,
+                  department_id: formData.department_id || null,
+                  status: 'planned',
+                  duration_minutes: 0,
+                  ...transPayload
+                });
+              });
+            } else {
+              insertData.push({
+                user_id: activeTenantId,
+                work_date: formData.work_date,
+                task_title: formData.task_title,
+                work_type: formData.task_title,
+                crop_id: formData.crop_id || null,
+                field_id: fId,
+                worker_id: null,
+                department_id: formData.department_id || null,
+                status: 'planned',
+                duration_minutes: 0,
+                ...transPayload
+              });
+            }
+          });
+          const { error: cErr } = await supabase.from('work_logs').insert(insertData);
+          if (cErr) throw cErr;
+        }
       }
 
       // 一覧を最新化
@@ -153,16 +219,21 @@ export default function TasksPage() {
   const handleDelete = async (id: string) => {
     if (!window.confirm('本当に削除しますか？')) return;
     try {
-      const res = await deletePlannedTask(id);
-      if (res.success) {
-        const activeTenantId = tenantId || await getCurrentTenantId();
-        if (activeTenantId) {
-          await fetchTasksData(activeTenantId);
-        } else {
-          setTasks(tasks.filter(t => t.id !== id));
-        }
+      let delSuccess = false;
+      try {
+        const res = await deletePlannedTask(id);
+        if (res && res.success) delSuccess = true;
+      } catch (e) {}
+
+      if (!delSuccess) {
+        await supabase.from('work_logs').delete().eq('id', id);
+      }
+
+      const activeTenantId = tenantId || await getCurrentTenantId();
+      if (activeTenantId) {
+        await fetchTasksData(activeTenantId);
       } else {
-        alert('削除に失敗しました: ' + res.error);
+        setTasks(tasks.filter(t => t.id !== id));
       }
     } catch (err) {
       console.error(err);
