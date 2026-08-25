@@ -24,6 +24,7 @@ export default function AdminFertilizersPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [tableMissing, setTableMissing] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
+  const [overwriteMode, setOverwriteMode] = useState(false);
 
   // 手動追加・編集モーダル
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -281,6 +282,12 @@ export default function AdminFertilizersPage() {
             uniqueMap.set(key, item);
           });
           const uniqueData = Array.from(uniqueMap.values());
+
+          // 完全上書きモードが有効な場合は既存データをクリア
+          if (overwriteMode) {
+            setStatus({ type: 'info', message: '既存のデータをクリアしています...' });
+            await supabase.from('m_fertilizers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          }
 
           setStatus({ type: 'info', message: `${uniqueData.length}件の肥料データをSupabaseに一括登録しています...` });
 
@@ -637,6 +644,18 @@ CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR
                 </>
               )}
             </button>
+
+            <div className="pt-1">
+              <label className="flex items-center gap-2 text-xs font-bold text-slate-300 hover:text-white cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={overwriteMode}
+                  onChange={(e) => setOverwriteMode(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-500 bg-slate-900 border-slate-700 focus:ring-emerald-500"
+                />
+                <span>既存データを全削除して総入れ替え（完全上書き）</span>
+              </label>
+            </div>
 
             {progress && (
               <div className="space-y-1">
