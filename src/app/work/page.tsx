@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getB2BOrders, updateB2BOrderStatus } from '@/app/actions/b2b';
+import { getWorkerShareSettings } from '@/app/actions/farm';
 import { WorkerGate } from '@/components/WorkerGate';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
@@ -334,12 +335,22 @@ export default function WorkEntryPage() {
             .limit(50);
           if (bPosts) setBoardPosts(bPosts);
 
-          // 共有設定の読み込み
-          if (typeof window !== 'undefined') {
-            try {
+          // 管理者が決定した共有設定の読み込み（DB優先）
+          try {
+            if (ownerId) {
+              const sRes = await getWorkerShareSettings(ownerId);
+              if (sRes.success && sRes.data) {
+                setShareSettings(sRes.data);
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('agri_worker_share_settings', JSON.stringify(sRes.data));
+                }
+              }
+            } else if (typeof window !== 'undefined') {
               const saved = localStorage.getItem('agri_worker_share_settings');
               if (saved) setShareSettings(JSON.parse(saved));
-            } catch (e) {}
+            }
+          } catch (e) {
+            console.warn('Failed to load worker share settings:', e);
           }
 
           // 本日のチーム労働生産性の計算 (自社テナント全体)
@@ -851,14 +862,16 @@ export default function WorkEntryPage() {
 
           {/* 右側：コントロール (司令塔・ポータル・言語・ログアウト) */}
           <div className="flex items-center gap-1 flex-shrink-0">
-            <button
-              onClick={() => router.push('/admin/cultivations')}
-              className="flex items-center gap-1 px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 hover:text-white border border-emerald-500/40 rounded-lg text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"
-              title="農業司令塔へ"
-            >
-              <Sprout className="w-3 h-3 flex-shrink-0" />
-              <span>司令塔</span>
-            </button>
+            {currentUser.role === 'admin' && (
+              <button
+                onClick={() => router.push('/admin/cultivations')}
+                className="flex items-center gap-1 px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 hover:text-white border border-emerald-500/40 rounded-lg text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"
+                title="農業司令塔へ"
+              >
+                <Sprout className="w-3 h-3 flex-shrink-0" />
+                <span>司令塔</span>
+              </button>
+            )}
             <button
               onClick={() => router.push('/portal')}
               className="flex items-center gap-1 px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 hover:text-white border border-blue-500/40 rounded-lg text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"

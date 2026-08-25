@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Calendar, CheckCircle2, Clock, MapPin, Sprout, Loader2, Plus, Trash2, Edit2, Users, Briefcase, Inbox, XCircle, FileText } from 'lucide-react';
+import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 
 export default function ApprovalsPage() {
   const [logs, setLogs] = useState<any[]>([]);
@@ -59,20 +60,21 @@ export default function ApprovalsPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-        <div>
-          <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
-            <Inbox className="w-7 h-7 text-blue-600" />
-            承認インボックス
-          </h1>
-          <p className="text-slate-500 font-medium mt-1">現場から上がってきた作業完了報告を確認し、承認・差し戻しを行います。</p>
-        </div>
-        <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-xl font-bold flex items-center gap-2 border border-blue-100">
-          <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-          承認待ち: {logs.length}件
-        </div>
-      </header>
+    <AdminOnlyGuard>
+      <div className="max-w-5xl mx-auto space-y-6">
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+          <div>
+            <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
+              <Inbox className="w-7 h-7 text-blue-600" />
+              承認インボックス
+            </h1>
+            <p className="text-slate-500 font-medium mt-1">現場から上がってきた作業完了報告を確認し、承認・差し戻しを行います。</p>
+          </div>
+          <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-xl font-bold flex items-center gap-2 border border-blue-100">
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+            承認待ち: {logs.length}件
+          </div>
+        </header>
 
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
         {isLoading ? (
@@ -138,5 +140,6 @@ export default function ApprovalsPage() {
         )}
       </div>
     </div>
+    </AdminOnlyGuard>
   );
 }

@@ -354,3 +354,70 @@ export async function getPortalTasks(tenantId: string) {
     return { success: false, data: [] };
   }
 }
+
+// 4. 管理者専用: 作業者画面の生産性共有設定の保存
+export async function saveWorkerShareSettings(tenantId: string, settings: {
+  showYieldPerHour: boolean;
+  showRevenuePerHour: boolean;
+  showTeamTotals: boolean;
+}) {
+  try {
+    const supabase = createAdminClient();
+    if (!tenantId) return { success: false, error: 'テナントIDが不正です' };
+
+    // company_settings に設定JSONを保存
+    const { data: comp } = await supabase
+      .from('company_settings')
+      .select('id, settings')
+      .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+      .maybeSingle();
+
+    if (comp) {
+      const currentSettings = comp.settings || {};
+      const newSettings = { ...currentSettings, worker_share_settings: settings };
+      await supabase
+        .from('company_settings')
+        .update({ settings: newSettings })
+        .eq('id', comp.id);
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('saveWorkerShareSettings error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// 5. 作業者画面用: 生産性共有設定の読み込み
+export async function getWorkerShareSettings(tenantId: string) {
+  try {
+    const supabase = createAdminClient();
+    if (!tenantId) {
+      return { 
+        success: true, 
+        data: { showYieldPerHour: true, showRevenuePerHour: true, showTeamTotals: true } 
+      };
+    }
+
+    const { data: comp } = await supabase
+      .from('company_settings')
+      .select('settings')
+      .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+      .maybeSingle();
+
+    if (comp?.settings?.worker_share_settings) {
+      return { success: true, data: comp.settings.worker_share_settings };
+    }
+
+    return { 
+      success: true, 
+      data: { showYieldPerHour: true, showRevenuePerHour: true, showTeamTotals: true } 
+    };
+  } catch (err: any) {
+    console.error('getWorkerShareSettings error:', err);
+    return { 
+      success: true, 
+      data: { showYieldPerHour: true, showRevenuePerHour: true, showTeamTotals: true } 
+    };
+  }
+}

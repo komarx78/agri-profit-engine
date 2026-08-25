@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { Coffee, Download, Users, Loader2, AlertCircle, CheckCircle, XCircle, Plus, Calendar } from 'lucide-react';
+import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 
 export default function PaidLeavePage() {
   const [workers, setWorkers] = useState<any[]>([]);
@@ -135,7 +136,8 @@ export default function PaidLeavePage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <AdminOnlyGuard>
+      <div className="max-w-6xl mx-auto px-4 py-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
@@ -380,5 +382,6 @@ export default function PaidLeavePage() {
         </div>
       )}
     </div>
+    </AdminOnlyGuard>
   );
 }

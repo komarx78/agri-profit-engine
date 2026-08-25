@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { Clock, Save, CheckCircle2, Loader2 } from 'lucide-react';
+import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 
 export default function HrSettingsPage() {
   const [settingsId, setSettingsId] = useState<string | null>(null);
@@ -115,7 +116,8 @@ export default function HrSettingsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <AdminOnlyGuard>
+      <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="mb-8">
         <h1 className="text-2xl font-black text-slate-800">労務・勤怠マスタ設定</h1>
         <p className="text-sm font-bold text-slate-500 mt-1">
@@ -238,5 +240,6 @@ export default function HrSettingsPage() {
         </div>
       </form>
     </div>
+    </AdminOnlyGuard>
   );
 }

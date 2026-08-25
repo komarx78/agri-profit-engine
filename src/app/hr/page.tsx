@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId, getTenantWorkerIds } from '@/lib/tenant';
 import { Clock, Users, Calendar as CalendarIcon, Coffee, Sun, CloudRain, ShieldCheck, ArrowRight, Save, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 
 export default function HrDashboardPage() {
   const [attendanceLogs, setAttendanceLogs] = useState<any[]>([]);
@@ -126,163 +127,193 @@ export default function HrDashboardPage() {
   if (isLoading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 hover:text-slate-700">
-              <ArrowRight className="w-5 h-5 rotate-180" />
-            </Link>
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-              <Users className="w-5 h-5 text-white" />
+    <AdminOnlyGuard>
+      <div className="min-h-screen bg-slate-50">
+        {/* ヘッダー */}
+        <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+          <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-rose-500 p-2 rounded-xl text-white shadow-xs">
+                <Users className="w-5 h-5" />
+              </div>
+              <div>
+                <h1 className="text-lg font-black text-slate-800">人事・勤怠ダッシュボード</h1>
+                <p className="text-xs text-slate-400 font-bold">現場作業員の出退勤・日報労働時間の突合・休憩管理</p>
+              </div>
             </div>
-            <span className="font-black text-xl text-slate-800">勤怠・有給管理</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="text-sm font-bold text-slate-500">本日: {new Date().toLocaleDateString('ja-JP')}</div>
-          </div>
-        </div>
-      </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
-          <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
-            <CalendarIcon className="w-6 h-6 text-blue-500" /> 本日の出退勤状況
-          </h1>
-
-          <div className="flex items-center gap-3 bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm self-start md:self-auto">
-            <span className="text-sm font-bold text-slate-600 flex items-center gap-1">
-              <Users className="w-4 h-4 text-blue-500" /> 全員一括
-            </span>
-            <div className="flex items-center gap-1">
-              <input 
-                type="number"
-                value={bulkBreakMinutes}
-                onChange={e => setBulkBreakMinutes(Number(e.target.value))}
-                className="w-16 px-2 py-1.5 border border-slate-200 rounded-lg text-right font-bold text-slate-700 focus:border-blue-500 focus:outline-none"
-              />
-              <span className="text-sm font-bold text-slate-500">分</span>
+            <div className="flex items-center gap-2">
+              <Link href="/portal" className="text-xs font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl transition-colors">
+                ポータルへ戻る
+              </Link>
             </div>
-            <button
-              onClick={handleBulkSaveBreak}
-              disabled={isBulkSaving || attendanceLogs.length === 0}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors disabled:opacity-50 ml-2"
-            >
-              {isBulkSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              適用
-            </button>
           </div>
-        </div>
+        </header>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-sm font-bold text-slate-500">
-                  <th className="p-4">従業員ID (仮)</th>
-                  <th className="p-4">出勤 / 退勤</th>
-                  <th className="p-4">天気・気温</th>
-                  <th className="p-4">休憩時間</th>
-                  <th className="p-4">総労働 / 登録作業</th>
-                  <th className="p-4 text-center">作業差分</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {attendanceLogs.length === 0 ? (
+        <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+          {/* サマリーカード */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+              <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-black">
+                <Clock className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-slate-400">本日の打刻出勤者</div>
+                <div className="text-2xl font-black text-slate-800">{attendanceLogs.length} <span className="text-sm font-bold text-slate-500">名</span></div>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+              <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center font-black">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-slate-400">日報提出者</div>
+                <div className="text-2xl font-black text-slate-800">{new Set(workLogs.map(w => w.worker_id)).size} <span className="text-sm font-bold text-slate-500">名</span></div>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+              <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center font-black">
+                <Coffee className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-slate-400">休憩時間 一括更新</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <select 
+                    value={bulkBreakMinutes} 
+                    onChange={e => setBulkBreakMinutes(Number(e.target.value))}
+                    className="bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold px-2 py-1"
+                  >
+                    <option value={45}>45分</option>
+                    <option value={60}>60分 (標準)</option>
+                    <option value={75}>75分</option>
+                    <option value={90}>90分</option>
+                  </select>
+                  <button 
+                    onClick={handleBulkSaveBreak}
+                    disabled={isBulkSaving}
+                    className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-bold text-xs shadow-xs"
+                  >
+                    {isBulkSaving ? '処理中...' : '全員適用'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 勤怠突合テーブル */}
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-black text-slate-800">本日の勤怠・作業突合リスト</h2>
+                <p className="text-xs text-slate-400 font-medium">打刻時間（出退勤）と日報時間のズレを自動検知します</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-slate-500 text-xs font-bold border-b border-slate-200">
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-400 font-bold">
-                      本日の出勤記録はまだありません
-                    </td>
+                    <th className="px-6 py-4">スタッフ</th>
+                    <th className="px-6 py-4">出勤 / 退勤</th>
+                    <th className="px-6 py-4">打刻拘束</th>
+                    <th className="px-6 py-4">休憩時間</th>
+                    <th className="px-6 py-4">日報作業時間</th>
+                    <th className="px-6 py-4">突合判定</th>
                   </tr>
-                ) : (
-                  attendanceLogs.map(log => {
-                    // 総労働時間の計算（出勤〜退勤 - 休憩）
-                    const totalMins = calculateTotalMinutes(log.clock_in, log.clock_out);
-                    const netWorkMins = Math.max(0, totalMins - (log.total_break_minutes || 0));
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {attendanceLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-slate-400 text-xs font-bold">
+                        本日の出勤打刻データはありません
+                      </td>
+                    </tr>
+                  ) : (
+                    attendanceLogs.map((log) => {
+                      const worker = workers.find(w => w.id === log.worker_id);
+                      const wLogs = workLogs.filter(w => w.worker_id === log.worker_id);
+                      const reportMinutes = wLogs.reduce((sum, w) => sum + (Number(w.duration_minutes) || 0), 0);
 
-                    // 作業記録の合計時間の計算
-                    const myWorkLogs = workLogs.filter(w => w.worker_id === log.worker_id);
-                    const totalWorkLogMins = myWorkLogs.reduce((acc, curr) => acc + (curr.duration_minutes || 0), 0);
-                    
-                    // 差分（入力漏れの可能性）
-                    const diffMins = netWorkMins - totalWorkLogMins;
+                      const clockTotalMinutes = calculateTotalMinutes(log.clock_in ? `${log.date}T${log.clock_in}` : undefined, log.clock_out ? `${log.date}T${log.clock_out}` : undefined);
+                      const breakMins = log.total_break_minutes || 0;
+                      const actualWorkMinutes = Math.max(0, clockTotalMinutes - breakMins);
+                      const diff = Math.abs(actualWorkMinutes - reportMinutes);
 
-                    return (
-                      <tr key={log.id} className="hover:bg-slate-50 transition-colors group">
-                        <td className="p-4">
-                          <div className="font-bold text-slate-700 text-sm truncate w-24" title={log.worker_id}>
-                            {log.worker_id.substring(0, 8)}...
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <div className="font-bold text-slate-800">
-                            {log.clock_in ? new Date(log.clock_in).toLocaleTimeString('ja-JP', {hour: '2-digit', minute:'2-digit'}) : '--:--'}
-                            <span className="text-slate-400 font-normal mx-2">〜</span>
-                            {log.clock_out ? new Date(log.clock_out).toLocaleTimeString('ja-JP', {hour: '2-digit', minute:'2-digit'}) : '勤務中'}
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          {log.weather ? (
-                            <div className="flex items-center gap-1.5 text-sm font-bold text-slate-600">
-                              {log.weather === '晴れ' ? <Sun className="w-4 h-4 text-amber-500" /> : <CloudRain className="w-4 h-4 text-blue-500" />}
-                              {log.weather} ({log.temperature}℃)
+                      return (
+                        <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-6 py-4 font-bold text-slate-800 flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-xs font-black">
+                              {worker?.name ? worker.name.charAt(0) : '員'}
                             </div>
-                          ) : <span className="text-slate-300">-</span>}
-                        </td>
-                        <td className="p-4">
-                          {editingLogId === log.id ? (
-                            <div className="flex items-center gap-2">
-                              <input 
-                                type="number" 
-                                value={editBreakMinutes}
-                                onChange={e => setEditBreakMinutes(Number(e.target.value))}
-                                className="w-20 px-2 py-1 border border-blue-500 rounded text-right font-bold"
-                              />
-                              <span className="text-sm font-bold text-slate-500">分</span>
-                              <button onClick={() => handleSaveBreak(log.id)} disabled={isSaving} className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"><Save className="w-4 h-4" /></button>
-                            </div>
-                          ) : (
-                            <div 
-                              className="font-bold text-blue-600 cursor-pointer hover:bg-blue-50 inline-flex items-center gap-1 px-2 py-1 rounded"
-                              onClick={() => { setEditingLogId(log.id); setEditBreakMinutes(log.total_break_minutes || 0); }}
-                              title="クリックして一括変更"
-                            >
-                              <Coffee className="w-4 h-4" /> {log.total_break_minutes || 0} 分
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-4">
-                          <div className="text-sm">
-                            <span className="font-black text-slate-700">{Math.floor(netWorkMins/60)}h {netWorkMins%60}m</span>
-                            <span className="text-slate-400 mx-2">/</span>
-                            <span className="font-bold text-emerald-600">{Math.floor(totalWorkLogMins/60)}h {totalWorkLogMins%60}m</span>
-                          </div>
-                        </td>
-                        <td className="p-4 text-center">
-                          {log.clock_out && diffMins > 30 ? (
-                            <div className="inline-flex items-center gap-1 bg-rose-50 text-rose-600 px-2 py-1 rounded-lg text-xs font-bold border border-rose-100" title="作業記録の入力漏れの可能性があります">
-                              <AlertCircle className="w-3 h-3" />
-                              {diffMins} 分の乖離
-                            </div>
-                          ) : log.clock_out ? (
-                            <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2 py-1 rounded-lg text-xs font-bold border border-emerald-100">
-                              <ShieldCheck className="w-3 h-3" /> 一致
-                            </div>
-                          ) : (
-                            <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">記録中</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                            <span>{worker?.name || '不明スタッフ'}</span>
+                          </td>
+                          <td className="px-6 py-4 text-xs font-bold text-slate-600">
+                            {log.clock_in ? log.clock_in.substring(0, 5) : '--:--'} 〜 {log.clock_out ? log.clock_out.substring(0, 5) : <span className="text-emerald-500">勤務中</span>}
+                          </td>
+                          <td className="px-6 py-4 text-xs font-bold text-slate-600">
+                            {clockTotalMinutes > 0 ? `${Math.floor(clockTotalMinutes / 60)}h ${clockTotalMinutes % 60}m` : '--'}
+                          </td>
+                          <td className="px-6 py-4 text-xs font-bold text-slate-600">
+                            {editingLogId === log.id ? (
+                              <div className="flex items-center gap-1.5">
+                                <input 
+                                  type="number" 
+                                  value={editBreakMinutes} 
+                                  onChange={e => setEditBreakMinutes(Number(e.target.value))}
+                                  className="w-16 px-2 py-1 bg-slate-50 border border-slate-300 rounded font-bold text-xs"
+                                />
+                                <button 
+                                  onClick={() => handleSaveBreak(log.id)}
+                                  disabled={isSaving}
+                                  className="p-1 bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                                >
+                                  <Save className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div 
+                                onClick={() => {
+                                  setEditingLogId(log.id);
+                                  setEditBreakMinutes(breakMins);
+                                }}
+                                className="cursor-pointer hover:text-blue-600 underline decoration-dashed flex items-center gap-1"
+                                title="クリックして休憩時間を手動修正"
+                              >
+                                <span>{breakMins} 分</span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-xs font-bold text-slate-800">
+                            {reportMinutes > 0 ? `${Math.floor(reportMinutes / 60)}h ${reportMinutes % 60}m` : <span className="text-slate-400">未提出</span>}
+                          </td>
+                          <td className="px-6 py-4">
+                            {log.clock_out && reportMinutes > 0 ? (
+                              diff > 30 ? (
+                                <div className="inline-flex items-center gap-1 px-2 py-1 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold">
+                                  <AlertCircle className="w-3 h-3" /> ズレ {diff}分
+                                </div>
+                              ) : (
+                                <div className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-bold">
+                                  <ShieldCheck className="w-3 h-3" /> 一致
+                                </div>
+                              )
+                            ) : (
+                              <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">記録中</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
 
-      </main>
-    </div>
+        </main>
+      </div>
+    </AdminOnlyGuard>
   );
 }

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { Users, Plus, Edit2, Trash2, X, Loader2, Save, Building, ShieldCheck, Clock } from 'lucide-react';
+import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 
 export default function HrEmployeesPage() {
   const [workers, setWorkers] = useState<any[]>([]);
@@ -151,7 +152,8 @@ export default function HrEmployeesPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <AdminOnlyGuard>
+      <div className="max-w-6xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
@@ -411,7 +413,8 @@ export default function HrEmployeesPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </AdminOnlyGuard>
   );
 }
 

@@ -31,6 +31,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { CultivationActionSheet, CultivationTarget } from '@/components/CultivationActionSheet';
+import { saveWorkerShareSettings, getWorkerShareSettings } from '@/app/actions/farm';
 import Link from 'next/link';
 
 interface CultivationItem {
@@ -128,27 +129,47 @@ function CultivationsHubContent() {
     showTeamTotals: true
   });
 
-  // 設定の初期読み込み
+  // 設定の初期読み込み（DBおよびローカルストレージ）
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    const loadSettings = async () => {
       try {
-        const saved = localStorage.getItem('agri_worker_share_settings');
-        if (saved) {
-          setShareSettings(JSON.parse(saved));
+        const tenantId = await getCurrentTenantId();
+        if (tenantId) {
+          const res = await getWorkerShareSettings(tenantId);
+          if (res.success && res.data) {
+            setShareSettings(res.data);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('agri_worker_share_settings', JSON.stringify(res.data));
+            }
+            return;
+          }
+        }
+        if (typeof window !== 'undefined') {
+          const saved = localStorage.getItem('agri_worker_share_settings');
+          if (saved) setShareSettings(JSON.parse(saved));
         }
       } catch (e) {
         console.warn('Failed to load share settings:', e);
       }
-    }
+    };
+    loadSettings();
   }, []);
 
-  const handleSaveShareSettings = (newSettings: any) => {
+  const handleSaveShareSettings = async (newSettings: any) => {
     setShareSettings(newSettings);
     if (typeof window !== 'undefined') {
       localStorage.setItem('agri_worker_share_settings', JSON.stringify(newSettings));
     }
+    try {
+      const tenantId = await getCurrentTenantId();
+      if (tenantId) {
+        await saveWorkerShareSettings(tenantId, newSettings);
+      }
+    } catch (e) {
+      console.warn('Failed to save share settings to DB:', e);
+    }
     setIsShareSettingsOpen(false);
-    showToast('作業者への生産性共有設定を保存しました！');
+    showToast('作業者への生産性共有設定を全社反映・保存しました！');
   };
 
   // --- タブ4: 予定ステート ---

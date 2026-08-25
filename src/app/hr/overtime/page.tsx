@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId, getTenantWorkerIds } from '@/lib/tenant';
 import { Clock, CheckCircle2, XCircle, Search, Calendar, FileText } from 'lucide-react';
+import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 
 export default function OvertimeApprovalPage() {
   const [requests, setRequests] = useState<any[]>([]);
@@ -73,7 +74,8 @@ export default function OvertimeApprovalPage() {
   const filteredRequests = requests.filter(r => r.status === statusFilter);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <AdminOnlyGuard>
+      <div className="max-w-6xl mx-auto px-4 py-8">
       <div className="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
@@ -189,5 +191,6 @@ export default function OvertimeApprovalPage() {
         </div>
       </div>
     </div>
+    </AdminOnlyGuard>
   );
 }

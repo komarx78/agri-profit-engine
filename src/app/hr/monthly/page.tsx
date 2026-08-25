@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { Calendar, Download, ChevronLeft, ChevronRight, Clock, Users, Loader2, Save, FileText, Settings, ArrowLeft } from 'lucide-react';
+import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 
 export default function MonthlyTimecardPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -194,7 +195,8 @@ export default function MonthlyTimecardPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <AdminOnlyGuard>
+      <div className="max-w-6xl mx-auto px-4 py-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
@@ -446,7 +448,8 @@ export default function MonthlyTimecardPage() {
             )}
           </div>
         )}
+        </div>
       </div>
-    </div>
+    </AdminOnlyGuard>
   );
 }

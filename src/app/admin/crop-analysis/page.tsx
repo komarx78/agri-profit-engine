@@ -6,6 +6,7 @@ import { getCurrentTenantId } from '@/lib/tenant';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as BarTooltip } from 'recharts';
 import { Sprout, Loader2, User, Clock, BarChart2, TrendingUp, HelpCircle } from 'lucide-react';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 
 const PIE_COLORS = ['#fb7185', '#f43f5e', '#e11d48', '#fda4af', '#be123c', '#9f1239', '#ffe4e6'];
 const WORKER_COLORS = ['#3b82f6', '#60a5fa', '#2563eb', '#93c5fd', '#1d4ed8', '#bfdbfe', '#1e3a8a'];
@@ -143,7 +144,8 @@ export default function CropAnalysisPage() {
   }, [targetWorkLogs]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-6 pb-16 pt-4 sm:pt-8">
+    <AdminOnlyGuard>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-6 pb-16 pt-4 sm:pt-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b-2 border-slate-200 pb-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight mb-2 flex items-center gap-3">
@@ -325,5 +327,6 @@ export default function CropAnalysisPage() {
         </div>
       )}
     </div>
+    </AdminOnlyGuard>
   );
 }
