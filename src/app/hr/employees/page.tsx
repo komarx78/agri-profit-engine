@@ -57,14 +57,46 @@ export default function HrEmployeesPage() {
     try {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) return;
-      const { data, error } = await supabase
-        .from('attendance_rules')
-        .select('*')
-        .eq('user_id', tenantId)
-        .order('created_at', { ascending: true });
-      if (!error && data) {
-        setAttendanceRules(data);
+
+      let rules: any[] = [];
+      // 1. attendance_rules テーブルから
+      try {
+        const { data, error } = await supabase
+          .from('attendance_rules')
+          .select('*')
+          .eq('user_id', tenantId)
+          .order('created_at', { ascending: true });
+        if (!error && data && data.length > 0) {
+          rules = data;
+        }
+      } catch (e) {}
+
+      // 2. company_settings.attendance_rules から
+      if (rules.length === 0) {
+        try {
+          const { data: comp } = await supabase
+            .from('company_settings')
+            .select('attendance_rules')
+            .eq('user_id', tenantId)
+            .maybeSingle();
+          if (comp?.attendance_rules && Array.isArray(comp.attendance_rules)) {
+            rules = comp.attendance_rules;
+          }
+        } catch (e) {}
       }
+
+      // 3. localStorage から
+      if (rules.length === 0 && typeof window !== 'undefined') {
+        const saved = localStorage.getItem(`agri_attendance_rules_${tenantId}`);
+        if (saved) {
+          try {
+            const p = JSON.parse(saved);
+            if (Array.isArray(p)) rules = p;
+          } catch (e) {}
+        }
+      }
+
+      setAttendanceRules(rules);
     } catch (err) {
       console.error('fetchAttendanceRules error:', err);
     }

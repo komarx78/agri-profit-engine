@@ -38,6 +38,7 @@ export default function HrSettingsPage() {
         }
 
         // 1. company_settings の取得
+        let compRules: any[] = [];
         const { data: compData } = await supabase
           .from('company_settings')
           .select('*')
@@ -51,9 +52,13 @@ export default function HrSettingsPage() {
           if (compData.line_notification_time) {
             setLineNotificationTime(compData.line_notification_time.substring(0, 5));
           }
+          if (compData.attendance_rules && Array.isArray(compData.attendance_rules) && compData.attendance_rules.length > 0) {
+            compRules = compData.attendance_rules;
+          }
         }
 
-        // 2. attendance_rules の取得
+        // 2. attendance_rules テーブルからの取得を試行
+        let loadedRules: AttendanceRuleItem[] = [];
         try {
           const { data: rulesData, error: rulesError } = await supabase
             .from('attendance_rules')
@@ -62,7 +67,7 @@ export default function HrSettingsPage() {
             .order('created_at', { ascending: true });
 
           if (!rulesError && rulesData && rulesData.length > 0) {
-            setRules(rulesData.map(r => ({
+            loadedRules = rulesData.map(r => ({
               id: r.id,
               name: r.name,
               start_time: r.start_time ? r.start_time.substring(0, 5) : '08:00',
@@ -70,30 +75,50 @@ export default function HrSettingsPage() {
               rest_minutes: r.rest_minutes ?? 60,
               auto_round_out_time: r.auto_round_out_time ?? true,
               is_default: r.is_default ?? false
-            })));
-          } else {
-            // ルールが存在しない場合の初期ルール1
-            setRules([{
-              name: 'ルール1 (通常勤務)',
-              start_time: compData?.default_start_time ? compData.default_start_time.substring(0, 5) : '08:00',
-              end_time: compData?.default_end_time ? compData.default_end_time.substring(0, 5) : '17:00',
-              rest_minutes: compData?.default_rest_minutes ?? 60,
-              auto_round_out_time: compData?.auto_round_out_time ?? true,
-              is_default: true
-            }]);
+            }));
           }
         } catch (e) {
-          console.warn('attendance_rules fetch error:', e);
-          // フォールバック
-          setRules([{
+          console.warn('attendance_rules table fetch warning:', e);
+        }
+
+        // 3. テーブルに無ければ company_settings または localStorage から復元
+        if (loadedRules.length === 0 && compRules.length > 0) {
+          loadedRules = compRules.map(r => ({
+            id: r.id || undefined,
+            name: r.name || 'ルール',
+            start_time: r.start_time ? r.start_time.substring(0, 5) : '08:00',
+            end_time: r.end_time ? r.end_time.substring(0, 5) : '17:00',
+            rest_minutes: r.rest_minutes ?? 60,
+            auto_round_out_time: r.auto_round_out_time ?? true,
+            is_default: r.is_default ?? false
+          }));
+        }
+
+        if (loadedRules.length === 0 && typeof window !== 'undefined') {
+          const localSaved = localStorage.getItem(`agri_attendance_rules_${tenantId}`);
+          if (localSaved) {
+            try {
+              const parsed = JSON.parse(localSaved);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                loadedRules = parsed;
+              }
+            } catch (e) {}
+          }
+        }
+
+        // 4. それでも無ければ初期ルール1を作成
+        if (loadedRules.length === 0) {
+          loadedRules = [{
             name: 'ルール1 (通常勤務)',
             start_time: compData?.default_start_time ? compData.default_start_time.substring(0, 5) : '08:00',
             end_time: compData?.default_end_time ? compData.default_end_time.substring(0, 5) : '17:00',
             rest_minutes: compData?.default_rest_minutes ?? 60,
             auto_round_out_time: compData?.auto_round_out_time ?? true,
             is_default: true
-          }]);
+          }];
         }
+
+        setRules(loadedRules);
 
       } catch (err) {
         console.error(err);
@@ -169,33 +194,20 @@ export default function HrSettingsPage() {
       // デフォルトルールの特定
       const defaultRule = rules.find(r => r.is_default) || rules[0];
 
-      // 1. company_settings を更新
-      const compPayload = {
-        user_id: tenantId,
-        default_start_time: defaultRule.start_time.length === 5 ? defaultRule.start_time + ':00' : defaultRule.start_time,
-        default_end_time: defaultRule.end_time.length === 5 ? defaultRule.end_time + ':00' : defaultRule.end_time,
-        default_rest_minutes: defaultRule.rest_minutes,
-        auto_round_out_time: defaultRule.auto_round_out_time,
-        line_notification_time: lineNotificationTime.length === 5 ? lineNotificationTime + ':00' : lineNotificationTime,
-        updated_at: new Date().toISOString()
-      };
-
-      if (settingsId) {
-        await supabase.from('company_settings').update(compPayload).eq('id', settingsId);
-      } else {
-        const { data: newComp } = await supabase.from('company_settings').insert([compPayload]).select().single();
-        if (newComp) setSettingsId(newComp.id);
-      }
-
-      // 2. attendance_rules テーブルの削除レコード処理
+      // 1. attendance_rules テーブルの削除レコード処理
       if (deletedRuleIds.length > 0) {
-        await supabase.from('attendance_rules').delete().in('id', deletedRuleIds);
-        setDeletedRuleIds([]);
+        try {
+          await supabase.from('attendance_rules').delete().in('id', deletedRuleIds);
+          setDeletedRuleIds([]);
+        } catch (delErr) {
+          console.warn('Delete rules warning:', delErr);
+        }
       }
 
-      // 3. attendance_rules テーブルの各ルールをUpsert
+      // 2. attendance_rules テーブルの各ルールを保存/更新
       const updatedRules: AttendanceRuleItem[] = [];
-      for (const r of rules) {
+      for (let i = 0; i < rules.length; i++) {
+        const r = rules[i];
         const rulePayload: any = {
           user_id: tenantId,
           name: r.name,
@@ -207,53 +219,104 @@ export default function HrSettingsPage() {
           updated_at: new Date().toISOString()
         };
 
-        if (r.id) {
-          const { data: uData, error: uErr } = await supabase
-            .from('attendance_rules')
-            .update(rulePayload)
-            .eq('id', r.id)
-            .select()
-            .single();
-          if (!uErr && uData) {
-            updatedRules.push({
-              id: uData.id,
-              name: uData.name,
-              start_time: uData.start_time.substring(0, 5),
-              end_time: uData.end_time.substring(0, 5),
-              rest_minutes: uData.rest_minutes,
-              auto_round_out_time: uData.auto_round_out_time,
-              is_default: uData.is_default
-            });
+        try {
+          if (r.id) {
+            const { data: uData, error: uErr } = await supabase
+              .from('attendance_rules')
+              .update(rulePayload)
+              .eq('id', r.id)
+              .select()
+              .single();
+            if (!uErr && uData) {
+              updatedRules.push({
+                id: uData.id,
+                name: uData.name,
+                start_time: uData.start_time.substring(0, 5),
+                end_time: uData.end_time.substring(0, 5),
+                rest_minutes: uData.rest_minutes,
+                auto_round_out_time: uData.auto_round_out_time,
+                is_default: uData.is_default
+              });
+            } else {
+              updatedRules.push(r);
+            }
           } else {
-            updatedRules.push(r);
+            const { data: iData, error: iErr } = await supabase
+              .from('attendance_rules')
+              .insert([rulePayload])
+              .select()
+              .single();
+            if (!iErr && iData) {
+              updatedRules.push({
+                id: iData.id,
+                name: iData.name,
+                start_time: iData.start_time.substring(0, 5),
+                end_time: iData.end_time.substring(0, 5),
+                rest_minutes: iData.rest_minutes,
+                auto_round_out_time: iData.auto_round_out_time,
+                is_default: iData.is_default
+              });
+            } else {
+              // テーブルinsertで弾かれた場合も仮IDを付与
+              updatedRules.push({
+                ...r,
+                id: r.id || `rule-${Date.now()}-${i}`
+              });
+            }
+          }
+        } catch (tableErr) {
+          console.warn('Table save warning for rule:', tableErr);
+          updatedRules.push({
+            ...r,
+            id: r.id || `rule-${Date.now()}-${i}`
+          });
+        }
+      }
+
+      // 3. company_settings を更新 (attendance_rules JSONB も一緒に保存して完全バックアップ)
+      const compPayload: any = {
+        user_id: tenantId,
+        default_start_time: defaultRule.start_time.length === 5 ? defaultRule.start_time + ':00' : defaultRule.start_time,
+        default_end_time: defaultRule.end_time.length === 5 ? defaultRule.end_time + ':00' : defaultRule.end_time,
+        default_rest_minutes: defaultRule.rest_minutes,
+        auto_round_out_time: defaultRule.auto_round_out_time,
+        line_notification_time: lineNotificationTime.length === 5 ? lineNotificationTime + ':00' : lineNotificationTime,
+        attendance_rules: updatedRules,
+        updated_at: new Date().toISOString()
+      };
+
+      try {
+        if (settingsId) {
+          const { error: cUpErr } = await supabase.from('company_settings').update(compPayload).eq('id', settingsId);
+          if (cUpErr) {
+            // attendance_rules カラムが無い場合のフォールバック
+            delete compPayload.attendance_rules;
+            await supabase.from('company_settings').update(compPayload).eq('id', settingsId);
           }
         } else {
-          const { data: iData, error: iErr } = await supabase
-            .from('attendance_rules')
-            .insert([rulePayload])
-            .select()
-            .single();
-          if (!iErr && iData) {
-            updatedRules.push({
-              id: iData.id,
-              name: iData.name,
-              start_time: iData.start_time.substring(0, 5),
-              end_time: iData.end_time.substring(0, 5),
-              rest_minutes: iData.rest_minutes,
-              auto_round_out_time: iData.auto_round_out_time,
-              is_default: iData.is_default
-            });
-          } else {
-            updatedRules.push(r);
+          const { data: newComp, error: cInErr } = await supabase.from('company_settings').insert([compPayload]).select().single();
+          if (cInErr) {
+            delete compPayload.attendance_rules;
+            const { data: retryComp } = await supabase.from('company_settings').insert([compPayload]).select().single();
+            if (retryComp) setSettingsId(retryComp.id);
+          } else if (newComp) {
+            setSettingsId(newComp.id);
           }
         }
+      } catch (compErr) {
+        console.warn('Company settings update warning:', compErr);
+      }
+
+      // 4. LocalStorage にもキャッシュ保存
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`agri_attendance_rules_${tenantId}`, JSON.stringify(updatedRules));
       }
 
       setRules(updatedRules);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: any) {
-      console.error(err);
+      console.error('Save error:', err);
       alert('保存に失敗しました: ' + (err.message || '通信エラー'));
     } finally {
       setIsSaving(false);

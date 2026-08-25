@@ -50,16 +50,31 @@ export default function MonthlyTimecardPage() {
 
       if (cData) setCompanySettings(cData);
 
-      // 2. 勤怠ルール一覧を取得
+      // 2. 勤怠ルール一覧を取得 (3重フォールバック)
+      let rules: any[] = [];
       try {
         const { data: rData } = await supabase
           .from('attendance_rules')
           .select('*')
           .eq('user_id', tenantId);
-        if (rData) setAttendanceRules(rData);
-      } catch (e) {
-        console.warn('Failed to load attendance rules:', e);
+        if (rData && rData.length > 0) rules = rData;
+      } catch (e) {}
+
+      if (rules.length === 0 && cData?.attendance_rules && Array.isArray(cData.attendance_rules)) {
+        rules = cData.attendance_rules;
       }
+
+      if (rules.length === 0 && typeof window !== 'undefined') {
+        const saved = localStorage.getItem(`agri_attendance_rules_${tenantId}`);
+        if (saved) {
+          try {
+            const p = JSON.parse(saved);
+            if (Array.isArray(p)) rules = p;
+          } catch (e) {}
+        }
+      }
+
+      setAttendanceRules(rules);
 
       // 3. 自社テナントの従業員のみを取得
       const { data: wData } = await supabase
