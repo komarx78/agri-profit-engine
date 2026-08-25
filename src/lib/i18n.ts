@@ -221,6 +221,49 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
     id: 'Silakan pilih',
     zh: '请选择' , si: 'කරුණාකර තෝරන්න', km: 'សូមជ្រើសរើស' },
   
+  // タブ・ヘッダー
+  tabSales: { ja: '出荷・納品', en: 'Delivery & Shipping', vi: 'Xuất hàng & Giao', id: 'Pengiriman & Pasokan', zh: '发货与配送', si: 'නැව්ගත කිරීම සහ බෙදාහැරීම', km: 'ការដឹកជញ្ជូន និង ការផ្គត់ផ្គង់' },
+  portal_btn: { ja: 'ポータル', en: 'Portal', vi: 'Portal', id: 'Portal', zh: '门户', si: 'පෝර්ටලය', km: 'ច្រក' },
+  cmd_hub: { ja: '司令塔', en: 'Hub', vi: 'Trung tâm', id: 'Pusat Kontrol', zh: '司令塔', si: 'පාලන මධ්‍යස්ථානය', km: 'មជ្ឈមណ្ឌលបញ្ជា' },
+
+  // チーム生産性
+  teamProductivity: { ja: '本日のチーム生産性', en: "Today's Team Productivity", vi: 'Năng suất đội ngũ hôm nay', id: 'Produktivitas Tim Hari Ini', zh: '今日团队生产力', si: 'අද කණ්ඩායමේ ඵලදායිතාව', km: 'ផលិតភាពក្រុមថ្ងៃនេះ' },
+  realtimeBadge: { ja: 'リアルタイム', en: 'Realtime', vi: 'Thời gian thực', id: 'Real-time', zh: '实时', si: 'තථ්‍ය කාලීන', km: 'ពេលវេលាជាក់ស្តែង' },
+  teamCheerMessage: { ja: 'みんなの頑張りがチームの力になります！🚀', en: 'Everyone hard work powers the team! 🚀', vi: 'Sự nỗ lực của mọi người là sức mạnh của đội! 🚀', id: 'Kerja keras semua orang adalah kekuatan tim! 🚀', zh: '大家的努力成就团队的力量！🚀', si: 'සැමගේ කැපවීම කණ්ඩායමේ ශක්තියයි! 🚀', km: 'ការខិតខំរបស់ទាំងអស់គ្នាជាកម្លាំងក្រុម! 🚀' },
+  detailBtn: { ja: '詳細 ➔', en: 'Details ➔', vi: 'Chi tiết ➔', id: 'Detail ➔', zh: '详情 ➔', si: 'විස්තර ➔', km: 'ព័ត៌មានលម្អិត ➔' },
+  yieldPerHourLabel: { ja: '🌾 1時間あたり収穫量', en: '🌾 Yield per Hour', vi: '🌾 Sản lượng mỗi giờ', id: '🌾 Panen per Jam', zh: '🌾 每小时收获量', si: '🌾 පැයකට අස්වැන්න', km: '🌾 ទិន្នផលក្នុងមួយម៉ោង' },
+  revenuePerHourLabel: { ja: '💰 1時間あたり生産高', en: '💰 Revenue per Hour', vi: '💰 Doanh thu mỗi giờ', id: '💰 Nilai per Jam', zh: '💰 每小时产值', si: '💰 පැයකට නිෂ්පාදන වටිනාකම', km: '💰 ប្រាក់ចំណូលក្នុងមួយម៉ោង' },
+  totalWorkHoursLabel: { ja: '⏱️ 本日チーム総稼働: ', en: '⏱️ Total Team Hours: ', vi: '⏱️ Tổng giờ làm của đội: ', id: '⏱️ Total Jam Kerja Tim: ', zh: '⏱️ 今日团队总工时: ', si: '⏱️ කණ්ඩායමේ මුළු පැය: ', km: '⏱️ ម៉ោងសរុបរបស់ក្រុម: ' },
+  hoursUnit: { ja: '時間', en: ' hrs', vi: ' giờ', id: ' jam', zh: ' 小时', si: ' පැය', km: ' ម៉ោង' },
+  totalHarvestKgLabel: { ja: '収穫合計: ', en: 'Total Harvest: ', vi: 'Tổng thu hoạch: ', id: 'Total Panen: ', zh: '收获总计: ', si: 'මුළු අස්වැන්න: ', km: 'ការប្រមូលផលសរុប: ' },
+
+  // 出荷・納品
+  b2bDeliveryTitle: { ja: '本日の配達予定 (受注分)', en: "Today's Delivery Schedule (B2B)", vi: 'Lịch giao hàng hôm nay (Đơn hàng)', id: 'Jadwal Pengiriman Hari Ini', zh: '今日配送计划 (订单)', si: 'අද බෙදාහැරීමේ කාලසටහන', km: 'កាលវិភាគដឹកជញ្ជូនថ្ងៃនេះ' },
+  noPendingB2B: { ja: '本日の未納品はありません', en: 'No pending deliveries today', vi: 'Không có đơn hàng chưa giao hôm nay', id: 'Tidak ada pengiriman tertunda hari ini', zh: '今日没有未配送订单', si: 'අද නොබෙදූ ඇණවුම් නොමැත', km: 'មិនមានការដឹកជញ្ជូនដែលមិនទាន់សម្រេចនៅថ្ងៃនេះទេ' },
+  markDeliveredBtn: { ja: '納品完了', en: 'Delivered', vi: 'Đã giao hàng', id: 'Terkirim', zh: '完成配送', si: 'බෙදාහැරීම අවසන්', km: 'បានដឹកជញ្ជូនរួចរាល់' },
+  adHocSalesTitle: { ja: '都度出荷の記録 (JA・直売所等)', en: 'Ad-hoc Sales / Shipping (JA, Direct, etc.)', vi: 'Ghi nhận xuất hàng (JA, Điểm bán trực tiếp)', id: 'Catatan Pengiriman (JA, Pasar Langsung, dll)', zh: '随行出货记录 (农协、直销所等)', si: 'නැව්ගත කිරීමේ වාර්තාව (JA, සෘජු වෙළඳපොල ආදිය)', km: 'កំណត់ត្រាដឹកជញ្ជូន (JA, ទីផ្សារផ្ទាល់ ជាដើម)' },
+  salesChannelLabel: { ja: '出荷先 (販路)', en: 'Sales Channel', vi: 'Kênh bán / Nơi nhận', id: 'Saluran Penjualan', zh: '出货渠道 (销售渠道)', si: 'විකුණුම් මාර්ගය', km: 'បណ្តាញលក់' },
+  cropLabel: { ja: '作目', en: 'Crop', vi: 'Loại cây trồng', id: 'Tanaman', zh: '作物', si: 'බෝගය', km: 'ដំណាំ' },
+  selectPlaceholder: { ja: '選択してください', en: 'Please select', vi: 'Vui lòng chọn', id: 'Silakan pilih', zh: '请选择', si: 'කරුණාකර තෝරන්න', km: 'សូមជ្រើសរើស' },
+  recordShippingBtn: { ja: '出荷を記録する', en: 'Record Shipping', vi: 'Lưu xuất hàng', id: 'Simpan Pengiriman', zh: '记录出货', si: 'නැව්ගත කිරීම වාර්තා කරන්න', km: 'កត់ត្រាការដឹកជញ្ជូន' },
+  recordingShippingBtn: { ja: '記録中...', en: 'Recording...', vi: 'Đang lưu...', id: 'Menyimpan...', zh: '记录中...', si: 'වාර්තා වෙමින් පවතී...', km: 'កំពុងកត់ត្រា...' },
+
+  // 残業・その他
+  overtimeApplyTitle: { ja: '残業の申請（事前申請可）', en: 'Overtime Request', vi: 'Đăng ký làm thêm giờ', id: 'Pengajuan Lembur', zh: '加班申请 (可提前申请)', si: 'අතිකාල ඉල්ලීම', km: 'សំណើសុំធ្វើការថែមម៉ោង' },
+  overtimePending: { ja: '【本日】残業申請中（承認待ち）', en: '[Today] Overtime Pending Approval', vi: '[Hôm nay] Đang chờ duyệt tăng ca', id: '[Hari ini] Menunggu Persetujuan Lembur', zh: '【今日】加班申请审核中', si: '[අද] අතිකාල අනුමැතිය බලාපොරොත්තුවෙන්', km: '[ថ្ងៃនេះ] កំពុងរង់ចាំការអនុម័តថែមម៉ោង' },
+  overtimeApproved: { ja: '【本日】残業申請 承認済み', en: '[Today] Overtime Approved', vi: '[Hôm nay] Đã duyệt tăng ca', id: '[Hari ini] Lembur Disetujui', zh: '【今日】加班申请已通过', si: '[අද] අතිකාල අනුමත කර ඇත', km: '[ថ្ងៃនេះ] បានអនុម័តថែមម៉ោង' },
+  photoTakeOrSelect: { ja: '撮影 または ファイルを選択', en: 'Take Photo or Select File', vi: 'Chụp ảnh hoặc chọn tệp', id: 'Ambil Foto atau Pilih File', zh: '拍照或选择文件', si: 'ඡායාරූපයක් ගන්න හෝ ගොනුවක් තෝරන්න', km: 'ថតរូប ឬ ជ្រើសរើសឯកសារ' },
+  workMemoPlaceholder: { ja: '作業メモ...', en: 'Work memo...', vi: 'Ghi chú công việc...', id: 'Catatan kerja...', zh: '作业备注...', si: 'වැඩ සටහන්...', km: 'កំណត់ចំណាំការងារ...' },
+  videoSectionLabel: { ja: '動画', en: 'Video', vi: 'Video', id: 'Video', zh: '视频', si: 'වීඩියෝ', km: 'វីដេអូ' },
+  usageAmount: { ja: '使用量', en: 'Amount used', vi: 'Lượng sử dụng', id: 'Jumlah terpakai', zh: '使用量', si: 'භාවිතා කළ ප්‍රමාණය', km: 'បរិមាណប្រើប្រាស់' },
+  addNewWorkType: { ja: '新規追加', en: '+ Add New', vi: '+ Thêm mới', id: '+ Tambah Baru', zh: '+ 新增', si: '+ අලුතින් එක් කරන්න', km: '+ បន្ថែមថ្មី' },
+  confirmWorkType: { ja: '決定', en: 'Confirm', vi: 'Xác nhận', id: 'Konfirmasi', zh: '确定', si: 'තහවුරු කරන්න', km: 'បញ្ជាក់' },
+  enterWorkTypePlaceholder: { ja: '作業内容を入力', en: 'Enter work content', vi: 'Nhập nội dung công việc', id: 'Masukkan isi pekerjaan', zh: '输入作业内容', si: 'වැඩ අන්තර්ගතය ඇතුළත් කරන්න', km: 'បញ្ចូលខ្លឹមសារការងារ' },
+  fieldWorkplace: { ja: '圃場 (作業場所)', en: 'Field (Location)', vi: 'Ruộng (Vị trí làm việc)', id: 'Ladang (Lokasi)', zh: '地块 (作业场所)', si: 'ක්ෂේත්‍රය (ස්ථානය)', km: 'ដីស្រែ (ទីតាំង)' },
+  selectFieldPlaceholder: { ja: '圃場を選択してください', en: 'Please select a field', vi: 'Vui lòng chọn ruộng', id: 'Silakan pilih ladang', zh: '请选择地块', si: 'කරුණාකර ක්ෂේත්‍රයක් තෝරන්න', km: 'សូមជ្រើសរើសដីស្រែ' },
+  workContentLabel: { ja: '作業内容', en: 'Work Content', vi: 'Nội dung công việc', id: 'Isi Pekerjaan', zh: '作业内容', si: 'වැඩ අන්තර්ගතය', km: 'ខ្លឹមសារការងារ' },
+  memoSectionLabel: { ja: 'メモ', en: 'Memo', vi: 'Ghi chú', id: 'Catatan', zh: '备注', si: 'සටහන', km: 'កំណត់ចំណាំ' },
+
   // 動画マニュアル関連
   videoManuals: { ja: '動画マニュアル集', en: 'Video Manuals', vi: 'Hướng dẫn bằng video', id: 'Manual Video', zh: '视频手册'
    , si: 'වීඩියෝ අත්පොත එකතුව', km: 'ការប្រមូលវីដេអូដោយដៃ' },

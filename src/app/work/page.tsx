@@ -892,7 +892,7 @@ export default function WorkEntryPage() {
                 title="農業司令塔へ"
               >
                 <Sprout className="w-3 h-3 flex-shrink-0" />
-                <span>司令塔</span>
+                <span>{t('cmd_hub', language)}</span>
               </button>
             )}
             <button
@@ -901,7 +901,7 @@ export default function WorkEntryPage() {
               title="ポータル画面へ戻る"
             >
               <Layout className="w-3 h-3 flex-shrink-0" />
-              <span>ポータル</span>
+              <span>{t('portal_btn', language)}</span>
             </button>
             <select
               value={language}
@@ -952,7 +952,7 @@ export default function WorkEntryPage() {
             }`}
           >
             <Truck className="w-3.5 h-3.5 flex-shrink-0 hidden sm:inline" />
-            <span className="truncate">出荷・納品</span>
+            <span className="truncate">{t('tabSales', language)}</span>
           </button>
         </div>
         
@@ -975,10 +975,14 @@ export default function WorkEntryPage() {
                 </div>
                 <div>
                   <h3 className="text-xs font-black text-white tracking-wide flex items-center gap-1.5">
-                    <span>本日のチーム生産性</span>
-                    <span className="text-[9px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 rounded-full font-bold">リアルタイム</span>
+                    <span>{t('teamProductivity', language)}</span>
+                    <span className="text-[9px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 rounded-full font-bold">
+                      {t('realtimeBadge', language)}
+                    </span>
                   </h3>
-                  <p className="text-[10px] text-emerald-300/80 font-medium">みんなの頑張りがチームの力になります！🚀</p>
+                  <p className="text-[10px] text-emerald-300/80 font-medium">
+                    {t('teamCheerMessage', language)}
+                  </p>
                 </div>
               </div>
 
@@ -986,14 +990,16 @@ export default function WorkEntryPage() {
                 onClick={() => router.push('/admin/cultivations')}
                 className="text-[10px] text-emerald-300 hover:text-white bg-emerald-800/60 px-2 py-1 rounded-lg border border-emerald-700 font-bold transition-all"
               >
-                詳細 ➔
+                {t('detailBtn', language)}
               </button>
             </div>
 
             <div className="grid grid-cols-2 gap-2 pt-1">
               {shareSettings.showYieldPerHour && (
                 <div className="bg-emerald-950/70 p-2.5 rounded-2xl border border-emerald-800/60 text-center">
-                  <span className="text-[10px] font-bold text-emerald-300/90 block mb-0.5">🌾 1時間あたり収穫量</span>
+                  <span className="text-[10px] font-bold text-emerald-300/90 block mb-0.5">
+                    {t('yieldPerHourLabel', language)}
+                  </span>
                   <div className="flex items-baseline justify-center gap-1">
                     <span className="text-xl font-black text-amber-300 tracking-tight">
                       {productivity.yieldPerHour > 0 ? productivity.yieldPerHour : '--'}
@@ -1005,7 +1011,9 @@ export default function WorkEntryPage() {
 
               {shareSettings.showRevenuePerHour && (
                 <div className="bg-emerald-950/70 p-2.5 rounded-2xl border border-emerald-800/60 text-center">
-                  <span className="text-[10px] font-bold text-emerald-300/90 block mb-0.5">💰 1時間あたり生産高</span>
+                  <span className="text-[10px] font-bold text-emerald-300/90 block mb-0.5">
+                    {t('revenuePerHourLabel', language)}
+                  </span>
                   <div className="flex items-baseline justify-center gap-1">
                     <span className="text-xl font-black text-teal-300 tracking-tight">
                       {productivity.revenuePerHour > 0 ? `¥${productivity.revenuePerHour.toLocaleString()}` : '--'}
@@ -1018,8 +1026,8 @@ export default function WorkEntryPage() {
 
             {shareSettings.showTeamTotals && (
               <div className="mt-2 pt-2 border-t border-emerald-800/60 flex items-center justify-between text-[11px] font-bold text-emerald-200/90 px-1">
-                <span>⏱️ 本日チーム総稼働: <strong className="text-white">{productivity.todayHours}時間</strong></span>
-                <span>収穫合計: <strong className="text-amber-300">{productivity.todayHarvestKg}kg</strong></span>
+                <span>{t('totalWorkHoursLabel', language)}<strong className="text-white">{productivity.todayHours}{t('hoursUnit', language)}</strong></span>
+                <span>{t('totalHarvestKgLabel', language)}<strong className="text-amber-300">{productivity.todayHarvestKg}kg</strong></span>
               </div>
             )}
           </div>
@@ -1085,17 +1093,17 @@ export default function WorkEntryPage() {
             {/* 残業申請エリア（事前申請も可能） */}
             <div className="mt-8 p-5 bg-slate-800/60 rounded-3xl border border-slate-700 flex flex-col items-center gap-4">
               <h3 className="text-white font-bold w-full flex items-center gap-2 mb-1">
-                <Clock className="w-5 h-5 text-amber-400" /> 残業の申請（事前申請可）
+                <Clock className="w-5 h-5 text-amber-400" /> {t('overtimeApplyTitle', language)}
               </h3>
               
               {overtimeStatus === 'pending' && (
                 <div className="w-full py-3 bg-amber-500/20 text-amber-400 font-bold rounded-xl text-center border border-amber-500/30">
-                  【本日】残業申請中（承認待ち）
+                  {t('overtimePending', language)}
                 </div>
               )}
               {overtimeStatus === 'approved' && (
                 <div className="w-full py-3 bg-emerald-500/20 text-emerald-400 font-bold rounded-xl text-center border border-emerald-500/30 flex items-center justify-center gap-2">
-                  <CheckCircle2 className="w-5 h-5" /> 【本日】残業申請 承認済み
+                  <CheckCircle2 className="w-5 h-5" /> {t('overtimeApproved', language)}
                 </div>
               )}
               {overtimeStatus === 'rejected' && (
@@ -1297,7 +1305,7 @@ export default function WorkEntryPage() {
                       onClick={() => setIsAddingWorkType(!isAddingWorkType)}
                       className="py-2 px-1 rounded-lg font-bold text-xs border border-dashed border-emerald-500/50 text-emerald-400 hover:bg-emerald-900/40 flex items-center justify-center gap-1 transition-all"
                     >
-                      <Plus className="w-3 h-3" /> 新規追加
+                      <Plus className="w-3 h-3" /> {t('addNewWorkType', language)}
                     </button>
                   </div>
 
@@ -1308,7 +1316,7 @@ export default function WorkEntryPage() {
                           type="text"
                           value={newWorkType}
                           onChange={(e) => setNewWorkType(e.target.value)}
-                          placeholder="作業内容を入力"
+                          placeholder={t('enterWorkTypePlaceholder', language)}
                           className="flex-1 bg-emerald-950/60 border border-emerald-800/60 text-white rounded-lg px-2 py-1.5 text-xs font-bold focus:outline-none focus:border-emerald-500"
                         />
                         <button
@@ -1326,7 +1334,7 @@ export default function WorkEntryPage() {
                           }}
                           className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg px-3 py-1.5 text-xs transition-colors"
                         >
-                          決定
+                          {t('confirmWorkType', language)}
                         </button>
                       </div>
                     )}
@@ -1346,7 +1354,7 @@ export default function WorkEntryPage() {
                     </select>
                     {selectedMaterial && (
                       <div className="flex items-center gap-3">
-                        <input type="number" value={materialQuantity} onChange={(e) => setMaterialQuantity(e.target.value)} placeholder="使用量" className="flex-1 px-3 py-3 bg-slate-950 border border-slate-700 text-white rounded-xl font-bold" />
+                        <input type="number" value={materialQuantity} onChange={(e) => setMaterialQuantity(e.target.value)} placeholder={t('usageAmount', language)} className="flex-1 px-3 py-3 bg-slate-950 border border-slate-700 text-white rounded-xl font-bold" />
                         <div className="text-sm font-bold text-slate-400">{materials.find(m => m.name === selectedMaterial)?.unit}</div>
                       </div>
                     )}
@@ -1360,7 +1368,7 @@ export default function WorkEntryPage() {
                   {!photoPreview ? (
                     <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-700 border-dashed rounded-xl cursor-pointer bg-slate-800/50 hover:bg-slate-800 transition-colors">
                       <span className="text-3xl mb-2">📷</span>
-                      <span className="text-xs text-slate-400 font-bold">撮影 または ファイルを選択</span>
+                      <span className="text-xs text-slate-400 font-bold">{t('photoTakeOrSelect', language)}</span>
                       <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
                     </label>
                   ) : (
@@ -1373,14 +1381,14 @@ export default function WorkEntryPage() {
                 
                 <div>
                   <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
-                    <FileText className="w-4 h-4" />メモ
+                    <FileText className="w-4 h-4" />{t('memoSectionLabel', language)}
                   </h2>
-                  <textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="作業メモ..." className="w-full h-24 p-3 bg-slate-950 border border-slate-700 text-white rounded-xl text-sm" />
+                  <textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={t('workMemoPlaceholder', language)} className="w-full h-24 p-3 bg-slate-950 border border-slate-700 text-white rounded-xl text-sm" />
                 </div>
 
                 <div>
                   <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
-                    <Video className="w-4 h-4" />動画
+                    <Video className="w-4 h-4" />{t('videoSectionLabel', language)}
                   </h2>
                   <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
                     <input 
@@ -1452,7 +1460,7 @@ export default function WorkEntryPage() {
             <section className="bg-emerald-900/40 p-5 rounded-3xl border border-emerald-800/40 shadow-sm relative overflow-hidden">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-black text-emerald-400 flex items-center gap-2">
-                  <Calendar className="w-4 h-4" /> 本日の配達予定 (受注分)
+                  <Calendar className="w-4 h-4" /> {t('b2bDeliveryTitle', language)}
                 </h2>
                 <span className="text-xs font-bold text-emerald-300/60">{getJSTDate()}</span>
               </div>
@@ -1460,7 +1468,7 @@ export default function WorkEntryPage() {
               {b2bOrders.length === 0 ? (
                 <div className="text-center py-8 bg-emerald-950/50 rounded-2xl border border-emerald-900/50">
                   <CheckCircle2 className="w-8 h-8 text-emerald-500/50 mx-auto mb-2" />
-                  <div className="text-emerald-400/80 font-bold text-sm">本日の未納品はありません</div>
+                  <div className="text-emerald-400/80 font-bold text-sm">{t('noPendingB2B', language)}</div>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1469,14 +1477,14 @@ export default function WorkEntryPage() {
                       <div>
                         <div className="font-black text-white text-base mb-1">{order.customer?.name}</div>
                         <div className="text-xs font-bold text-emerald-300/80">
-                          {order.items?.map((i: any) => `${i.crops?.name || i.crop?.name || '作物'} ${i.quantity}${i.unit}`).join(' / ')}
+                          {order.items?.map((i: any) => `${getTranslatedName(i.crops || i.crop || { name: '作物' }, language)} ${i.quantity}${getTranslatedUnit(i.unit || 'kg', language)}`).join(' / ')}
                         </div>
                       </div>
                       <button 
                         onClick={() => handleCompleteB2BOrder(order.id)}
                         className="bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black text-xs py-2 px-3.5 rounded-xl transition-colors flex items-center gap-1 shadow-md"
                       >
-                        納品完了 <ArrowRight className="w-3.5 h-3.5" />
+                        {t('markDeliveredBtn', language)} <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ))}
@@ -1487,33 +1495,33 @@ export default function WorkEntryPage() {
             {/* 下段：JA等への都度出荷フォーム */}
             <section className="bg-emerald-900/40 p-5 rounded-3xl border border-emerald-800/40 shadow-sm relative overflow-hidden">
               <h2 className="text-sm font-black text-emerald-400 mb-4 flex items-center gap-2">
-                <Truck className="w-4 h-4" /> 都度出荷の記録 (JA・直売所等)
+                <Truck className="w-4 h-4" /> {t('adHocSalesTitle', language)}
               </h2>
               
               <form onSubmit={handleAdHocSalesSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-emerald-300 mb-1.5">出荷先 (販路)</label>
+                  <label className="block text-xs font-bold text-emerald-300 mb-1.5">{t('salesChannelLabel', language)}</label>
                   <select 
                     value={selectedSalesChannel}
                     onChange={e => setSelectedSalesChannel(e.target.value)}
                     className="w-full bg-emerald-950 border border-emerald-800 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-emerald-400 font-bold"
                     required
                   >
-                    <option value="">選択してください</option>
-                    {salesChannels.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    <option value="">{t('selectPlaceholder', language)}</option>
+                    {salesChannels.map(c => <option key={c.id} value={c.name}>{getTranslatedName(c, language)}</option>)}
                   </select>
                 </div>
                 
                 <div>
-                  <label className="block text-xs font-bold text-emerald-300 mb-1.5">作目</label>
+                  <label className="block text-xs font-bold text-emerald-300 mb-1.5">{t('cropLabel', language)}</label>
                   <select 
                     value={selectedSalesCrop}
                     onChange={e => setSelectedSalesCrop(e.target.value)}
                     className="w-full bg-emerald-950 border border-emerald-800 text-white px-4 py-3 rounded-xl focus:outline-none focus:border-emerald-400 font-bold"
                     required
                   >
-                    <option value="">選択してください</option>
-                    {crops.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    <option value="">{t('selectPlaceholder', language)}</option>
+                    {crops.map(c => <option key={c.id} value={c.name}>{getTranslatedName(c, language)}</option>)}
                   </select>
                 </div>
                 
@@ -1554,7 +1562,7 @@ export default function WorkEntryPage() {
                       : 'bg-emerald-500 text-emerald-950 hover:bg-emerald-400 shadow-lg'
                   }`}
                 >
-                  {isSubmittingSales ? '記録中...' : '出荷を記録する'}
+                  {isSubmittingSales ? t('recordingShippingBtn', language) : t('recordShippingBtn', language)}
                 </button>
               </form>
             </section>
