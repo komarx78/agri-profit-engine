@@ -122,7 +122,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { name: '💳 経理・購買システム', path: '/accounting-management', icon: Receipt, external: true },
         { name: '📱 現場出退勤ポータル', path: '/portal', icon: Layout, external: true },
         { name: '👥 労務・人事システム', path: '/hr', icon: Users, external: true },
-        { name: '💊 農薬検索・防除AI', path: '/pesticides', icon: FlaskConical },
+        { name: '💊 農薬検索・防除AI', path: '/farm/pesticide-check', icon: FlaskConical },
         { name: '⚙️ マスタ管理全般', path: '/admin/masters', icon: Database },
         { name: '🏢 自社情報設定', path: '/admin/settings', icon: Settings },
       ]

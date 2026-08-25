@@ -32,7 +32,6 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   // ログインしていない場合で、保護されたルートにアクセスした場合
-  // （/login, /farm, /sales, /work は未ログインでもアクセス可能）
   if (
     !user &&
     !request.nextUrl.pathname.startsWith('/login') &&
@@ -41,6 +40,12 @@ export async function updateSession(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/work') &&
     !request.nextUrl.pathname.startsWith('/portal') &&
     !request.nextUrl.pathname.startsWith('/admin') &&
+    !request.nextUrl.pathname.startsWith('/pesticides') &&
+    !request.nextUrl.pathname.startsWith('/sales-management') &&
+    !request.nextUrl.pathname.startsWith('/accounting-management') &&
+    !request.nextUrl.pathname.startsWith('/hr') &&
+    !request.nextUrl.pathname.startsWith('/manuals') &&
+    !request.nextUrl.pathname.startsWith('/b2b-order') &&
     request.nextUrl.pathname !== '/'
   ) {
     // '/login' にリダイレクト
