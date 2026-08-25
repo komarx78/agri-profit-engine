@@ -21,7 +21,8 @@ import {
   Calculator,
   Layers,
   Plus,
-  Search
+  Search,
+  Copy
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
@@ -452,11 +453,20 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
           setFarmFertilizers(fertMatRes.data);
           if (fertMatRes.data.length > 0) {
             const first = fertMatRes.data[0];
-            setSelectedFertilizerName(first.name);
-            setCustomN(String(first.n_percent ?? first.n_ratio ?? 0));
-            setCustomP(String(first.p_percent ?? first.p_ratio ?? 0));
-            setCustomK(String(first.k_percent ?? first.k_ratio ?? 0));
-            setFertPricePerBag(String(first.default_price || first.unit_price || 0));
+            setFertilizerItems(prev => {
+              if (prev.length === 1 && prev[0].name === 'その他（手入力）') {
+                return [{
+                  ...prev[0],
+                  name: first.name,
+                  pricePerBag: String(first.default_price || first.unit_price || 0),
+                  nPercent: String(first.n_percent ?? first.n_ratio ?? 0),
+                  pPercent: String(first.p_percent ?? first.p_ratio ?? 0),
+                  kPercent: String(first.k_percent ?? first.k_ratio ?? 0),
+                  bagWeight: parseFloat(first.bag_weight || first.capacity) || 20
+                }];
+              }
+              return prev;
+            });
           }
         }
         if (logsRes.data) {

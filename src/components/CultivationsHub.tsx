@@ -26,7 +26,8 @@ import {
   X, 
   Filter, 
   ArrowRight,
-  ChevronRight
+  ChevronRight,
+  Copy
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
