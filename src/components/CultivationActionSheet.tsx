@@ -45,28 +45,6 @@ interface CultivationActionSheetProps {
 
 type ActionCategory = 'fertilizer' | 'pesticide' | 'work' | 'pest' | 'growth' | 'shipment' | 'sales' | null;
 
-// 肥料プリセットマスター
-interface FertilizerPreset {
-  name: string;
-  n: number; // %
-  p: number; // %
-  k: number; // %
-  bagWeight: number; // kg
-  pricePerBag: number; // 円
-}
-
-const FERTILIZER_PRESETS: FertilizerPreset[] = [
-  { name: '普通化成肥料 (8-8-8)', n: 8, p: 8, k: 8, bagWeight: 20, pricePerBag: 2400 },
-  { name: '高度化成肥料 (14-14-14)', n: 14, p: 14, k: 14, bagWeight: 20, pricePerBag: 3800 },
-  { name: '有機配合肥料 (10-8-8)', n: 10, p: 8, k: 8, bagWeight: 20, pricePerBag: 3200 },
-  { name: '発酵鶏ふん (3-5-2)', n: 3.0, p: 5.0, k: 2.0, bagWeight: 15, pricePerBag: 350 },
-  { name: '完熟牛ふん堆肥 (1-1-1)', n: 1.2, p: 1.5, k: 1.0, bagWeight: 40, pricePerBag: 600 },
-  { name: '尿素 (46-0-0)', n: 46, p: 0, k: 0, bagWeight: 20, pricePerBag: 4200 },
-  { name: '過リン酸石灰 (0-20-0)', n: 0, p: 20, k: 0, bagWeight: 20, pricePerBag: 2800 },
-  { name: '塩化加里 (0-0-60)', n: 0, p: 0, k: 60, bagWeight: 20, pricePerBag: 4500 },
-  { name: 'その他（手入力）', n: 0, p: 0, k: 0, bagWeight: 20, pricePerBag: 0 }
-];
-
 export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
   selectedCultivations,
   onClearSelection,
@@ -105,16 +83,16 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
   // 作業用
   const [workType, setWorkType] = useState<string>('定植');
 
-  // 肥料専用ステート
-  const [selectedFertilizerName, setSelectedFertilizerName] = useState<string>(FERTILIZER_PRESETS[0].name);
+  // 肥料専用ステート（自社マスタまたは公的マスター連動）
+  const [selectedFertilizerName, setSelectedFertilizerName] = useState<string>('その他（手入力）');
   const [fertilizerType, setFertilizerType] = useState<'元肥' | '追肥1回目' | '追肥2回目' | '土壌改良' | '葉面散布'>('元肥');
   const [fertInputMode, setFertInputMode] = useState<'bags' | 'kg'>('bags');
   const [fertBags, setFertBags] = useState<string>('3'); // 袋数
   const [fertTotalKg, setFertTotalKg] = useState<string>('60'); // kg
-  const [customN, setCustomN] = useState<string>('8');
-  const [customP, setCustomP] = useState<string>('8');
-  const [customK, setCustomK] = useState<string>('8');
-  const [fertPricePerBag, setFertPricePerBag] = useState<string>('2400');
+  const [customN, setCustomN] = useState<string>('0');
+  const [customP, setCustomP] = useState<string>('0');
+  const [customK, setCustomK] = useState<string>('0');
+  const [fertPricePerBag, setFertPricePerBag] = useState<string>('0');
 
   // その他の品名・数量・金額 ＆ 複数圃場スマート面積按分ステート
   const [itemName, setItemName] = useState<string>('');
@@ -187,7 +165,6 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
   // 肥料成分のリアルタイム計算
   const fertCalculation = useMemo(() => {
     const farmItem = farmFertilizers.find(f => f.name === selectedFertilizerName);
-    const preset = FERTILIZER_PRESETS.find(p => p.name === selectedFertilizerName);
 
     let nRatio = 0, pRatio = 0, kRatio = 0, bagKg = 20, bagPrice = 0;
 
@@ -197,12 +174,6 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       kRatio = parseFloat(farmItem.k_percent ?? farmItem.k_ratio) || (parseFloat(customK) || 0);
       bagKg = parseFloat(farmItem.bag_weight || farmItem.capacity) || 20;
       bagPrice = parseFloat(farmItem.default_price || farmItem.unit_price) || (parseFloat(fertPricePerBag) || 0);
-    } else if (preset && preset.name !== 'その他（手入力）') {
-      nRatio = preset.n;
-      pRatio = preset.p;
-      kRatio = preset.k;
-      bagKg = preset.bagWeight;
-      bagPrice = preset.pricePerBag;
     } else {
       nRatio = parseFloat(customN) || 0;
       pRatio = parseFloat(customP) || 0;
@@ -433,6 +404,14 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
         }
         if (fertMatRes.data) {
           setFarmFertilizers(fertMatRes.data);
+          if (fertMatRes.data.length > 0) {
+            const first = fertMatRes.data[0];
+            setSelectedFertilizerName(first.name);
+            setCustomN(String(first.n_percent ?? first.n_ratio ?? 0));
+            setCustomP(String(first.p_percent ?? first.p_ratio ?? 0));
+            setCustomK(String(first.k_percent ?? first.k_ratio ?? 0));
+            setFertPricePerBag(String(first.default_price || first.unit_price || 0));
+          }
         }
         if (logsRes.data) {
           setTenantSprayLogs(logsRes.data);
@@ -918,40 +897,30 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                         // 自社登録肥料から選択された場合
                         const farmItem = farmFertilizers.find(f => f.name === val);
                         if (farmItem) {
-                          setCustomN(String(farmItem.n_percent ?? farmItem.n_ratio ?? 8));
-                          setCustomP(String(farmItem.p_percent ?? farmItem.p_ratio ?? 8));
-                          setCustomK(String(farmItem.k_percent ?? farmItem.k_ratio ?? 8));
-                          setFertPricePerBag(String(farmItem.default_price || farmItem.unit_price || 2400));
-                          return;
-                        }
-
-                        // プリセットから選択された場合
-                        const preset = FERTILIZER_PRESETS.find(p => p.name === val);
-                        if (preset && preset.name !== 'その他（手入力）') {
-                          setCustomN(String(preset.n));
-                          setCustomP(String(preset.p));
-                          setCustomK(String(preset.k));
-                          setFertPricePerBag(String(preset.pricePerBag));
+                          setCustomN(String(farmItem.n_percent ?? farmItem.n_ratio ?? 0));
+                          setCustomP(String(farmItem.p_percent ?? farmItem.p_ratio ?? 0));
+                          setCustomK(String(farmItem.k_percent ?? farmItem.k_ratio ?? 0));
+                          setFertPricePerBag(String(farmItem.default_price || farmItem.unit_price || 0));
                         }
                       }}
                       className="w-full px-3 py-2 text-sm bg-white border border-amber-300 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
                     >
-                      {farmFertilizers.length > 0 && (
-                        <optgroup label="🏢 自農園マスタ登録肥料（資材マスタ）">
-                          {farmFertilizers.map((f) => (
-                            <option key={f.id} value={f.name}>
-                              {f.name} {f.default_price ? `(単価:約¥${Number(f.default_price).toLocaleString()})` : ''}
-                            </option>
-                          ))}
-                        </optgroup>
+                      {farmFertilizers.length > 0 ? (
+                        <>
+                          <optgroup label="🏢 自農園マスタ登録肥料（資材マスタ）">
+                            {farmFertilizers.map((f) => (
+                              <option key={f.id} value={f.name}>
+                                {f.name} {f.default_price ? `(単価:約¥${Number(f.default_price).toLocaleString()})` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                          <option value="その他（手入力）">✏️ その他（手入力・公的マスターから適用）</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="その他（手入力）">🔍 自農園マスタ未登録（公的マスター検索または手入力）</option>
+                        </>
                       )}
-                      <optgroup label="🌾 標準肥料テンプレート">
-                        {FERTILIZER_PRESETS.map((p) => (
-                          <option key={p.name} value={p.name}>
-                            {p.name} {p.pricePerBag > 0 ? `(単価:約¥${p.pricePerBag.toLocaleString()}/袋)` : ''}
-                          </option>
-                        ))}
-                      </optgroup>
                     </select>
                   </div>
 
