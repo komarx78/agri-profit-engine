@@ -55,15 +55,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         return;
       }
 
-      // 現場PINログイン（スタッフ管理者）の認証チェック
+      // 現場PINログインまたは農園オーナーIDの認証チェック
       const savedWorker = localStorage.getItem('agri_current_worker');
       const savedOwnerId = localStorage.getItem('agri_owner_id');
 
-      if (savedWorker && savedOwnerId) {
+      if (savedOwnerId) {
+        setTenantId(savedOwnerId);
+        return;
+      }
+
+      if (savedWorker) {
         try {
           const workerData = JSON.parse(savedWorker);
-          if (workerData.role === 'admin' || workerData.role === 'manager') {
-            setTenantId(savedOwnerId);
+          if (workerData.user_id) {
+            setTenantId(workerData.user_id);
             return;
           }
         } catch (e) {
