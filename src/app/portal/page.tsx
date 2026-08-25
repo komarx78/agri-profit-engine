@@ -12,7 +12,7 @@ import {
   PackageOpen, Sprout, Smartphone, Receipt, TrendingUp, Pointer, Banknote,
   FileSpreadsheet, Store, Calculator, Database, Camera, ExternalLink, HelpCircle,
   Truck, Scissors, Sliders, Check, Languages, Wand2, Edit3, Save, RotateCcw,
-  FlaskConical, History, CheckSquare, BarChart3, Users, Settings
+  FlaskConical, History, CheckSquare, BarChart3, Users, Settings, Building
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import VideoPlayerWithSubtitles, { Narration } from '@/components/VideoPlayerWithSubtitles';
