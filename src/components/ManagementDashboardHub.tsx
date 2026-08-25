@@ -304,271 +304,315 @@ export default function ManagementDashboardHub() {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-slate-900 border border-slate-700 text-white p-3 rounded-xl shadow-xl text-xs font-bold space-y-1">
-          <p className="font-black border-b border-slate-700 pb-1">{data.name}</p>
-          <p className="text-emerald-400">時給換算: ¥{data.時給換算?.toLocaleString()}/h</p>
-          <p className="text-slate-300">売上: ¥{data.売上?.toLocaleString()}</p>
-          <p className="text-rose-300">総コスト: ¥{data.コスト?.toLocaleString()}</p>
-          <p className="text-amber-300">営業利益: ¥{data.利益?.toLocaleString()} ({data.利益率}%)</p>
+        <div className="bg-slate-900/95 backdrop-blur-md text-slate-100 p-4 rounded-xl shadow-2xl border border-slate-700 font-bold text-sm min-w-[200px]">
+          <p className="text-base text-emerald-400 mb-2 border-b border-slate-700 pb-1">{label}</p>
+          <div className="space-y-1">
+            <div className="flex justify-between"><span className="text-slate-400">売上:</span><span className="text-white">¥{data.売上?.toLocaleString() || 0}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">コスト:</span><span className="text-rose-400">¥{data.コスト?.toLocaleString() || 0}</span></div>
+            <div className="border-t border-slate-700 my-1.5"></div>
+            <div className="flex justify-between items-center"><span className="text-slate-400">純利益:</span><span className={`text-lg ${data.利益 >= 0 ? 'text-amber-400' : 'text-rose-500'}`}>¥{data.利益?.toLocaleString() || 0}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">利益率:</span><span className="text-blue-300">{data.利益率 || 0}%</span></div>
+            {data.時給換算 !== undefined && (
+              <div className="flex justify-between mt-2 pt-2 border-t border-slate-700/50"><span className="text-slate-400">時給換算:</span><span className="text-emerald-300">¥{data.時給換算.toLocaleString()}/h</span></div>
+            )}
+          </div>
         </div>
       );
     }
     return null;
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center p-16 space-y-3">
-        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-        <p className="text-xs font-bold text-slate-400">経営ダッシュボードを集計中...</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-8 animate-in fade-in-50 duration-200">
       
-      {/* 上部コントロールバー */}
-      <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-blue-600 text-white rounded-2xl shadow-sm">
-            <Activity className="w-5 h-5" />
+      {/* ページヘッダー＆直感的なコントロールパネル */}
+      <div className="flex flex-col gap-6 border-b-2 border-slate-200 pb-8 bg-white p-6 rounded-3xl border shadow-sm">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+          <div className="flex-1 w-full md:w-auto">
+            <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight mb-2">経営ダッシュボード</h1>
+            <p className="text-sm md:text-base text-slate-500 font-medium">作業・売上データから農園の健康状態（P&L）をリアルタイムに可視化します。</p>
+
+            {/* 現場用URL（農園専用URL）の表示 */}
+            {tenantId && (
+              <div className="mt-4 bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm w-full md:max-w-2xl">
+                <div>
+                  <h3 className="font-black text-emerald-800 flex items-center gap-2 text-sm">
+                    <UserCheck className="w-4 h-4" /> 🌾 貴農園専用・現場タブレット用URL
+                  </h3>
+                  <p className="text-xs text-emerald-600 mt-1 font-medium">
+                    ※この専用URLを現場の従業員に配布（LINE送信等）してください。現場端末で開くだけで貴農園のスタッフ一覧が表示されます。
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                  <input 
+                    type="text" 
+                    readOnly
+                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/portal?farm=${tenantId}`}
+                    className="flex-1 sm:w-64 px-3 py-2 bg-white border border-emerald-200 rounded-lg text-xs font-mono text-slate-600 focus:outline-none"
+                    onClick={(e) => e.currentTarget.select()}
+                  />
+                  <button 
+                    onClick={() => {
+                      const farmUrl = `${window.location.origin}/portal?farm=${tenantId}`;
+                      navigator.clipboard.writeText(farmUrl);
+                      alert('【貴農園専用URL】をコピーしました！\n\n' + farmUrl + '\n\n現場タブレットや従業員のスマホでこのURLを開くだけで、貴農園のスタッフ選択・打刻画面が即座に表示されます。');
+                    }}
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors whitespace-nowrap shadow-sm active:scale-95"
+                  >
+                    コピー
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-          <div>
-            <h1 className="text-lg font-black text-slate-800">📊 経営・採算ダッシュボード</h1>
-            <p className="text-xs font-bold text-slate-400">農園全体の売上・人件費・資材費・限界利益をリアルタイム集計</p>
+          
+          {/* シンプルな経費率設定 */}
+          <div className="hidden md:flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-xl shadow-sm border border-slate-200">
+            <span className="text-sm font-bold text-slate-600">経費率(資材等)設定:</span>
+            <div className="flex items-center gap-1">
+              <span className="text-slate-400 text-sm">売上の</span>
+              <input 
+                type="number" 
+                value={estimateRate}
+                onChange={(e) => setEstimateRate(Number(e.target.value) || 0)}
+                className="bg-white rounded-lg w-14 px-2 py-1 text-center font-black text-amber-600 outline-none focus:ring-2 focus:ring-amber-400 transition-shadow border border-slate-200"
+              />
+              <span className="text-slate-400 text-sm">%</span>
+            </div>
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-          {/* 実績/予実 切り替え */}
-          <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
+        
+        {/* 大きく直感的な「予実切り替え」タブ */}
+        <div className="flex justify-center w-full">
+          <div className="bg-slate-100/80 p-1.5 rounded-2xl flex items-center shadow-inner border border-slate-200/60 max-w-md w-full">
             <button
               onClick={() => setDataViewMode('actualOnly')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
-                dataViewMode === 'actualOnly' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+              className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all duration-300 flex items-center justify-center gap-2 ${
+                dataViewMode === 'actualOnly' 
+                  ? 'bg-white text-emerald-600 shadow-[0_2px_10px_rgba(0,0,0,0.08)] scale-100' 
+                  : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 scale-95'
               }`}
             >
-              実績のみ
+              <div className={`w-2 h-2 rounded-full ${dataViewMode === 'actualOnly' ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
+              確定した【実績】のみ
             </button>
+            
             <button
               onClick={() => setDataViewMode('includePlanned')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
-                dataViewMode === 'includePlanned' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'
+              className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all duration-300 flex items-center justify-center gap-2 ${
+                dataViewMode === 'includePlanned' 
+                  ? 'bg-white text-amber-600 shadow-[0_2px_10px_rgba(0,0,0,0.08)] scale-100' 
+                  : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 scale-95'
               }`}
             >
-              予定を含める
+              <div className={`w-2 h-2 rounded-full ${dataViewMode === 'includePlanned' ? 'bg-amber-500' : 'bg-slate-300'}`}></div>
+              予定＋実績【予想】
             </button>
           </div>
-
-          <Link
-            href="/admin/cultivation-schedule"
-            className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-black transition-colors flex items-center gap-1 shadow-2xs"
-          >
-            <span>栽培・予実管理表へ</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
         </div>
-      </div>
-
-      {/* 4大KPIサマリーカード */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* 総売上 */}
-        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-black text-slate-400">総売上実績</span>
-            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
-              <Banknote className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-slate-800">
-            ¥{summary.sales.toLocaleString()}
-          </div>
-          <p className="text-[10px] font-bold text-slate-400 mt-1">出荷・B2B販売の総計</p>
-        </div>
-
-        {/* 労働人件費 */}
-        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-black text-slate-400">労働人件費</span>
-            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-              <Clock className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-slate-800">
-            ¥{Math.round(summary.laborCost).toLocaleString()}
-          </div>
-          <p className="text-[10px] font-bold text-slate-400 mt-1">作業時間 × 時給換算</p>
-        </div>
-
-        {/* 概算資材費 */}
-        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-black text-slate-400">資材費・経費 (概算{estimateRate}%)</span>
-            <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
-              <Calculator className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-slate-800">
-            ¥{Math.round(summary.materialCost).toLocaleString()}
-          </div>
-          <p className="text-[10px] font-bold text-slate-400 mt-1">肥料・農薬・種苗・包装等</p>
-        </div>
-
-        {/* 営業利益 ＆ 利益率 */}
-        <div className={`p-5 rounded-3xl border shadow-sm relative overflow-hidden ${
-          summary.profit >= 0 ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white border-emerald-400' : 'bg-rose-500 text-white border-rose-400'
-        }`}>
-          <div className="flex items-center justify-between mb-2 opacity-80">
-            <span className="text-xs font-black">営業利益（限界利益）</span>
-            <TrendingUp className="w-4 h-4" />
-          </div>
-          <div className="text-2xl font-black">
-            ¥{Math.round(summary.profit).toLocaleString()}
-          </div>
-          <div className="flex items-center justify-between text-[11px] font-bold mt-1 opacity-90">
-            <span>利益率</span>
-            <span className="text-sm font-black">{summary.margin.toFixed(1)}%</span>
-          </div>
-        </div>
-      </div>
-
-      {/* グラフエリア */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* 作目別 採算性ランキング (8カラム) */}
-        <div className="lg:col-span-8 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div>
-              <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                <Sprout className="w-4 h-4 text-emerald-600" /> 作目別 採算性（時給換算利益）
-              </h2>
-              <p className="text-xs text-slate-400 font-bold mt-0.5">作目ごとに1時間あたりいくら儲かっているかを可視化</p>
-            </div>
+        {/* モバイル用の経費率設定 (画面が小さい時だけ表示) */}
+        <div className="md:hidden flex items-center justify-center gap-2 bg-slate-50 px-4 py-2 rounded-xl shadow-sm border border-slate-200 w-fit mx-auto">
+          <span className="text-sm font-bold text-slate-600">経費率:</span>
+          <div className="flex items-center gap-1">
+            <input 
+              type="number" 
+              value={estimateRate}
+              onChange={(e) => setEstimateRate(Number(e.target.value) || 0)}
+              className="bg-white rounded-lg w-14 px-2 py-1 text-center font-black text-amber-600 outline-none border border-slate-200"
+            />
+            <span className="text-slate-400 text-sm">%</span>
           </div>
-
-          {profitabilityData.length > 0 ? (
-            <div className="h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={profitabilityData} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" tick={{ fontSize: 12, fontWeight: 700 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip content={<CustomProfitTooltip />} />
-                  <Bar dataKey="時給換算" fill="#10b981" radius={[8, 8, 0, 0]}>
-                    {profitabilityData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-[200px] flex items-center justify-center text-slate-400 text-xs font-bold">
-              データがありません。日報または売上を記録してください。
-            </div>
-          )}
         </div>
-
-        {/* 作目別 労働時間シェア (4カラム) */}
-        <div className="lg:col-span-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-          <div className="border-b border-slate-100 pb-3">
-            <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-blue-600" /> 作業時間配分
-            </h2>
-            <p className="text-xs text-slate-400 font-bold mt-0.5">どの作目に労働時間が投下されているか</p>
-          </div>
-
-          {cropData.length > 0 ? (
-            <div className="h-[280px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={cropData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    paddingAngle={4}
-                    dataKey="value"
-                  >
-                    {cropData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value: any) => [`${Math.round(Number(value) / 60)} 時間`, '作業時間']} />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-[200px] flex items-center justify-center text-slate-400 text-xs font-bold">
-              作業データがありません。
-            </div>
-          )}
-        </div>
-
-        {/* 圃場別 採算性 (6カラム) */}
-        <div className="lg:col-span-6 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-          <div className="border-b border-slate-100 pb-3">
-            <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-teal-600" /> 圃場別 採算性（売上 vs コスト）
-            </h2>
-            <p className="text-xs text-slate-400 font-bold mt-0.5">圃場ごとの利益とコスト構造</p>
-          </div>
-
-          {fieldData.length > 0 ? (
-            <div className="h-[260px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={fieldData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 700 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="売上" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="コスト" fill="#f43f5e" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-[180px] flex items-center justify-center text-slate-400 text-xs font-bold">
-              圃場データがありません。
-            </div>
-          )}
-        </div>
-
-        {/* 月次 売上・利益推移 (6カラム) */}
-        <div className="lg:col-span-6 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-          <div className="border-b border-slate-100 pb-3">
-            <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-purple-600" /> 月次 売上・累計利益推移
-            </h2>
-            <p className="text-xs text-slate-400 font-bold mt-0.5">年間を通じた収支のトレンド</p>
-          </div>
-
-          {monthlyTrendData.length > 0 ? (
-            <div className="h-[260px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={monthlyTrendData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11, fontWeight: 700 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="売上" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  <Line type="monotone" dataKey="累計利益" stroke="#10b981" strokeWidth={3} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-[180px] flex items-center justify-center text-slate-400 text-xs font-bold">
-              推移データがありません。
-            </div>
-          )}
-        </div>
-
       </div>
+
+      {isLoading ? (
+        <div className="h-64 flex items-center justify-center">
+          <div className="animate-pulse flex flex-col items-center">
+            <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-slate-500 font-bold tracking-widest">集計中...</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* --- サマリー (P&L) カード群 --- */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden group">
+              <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
+              <div className="text-blue-100 font-bold mb-1 flex items-center gap-2"><Banknote className="w-4 h-4" /> 総売上</div>
+              <div className="text-3xl font-black tracking-tight">¥{summary.sales.toLocaleString()}</div>
+            </div>
+            
+            <div className="bg-gradient-to-br from-rose-500 to-pink-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden group">
+              <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
+              <div className="text-rose-100 font-bold mb-1 flex items-center gap-2"><Activity className="w-4 h-4" /> 総コスト (人件費＋資材)</div>
+              <div className="text-3xl font-black tracking-tight">¥{(summary.laborCost + summary.materialCost).toLocaleString()}</div>
+            </div>
+            
+            <div className="bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden group lg:col-span-2">
+              <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
+              <div className="text-amber-100 font-bold mb-1 flex items-center gap-2"><TrendingUp className="w-4 h-4" /> 営業利益 (純利益)</div>
+              <div className="flex items-baseline gap-4">
+                <div className="text-4xl font-black tracking-tight">¥{summary.profit.toLocaleString()}</div>
+                <div className="text-lg font-bold bg-white/20 px-3 py-1 rounded-full backdrop-blur-sm">
+                  利益率 {summary.margin.toFixed(1)}%
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* --- 月別推移トレンド --- */}
+          <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2.5 bg-slate-100 rounded-xl text-slate-700">
+                <CalendarDays className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2">
+                  経営推移トレンド
+                  <HelpTooltip content="月ごとの売上・コスト・利益の推移を確認できます。累計利益がゼロを超えたタイミングが黒字転換の目安です。" />
+                </h2>
+                <p className="text-sm text-slate-500 font-medium">単月の売上・コストと、累計利益の推移（黒字転換のタイミング）</p>
+              </div>
+            </div>
+            
+            <div className="w-full h-[400px]">
+              {monthlyTrendData.length === 0 ? (
+                <div className="w-full h-full flex items-center justify-center text-slate-400">データがありません</div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={monthlyTrendData} margin={{ top: 20, right: 20, bottom: 0, left: 20 }}>
+                    <CartesianGrid stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="month" tick={{fill: '#64748b', fontWeight: 'bold'}} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={(val) => `¥${(val/10000).toFixed(0)}万`} tick={{fill: '#64748b'}} axisLine={false} tickLine={false} />
+                    <Tooltip 
+                      formatter={(val: any, name: any) => [`¥${val.toLocaleString()}`, String(name || '')]}
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }}
+                    />
+                    <Legend wrapperStyle={{ paddingTop: '20px', fontWeight: 'bold' }} />
+                    
+                    <Bar dataKey="売上" barSize={32} fill="#3b82f6" radius={[4, 4, 0, 0]} name="売上" />
+                    <Bar dataKey="コスト" barSize={32} fill="#ef4444" radius={[4, 4, 0, 0]} name="コスト" />
+                    <Line type="monotone" dataKey="単月利益" stroke="#f59e0b" strokeWidth={3} dot={{r: 4}} name="単月利益" />
+                    <Area type="monotone" dataKey="累計利益" fill="#10b981" stroke="#10b981" fillOpacity={0.1} strokeWidth={3} name="累計利益" />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </section>
+
+          {/* --- 分析グラフ群 (作目・圃場・人) --- */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            {/* 作目別採算性 */}
+            <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex flex-col h-[450px]">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2.5 bg-emerald-100 rounded-xl text-emerald-700">
+                  <Sprout className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                    作目別 採算性
+                    <HelpTooltip content="作目ごとの『売上 - コスト』を計算し、どの作目が一番儲かっているか（または赤字か）を可視化します。" />
+                  </h3>
+                  <p className="text-sm text-slate-500">最も利益率が高い作目は？</p>
+                </div>
+              </div>
+              <div className="flex-1 w-full">
+                {profitabilityData.length === 0 ? (
+                  <div className="w-full h-full flex items-center justify-center text-slate-400">データがありません</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={profitabilityData} margin={{ top: 0, right: 0, left: -20, bottom: 40 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 'bold' }} angle={-45} textAnchor="end" />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(val) => `¥${(val/10000).toFixed(0)}万`} />
+                      <Tooltip content={<CustomProfitTooltip />} cursor={{fill: '#f8fafc'}} />
+                      <Bar dataKey="利益" radius={[6, 6, 0, 0]} maxBarSize={50}>
+                        {profitabilityData.map((entry, idx) => (
+                          <Cell key={`cell-${idx}`} fill={entry.利益 >= 0 ? '#10b981' : '#ef4444'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </section>
+
+            {/* 圃場別採算性 */}
+            <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex flex-col h-[450px]">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2.5 bg-teal-100 rounded-xl text-teal-700">
+                  <MapPin className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                    圃場別 採算性
+                    <HelpTooltip content="圃場（畑）ごとの収益性を確認できます。環境や土壌の違いによる利益の差を分析するのに役立ちます。" />
+                  </h3>
+                  <p className="text-sm text-slate-500">収益性の高い畑を特定</p>
+                </div>
+              </div>
+              <div className="flex-1 w-full">
+                {fieldData.length === 0 ? (
+                  <div className="w-full h-full flex items-center justify-center text-slate-400">データがありません</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={fieldData} margin={{ top: 0, right: 0, left: -20, bottom: 40 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 'bold' }} angle={-45} textAnchor="end" />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(val) => `¥${(val/10000).toFixed(0)}万`} />
+                      <Tooltip content={<CustomProfitTooltip />} cursor={{fill: '#f8fafc'}} />
+                      <Bar dataKey="利益" radius={[6, 6, 0, 0]} maxBarSize={50}>
+                        {fieldData.map((entry, idx) => (
+                          <Cell key={`cell-${idx}`} fill={entry.利益 >= 0 ? '#14b8a6' : '#ef4444'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </section>
+
+            {/* 個人別生産性 */}
+            <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex flex-col h-[450px] lg:col-span-2">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2.5 bg-purple-100 rounded-xl text-purple-700">
+                  <UserCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800">スタッフ別 生産性（利益貢献度）</h3>
+                  <p className="text-sm text-slate-500">1時間あたりに生み出している利益額（時給換算）</p>
+                </div>
+              </div>
+              <div className="flex-1 w-full">
+                {workerProductivityData.length === 0 ? (
+                  <div className="w-full h-full flex items-center justify-center text-slate-400">データがありません</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={workerProductivityData} margin={{ top: 0, right: 0, left: -20, bottom: 40 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 'bold' }} angle={-45} textAnchor="end" />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(val) => `¥${val.toLocaleString()}`} />
+                      <Tooltip 
+                        formatter={(val: any, name: any) => [`¥${val.toLocaleString()}/h`, String(name || '')]}
+                        cursor={{fill: '#f8fafc'}}
+                        contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }}
+                      />
+                      <Bar dataKey="生産性" radius={[6, 6, 0, 0]} maxBarSize={60}>
+                        {workerProductivityData.map((entry, idx) => (
+                          <Cell key={`cell-${idx}`} fill={entry.生産性 >= 0 ? '#8b5cf6' : '#ef4444'} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </section>
+
+          </div>
+        </>
+      )}
     </div>
   );
 }
