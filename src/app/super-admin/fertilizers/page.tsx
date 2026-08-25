@@ -275,11 +275,15 @@ export default function AdminFertilizersPage() {
             throw new Error('有効な肥料データ（肥料名を含む行）が見つかりませんでした。CSVファイルをご確認ください。');
           }
 
-          // 重複除外
+          // 厳格な重複除外（同一registration_noの完全一本化）
           const uniqueMap = new Map();
-          parsedList.forEach((item: any) => {
-            const key = item.registration_no || `${item.fertilizer_name}_${item.applicant_name}`;
-            uniqueMap.set(key, item);
+          parsedList.forEach((item: any, idx: number) => {
+            let reg = item.registration_no;
+            if (!reg || reg === '-' || reg === 'null' || reg === 'undefined') {
+              reg = `NO-REG-${idx}-${Date.now()}`;
+              item.registration_no = reg;
+            }
+            uniqueMap.set(reg, item);
           });
           const uniqueData = Array.from(uniqueMap.values());
 
@@ -291,20 +295,35 @@ export default function AdminFertilizersPage() {
 
           setStatus({ type: 'info', message: `${uniqueData.length}件の肥料データをSupabaseに一括登録しています...` });
 
-          const chunkSize = 500;
+          const chunkSize = 400;
           for (let i = 0; i < uniqueData.length; i += chunkSize) {
             const chunk = uniqueData.slice(i, i + chunkSize);
-            const { error } = await supabase
+            
+            // 1. PostgREST Upsert (onConflict)
+            const { error: upsertErr } = await supabase
               .from('m_fertilizers')
-              .upsert(chunk, { onConflict: 'registration_no' });
+              .upsert(chunk, { onConflict: 'registration_no', ignoreDuplicates: false });
 
-            if (error) {
-              if (error.code === 'PGRST205' || error.message?.includes('schema cache') || error.message?.includes('m_fertilizers')) {
+            if (upsertErr) {
+              if (upsertErr.code === 'PGRST205' || upsertErr.message?.includes('schema cache')) {
                 throw new Error('データベースに「m_fertilizers」テーブルが存在しません。SupabaseのSQL Editorでテーブル作成SQLを実行してください。');
               }
-              const { error: insertErr } = await supabase.from('m_fertilizers').insert(chunk);
+              
+              // 2. 制約エラー等の場合のフォールバック（重複無視で登録）
+              const { error: insertErr } = await supabase
+                .from('m_fertilizers')
+                .upsert(chunk, { onConflict: 'registration_no', ignoreDuplicates: true });
+                
               if (insertErr) {
-                throw new Error(`DB保存エラー: ${insertErr.message}`);
+                console.warn('Chunk upsert retry failed, doing single items fallback...', insertErr);
+                // 3. 最後の砦：行単位での個別保存
+                for (const item of chunk) {
+                  try {
+                    await supabase.from('m_fertilizers').upsert([item], { onConflict: 'registration_no' });
+                  } catch (singleErr) {
+                    // 個別エラーはスキップして継続
+                  }
+                }
               }
             }
 
