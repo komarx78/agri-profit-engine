@@ -611,27 +611,28 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       const tenantId = await getCurrentTenantId();
       if (!tenantId) throw new Error('テナント認証情報が見つかりません');
 
-      let payload: any = {
+      // 基本カラムで安全にInsert
+      const payload: any = {
         user_id: tenantId,
         name: item.fertilizer_name,
         category: '肥料費',
         material_type: 'fertilizer',
         unit: '袋',
-        n_percent: item.n_percent || 0,
-        p_percent: item.p_percent || 0,
-        k_percent: item.k_percent || 0,
-        fertilizer_type: item.fertilizer_type || '化成肥料',
-        fertilizer_usage: '共通',
-        bag_weight_kg: 20,
         default_price: 0,
-        memo: `FAMIC公的登録: ${item.registration_no || ''} (${item.fertilizer_type || ''})`
+        memo: `FAMIC公的登録: ${item.registration_no || ''} (${item.fertilizer_type || ''}) | N:${item.n_percent}% P:${item.p_percent}% K:${item.k_percent}%`
       };
+
+      // 拡張カラム（存在する場合に保存）
+      if (item.n_percent !== undefined) payload.n_percent = item.n_percent;
+      if (item.p_percent !== undefined) payload.p_percent = item.p_percent;
+      if (item.k_percent !== undefined) payload.k_percent = item.k_percent;
+      if (item.fertilizer_type) payload.fertilizer_type = item.fertilizer_type;
 
       let { data, error } = await supabase.from('materials').insert([payload]).select();
 
-      // スキーマ未定義カラムがあった場合の自動フォールバック
-      if (error && (error.code === 'PGRST204' || error.message?.includes('schema cache') || error.message?.includes('column'))) {
-        const basicPayload = {
+      // 万一拡張カラムでエラーが出た場合のセーフティフォールバック
+      if (error) {
+        const safePayload = {
           user_id: tenantId,
           name: item.fertilizer_name,
           category: '肥料費',
@@ -640,7 +641,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
           default_price: 0,
           memo: `FAMIC公的登録: ${item.registration_no || ''} | N:${item.n_percent}% P:${item.p_percent}% K:${item.k_percent}%`
         };
-        const fallbackRes = await supabase.from('materials').insert([basicPayload]).select();
+        const fallbackRes = await supabase.from('materials').insert([safePayload]).select();
         data = fallbackRes.data;
         error = fallbackRes.error;
       }
@@ -648,7 +649,6 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       if (error) throw error;
 
       if (data && data[0]) {
-        // メモリ上のデータにN-P-Kを補完
         const savedItem = {
           ...data[0],
           n_percent: item.n_percent || 0,
@@ -681,27 +681,25 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       const tenantId = await getCurrentTenantId();
       if (!tenantId) throw new Error('テナント認証情報が見つかりません');
 
-      let payload: any = {
+      const payload: any = {
         user_id: tenantId,
         name: newFertName.trim(),
         category: '肥料費',
         material_type: 'fertilizer',
         unit: '袋',
-        n_percent: parseFloat(newFertN) || 0,
-        p_percent: parseFloat(newFertP) || 0,
-        k_percent: parseFloat(newFertK) || 0,
         default_price: parseFloat(newFertPrice) || 0,
-        bag_weight_kg: parseFloat(newFertWeight) || 20,
-        fertilizer_type: '化成肥料',
-        fertilizer_usage: '共通',
-        memo: '施肥入力画面より手動登録'
+        memo: `施肥画面手動登録 | N:${newFertN}% P:${newFertP}% K:${newFertK}%`
       };
+
+      if (newFertN) payload.n_percent = parseFloat(newFertN) || 0;
+      if (newFertP) payload.p_percent = parseFloat(newFertP) || 0;
+      if (newFertK) payload.k_percent = parseFloat(newFertK) || 0;
 
       let { data, error } = await supabase.from('materials').insert([payload]).select();
 
-      // スキーマ未定義カラムがあった場合の自動フォールバック
-      if (error && (error.code === 'PGRST204' || error.message?.includes('schema cache') || error.message?.includes('column'))) {
-        const basicPayload = {
+      // 万一拡張カラムでエラーが出た場合のセーフティフォールバック
+      if (error) {
+        const safePayload = {
           user_id: tenantId,
           name: newFertName.trim(),
           category: '肥料費',
@@ -710,7 +708,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
           default_price: parseFloat(newFertPrice) || 0,
           memo: `施肥画面手動登録 | N:${newFertN}% P:${newFertP}% K:${newFertK}%`
         };
-        const fallbackRes = await supabase.from('materials').insert([basicPayload]).select();
+        const fallbackRes = await supabase.from('materials').insert([safePayload]).select();
         data = fallbackRes.data;
         error = fallbackRes.error;
       }
