@@ -69,6 +69,7 @@ export default function SettingsPage() {
       }
 
       setSaveSuccess(true);
+      alert('自社情報を正常に保存しました！');
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: any) {
       console.error(err);
