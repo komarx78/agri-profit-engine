@@ -197,12 +197,13 @@ export default function PaidLeavePage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {workers.map((emp: any) => {
+                      const isDispatch = emp.type === '派遣' || emp.employment_type === '派遣';
                       const carryover = emp.paid_leave_carryover || 0;
                       const balance = emp.paid_leave_balance || 0;
                       const total = Number(carryover) + Number(balance);
                       
                       return (
-                        <tr key={emp.id} className="hover:bg-slate-50">
+                        <tr key={emp.id} className={`hover:bg-slate-50 ${isDispatch ? 'bg-slate-50/50 opacity-70' : ''}`}>
                           <td className="p-4">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 bg-slate-100 text-slate-500 rounded-full flex items-center justify-center">
@@ -212,12 +213,22 @@ export default function PaidLeavePage() {
                             </div>
                           </td>
                           <td className="p-4 text-sm font-bold text-slate-600">
-                            {emp.employment_type || '未設定'}
+                            {isDispatch ? (
+                              <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-bold">派遣 (対象外)</span>
+                            ) : (
+                              emp.type || emp.employment_type || '未設定'
+                            )}
                           </td>
-                          <td className="p-4 text-sm font-bold text-slate-600">{emp.join_date || '未設定'}</td>
-                          <td className="p-4 text-center font-bold text-slate-500">{carryover} 日</td>
-                          <td className="p-4 text-center font-bold text-emerald-600">{balance} 日</td>
-                          <td className="p-4 text-center font-black text-amber-600 text-lg">{total} 日</td>
+                          <td className="p-4 text-sm font-bold text-slate-600">{emp.join_date || '-'}</td>
+                          <td className="p-4 text-center font-bold text-slate-500">
+                            {isDispatch ? '-' : `${carryover} 日`}
+                          </td>
+                          <td className="p-4 text-center font-bold text-emerald-600">
+                            {isDispatch ? '-' : `${balance} 日`}
+                          </td>
+                          <td className="p-4 text-center font-black text-amber-600 text-lg">
+                            {isDispatch ? '-' : `${total} 日`}
+                          </td>
                           <td className="p-4 text-center">
                             <button 
                               onClick={() => { setEditingWorker(emp); setIsEditModalOpen(true); }}
@@ -250,31 +261,21 @@ export default function PaidLeavePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {leaveRequests.length === 0 && (
+                    {leaveRequests.length === 0 ? (
                       <tr><td colSpan={7} className="p-8 text-center text-slate-400 font-bold">申請履歴はありません</td></tr>
-                    )}
-                    {leaveRequests.map((req: any) => (
-                      <tr key={req.id} className="hover:bg-slate-50 group">
-                        <td className="p-4 text-sm font-bold text-slate-500">
-                          {new Date(req.created_at).toLocaleDateString('ja-JP')}
-                        </td>
-                        <td className="p-4 font-bold text-slate-800">{req.workers?.name || '不明'}</td>
-                        <td className="p-4">
-                          <span className={`px-2 py-1 rounded-md text-xs font-bold ${
-                            req.type === '有給休暇' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                          }`}>
-                            {req.type}
-                          </span>
-                        </td>
-                        <td className="p-4 font-bold text-blue-600 text-sm flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          {req.start_date} {req.end_date !== req.start_date ? `〜 ${req.end_date}` : ''}
-                        </td>
+                    ) : leaveRequests.map((req: any) => (
+                      <tr key={req.id} className="hover:bg-slate-50">
+                        <td className="p-4 text-sm font-bold text-slate-500">{req.created_at ? req.created_at.substring(0,10) : '-'}</td>
+                        <td className="p-4 font-bold text-slate-800">{req.workers?.name || '-'}</td>
+                        <td className="p-4"><span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-xs font-bold">{req.type}</span></td>
+                        <td className="p-4 font-bold text-slate-700">{req.start_date} 〜 {req.end_date}</td>
                         <td className="p-4 text-sm text-slate-600">{req.reason || '-'}</td>
                         <td className="p-4 text-center">
-                          {req.status === '申請中' && <span className="text-amber-500 font-bold text-sm">申請中</span>}
-                          {req.status === '承認' && <span className="text-emerald-500 font-bold text-sm">承認済</span>}
-                          {req.status === '却下' && <span className="text-rose-500 font-bold text-sm">却下</span>}
+                          <span className={`px-2 py-1 rounded-full text-xs font-black ${
+                            req.status === '承認' ? 'bg-emerald-100 text-emerald-700' :
+                            req.status === '却下' ? 'bg-rose-100 text-rose-700' :
+                            'bg-amber-100 text-amber-700'
+                          }`}>{req.status}</span>
                         </td>
                         <td className="p-4 text-center">
                           {req.status === '申請中' ? (
@@ -309,7 +310,7 @@ export default function PaidLeavePage() {
                 <label className="block text-sm font-bold text-slate-700 mb-1">対象従業員</label>
                 <select required value={requestForm.worker_id} onChange={e => setRequestForm({...requestForm, worker_id: e.target.value})} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold">
                   <option value="">選択してください</option>
-                  {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  {workers.filter(w => w.type !== '派遣' && w.employment_type !== '派遣').map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                 </select>
               </div>
               <div>
@@ -357,6 +358,7 @@ export default function PaidLeavePage() {
                   <select value={editingWorker.employment_type || ''} onChange={e => setEditingWorker({...editingWorker, employment_type: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg font-bold">
                     <option value="正社員">正社員</option>
                     <option value="パート">パート</option>
+                    <option value="派遣">派遣 (有給対象外)</option>
                   </select>
                 </div>
                 <div>

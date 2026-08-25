@@ -421,6 +421,8 @@ export default function HrEmployeesPage() {
                     <td className="p-4">
                       {w.type === '正社員' ? (
                         <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-md text-xs font-bold">正社員</span>
+                      ) : w.type === '派遣' ? (
+                        <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded-md text-xs font-bold">派遣 (有給対象外)</span>
                       ) : (
                         <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-md text-xs font-bold">パート ({w.weekly_days}日/週)</span>
                       )}
@@ -556,35 +558,48 @@ export default function HrEmployeesPage() {
                       >
                         <option value="正社員">正社員 (フルタイム)</option>
                         <option value="パート">パート・アルバイト</option>
+                        <option value="派遣">派遣 (有給対象外)</option>
                       </select>
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">入社日 (有給起算日)</label>
-                      <input 
-                        type="date"
-                        value={formData.join_date}
-                        onChange={e => setFormData({...formData, join_date: e.target.value})}
-                        className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold text-slate-700"
-                      />
-                    </div>
 
-                    {formData.type === 'パート' && (
-                      <div className="bg-white p-4 rounded-lg border border-slate-200 flex items-center justify-between">
-                        <div>
-                          <div className="font-bold text-slate-700 text-sm">週の所定労働日数</div>
-                          <div className="text-xs text-slate-500">※有給比例付与計算用</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <input 
-                            type="number" 
-                            min={1} max={6}
-                            value={formData.weekly_days}
-                            onChange={e => setFormData({...formData, weekly_days: Number(e.target.value)})}
-                            className="w-20 p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 font-bold text-center text-lg text-blue-600"
-                          />
-                          <span className="font-bold text-slate-500">日</span>
-                        </div>
+                    {formData.type === '派遣' ? (
+                      <div className="bg-purple-50 p-3.5 rounded-xl border border-purple-200 text-xs font-bold text-purple-800 space-y-1">
+                        <p className="font-black flex items-center gap-1">ℹ️ 派遣スタッフの有給について</p>
+                        <p className="text-[11px] text-purple-700 leading-relaxed">
+                          派遣スタッフは自社での有給付与・管理の対象外となります。現場ポータルでの有給残日数表示や有給申請機能も自動的に非表示となります。
+                        </p>
                       </div>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">入社日 (有給起算日)</label>
+                          <input 
+                            type="date"
+                            value={formData.join_date}
+                            onChange={e => setFormData({...formData, join_date: e.target.value})}
+                            className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold text-slate-700"
+                          />
+                        </div>
+
+                        {formData.type === 'パート' && (
+                          <div className="bg-white p-4 rounded-lg border border-slate-200 flex items-center justify-between">
+                            <div>
+                              <div className="font-bold text-slate-700 text-sm">週の所定労働日数</div>
+                              <div className="text-xs text-slate-500">※有給比例付与計算用</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input 
+                                type="number" 
+                                min={1} max={6}
+                                value={formData.weekly_days}
+                                onChange={e => setFormData({...formData, weekly_days: Number(e.target.value)})}
+                                className="w-20 p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 font-bold text-center text-lg text-blue-600"
+                              />
+                              <span className="font-bold text-slate-500">日</span>
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </section>

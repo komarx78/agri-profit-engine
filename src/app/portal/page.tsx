@@ -1160,67 +1160,69 @@ function PortalContent() {
                 {t('goToWorkPortal', language)} <ArrowRight className="w-4 h-4" />
               </button>
 
-              {/* 🏖️ 有給休暇・残日数 ＆ 申請セクション */}
-              <div className="pt-4 border-t border-slate-100 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-black text-slate-700">
-                    <Coffee className="w-4 h-4 text-amber-500" />
-                    <span>{t('leave_title', language)}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowLeaveModal(true)}
-                    className="text-[11px] font-black bg-amber-500 hover:bg-amber-600 active:scale-95 text-white px-3 py-1 rounded-lg flex items-center gap-1 shadow-xs transition-all"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>{t('leave_applyBtn', language)}</span>
-                  </button>
-                </div>
-
-                {leaveBalance ? (
-                  <div className="bg-amber-50/60 border border-amber-200/70 p-3.5 rounded-2xl">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-[11px] font-bold text-amber-800">{t('leave_availableDays', language)}</span>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl font-black text-amber-600">{leaveBalance.total}</span>
-                        <span className="text-xs font-bold text-amber-800">{t('daysUnit', language)}</span>
-                      </div>
+              {/* 🏖️ 有給休暇・残日数 ＆ 申請セクション (派遣スタッフには非表示) */}
+              {currentUser?.type !== '派遣' && workerProfile?.type !== '派遣' && (
+                <div className="pt-4 border-t border-slate-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-black text-slate-700">
+                      <Coffee className="w-4 h-4 text-amber-500" />
+                      <span>{t('leave_title', language)}</span>
                     </div>
-                    <div className="flex items-center justify-between text-[10px] text-amber-700 font-medium mt-1 pt-1.5 border-t border-amber-200/50">
-                      <span>{t('leave_carriedOver', language)}<strong>{leaveBalance.carryover}{t('daysUnit', language)}</strong></span>
-                      <span>{t('leave_grantedThisYear', language)}<strong>{leaveBalance.balance}{t('daysUnit', language)}</strong></span>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowLeaveModal(true)}
+                      className="text-[11px] font-black bg-amber-500 hover:bg-amber-600 active:scale-95 text-white px-3 py-1 rounded-lg flex items-center gap-1 shadow-xs transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>{t('leave_applyBtn', language)}</span>
+                    </button>
                   </div>
-                ) : (
-                  <div className="bg-slate-50 p-3 rounded-xl text-center text-xs font-bold text-slate-400">
-                    有給データ取得中...
-                  </div>
-                )}
 
-                {/* 直近の休暇申請状況 */}
-                {leaveRequests.length > 0 && (
-                  <div className="space-y-1.5 pt-1">
-                    <span className="text-[10px] font-black text-slate-400 block">最近の申請ステータス:</span>
-                    {leaveRequests.slice(0, 2).map((req, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-xs bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-100">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-700">{req.start_date}</span>
-                          <span className="text-[10px] text-slate-500">({req.type})</span>
+                  {leaveBalance ? (
+                    <div className="bg-amber-50/60 border border-amber-200/70 p-3.5 rounded-2xl">
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-[11px] font-bold text-amber-800">{t('leave_availableDays', language)}</span>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-2xl font-black text-amber-600">{leaveBalance.total}</span>
+                          <span className="text-xs font-bold text-amber-800">{t('daysUnit', language)}</span>
                         </div>
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
-                          req.status === '承認' 
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                            : req.status === '却下'
-                            ? 'bg-rose-50 text-rose-700 border-rose-200'
-                            : 'bg-amber-50 text-amber-700 border-amber-200'
-                        }`}>
-                          {req.status}
-                        </span>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                      <div className="flex items-center justify-between text-[10px] text-amber-700 font-medium mt-1 pt-1.5 border-t border-amber-200/50">
+                        <span>{t('leave_carriedOver', language)}<strong>{leaveBalance.carryover}{t('daysUnit', language)}</strong></span>
+                        <span>{t('leave_grantedThisYear', language)}<strong>{leaveBalance.balance}{t('daysUnit', language)}</strong></span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50 p-3 rounded-xl text-center text-xs font-bold text-slate-400">
+                      有給データ取得中...
+                    </div>
+                  )}
+
+                  {/* 直近の休暇申請状況 */}
+                  {leaveRequests.length > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-[10px] font-black text-slate-400 block">最近の申請ステータス:</span>
+                      {leaveRequests.slice(0, 2).map((req, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-xs bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-100">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-slate-700">{req.start_date}</span>
+                            <span className="text-[10px] text-slate-500">({req.type})</span>
+                          </div>
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                            req.status === '承認' 
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                              : req.status === '却下'
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}>
+                            {req.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* マニュアル動画 */}
