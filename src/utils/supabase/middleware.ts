@@ -31,27 +31,26 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // ログインしていない場合で、保護されたルートにアクセスした場合
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/farm') &&
-    !request.nextUrl.pathname.startsWith('/sales') &&
-    !request.nextUrl.pathname.startsWith('/work') &&
-    !request.nextUrl.pathname.startsWith('/portal') &&
-    !request.nextUrl.pathname.startsWith('/admin') &&
-    !request.nextUrl.pathname.startsWith('/pesticides') &&
-    !request.nextUrl.pathname.startsWith('/sales-management') &&
-    !request.nextUrl.pathname.startsWith('/accounting-management') &&
-    !request.nextUrl.pathname.startsWith('/hr') &&
-    !request.nextUrl.pathname.startsWith('/manuals') &&
-    !request.nextUrl.pathname.startsWith('/b2b-order') &&
-    !request.nextUrl.pathname.startsWith('/super-admin') &&
-    request.nextUrl.pathname !== '/'
-  ) {
-    // '/login' にリダイレクト
+  const pathname = request.nextUrl.pathname
+
+  // 公開ルート（認証不要）の判定
+  const isPublicRoute =
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/portal') ||
+    pathname.startsWith('/share') ||
+    pathname.startsWith('/api')
+
+  // 1. 未ログイン状態で保護ルートにアクセスした場合は /login にリダイレクト
+  if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
+    return NextResponse.redirect(url)
+  }
+
+  // 2. すでにログインしている状態で /login にアクセスした場合はダッシュボード (/) にリダイレクト
+  if (user && pathname.startsWith('/login')) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/'
     return NextResponse.redirect(url)
   }
 
