@@ -29,8 +29,8 @@ export default function LoginPage() {
       
       if (error) throw error;
       
-      // ログイン成功時は管理ダッシュボード（ルート画面）へ
-      router.push('/');
+      // ログイン成功時は管理者画面（作付け統合司令塔）へ直接遷移
+      router.push('/admin/cultivations');
       router.refresh();
     } catch (err: any) {
       console.error(err);

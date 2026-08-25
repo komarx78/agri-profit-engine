@@ -16,11 +16,6 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import VideoPlayerWithSubtitles, { Narration } from '@/components/VideoPlayerWithSubtitles';
-import CultivationsHub from '@/components/CultivationsHub';
-import HrManagementHub from '@/components/HrManagementHub';
-import CloudPortalHub from '@/components/CloudPortalHub';
-import ManagementDashboardHub from '@/components/ManagementDashboardHub';
-import AdminHub from '@/components/AdminHub';
 import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
 import { getPortalTasks } from '@/app/actions/farm';
@@ -59,22 +54,6 @@ export default function PortalPage() {
 function PortalContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const rawTab = searchParams.get('tab');
-  const initialTab = (rawTab === 'home' ? 'home' : 'admin');
-
-  // 統合2大タブステート: admin(管理者ホーム) | home(現場ホーム)
-  const [activePortalTab, setActivePortalTab] = useState<'admin' | 'home' | 'cloud' | 'dashboard' | 'cultivations' | 'hr'>(initialTab);
-
-  useEffect(() => {
-    const tabParam = searchParams.get('tab') as any;
-    if (tabParam) {
-      if (tabParam === 'home') {
-        setActivePortalTab('home');
-      } else {
-        setActivePortalTab('admin');
-      }
-    }
-  }, [searchParams]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);

@@ -56,10 +56,10 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // 2. すでにログインしている状態で /login にアクセスした場合はダッシュボード (/) にリダイレクト
+  // 2. すでにログインしている状態で /login にアクセスした場合は管理者画面 (/admin/cultivations) にリダイレクト
   if (user && pathname.startsWith('/login')) {
     const url = request.nextUrl.clone()
-    url.pathname = '/'
+    url.pathname = '/admin/cultivations'
     return NextResponse.redirect(url)
   }
 
