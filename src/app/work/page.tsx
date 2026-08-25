@@ -107,6 +107,7 @@ export default function WorkEntryPage() {
   const [selectedSalesChannel, setSelectedSalesChannel] = useState('');
   const [selectedSalesCrop, setSelectedSalesCrop] = useState('');
   const [salesQuantity, setSalesQuantity] = useState('');
+  const [salesUnit, setSalesUnit] = useState('kg');
   const [isSubmittingSales, setIsSubmittingSales] = useState(false);
   const [tasks, setTasks] = useState<any[]>([]);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<any | null>(null);
@@ -619,10 +620,12 @@ export default function WorkEntryPage() {
       
       const { error } = await supabase.from('sales_logs').insert([
         {
+          user_id: workerProfile?.user_id || (currentUser as any)?.user_id || null,
           crop_id: cropId || null,
           channel_id: channelId || null,
           sales_date: getJSTDate(),
           quantity: parseFloat(salesQuantity) || 0,
+          unit: salesUnit,
           status: 'completed',
           worker_id: currentUser?.id || null
         }
@@ -633,6 +636,7 @@ export default function WorkEntryPage() {
       setSelectedSalesCrop('');
       setSelectedSalesChannel('');
       setSalesQuantity('');
+      setSalesUnit('kg');
     } catch (err: any) {
       alert("エラー: " + err.message);
     } finally {
@@ -1514,7 +1518,7 @@ export default function WorkEntryPage() {
                 </div>
                 
                 <div>
-                  <label className="block text-xs font-bold text-emerald-300 mb-1.5">数量 (kg)</label>
+                  <label className="block text-xs font-bold text-emerald-300 mb-1.5">数量・単位</label>
                   <div className="flex gap-2">
                     <input
                       type="number"
@@ -1525,9 +1529,23 @@ export default function WorkEntryPage() {
                       className="w-full bg-emerald-950 text-white text-2xl font-black px-4 py-3 border border-emerald-800 rounded-xl focus:outline-none focus:border-emerald-400 text-right"
                       required
                     />
-                    <div className="w-20 bg-emerald-900/60 flex items-center justify-center rounded-xl font-bold text-emerald-300 border border-emerald-800">
-                      kg
-                    </div>
+                    <select
+                      value={salesUnit}
+                      onChange={(e) => setSalesUnit(e.target.value)}
+                      className="w-24 sm:w-28 bg-emerald-900 text-emerald-200 font-bold px-2 py-3 rounded-xl border border-emerald-700 focus:outline-none focus:border-emerald-400 text-center cursor-pointer text-sm"
+                    >
+                      <option value="kg">kg</option>
+                      <option value="袋">袋</option>
+                      <option value="箱">箱</option>
+                      <option value="パック">パック</option>
+                      <option value="本">本</option>
+                      <option value="個">個</option>
+                      <option value="束">束</option>
+                      <option value="ケース">ケース</option>
+                      <option value="トレー">トレー</option>
+                      <option value="コンテナ">コンテナ</option>
+                      <option value="g">g</option>
+                    </select>
                   </div>
                 </div>
 
