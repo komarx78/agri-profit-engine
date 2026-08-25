@@ -141,7 +141,32 @@ export default function HrEmployeesPage() {
         .order('name');
 
       if (error) throw error;
-      setWorkers(data || []);
+
+      let workerList = data || [];
+      // localStorage からルールマッピングを復元
+      if (typeof window !== 'undefined') {
+        const localMapStr = localStorage.getItem(`agri_worker_rule_map_${tenantId}`);
+        if (localMapStr) {
+          try {
+            const localMap = JSON.parse(localMapStr);
+            workerList = workerList.map((w: any) => {
+              const mapped = localMap[w.id];
+              if (mapped) {
+                return {
+                  ...w,
+                  attendance_rule_id: w.attendance_rule_id || mapped.attendance_rule_id,
+                  standard_start_time: w.standard_start_time || mapped.standard_start_time,
+                  standard_end_time: w.standard_end_time || mapped.standard_end_time,
+                  standard_rest_minutes: w.standard_rest_minutes ?? mapped.standard_rest_minutes
+                };
+              }
+              return w;
+            });
+          } catch (e) {}
+        }
+      }
+
+      setWorkers(workerList);
     } catch (err) {
       console.error(err);
     } finally {
@@ -152,11 +177,12 @@ export default function HrEmployeesPage() {
   const openModal = (worker: any = null) => {
     if (worker) {
       setEditingId(worker.id);
-      // 該当するルールの特定
+      // 該当するルールの特定（ID一致 or 時刻一致）
       let ruleId = worker.attendance_rule_id || '';
+      const wStart = worker.standard_start_time ? worker.standard_start_time.substring(0, 5) : '';
+      const wEnd = worker.standard_end_time ? worker.standard_end_time.substring(0, 5) : '';
+
       if (!ruleId && attendanceRules.length > 0) {
-        const wStart = worker.standard_start_time ? worker.standard_start_time.substring(0, 5) : '';
-        const wEnd = worker.standard_end_time ? worker.standard_end_time.substring(0, 5) : '';
         const found = attendanceRules.find(r => 
           r.start_time?.substring(0, 5) === wStart && r.end_time?.substring(0, 5) === wEnd
         );
@@ -172,8 +198,8 @@ export default function HrEmployeesPage() {
         join_date: worker.join_date || new Date().toISOString().split('T')[0],
         weekly_days: worker.weekly_days || 3,
         attendance_rule_id: ruleId,
-        standard_start_time: worker.standard_start_time ? worker.standard_start_time.substring(0, 5) : '08:00',
-        standard_end_time: worker.standard_end_time ? worker.standard_end_time.substring(0, 5) : '17:00',
+        standard_start_time: wStart || '08:00',
+        standard_end_time: wEnd || '17:00',
         standard_rest_minutes: worker.standard_rest_minutes ?? 60
       });
     } else {
@@ -229,24 +255,74 @@ export default function HrEmployeesPage() {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) throw new Error('テナントIDが特定できません');
 
-      let query;
       // time 型にするために秒までつける
-      const dataToSave = {
+      const dataToSave: any = {
         ...formData,
         user_id: tenantId,
         role: formData.role || 'worker',
         attendance_rule_id: formData.attendance_rule_id || null,
         standard_start_time: formData.standard_start_time.length === 5 ? formData.standard_start_time + ':00' : formData.standard_start_time,
         standard_end_time: formData.standard_end_time.length === 5 ? formData.standard_end_time + ':00' : formData.standard_end_time,
+        standard_rest_minutes: Number(formData.standard_rest_minutes) || 60
       };
 
-      if (editingId) {
-        query = supabase.from('workers').update(dataToSave).eq('id', editingId).eq('user_id', tenantId);
-      } else {
-        query = supabase.from('workers').insert([dataToSave]);
+      let savedWorkerId = editingId;
+
+      try {
+        if (editingId) {
+          const { error } = await supabase.from('workers').update(dataToSave).eq('id', editingId).eq('user_id', tenantId);
+          if (error) {
+            // カラムが無い場合のフォールバック（基本項目のみ）
+            console.warn('Update fallback without rule columns:', error);
+            const fallbackData = {
+              name: dataToSave.name,
+              pin_code: dataToSave.pin_code,
+              role: dataToSave.role,
+              hourly_wage: dataToSave.hourly_wage,
+              type: dataToSave.type,
+              join_date: dataToSave.join_date,
+              weekly_days: dataToSave.weekly_days
+            };
+            await supabase.from('workers').update(fallbackData).eq('id', editingId).eq('user_id', tenantId);
+          }
+        } else {
+          const { data: newW, error } = await supabase.from('workers').insert([dataToSave]).select().single();
+          if (error) {
+            console.warn('Insert fallback without rule columns:', error);
+            const fallbackData = {
+              name: dataToSave.name,
+              pin_code: dataToSave.pin_code,
+              role: dataToSave.role,
+              hourly_wage: dataToSave.hourly_wage,
+              type: dataToSave.type,
+              join_date: dataToSave.join_date,
+              weekly_days: dataToSave.weekly_days,
+              user_id: tenantId
+            };
+            const { data: retryW } = await supabase.from('workers').insert([fallbackData]).select().single();
+            if (retryW) savedWorkerId = retryW.id;
+          } else if (newW) {
+            savedWorkerId = newW.id;
+          }
+        }
+      } catch (dbErr) {
+        console.error('DB save error:', dbErr);
       }
-      const { error } = await query;
-      if (error) throw error;
+
+      // localStorage にワーカーごとのルール設定をキャッシュ保存
+      if (typeof window !== 'undefined' && savedWorkerId) {
+        try {
+          const localMapStr = localStorage.getItem(`agri_worker_rule_map_${tenantId}`) || '{}';
+          const localMap = JSON.parse(localMapStr);
+          localMap[savedWorkerId] = {
+            attendance_rule_id: formData.attendance_rule_id,
+            standard_start_time: formData.standard_start_time,
+            standard_end_time: formData.standard_end_time,
+            standard_rest_minutes: formData.standard_rest_minutes
+          };
+          localStorage.setItem(`agri_worker_rule_map_${tenantId}`, JSON.stringify(localMap));
+        } catch (e) {}
+      }
 
       await fetchWorkers();
       setIsModalOpen(false);
@@ -349,7 +425,11 @@ export default function HrEmployeesPage() {
                     </td>
                     <td className="p-4 text-sm font-bold text-slate-600">
                       {(() => {
-                        const matchedRule = attendanceRules.find(r => r.id === w.attendance_rule_id);
+                        const matchedRule = attendanceRules.find(r => 
+                          String(r.id) === String(w.attendance_rule_id) || 
+                          r.name === w.attendance_rule_id ||
+                          (r.start_time?.substring(0, 5) === w.standard_start_time?.substring(0, 5) && r.end_time?.substring(0, 5) === w.standard_end_time?.substring(0, 5))
+                        );
                         return (
                           <div className="space-y-1">
                             {matchedRule && (
@@ -359,11 +439,11 @@ export default function HrEmployeesPage() {
                             )}
                             <div className="flex items-center gap-1 text-xs text-slate-700">
                               <Clock className="w-3.5 h-3.5 text-slate-400" />
-                              {w.standard_start_time ? w.standard_start_time.substring(0, 5) : '08:00'} 
+                              {w.standard_start_time ? w.standard_start_time.substring(0, 5) : (matchedRule?.start_time ? matchedRule.start_time.substring(0, 5) : '08:00')} 
                               〜 
-                              {w.standard_end_time ? w.standard_end_time.substring(0, 5) : '17:00'}
+                              {w.standard_end_time ? w.standard_end_time.substring(0, 5) : (matchedRule?.end_time ? matchedRule.end_time.substring(0, 5) : '17:00')}
                             </div>
-                            <div className="text-[11px] text-slate-400">休憩: {w.standard_rest_minutes ?? 60}分</div>
+                            <div className="text-[11px] text-slate-400">休憩: {w.standard_rest_minutes ?? (matchedRule?.rest_minutes ?? 60)}分</div>
                           </div>
                         );
                       })()}

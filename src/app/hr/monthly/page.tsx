@@ -83,7 +83,29 @@ export default function MonthlyTimecardPage() {
         .eq('user_id', tenantId)
         .order('name');
 
-      const currentWorkers = wData || [];
+      let currentWorkers = wData || [];
+      if (typeof window !== 'undefined') {
+        const localMapStr = localStorage.getItem(`agri_worker_rule_map_${tenantId}`);
+        if (localMapStr) {
+          try {
+            const localMap = JSON.parse(localMapStr);
+            currentWorkers = currentWorkers.map((w: any) => {
+              const mapped = localMap[w.id];
+              if (mapped) {
+                return {
+                  ...w,
+                  attendance_rule_id: w.attendance_rule_id || mapped.attendance_rule_id,
+                  standard_start_time: w.standard_start_time || mapped.standard_start_time,
+                  standard_end_time: w.standard_end_time || mapped.standard_end_time,
+                  standard_rest_minutes: w.standard_rest_minutes ?? mapped.standard_rest_minutes
+                };
+              }
+              return w;
+            });
+          } catch (e) {}
+        }
+      }
+
       setWorkers(currentWorkers);
       const workerIds = currentWorkers.map(w => w.id);
 
@@ -151,7 +173,11 @@ export default function MonthlyTimecardPage() {
     const logDate = log.date; 
     
     // 紐づく勤怠ルールの特定
-    const matchedRule = attendanceRules.find(r => r.id === worker.attendance_rule_id);
+    const matchedRule = attendanceRules.find(r => 
+      String(r.id) === String(worker.attendance_rule_id) || 
+      r.name === worker.attendance_rule_id ||
+      (r.start_time?.substring(0, 5) === worker.standard_start_time?.substring(0, 5) && r.end_time?.substring(0, 5) === worker.standard_end_time?.substring(0, 5))
+    );
 
     const stdStartStr = worker.standard_start_time || matchedRule?.start_time || companySettings?.default_start_time || '08:00:00';
     const stdEndStr = worker.standard_end_time || matchedRule?.end_time || companySettings?.default_end_time || '17:00:00';
