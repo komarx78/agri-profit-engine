@@ -214,14 +214,25 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
         setSelectedSprayFieldIds([fetchedFields[0].id]);
       }
 
+      // 圃場面積（a: アール）の正確な算出ヘルパー
+      const calculateFieldAreaAcre = (f: any): number => {
+        if (!f) return 10.0;
+        if (f.area_size !== undefined && f.area_size !== null && Number(f.area_size) > 0) {
+          return Number(f.area_size);
+        }
+        if (f.area_sqm !== undefined && f.area_sqm !== null && Number(f.area_sqm) > 0) {
+          return Math.round((Number(f.area_sqm) / 100) * 10) / 10;
+        }
+        return 10.0;
+      };
+
       // 1. 作付け一覧の整形
       const cultList: CultivationItem[] = [];
       if (fetchedPlans.length > 0) {
         fetchedPlans.forEach((p: any) => {
           const matchedField = fetchedFields.find(f => f.id === p.field_id);
           const matchedCrop = p.crops || fetchedCrops.find(c => c.id === p.crop_id);
-          const areaSqm = matchedField?.area_sqm || matchedField?.area_size || 0;
-          const areaAcre = areaSqm > 0 ? Math.round((areaSqm / 100) * 10) / 10 : 10.0;
+          const areaAcre = calculateFieldAreaAcre(matchedField);
           const startMonth = p.start_month || 8;
           const year = p.year || new Date().getFullYear();
 
@@ -240,8 +251,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
 
       fetchedFields.forEach((f: any) => {
         if (!cultList.some(item => item.fieldId === f.id)) {
-          const areaSqm = f.area_sqm || f.area_size || 0;
-          const areaAcre = areaSqm > 0 ? Math.round((areaSqm / 100) * 10) / 10 : 10.0;
+          const areaAcre = calculateFieldAreaAcre(f);
           const defaultCrop = fetchedCrops[0];
 
           cultList.push({
