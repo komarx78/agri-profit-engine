@@ -1003,14 +1003,16 @@ export default function PortalPage() {
 
           {/* 右側：ナビゲーション・ユーザー情報・言語切替・ログアウト */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-            {/* 農業司令塔へのリンク */}
-            <button
-              onClick={() => router.push('/admin/cultivations')}
-              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs transition-colors shadow-2xs"
-            >
-              <Sprout className="w-3.5 h-3.5" />
-              <span>🌱 農業司令塔</span>
-            </button>
+            {/* 農業司令塔へのリンク（管理者のみ） */}
+            {role === 'admin' && (
+              <button
+                onClick={() => router.push('/admin/cultivations')}
+                className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs transition-colors shadow-2xs"
+              >
+                <Sprout className="w-3.5 h-3.5" />
+                <span>🌱 農業司令塔</span>
+              </button>
+            )}
 
             {/* 現場日報入力へのリンク */}
             <button
@@ -1031,16 +1033,18 @@ export default function PortalPage() {
                   <span className="text-slate-900 font-black truncate max-w-[120px]">{getTranslatedName(currentUser, language)}</span>
                 </div>
 
-                {/* スタッフ切り替えボタン */}
-                <button
-                  type="button"
-                  onClick={() => setShowWorkerGate(true)}
-                  className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-2 sm:px-2.5 sm:py-1.5 rounded-xl border border-blue-200 transition-colors flex items-center gap-1 shrink-0"
-                  title="別の現場スタッフとしてログインし直す"
-                >
-                  <UserCheck className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-                  <span className="hidden lg:inline">{t('switchWorker', language)}</span>
-                </button>
+                {/* スタッフ切り替えボタン（管理者のみ） */}
+                {role === 'admin' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowWorkerGate(true)}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-2 sm:px-2.5 sm:py-1.5 rounded-xl border border-blue-200 transition-colors flex items-center gap-1 shrink-0"
+                    title="別の現場スタッフとしてログインし直す"
+                  >
+                    <UserCheck className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                    <span className="hidden lg:inline">{t('switchWorker', language)}</span>
+                  </button>
+                )}
               </div>
             )}
 
