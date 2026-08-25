@@ -18,6 +18,7 @@ import dynamic from 'next/dynamic';
 import VideoPlayerWithSubtitles, { Narration } from '@/components/VideoPlayerWithSubtitles';
 import CultivationsHub from '@/components/CultivationsHub';
 import HrManagementHub from '@/components/HrManagementHub';
+import CloudPortalHub from '@/components/CloudPortalHub';
 import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
 import { getPortalTasks } from '@/app/actions/farm';
@@ -56,14 +57,14 @@ export default function PortalPage() {
 function PortalContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialTab = (searchParams.get('tab') as 'home' | 'cultivations' | 'hr' | 'sales') || 'home';
+  const initialTab = (searchParams.get('tab') as 'home' | 'cloud' | 'cultivations' | 'hr') || 'home';
 
-  // 4大統合タブステート: home(現場ホーム) | cultivations(栽培司令塔) | hr(勤怠・労務) | sales(経営・販売)
-  const [activePortalTab, setActivePortalTab] = useState<'home' | 'cultivations' | 'hr' | 'sales'>(initialTab);
+  // 統合タブステート: home(現場ホーム) | cloud(CloudPortal総合管理) | cultivations(栽培司令塔) | hr(勤怠・労務)
+  const [activePortalTab, setActivePortalTab] = useState<'home' | 'cloud' | 'cultivations' | 'hr'>(initialTab);
 
   useEffect(() => {
     const tabParam = searchParams.get('tab') as any;
-    if (tabParam && ['home', 'cultivations', 'hr', 'sales'].includes(tabParam)) {
+    if (tabParam && ['home', 'cloud', 'cultivations', 'hr'].includes(tabParam)) {
       setActivePortalTab(tabParam);
     }
   }, [searchParams]);
@@ -1102,7 +1103,7 @@ function PortalContent() {
           </div>
         </div>
 
-        {/* 🌟 4大統合タブナビゲーションバー（管理者モード時のみ表示） */}
+        {/* 🌟 統合ナビゲーションバー（管理者モード時のみ表示） */}
         {role === 'admin' && (
           <div className="bg-slate-50/90 border-t border-slate-200 backdrop-blur-xs">
             <div className="max-w-7xl mx-auto px-3 sm:px-4 flex items-center gap-2 overflow-x-auto py-1.5">
@@ -1119,7 +1120,23 @@ function PortalContent() {
                 }`}
               >
                 <LayoutDashboard className="w-4 h-4" />
-                <span>🏠 現場ホーム</span>
+                <span>📱 現場ホーム（打刻・タスク）</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActivePortalTab('cloud');
+                  router.push('/portal?tab=cloud');
+                }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 ${
+                  activePortalTab === 'cloud'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                }`}
+              >
+                <Building className="w-4 h-4 text-emerald-400" />
+                <span>🏢 CloudPortal（総合管理）</span>
               </button>
 
               <button
@@ -1158,22 +1175,6 @@ function PortalContent() {
                   </span>
                 )}
               </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setActivePortalTab('sales');
-                  router.push('/portal?tab=sales');
-                }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 ${
-                  activePortalTab === 'sales'
-                    ? 'bg-amber-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white'
-                }`}
-              >
-                <BarChart3 className="w-4 h-4" />
-                <span>📊 経営・販売・マスタ</span>
-              </button>
             </div>
           </div>
         )}
@@ -1181,125 +1182,25 @@ function PortalContent() {
 
       <main className="max-w-7xl mx-auto px-4 py-8">
         
-        {/* 1. 🌾 栽培・防除司令塔タブ */}
+        {/* 1. 🏢 CloudPortal（総合管理）タブ */}
+        {role === 'admin' && activePortalTab === 'cloud' && (
+          <CloudPortalHub onSwitchToWork={() => {
+            setActivePortalTab('home');
+            router.push('/portal?tab=home');
+          }} />
+        )}
+
+        {/* 2. 🌾 栽培・防除司令塔タブ */}
         {role === 'admin' && activePortalTab === 'cultivations' && (
           <CultivationsHub initialSubTab="cultivations" />
         )}
 
-        {/* 2. ⏱ 勤怠・労務管理タブ */}
+        {/* 3. ⏱ 勤怠・労務管理タブ */}
         {role === 'admin' && activePortalTab === 'hr' && (
           <HrManagementHub />
         )}
 
-        {/* 3. 📊 経営・販売・マスタタブ */}
-        {role === 'admin' && activePortalTab === 'sales' && (
-          <div className="space-y-6 animate-in fade-in-50 duration-200">
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-              <div>
-                <h2 className="text-base font-black text-slate-800 flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5 text-amber-600" /> 経営管理・販売・マスタ統合メニュー
-                </h2>
-                <p className="text-xs font-bold text-slate-400 mt-1">
-                  作付予実、B2B受注・請求書、各種マスタの設定を素早く切り替え
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-                {/* 栽培・予実管理表 */}
-                <Link
-                  href="/admin/cultivation-schedule"
-                  className="p-5 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 transition-all shadow-2xs group"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="p-2.5 bg-emerald-600 text-white rounded-xl">
-                      <Sprout className="w-5 h-5" />
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-emerald-500 group-hover:translate-x-1 transition-transform" />
-                  </div>
-                  <h3 className="text-sm font-black text-slate-800">栽培・予実管理表</h3>
-                  <p className="text-xs text-slate-500 font-medium mt-1">作付計画ごとの売上・資材費・労働時間の収支分析</p>
-                </Link>
-
-                {/* 育苗スケジュール */}
-                <Link
-                  href="/admin/nursery-schedule"
-                  className="p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 hover:border-blue-400 transition-all shadow-2xs group"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="p-2.5 bg-blue-600 text-white rounded-xl">
-                      <Calendar className="w-5 h-5" />
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-blue-500 group-hover:translate-x-1 transition-transform" />
-                  </div>
-                  <h3 className="text-sm font-black text-slate-800">育苗スケジュール（ロス率計算）</h3>
-                  <p className="text-xs text-slate-500 font-medium mt-1">定植必要数とロス率に応じた播種数の自動計算</p>
-                </Link>
-
-                {/* B2B請求書・受注管理 */}
-                <Link
-                  href="/sales-management/invoices"
-                  className="p-5 rounded-2xl bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200 hover:border-indigo-400 transition-all shadow-2xs group"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="p-2.5 bg-indigo-600 text-white rounded-xl">
-                      <Receipt className="w-5 h-5" />
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-indigo-500 group-hover:translate-x-1 transition-transform" />
-                  </div>
-                  <h3 className="text-sm font-black text-slate-800">B2B請求書・販売管理</h3>
-                  <p className="text-xs text-slate-500 font-medium mt-1">飲食店・スーパー等の取引先管理とインボイス発行</p>
-                </Link>
-
-                {/* 出荷・売上履歴 */}
-                <Link
-                  href="/admin/sales-history"
-                  className="p-5 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 hover:border-amber-400 transition-all shadow-2xs group"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="p-2.5 bg-amber-600 text-white rounded-xl">
-                      <TrendingUp className="w-5 h-5" />
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-amber-500 group-hover:translate-x-1 transition-transform" />
-                  </div>
-                  <h3 className="text-sm font-black text-slate-800">出荷・売上履歴</h3>
-                  <p className="text-xs text-slate-500 font-medium mt-1">日々の出荷実績と販路別売上集計</p>
-                </Link>
-
-                {/* マスタ一括管理 */}
-                <Link
-                  href="/admin/masters"
-                  className="p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 hover:border-slate-400 transition-all shadow-2xs group"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="p-2.5 bg-slate-700 text-white rounded-xl">
-                      <Database className="w-5 h-5" />
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-slate-500 group-hover:translate-x-1 transition-transform" />
-                  </div>
-                  <h3 className="text-sm font-black text-slate-800">マスタ管理センター</h3>
-                  <p className="text-xs text-slate-500 font-medium mt-1">作目、圃場、作業者、資材、販路等のマスタ設定</p>
-                </Link>
-
-                {/* 作付地図・気象 */}
-                <Link
-                  href="/admin/map"
-                  className="p-5 rounded-2xl bg-gradient-to-br from-teal-50 to-cyan-50 border border-teal-200 hover:border-teal-400 transition-all shadow-2xs group"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="p-2.5 bg-teal-600 text-white rounded-xl">
-                      <MapPin className="w-5 h-5" />
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-teal-500 group-hover:translate-x-1 transition-transform" />
-                  </div>
-                  <h3 className="text-sm font-black text-slate-800">作付地図 ＆ 積算気象</h3>
-                  <p className="text-xs text-slate-500 font-medium mt-1">航空写真地図上での圃場可視化と積算温度</p>
-                </Link>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 4. 🏠 現場ホーム（一般スタッフモード時、または管理者でhome選択時） */}
+        {/* 4. 📱 現場ホーム（一般スタッフモード時、または管理者でhome選択時） */}
         {(role === 'worker' || activePortalTab === 'home') && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
