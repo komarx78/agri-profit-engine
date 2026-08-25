@@ -155,6 +155,7 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
     zh: '手册' , si: 'අත්පොත', km: 'សៀវភៅដៃ' },
   
   date: { ja: '日付', en: 'Date', vi: 'Ngày', id: 'Tanggal', zh: '日期', si: 'දිනය', km: 'កាលបរិច្ឆេទ' },
+  quantityAndUnit: { ja: '数量・単位', en: 'Quantity & Unit', vi: 'Số lượng & Đơn vị', id: 'Jumlah & Satuan', zh: '数量与单位', si: 'ප්‍රමාණය සහ ඒකකය', km: 'បរិមាណ និង ឯកតា' },
   // 項目ラベル
   worker: { ja: '作業者',
     en: 'Worker',
@@ -474,3 +475,32 @@ export function getTranslatedWorkType(text: string, lang: LanguageCode = 'ja'): 
 
   return text;
 }
+
+export const UNIT_DICTIONARY: Record<string, Record<LanguageCode, string>> = {
+  'kg': { ja: 'kg', en: 'kg', vi: 'kg', id: 'kg', zh: 'kg', si: 'kg', km: 'kg' },
+  '袋': { ja: '袋', en: 'Bag', vi: 'Túi', id: 'Kantong', zh: '袋', si: 'මල්ල', km: 'ថង់' },
+  '箱': { ja: '箱', en: 'Box', vi: 'Hộp', id: 'Kotak', zh: '箱', si: 'පෙට්ටිය', km: 'ប្រអប់' },
+  'パック': { ja: 'パック', en: 'Pack', vi: 'Vỉ/Gói', id: 'Pak', zh: '包/盒', si: 'පැක්', km: 'កញ្ចប់' },
+  '本': { ja: '本', en: 'Pcs', vi: 'Cây/Củ', id: 'Batang', zh: '根/条', si: 'කඳ', km: 'ដើម' },
+  '個': { ja: '個', en: 'Pcs', vi: 'Trái/Quả', id: 'Buah', zh: '个', si: 'ගෙඩි', km: 'គ្រាប់' },
+  '束': { ja: '束', en: 'Bundle', vi: 'Bó', id: 'Ikat', zh: '束', si: 'මිටිය', km: 'បាច់' },
+  'ケース': { ja: 'ケース', en: 'Case', vi: 'Thùng', id: 'Kasus', zh: '箱', si: 'කේස්', km: 'កេស' },
+  'トレー': { ja: 'トレー', en: 'Tray', vi: 'Khay', id: 'Baki', zh: '托盘', si: 'තැටි', km: 'ថាស' },
+  'コンテナ': { ja: 'コンテナ', en: 'Container', vi: 'Sọt/Công', id: 'Kontainer', zh: '筐', si: 'බහාලුම', km: 'កុងតឺន័រ' },
+  'g': { ja: 'g', en: 'g', vi: 'g', id: 'g', zh: 'g', si: 'g', km: 'g' },
+};
+
+export const UNITS = [
+  'kg', '袋', '箱', 'パック', '本', '個', '束', 'ケース', 'トレー', 'コンテナ', 'g'
+];
+
+export function getTranslatedUnit(unit: string, lang: LanguageCode = 'ja'): string {
+  if (!unit) return '';
+  if (lang === 'ja') return unit;
+  if (UNIT_DICTIONARY[unit] && UNIT_DICTIONARY[unit][lang]) {
+    const trans = UNIT_DICTIONARY[unit][lang];
+    return trans === unit ? unit : `${unit} (${trans})`;
+  }
+  return unit;
+}
+

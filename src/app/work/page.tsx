@@ -14,7 +14,7 @@ import { getB2BOrders, updateB2BOrderStatus } from '@/app/actions/b2b';
 import { getWorkerShareSettings } from '@/app/actions/farm';
 import { WorkerGate } from '@/components/WorkerGate';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
+import { t, getTranslatedName, LANGUAGES, LanguageCode, UNITS, getTranslatedUnit } from '@/lib/i18n';
 import { useCompany } from '@/hooks/useCompany';
 import imageCompression from 'browser-image-compression';
 
@@ -1518,7 +1518,9 @@ export default function WorkEntryPage() {
                 </div>
                 
                 <div>
-                  <label className="block text-xs font-bold text-emerald-300 mb-1.5">数量・単位</label>
+                  <label className="block text-xs font-bold text-emerald-300 mb-1.5">
+                    {t('quantityAndUnit', language) || '数量・単位'}
+                  </label>
                   <div className="flex gap-2">
                     <input
                       type="number"
@@ -1532,19 +1534,13 @@ export default function WorkEntryPage() {
                     <select
                       value={salesUnit}
                       onChange={(e) => setSalesUnit(e.target.value)}
-                      className="w-24 sm:w-28 bg-emerald-900 text-emerald-200 font-bold px-2 py-3 rounded-xl border border-emerald-700 focus:outline-none focus:border-emerald-400 text-center cursor-pointer text-sm"
+                      className="w-28 sm:w-36 bg-emerald-900 text-emerald-200 font-bold px-2 py-3 rounded-xl border border-emerald-700 focus:outline-none focus:border-emerald-400 text-center cursor-pointer text-xs sm:text-sm"
                     >
-                      <option value="kg">kg</option>
-                      <option value="袋">袋</option>
-                      <option value="箱">箱</option>
-                      <option value="パック">パック</option>
-                      <option value="本">本</option>
-                      <option value="個">個</option>
-                      <option value="束">束</option>
-                      <option value="ケース">ケース</option>
-                      <option value="トレー">トレー</option>
-                      <option value="コンテナ">コンテナ</option>
-                      <option value="g">g</option>
+                      {UNITS.map((u) => (
+                        <option key={u} value={u}>
+                          {getTranslatedUnit(u, language)}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
