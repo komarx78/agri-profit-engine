@@ -738,7 +738,14 @@ export default function MastersPage() {
                     {fertilizerList.map(m => (
                       <div key={m.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
                         <div>
-                          <div className="font-bold text-slate-700">{m.name}</div>
+                          <div className="font-bold text-slate-700 flex items-center gap-1.5 flex-wrap">
+                            <span>{m.name}</span>
+                            {m.specification && (
+                              <span className="text-[10px] bg-slate-900 text-amber-300 px-1.5 py-0.5 rounded font-mono font-bold">
+                                {m.specification}
+                              </span>
+                            )}
+                          </div>
                           <div className="flex flex-wrap items-center gap-1.5 mt-1">
                             {(m.n_percent !== undefined || m.p_percent !== undefined || m.k_percent !== undefined) && (
                               <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-black border border-emerald-200">
@@ -1330,7 +1337,7 @@ export default function MastersPage() {
                       placeholder="例: 袋, kg, L"
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1">購入単価 (円)</label>
                     <input 
                       type="number" 
@@ -1338,6 +1345,16 @@ export default function MastersPage() {
                       onChange={e => setFormData({...formData, default_price: Number(e.target.value)})}
                       className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-emerald-700"
                       placeholder="例: 2600"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold text-slate-500 mb-1">公的登録番号・規格（例: 登録: 生第82941号）</label>
+                    <input 
+                      type="text" 
+                      value={formData.specification || ''} 
+                      onChange={e => setFormData({...formData, specification: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold font-mono"
+                      placeholder="例: 登録: 生第105321号"
                     />
                   </div>
                 </div>

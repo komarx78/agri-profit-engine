@@ -1151,11 +1151,15 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                             {farmFertilizers.length > 0 ? (
                               <>
                                 <optgroup label="🏢 自農園マスタ登録肥料（資材マスタ）">
-                                  {farmFertilizers.map((f) => (
-                                    <option key={f.id} value={f.name}>
-                                      {f.name} {f.default_price ? `(単価:約¥${Number(f.default_price).toLocaleString()})` : ''}
-                                    </option>
-                                  ))}
+                                  {farmFertilizers.map((f) => {
+                                    const regStr = f.specification ? ` [${f.specification}]` : '';
+                                    const npkStr = (f.n_percent || f.p_percent || f.k_percent) ? ` (N${f.n_percent || 0}-P${f.p_percent || 0}-K${f.k_percent || 0})` : '';
+                                    return (
+                                      <option key={f.id} value={f.name}>
+                                        {f.name}{regStr}{npkStr} {f.default_price ? `[¥${Number(f.default_price).toLocaleString()}]` : ''}
+                                      </option>
+                                    );
+                                  })}
                                 </optgroup>
                                 <option value="その他（手入力）">✏️ その他（手入力・公的マスターから適用）</option>
                               </>
@@ -1882,19 +1886,41 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                           className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800 hover:border-slate-700 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
                         >
                           <div className="flex-1 min-w-0">
-                            <div className="font-bold text-white text-sm flex items-center gap-2 flex-wrap">
-                              <span>{item.fertilizer_name}</span>
-                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                                {item.fertilizer_type || '肥料'}
+                            <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+                              <span 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (item.registration_no) {
+                                    navigator.clipboard.writeText(item.registration_no);
+                                    showToast(`登録番号「${item.registration_no}」をコピーしました！`);
+                                  }
+                                }}
+                                title="クリックで登録番号をコピー"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-950 hover:bg-slate-900 text-amber-300 border border-slate-700 rounded text-[11px] font-mono font-black tracking-wide cursor-pointer transition-colors shadow-2xs"
+                              >
+                                <span className="text-[10px] text-slate-400 font-sans">登録番号:</span>
+                                {item.registration_no || '登録番号なし'}
+                                <Copy className="w-3 h-3 text-slate-400 hover:text-amber-300 ml-0.5" />
                               </span>
-                              {isAlreadyInFarm && (
-                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
-                                  自社マスタ登録済
+                              
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                                  {item.fertilizer_type || '肥料'}
                                 </span>
-                              )}
+                                {isAlreadyInFarm && (
+                                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
+                                    自社マスタ登録済
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <div className="text-xs text-slate-400 mt-0.5 truncate">
-                              {item.applicant_name ? `${item.applicant_name} | ` : ''}登録番号: {item.registration_no || '-'}
+
+                            <div className="font-bold text-white text-sm">
+                              {item.fertilizer_name}
+                            </div>
+                            <div className="text-xs text-slate-400 mt-0.5 truncate flex items-center gap-1.5">
+                              <span>申請者: <strong className="text-slate-300">{item.applicant_name || '未登録'}</strong></span>
+                              {item.registration_date && <span>({item.registration_date}登録)</span>}
                             </div>
                             
                             {/* N-P-K-Mg-Ca 比率 ＆ 微量要素 */}

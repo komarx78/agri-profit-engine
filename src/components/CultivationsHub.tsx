@@ -1091,18 +1091,43 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                         className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:border-teal-300 transition-all flex flex-col justify-between gap-3"
                       >
                         <div>
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <h4 className="text-sm font-black text-slate-800 leading-snug">
-                                {fert.fertilizer_name}
-                              </h4>
-                              <p className="text-[11px] text-slate-400 mt-0.5">
-                                {fert.applicant_name ? `${fert.applicant_name} | ` : ''}登録番号: {fert.registration_no || '-'}
-                              </p>
+                          {/* 登録番号 ＆ 区分バッジ */}
+                          <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+                            <div className="flex items-center gap-1.5">
+                              <span 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (fert.registration_no) {
+                                    navigator.clipboard.writeText(fert.registration_no);
+                                    showToast(`登録番号「${fert.registration_no}」をコピーしました！`);
+                                  }
+                                }}
+                                title="クリックで登録番号をコピー"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-amber-300 border border-slate-700 rounded-lg text-xs font-mono font-black tracking-wide cursor-pointer transition-colors shadow-2xs"
+                              >
+                                <span className="text-[10px] text-slate-400 font-sans">登録番号:</span>
+                                {fert.registration_no || '登録番号なし'}
+                                <Copy className="w-3 h-3 text-slate-400 hover:text-amber-300 ml-0.5" />
+                              </span>
+                              {fert.registration_date && (
+                                <span className="text-[10px] text-slate-400 font-medium">
+                                  ({fert.registration_date}登録)
+                                </span>
+                              )}
                             </div>
-                            <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                            <span className="shrink-0 text-[10px] font-black px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
                               {fert.fertilizer_type || '化成肥料'}
                             </span>
+                          </div>
+
+                          <div className="mt-1">
+                            <h4 className="text-base font-black text-slate-800 leading-snug">
+                              {fert.fertilizer_name}
+                            </h4>
+                            <p className="text-xs font-bold text-slate-500 mt-0.5 flex items-center gap-1">
+                              <span>業者名・申請者:</span>
+                              <span className="text-slate-700 font-black">{fert.applicant_name || '未登録'}</span>
+                            </p>
                           </div>
 
                           {/* 成分情報バッジ群（N, P, K, Mg, Ca, 微量要素） */}
