@@ -1415,8 +1415,26 @@ export default function WorkEntryPage() {
                 </button>
               </div>
             ) : (
-              <button type="submit" disabled={!selectedCrop || !selectedField || !workType || (inputMode === 'manual' && !duration) || isSubmitting} className="w-full py-5 rounded-2xl font-black text-xl bg-emerald-500 text-emerald-950 disabled:bg-slate-800 disabled:text-slate-500 mt-8 flex justify-center items-center gap-2">
-                {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : t('startWork', language)}
+              <button 
+                type="submit" 
+                disabled={!selectedCrop || !selectedField || !workType || (inputMode === 'manual' && !duration) || isSubmitting} 
+                className="w-full py-5 rounded-2xl font-black text-xl bg-emerald-500 text-emerald-950 disabled:bg-slate-800 disabled:text-slate-500 mt-8 flex justify-center items-center gap-2 shadow-lg active:scale-98 transition-transform"
+              >
+                {isSubmitting ? (
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                ) : (
+                  inputMode === 'manual' ? (
+                    <>
+                      <CheckCircle2 className="w-6 h-6" />
+                      <span>{t('submitRecord', language)}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-6 h-6 fill-emerald-950" />
+                      <span>{t('startWork', language)}</span>
+                    </>
+                  )
+                )}
               </button>
             )}
           </form>
