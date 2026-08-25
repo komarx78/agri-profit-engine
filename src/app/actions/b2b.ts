@@ -1,6 +1,7 @@
 "use server";
 
 import { supabase } from '@/lib/supabase';
+import { getAdminSupabase } from '@/lib/supabase-admin';
 
 /**
  * サーバー側で管理者セッションを検証し、なりすまし（IDOR）を防止するヘルパー
@@ -20,8 +21,9 @@ async function resolveAuthenticatedTenantId(passedTenantId?: string | null): Pro
 // ---------------------------
 export async function getB2BCustomers(tenantId: string | null) {
   try {
+    const adminClient = getAdminSupabase();
     const validTenantId = await resolveAuthenticatedTenantId(tenantId);
-    let query = supabase.from('b2b_customers').select('*').order('created_at', { ascending: false });
+    let query = adminClient.from('b2b_customers').select('*').order('created_at', { ascending: false });
     if (validTenantId) {
       query = query.eq('user_id', validTenantId);
     }
@@ -35,12 +37,13 @@ export async function getB2BCustomers(tenantId: string | null) {
 
 export async function createB2BCustomer(data: any, tenantId?: string | null) {
   try {
+    const adminClient = getAdminSupabase();
     const validTenantId = await resolveAuthenticatedTenantId(tenantId);
     const payload = { ...data };
     if (validTenantId) {
       payload.user_id = validTenantId;
     }
-    const { error } = await supabase.from('b2b_customers').insert([payload]);
+    const { error } = await adminClient.from('b2b_customers').insert([payload]);
     if (error) throw error;
     return { success: true };
   } catch (error: any) {
@@ -53,8 +56,9 @@ export async function createB2BCustomer(data: any, tenantId?: string | null) {
 // ---------------------------
 export async function getB2BOrders(tenantId: string | null) {
   try {
+    const adminClient = getAdminSupabase();
     const validTenantId = await resolveAuthenticatedTenantId(tenantId);
-    let query = supabase
+    let query = adminClient
       .from('b2b_orders')
       .select(`
         *,
@@ -77,6 +81,7 @@ export async function getB2BOrders(tenantId: string | null) {
 
 export async function createB2BOrder(orderData: any, orderItems: any[], tenantId?: string | null) {
   try {
+    const adminClient = getAdminSupabase();
     const validTenantId = await resolveAuthenticatedTenantId(tenantId);
     // 1. Create Order
     const payload = { ...orderData };
@@ -84,7 +89,7 @@ export async function createB2BOrder(orderData: any, orderItems: any[], tenantId
       payload.user_id = validTenantId;
     }
 
-    const { data: newOrder, error: orderError } = await supabase
+    const { data: newOrder, error: orderError } = await adminClient
       .from('b2b_orders')
       .insert([payload])
       .select('id')
@@ -99,7 +104,7 @@ export async function createB2BOrder(orderData: any, orderItems: any[], tenantId
       order_id: newOrder.id
     }));
     
-    const { error: itemsError } = await supabase
+    const { error: itemsError } = await adminClient
       .from('b2b_order_items')
       .insert(itemsWithOrderId);
       
@@ -113,7 +118,8 @@ export async function createB2BOrder(orderData: any, orderItems: any[], tenantId
 
 export async function updateB2BOrderStatus(orderId: string, status: string) {
   try {
-    const { error } = await supabase
+    const adminClient = getAdminSupabase();
+    const { error } = await adminClient
       .from('b2b_orders')
       .update({ status })
       .eq('id', orderId);
@@ -126,15 +132,16 @@ export async function updateB2BOrderStatus(orderId: string, status: string) {
 
 export async function updateB2BOrderDetails(orderId: string, orderData: any, orderItems: any[]) {
   try {
+    const adminClient = getAdminSupabase();
     // 1. Update Order main info
-    const { error: orderError } = await supabase
+    const { error: orderError } = await adminClient
       .from('b2b_orders')
       .update(orderData)
       .eq('id', orderId);
     if (orderError) throw orderError;
 
     // 2. Delete existing items
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await adminClient
       .from('b2b_order_items')
       .delete()
       .eq('order_id', orderId);
@@ -146,7 +153,7 @@ export async function updateB2BOrderDetails(orderId: string, orderData: any, ord
       order_id: orderId
     }));
     
-    const { error: itemsError } = await supabase
+    const { error: itemsError } = await adminClient
       .from('b2b_order_items')
       .insert(itemsWithOrderId);
     if (itemsError) throw itemsError;
@@ -159,7 +166,8 @@ export async function updateB2BOrderDetails(orderId: string, orderData: any, ord
 
 export async function deleteB2BOrder(orderId: string) {
   try {
-    const { error } = await supabase
+    const adminClient = getAdminSupabase();
+    const { error } = await adminClient
       .from('b2b_orders')
       .delete()
       .eq('id', orderId);
@@ -175,8 +183,9 @@ export async function deleteB2BOrder(orderId: string) {
 // ---------------------------
 export async function getB2BInvoices(tenantId: string | null) {
   try {
+    const adminClient = getAdminSupabase();
     const validTenantId = await resolveAuthenticatedTenantId(tenantId);
-    let query = supabase
+    let query = adminClient
       .from('b2b_invoices')
       .select('*, customer:b2b_customers(*)')
       .order('issue_date', { ascending: false });
@@ -195,12 +204,13 @@ export async function getB2BInvoices(tenantId: string | null) {
 
 export async function createB2BInvoice(invoiceData: any, tenantId?: string | null) {
   try {
+    const adminClient = getAdminSupabase();
     const validTenantId = await resolveAuthenticatedTenantId(tenantId);
     const payload = { ...invoiceData };
     if (validTenantId) {
       payload.user_id = validTenantId;
     }
-    const { data, error } = await supabase
+    const { data, error } = await adminClient
       .from('b2b_invoices')
       .insert([payload])
       .select('id')
@@ -214,7 +224,8 @@ export async function createB2BInvoice(invoiceData: any, tenantId?: string | nul
 
 export async function updateB2BInvoiceStatus(invoiceId: string, status: string) {
   try {
-    const { error } = await supabase
+    const adminClient = getAdminSupabase();
+    const { error } = await adminClient
       .from('b2b_invoices')
       .update({ status })
       .eq('id', invoiceId);
@@ -227,13 +238,14 @@ export async function updateB2BInvoiceStatus(invoiceId: string, status: string) 
 
 export async function generateInvoicesForMonth(targetMonth: string, tenantId?: string | null) {
   try {
+    const adminClient = getAdminSupabase();
     const validTenantId = await resolveAuthenticatedTenantId(tenantId);
     const startDate = `${targetMonth}-01`;
     const [yearStr, monthStr] = targetMonth.split('-');
     const nextMonth = new Date(Number(yearStr), Number(monthStr), 1);
     const endDate = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`;
 
-    let orderQuery = supabase
+    let orderQuery = adminClient
       .from('b2b_orders')
       .select('*, customer:b2b_customers(*), items:b2b_order_items(*)')
       .gte('delivery_date', startDate)
@@ -289,7 +301,7 @@ export async function generateInvoicesForMonth(targetMonth: string, tenantId?: s
         invoiceData.user_id = validTenantId;
       }
 
-      const { data: invData, error: invErr } = await supabase
+      const { data: invData, error: invErr } = await adminClient
         .from('b2b_invoices')
         .upsert([invoiceData], { onConflict: 'customer_id, target_month' })
         .select('id')
@@ -299,7 +311,7 @@ export async function generateInvoicesForMonth(targetMonth: string, tenantId?: s
         generatedCount++;
         // 該当オーダーのステータスを invoiced に更新
         const orderIds = ordersList.map(o => o.id);
-        await supabase
+        await adminClient
           .from('b2b_orders')
           .update({ status: 'invoiced' })
           .in('id', orderIds);
@@ -314,7 +326,8 @@ export async function generateInvoicesForMonth(targetMonth: string, tenantId?: s
 
 export async function updateInvoiceAmounts(invoiceId: string, subtotal: number, tax: number, total: number) {
   try {
-    const { error } = await supabase
+    const adminClient = getAdminSupabase();
+    const { error } = await adminClient
       .from('b2b_invoices')
       .update({
         subtotal,

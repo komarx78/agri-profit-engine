@@ -27,3 +27,5 @@ export const createAdminClient = () => {
     }
   );
 };
+
+export const getAdminSupabase = createAdminClient;
