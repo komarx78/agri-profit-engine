@@ -527,8 +527,44 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
     }
   };
 
-  const handleCloseModal = () => {
-    setActiveCategory(null);
+  // 日本語・英数・カナの全角半角正規化バリエーション生成ヘルパー
+  const generateSearchKeywords = (query: string): string[] => {
+    if (!query || !query.trim()) return [];
+    const raw = query.trim();
+    const set = new Set<string>();
+    set.add(raw);
+
+    // 1. 半角英数記号 -> 全角英数記号 (例: 21.0 -> ２１．０, ube -> ＵＢＥ)
+    const toZenkaku = raw.replace(/[A-Za-z0-9!-~]/g, (s) =>
+      String.fromCharCode(s.charCodeAt(0) + 0xFEE0)
+    ).replace(/ /g, '　');
+    set.add(toZenkaku);
+
+    // 2. 全角英数記号 -> 半角英数記号 (例: ２１ -> 21)
+    const toHankaku = raw.replace(/[！-～]/g, (s) =>
+      String.fromCharCode(s.charCodeAt(0) - 0xFEE0)
+    ).replace(/　/g, ' ');
+    set.add(toHankaku);
+
+    // 3. ひらがな -> カタカナ (例: りゅうさん -> リュウサン, あんもにあ -> アンモニア)
+    const toKatakana = raw.replace(/[\u3041-\u3096]/g, (m) =>
+      String.fromCharCode(m.charCodeAt(0) + 0x60)
+    );
+    set.add(toKatakana);
+
+    // 4. カタカナ -> ひらがな (例: アンモニア -> あんもにあ)
+    const toHiragana = raw.replace(/[\u30A1-\u30F6]/g, (m) =>
+      String.fromCharCode(m.charCodeAt(0) - 0x60)
+    );
+    set.add(toHiragana);
+
+    // 5. カタカナの全角半角複合
+    const toZenkakuKana = toKatakana.replace(/[A-Za-z0-9!-~]/g, (s) =>
+      String.fromCharCode(s.charCodeAt(0) + 0xFEE0)
+    );
+    set.add(toZenkakuKana);
+
+    return Array.from(set).filter(k => k.length > 0);
   };
 
   const handleSearchPublicFertilizer = async (query: string) => {
@@ -539,11 +575,20 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
     }
     setSearchingPublicFert(true);
     try {
+      const keywords = generateSearchKeywords(query);
+      const orConditions = keywords.flatMap(k => [
+        `fertilizer_name.ilike.%${k}%`,
+        `applicant_name.ilike.%${k}%`,
+        `fertilizer_type.ilike.%${k}%`,
+        `registration_no.ilike.%${k}%`
+      ]).join(',');
+
       const { data, error } = await supabase
         .from('m_fertilizers')
         .select('*')
-        .or(`fertilizer_name.ilike.%${query.trim()}%,applicant_name.ilike.%${query.trim()}%,fertilizer_type.ilike.%${query.trim()}%`)
-        .limit(25);
+        .or(orConditions)
+        .limit(30);
+
       if (!error && data) {
         setPublicFertResults(data);
       }

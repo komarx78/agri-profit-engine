@@ -77,7 +77,29 @@ export default function AdminFertilizersPage() {
         .limit(100);
 
       if (searchQuery.trim()) {
-        query = query.or(`fertilizer_name.ilike.%${searchQuery.trim()}%,applicant_name.ilike.%${searchQuery.trim()}%,registration_no.ilike.%${searchQuery.trim()}%,fertilizer_type.ilike.%${searchQuery.trim()}%`);
+        const raw = searchQuery.trim();
+        const set = new Set<string>();
+        set.add(raw);
+
+        // 全角・半角・カナ変換
+        const toZenkaku = raw.replace(/[A-Za-z0-9!-~]/g, (s) => String.fromCharCode(s.charCodeAt(0) + 0xFEE0)).replace(/ /g, '　');
+        set.add(toZenkaku);
+        const toHankaku = raw.replace(/[！-～]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).replace(/　/g, ' ');
+        set.add(toHankaku);
+        const toKatakana = raw.replace(/[\u3041-\u3096]/g, (m) => String.fromCharCode(m.charCodeAt(0) + 0x60));
+        set.add(toKatakana);
+        const toHiragana = raw.replace(/[\u30A1-\u30F6]/g, (m) => String.fromCharCode(m.charCodeAt(0) - 0x60));
+        set.add(toHiragana);
+
+        const keywords = Array.from(set).filter(k => k.length > 0);
+        const orConditions = keywords.flatMap(k => [
+          `fertilizer_name.ilike.%${k}%`,
+          `applicant_name.ilike.%${k}%`,
+          `registration_no.ilike.%${k}%`,
+          `fertilizer_type.ilike.%${k}%`
+        ]).join(',');
+
+        query = query.or(orConditions);
       }
 
       if (filterType !== 'all') {
