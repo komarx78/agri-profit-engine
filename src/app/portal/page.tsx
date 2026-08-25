@@ -1069,17 +1069,15 @@ function PortalContent() {
           {/* 右側：ナビゲーション・ユーザー情報・言語切替・ログアウト */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             
-            {/* 管理者モード時の管理者画面リンク */}
-            {role === 'admin' && (
-              <Link
-                href="/admin/cultivations"
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm rounded-xl transition-colors shadow-xs shrink-0"
-                title="管理者システム（作付け・地図・分析等）へ行く"
-              >
-                <Building className="w-4 h-4 shrink-0" />
-                <span>🏢 管理者画面へ</span>
-              </Link>
-            )}
+            {/* 管理者画面リンク */}
+            <Link
+              href="/admin/cultivations"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-sm shrink-0"
+              title="管理者システム（作付け・地図・分析等）へ行く"
+            >
+              <Building className="w-4 h-4 shrink-0" />
+              <span>🏢 管理者画面へ</span>
+            </Link>
 
             {/* 言語選択 */}
             <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">

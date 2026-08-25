@@ -33,13 +33,21 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
 
-  // 公開ルート（現場作業員・未認証アクセス許可）の判定
+  // 公開ルート（現場作業員・PIN管理者・未認証アクセス許可ルート）の判定
   const isPublicRoute =
     pathname.startsWith('/login') ||
     pathname.startsWith('/portal') ||
     pathname.startsWith('/work') ||
     pathname.startsWith('/share') ||
-    pathname.startsWith('/api')
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/sales-management') ||
+    pathname.startsWith('/accounting-management') ||
+    pathname.startsWith('/hr') ||
+    pathname.startsWith('/farm') ||
+    pathname.startsWith('/manuals') ||
+    pathname.startsWith('/pesticides') ||
+    pathname === '/'
 
   // 1. 未ログイン状態で保護ルートにアクセスした場合は /login にリダイレクト
   if (!user && !isPublicRoute) {
