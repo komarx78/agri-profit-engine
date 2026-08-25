@@ -628,31 +628,27 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
     searchDebounceTimerRef.current = setTimeout(async () => {
       try {
         const keywords = generateSearchKeywords(query);
-        const orConditions = keywords.map(kw => `fertilizer_name.ilike.%${kw}%`).join(',');
+        const orConditions = keywords.flatMap(k => [
+          `fertilizer_name.ilike.%${k}%`,
+          `applicant_name.ilike.%${k}%`,
+          `fertilizer_type.ilike.%${k}%`,
+          `registration_no.ilike.%${k}%`,
+          `other_ingredients.ilike.%${k}%`
+        ]).join(',');
 
         const { data, error } = await supabase
-          .from('official_fertilizers_jp')
+          .from('m_fertilizers')
           .select('*')
           .or(orConditions)
-          .limit(40);
+          .limit(50);
 
         if (thisRequestId !== searchRequestIdRef.current) return;
 
-        if (error) {
-          console.warn('Official fert search error, falling back to local filter:', error);
-          const { data: fallbackData } = await supabase
-            .from('official_fertilizers_jp')
-            .select('*')
-            .limit(100);
-          
-          if (fallbackData) {
-            const filtered = fallbackData.filter(item => 
-              keywords.some(kw => (item.fertilizer_name || '').toLowerCase().includes(kw.toLowerCase()))
-            );
-            setPublicFertResults(filtered);
-          }
-        } else {
-          setPublicFertResults(data || []);
+        if (!error && data) {
+          setPublicFertResults(data);
+        } else if (error) {
+          console.warn('m_fertilizers search error:', error);
+          setPublicFertResults([]);
         }
       } catch (err) {
         console.error('Fertilizer search error:', err);
@@ -1901,19 +1897,29 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                               {item.applicant_name ? `${item.applicant_name} | ` : ''}登録番号: {item.registration_no || '-'}
                             </div>
                             
-                            {/* N-P-K 比率 */}
-                            <div className="flex items-center gap-1.5 font-mono text-xs mt-1.5">
-                              <span className="px-1.5 py-0.2 bg-blue-950 text-blue-300 border border-blue-800 rounded text-[11px] font-black">
-                                N {item.n_percent}%
+                            {/* N-P-K-Mg-Ca 比率 ＆ 微量要素 */}
+                            <div className="flex items-center gap-1.5 font-mono text-xs mt-1.5 flex-wrap">
+                              <span className="px-1.5 py-0.5 bg-blue-950 text-blue-300 border border-blue-800 rounded text-[11px] font-black">
+                                窒素(N) {item.n_percent}%
                               </span>
-                              <span className="px-1.5 py-0.2 bg-amber-950 text-amber-300 border border-amber-800 rounded text-[11px] font-black">
-                                P {item.p_percent}%
+                              <span className="px-1.5 py-0.5 bg-amber-950 text-amber-300 border border-amber-800 rounded text-[11px] font-black">
+                                リン酸(P) {item.p_percent}%
                               </span>
-                              <span className="px-1.5 py-0.2 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded text-[11px] font-black">
-                                K {item.k_percent}%
+                              <span className="px-1.5 py-0.5 bg-purple-950 text-purple-300 border border-purple-800 rounded text-[11px] font-black">
+                                カリ(K) {item.k_percent}%
                               </span>
+                              {parseFloat(item.mg_percent) > 0 && (
+                                <span className="px-1.5 py-0.5 bg-teal-950 text-teal-300 border border-teal-800 rounded text-[11px] font-black">
+                                  苦土(Mg) {item.mg_percent}%
+                                </span>
+                              )}
+                              {parseFloat(item.ca_percent) > 0 && (
+                                <span className="px-1.5 py-0.5 bg-orange-950 text-orange-300 border border-orange-800 rounded text-[11px] font-black">
+                                  石灰(Ca) {item.ca_percent}%
+                                </span>
+                              )}
                               {item.other_ingredients && (
-                                <span className="text-[10px] text-slate-500 font-sans truncate max-w-[200px]">
+                                <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-1.5 py-0.5 rounded font-sans truncate max-w-full">
                                   {item.other_ingredients}
                                 </span>
                               )}

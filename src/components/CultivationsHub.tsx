@@ -94,7 +94,14 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   const [sprayMemo, setSprayMemo] = useState<string>('');
   const [isSavingSpray, setIsSavingSpray] = useState(false);
 
-  // --- タブ3: 履歴ステート ---
+  // --- タブ3: 肥料管理ステート ---
+  const [officialFertilizers, setOfficialFertilizers] = useState<any[]>([]);
+  const [farmRegisteredFertilizers, setFarmRegisteredFertilizers] = useState<any[]>([]);
+  const [searchFertQuery, setSearchFertQuery] = useState('');
+  const [fertCategoryTab, setFertCategoryTab] = useState<string>('all');
+  const [isLoadingFertilizers, setIsLoadingFertilizers] = useState(false);
+
+  // --- タブ4: 履歴ステート ---
   const [workLogs, setWorkLogs] = useState<any[]>([]);
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [historyTypeFilter, setHistoryTypeFilter] = useState<'all' | 'sprayOnly' | 'workOnly'>('all');
@@ -187,12 +194,14 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
         return;
       }
 
-      const [fRes, cRes, pRes, logsRes, matRes] = await Promise.all([
+      const [fRes, cRes, pRes, logsRes, matRes, fertMatRes, offFertRes] = await Promise.all([
         supabase.from('fields').select('*').eq('user_id', tenantId).order('name'),
         supabase.from('crops').select('*').eq('user_id', tenantId).order('name'),
         supabase.from('cultivation_plans_v2').select('*, crops(*)').eq('user_id', tenantId).order('created_at', { ascending: false }),
         supabase.from('work_logs').select('*, crops(name), fields(name), workers(name)').eq('user_id', tenantId).order('work_date', { ascending: false }),
-        supabase.from('materials').select('*').eq('user_id', tenantId).or('category.eq.農薬費,material_type.eq.pesticide').order('name')
+        supabase.from('materials').select('*').eq('user_id', tenantId).or('category.eq.農薬費,material_type.eq.pesticide').order('name'),
+        supabase.from('materials').select('*').eq('user_id', tenantId).or('category.eq.肥料費,material_type.eq.fertilizer').order('name'),
+        supabase.from('m_fertilizers').select('*').order('created_at', { ascending: false }).limit(60)
       ]);
 
       const fetchedFields = fRes.data || [];
@@ -200,10 +209,14 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
       const fetchedPlans = pRes.data || [];
       const fetchedLogs = logsRes.data || [];
       const fetchedMaterials = matRes.data || [];
+      const fetchedFertMaterials = fertMatRes.data || [];
+      const fetchedOfficialFerts = offFertRes.data || [];
 
       setFields(fetchedFields);
       setCrops(fetchedCrops);
       setFarmRegisteredPesticides(fetchedMaterials);
+      setFarmRegisteredFertilizers(fetchedFertMaterials);
+      setOfficialFertilizers(fetchedOfficialFerts);
 
       let initialCropId = selectedSprayCropId;
       if (fetchedCrops.length > 0 && !initialCropId) {
@@ -462,6 +475,103 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     });
   }, [workLogs, historyTypeFilter, historySearchQuery]);
 
+  // --- 肥料管理フィルタリング ---
+  const filteredFertilizers = useMemo(() => {
+    return officialFertilizers.filter(f => {
+      if (fertCategoryTab === 'registered') {
+        return farmRegisteredFertilizers.some(rf => rf.name === f.fertilizer_name);
+      }
+      if (fertCategoryTab !== 'all') {
+        if (!f.fertilizer_type?.includes(fertCategoryTab)) return false;
+      }
+      return true;
+    });
+  }, [officialFertilizers, farmRegisteredFertilizers, fertCategoryTab]);
+
+  // 公的肥料マスター検索
+  const handleSearchFertilizers = async (q: string) => {
+    setSearchFertQuery(q);
+    if (!q.trim()) {
+      setIsLoadingFertilizers(true);
+      const { data } = await supabase.from('m_fertilizers').select('*').order('created_at', { ascending: false }).limit(60);
+      setOfficialFertilizers(data || []);
+      setIsLoadingFertilizers(false);
+      return;
+    }
+
+    setIsLoadingFertilizers(true);
+    try {
+      const raw = q.trim();
+      const set = new Set<string>();
+      set.add(raw);
+      const toZenkaku = raw.replace(/[A-Za-z0-9!-~]/g, (s) => String.fromCharCode(s.charCodeAt(0) + 0xFEE0)).replace(/ /g, '　');
+      set.add(toZenkaku);
+      const toHankaku = raw.replace(/[！-～]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).replace(/　/g, ' ');
+      set.add(toHankaku);
+      const toKatakana = raw.replace(/[\u3041-\u3096]/g, (m) => String.fromCharCode(m.charCodeAt(0) + 0x60));
+      set.add(toKatakana);
+      const toHiragana = raw.replace(/[\u30A1-\u30F6]/g, (m) => String.fromCharCode(m.charCodeAt(0) - 0x60));
+      set.add(toHiragana);
+
+      const keywords = Array.from(set).filter(Boolean);
+      const orConditions = keywords.flatMap(k => [
+        `fertilizer_name.ilike.%${k}%`,
+        `applicant_name.ilike.%${k}%`,
+        `fertilizer_type.ilike.%${k}%`,
+        `registration_no.ilike.%${k}%`,
+        `other_ingredients.ilike.%${k}%`
+      ]).join(',');
+
+      const { data, error } = await supabase
+        .from('m_fertilizers')
+        .select('*')
+        .or(orConditions)
+        .limit(60);
+
+      if (!error && data) {
+        setOfficialFertilizers(data);
+      }
+    } catch (e) {
+      console.error('Fertilizer search error:', e);
+    } finally {
+      setIsLoadingFertilizers(false);
+    }
+  };
+
+  // 公的肥料を自社マスタ（materials）へ即座にワンクリック登録
+  const handleRegisterFertToFarmMaster = async (item: any) => {
+    try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) return;
+
+      const payload = {
+        user_id: tenantId,
+        name: item.fertilizer_name,
+        category: '肥料費',
+        material_type: 'fertilizer',
+        unit: '袋',
+        default_price: 0,
+        n_percent: parseFloat(item.n_percent) || 0,
+        p_percent: parseFloat(item.p_percent) || 0,
+        k_percent: parseFloat(item.k_percent) || 0,
+        bag_weight_kg: 20,
+        fertilizer_type: item.fertilizer_type || '化成肥料',
+        fertilizer_usage: '共通',
+        specification: `FAMIC公的登録: ${item.registration_no || ''}`
+      };
+
+      const { data, error } = await supabase.from('materials').insert([payload]).select();
+      if (error) throw error;
+
+      if (data && data[0]) {
+        setFarmRegisteredFertilizers(prev => [data[0], ...prev]);
+        setToastMessage(`「${item.fertilizer_name}」を自社肥料マスタに登録しました！`);
+      }
+    } catch (e: any) {
+      alert(`登録に失敗しました: ${e.message}`);
+    }
+  };
+
   // 散布記録の確定保存
   const handleSaveSprayLog = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -623,7 +733,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   return (
     <div className="space-y-6">
       
-      {/* 4大メインナビゲーションタブ */}
+      {/* 5大メインナビゲーションタブ */}
       <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-1 overflow-x-auto">
         <button
           type="button"
@@ -649,6 +759,19 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
         >
           <FlaskConical className="w-4 h-4" />
           <span>散布管理 (残回数)</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('fertilizers')}
+          className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all ${
+            activeMainTab === 'fertilizers'
+              ? 'bg-teal-700 text-white shadow-sm'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          <span>肥料管理 (成分・公的)</span>
         </button>
 
         <button
@@ -731,12 +854,12 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                       key={item.id}
                       onClick={() => {
                         setSelectedIds(prev => 
-                          prev.includes(item.id) ? prev.filter(id => id !== item.id) : [...prev, item.id]
+                          prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id]
                         );
                       }}
-                      className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${
+                      className={`p-4 rounded-2xl border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
                         isSelected 
-                          ? 'bg-emerald-50/50 border-emerald-500 shadow-sm' 
+                          ? 'bg-emerald-50/70 border-emerald-500 shadow-sm ring-2 ring-emerald-500/20' 
                           : 'bg-white border-slate-200 hover:border-slate-300'
                       }`}
                     >
@@ -892,7 +1015,152 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
             </div>
           )}
 
-          {/* TAB 3: 作業・散布履歴 */}
+          {/* TAB 3: 肥料管理 (成分・公的マスタ検索) */}
+          {activeMainTab === 'fertilizers' && (
+            <div className="space-y-4">
+              {/* 検索 ＆ カテゴリフィルターバー */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="relative w-full sm:w-80">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input 
+                      type="text" 
+                      placeholder="肥料名・メーカー・登録番号・成分（例: 昭和、21、高度化成、石灰）..." 
+                      value={searchFertQuery}
+                      onChange={e => handleSearchFertilizers(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                    <span>自農園マスタ登録数: <strong className="text-teal-700 font-black">{farmRegisteredFertilizers.length}</strong> 品目</span>
+                    <Link
+                      href="/admin/masters"
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors"
+                    >
+                      マスタ管理へ ➔
+                    </Link>
+                  </div>
+                </div>
+
+                {/* 肥料カテゴリタブ */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs font-bold">
+                  {[
+                    { id: 'all', label: 'すべて' },
+                    { id: '化成', label: '化成肥料' },
+                    { id: '有機', label: '有機質肥料' },
+                    { id: '石灰', label: '石灰・苦土 (Ca・Mg)' },
+                    { id: '配合', label: '配合肥料' },
+                    { id: '液肥', label: '液肥・葉面散布' },
+                    { id: 'registered', label: '自社マスタ登録済のみ' }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setFertCategoryTab(tab.id)}
+                      className={`px-3 py-1.5 rounded-xl whitespace-nowrap transition-all ${
+                        fertCategoryTab === tab.id
+                          ? 'bg-teal-700 text-white shadow-xs font-black'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 肥料リスト */}
+              {isLoadingFertilizers ? (
+                <div className="p-16 flex flex-col items-center justify-center gap-2 text-slate-400">
+                  <Loader2 className="w-8 h-8 animate-spin text-teal-600" />
+                  <p className="text-xs font-bold">肥料マスターを検索中...</p>
+                </div>
+              ) : filteredFertilizers.length === 0 ? (
+                <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-400 space-y-2">
+                  <p className="text-sm font-bold">該当する肥料が見つかりませんでした。</p>
+                  <p className="text-xs">別のキーワード（メーカー名や銘柄名の一部）で検索をお試しください。</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredFertilizers.map((fert) => {
+                    const isRegistered = farmRegisteredFertilizers.some(rf => rf.name === fert.fertilizer_name);
+                    return (
+                      <div
+                        key={fert.id}
+                        className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:border-teal-300 transition-all flex flex-col justify-between gap-3"
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <h4 className="text-sm font-black text-slate-800 leading-snug">
+                                {fert.fertilizer_name}
+                              </h4>
+                              <p className="text-[11px] text-slate-400 mt-0.5">
+                                {fert.applicant_name ? `${fert.applicant_name} | ` : ''}登録番号: {fert.registration_no || '-'}
+                              </p>
+                            </div>
+                            <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                              {fert.fertilizer_type || '化成肥料'}
+                            </span>
+                          </div>
+
+                          {/* 成分情報バッジ群（N, P, K, Mg, Ca, 微量要素） */}
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 text-blue-800 rounded-md text-xs font-black">
+                              窒素(N) {fert.n_percent}%
+                            </span>
+                            <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-md text-xs font-black">
+                              リン酸(P) {fert.p_percent}%
+                            </span>
+                            <span className="px-2 py-0.5 bg-purple-50 border border-purple-200 text-purple-800 rounded-md text-xs font-black">
+                              カリ(K) {fert.k_percent}%
+                            </span>
+                            {parseFloat(fert.mg_percent) > 0 && (
+                              <span className="px-2 py-0.5 bg-teal-50 border border-teal-200 text-teal-800 rounded-md text-xs font-black">
+                                苦土(Mg) {fert.mg_percent}%
+                              </span>
+                            )}
+                            {parseFloat(fert.ca_percent) > 0 && (
+                              <span className="px-2 py-0.5 bg-orange-50 border border-orange-200 text-orange-800 rounded-md text-xs font-black">
+                                石灰(Ca) {fert.ca_percent}%
+                              </span>
+                            )}
+                          </div>
+
+                          {fert.other_ingredients && (
+                            <div className="mt-2 text-[11px] font-medium text-emerald-800 bg-emerald-50/80 border border-emerald-200 px-2 py-1 rounded-lg">
+                              その他成分: {fert.other_ingredients}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* アクション */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                          {isRegistered ? (
+                            <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200 flex items-center gap-1">
+                              <Check className="w-3.5 h-3.5" /> 自農園マスタ登録済
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleRegisterFertToFarmMaster(fert)}
+                              className="w-full py-1.5 px-3 bg-teal-600 hover:bg-teal-700 text-white text-xs font-black rounded-xl transition-all shadow-2xs flex items-center justify-center gap-1"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              自農園マスタにワンクリック追加
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 4: 作業・散布履歴 */}
           {activeMainTab === 'history' && (
             <div className="space-y-4">
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
