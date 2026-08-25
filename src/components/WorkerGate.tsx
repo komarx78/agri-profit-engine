@@ -119,6 +119,8 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           name_si: data.name_si,
           name_km: data.name_km,
           role: data.role || 'staff',
+          type: data.type || data.employment_type || 'パート',
+          employment_type: data.type || data.employment_type || 'パート',
           user_id: data.user_id
         };
 

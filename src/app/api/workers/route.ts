@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     // 指定された農園（user_id）のワーカーのみを厳格に取得（※ pin_code, hourly_wage などの機密情報は絶対に返さない）
     const { data, error } = await supabase
       .from('workers')
-      .select('id, name, name_en, name_vi, name_id, name_zh, name_si, name_km, role, user_id, department_id, created_at')
+      .select('id, name, name_en, name_vi, name_id, name_zh, name_si, name_km, role, type, employment_type, user_id, department_id, created_at')
       .eq('user_id', ownerId)
       .order('name');
     
