@@ -9,6 +9,7 @@ export default function SuperAdminDashboard() {
   const [dbStats, setDbStats] = useState({
     basicCount: 0,
     usageCount: 0,
+    fertilizerCount: 0,
     loading: true
   });
 
@@ -20,12 +21,20 @@ export default function SuperAdminDashboard() {
   useEffect(() => {
     async function fetchStats() {
       try {
-        const { count: basicCount } = await supabase.from('m_pesticides').select('*', { count: 'exact', head: true });
-        const { count: usageCount } = await supabase.from('m_pesticide_usages').select('*', { count: 'exact', head: true });
+        const [
+          { count: basicCount },
+          { count: usageCount },
+          { count: fertilizerCount }
+        ] = await Promise.all([
+          supabase.from('m_pesticides').select('*', { count: 'exact', head: true }),
+          supabase.from('m_pesticide_usages').select('*', { count: 'exact', head: true }),
+          supabase.from('m_fertilizers').select('*', { count: 'exact', head: true })
+        ]);
         
         setDbStats({
           basicCount: basicCount || 0,
           usageCount: usageCount || 0,
+          fertilizerCount: fertilizerCount || 0,
           loading: false
         });
       } catch (error) {
@@ -48,8 +57,8 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* 農薬マスター (実データ連携) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* 農薬マスター 基本部 */}
         <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 flex flex-col relative overflow-hidden group">
           <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-indigo-400/10 blur-2xl group-hover:scale-150 transition-transform duration-500" />
           <div className="flex justify-between items-start mb-4 relative z-10">
@@ -61,14 +70,14 @@ export default function SuperAdminDashboard() {
             </span>
           </div>
           <div className="relative z-10 mt-auto">
-            <h3 className="text-slate-400 text-sm font-bold mb-1">基本部（農薬名）登録数</h3>
-            <p className="text-3xl font-black text-white">
-              {dbStats.loading ? <Loader2 className="w-6 h-6 animate-spin text-slate-500" /> : dbStats.basicCount.toLocaleString()}
+            <h3 className="text-slate-400 text-sm font-bold mb-1">農薬基本部 登録数</h3>
+            <p className="text-2xl font-black text-white">
+              {dbStats.loading ? <Loader2 className="w-5 h-5 animate-spin text-slate-500" /> : dbStats.basicCount.toLocaleString()} <span className="text-xs font-normal text-slate-500">件</span>
             </p>
           </div>
         </div>
 
-        {/* 適用部マスター (実データ連携) */}
+        {/* 農薬 適用部 */}
         <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 flex flex-col relative overflow-hidden group">
           <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-indigo-400/10 blur-2xl group-hover:scale-150 transition-transform duration-500" />
           <div className="flex justify-between items-start mb-4 relative z-10">
@@ -80,14 +89,33 @@ export default function SuperAdminDashboard() {
             </span>
           </div>
           <div className="relative z-10 mt-auto">
-            <h3 className="text-slate-400 text-sm font-bold mb-1">適用部（使用法）登録数</h3>
-            <p className="text-3xl font-black text-white">
-              {dbStats.loading ? <Loader2 className="w-6 h-6 animate-spin text-slate-500" /> : dbStats.usageCount.toLocaleString()}
+            <h3 className="text-slate-400 text-sm font-bold mb-1">農薬適用部 登録数</h3>
+            <p className="text-2xl font-black text-white">
+              {dbStats.loading ? <Loader2 className="w-5 h-5 animate-spin text-slate-500" /> : dbStats.usageCount.toLocaleString()} <span className="text-xs font-normal text-slate-500">件</span>
             </p>
           </div>
         </div>
 
-        {/* テナント管理 (今後実装予定) */}
+        {/* 肥料マスター (NEW!) */}
+        <div className="bg-slate-950 p-6 rounded-2xl border border-emerald-500/30 flex flex-col relative overflow-hidden group shadow-lg shadow-emerald-950/20">
+          <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-emerald-400/10 blur-2xl group-hover:scale-150 transition-transform duration-500" />
+          <div className="flex justify-between items-start mb-4 relative z-10">
+            <div className="p-3 rounded-xl bg-emerald-400/10 text-emerald-400 border border-emerald-500/20">
+              <Database className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-bold px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+              NEW
+            </span>
+          </div>
+          <div className="relative z-10 mt-auto">
+            <h3 className="text-slate-300 text-sm font-bold mb-1">全国肥料銘柄 登録数</h3>
+            <p className="text-2xl font-black text-emerald-300">
+              {dbStats.loading ? <Loader2 className="w-5 h-5 animate-spin text-slate-500" /> : dbStats.fertilizerCount.toLocaleString()} <span className="text-xs font-normal text-slate-500">件</span>
+            </p>
+          </div>
+        </div>
+
+        {/* テナント管理 */}
         <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 flex flex-col relative overflow-hidden group opacity-75">
           <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-blue-400/10 blur-2xl group-hover:scale-150 transition-transform duration-500" />
           <div className="flex justify-between items-start mb-4 relative z-10">
@@ -111,6 +139,19 @@ export default function SuperAdminDashboard() {
             <h2 className="text-lg font-bold text-white">クイックアクション</h2>
           </div>
           <div className="space-y-3">
+            <Link href="/super-admin/fertilizers" className="flex items-center justify-between p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-emerald-500/50 transition-colors group">
+              <div className="flex items-center gap-4">
+                <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-200 group-hover:text-white transition-colors">肥料マスターの管理 (CSVインポート)</h3>
+                  <p className="text-xs text-slate-500 mt-1">全国の肥料登録銘柄・N-P-K成分量データをCSVから一括登録します。</p>
+                </div>
+              </div>
+              <ArrowUpRight className="w-5 h-5 text-slate-600 group-hover:text-emerald-400 transition-colors" />
+            </Link>
+
             <Link href="/super-admin/pesticides" className="flex items-center justify-between p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 transition-colors group">
               <div className="flex items-center gap-4">
                 <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg">

@@ -23,6 +23,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
     { name: 'ダッシュボード', href: '/super-admin', icon: LayoutDashboard },
     { name: 'テナント管理', href: '/super-admin/tenants', icon: Users },
     { name: '農薬マスター管理', href: '/super-admin/pesticides', icon: Database },
+    { name: '肥料マスター管理', href: '/super-admin/fertilizers', icon: Server },
     { name: 'システムログ監視', href: '/super-admin/logs', icon: Activity },
   ];
 

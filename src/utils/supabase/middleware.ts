@@ -46,6 +46,7 @@ export async function updateSession(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/hr') &&
     !request.nextUrl.pathname.startsWith('/manuals') &&
     !request.nextUrl.pathname.startsWith('/b2b-order') &&
+    !request.nextUrl.pathname.startsWith('/super-admin') &&
     request.nextUrl.pathname !== '/'
   ) {
     // '/login' にリダイレクト
