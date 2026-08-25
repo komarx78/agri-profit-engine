@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
-import { MapPin, ArrowLeft, Loader2, Calendar, Edit, History, Sprout, Leaf, FlaskConical, Plus, Trash2, Edit2, CheckCircle2, AlertTriangle, X, FileText, Activity, Layers } from 'lucide-react';
+import { MapPin, ArrowLeft, Loader2, Calendar, Edit, History, Sprout, Leaf, FlaskConical, Plus, Trash2, Edit2, CheckCircle2, AlertTriangle, X, FileText, Activity, Layers, Sparkles, Camera, Upload, Check } from 'lucide-react';
 import Link from 'next/link';
 import { GoogleMap, useJsApiLoader, Polygon } from '@react-google-maps/api';
 import FieldWeatherCard from '@/components/FieldWeatherCard';
@@ -32,6 +32,10 @@ export default function FieldDetailPage() {
   const [isSoilModalOpen, setIsSoilModalOpen] = useState(false);
   const [editingSoilItem, setEditingSoilItem] = useState<any>(null);
   const [isSavingSoil, setIsSavingSoil] = useState(false);
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
+  const [isOcrLoading, setIsOcrLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [soilFormData, setSoilFormData] = useState({
     diagnosis_date: new Date().toISOString().split('T')[0],
     agency_name: '',
@@ -274,6 +278,169 @@ export default function FieldDetailPage() {
       improvement_recommendations: item.improvement_recommendations || '',
     });
     setIsSoilModalOpen(true);
+  };
+
+  // 🌱 標準的な土壌目安値セット
+  const handleSetStandardPreset = () => {
+    setSoilFormData(prev => ({
+      ...prev,
+      soil_type: '壌土',
+      ph: '6.2',
+      ec: '0.35',
+      cec: '18.0',
+      humus_percent: '3.5',
+      available_p_mg: '20.0',
+      exchangeable_k_mg: '22.0',
+      exchangeable_ca_mg: '280.0',
+      exchangeable_mg_mg: '45.0',
+      inorganic_n_mg: '2.5',
+    }));
+  };
+
+  // 📸 診断票の写真・PDFからAI-OCR自動読み取り
+  const handleOcrFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsOcrLoading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const imageBase64 = event.target?.result as string;
+          const res = await fetch('/api/soil-ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'ocr_soil_sheet',
+              imageBase64
+            })
+          });
+
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || '画像の読み取りに失敗しました');
+          }
+
+          const ocr = data.data;
+          setSoilFormData(prev => ({
+            ...prev,
+            diagnosis_date: ocr.diagnosis_date || prev.diagnosis_date,
+            agency_name: ocr.agency_name || prev.agency_name,
+            soil_type: ocr.soil_type || prev.soil_type,
+            ph: ocr.ph !== null && ocr.ph !== undefined ? String(ocr.ph) : prev.ph,
+            ec: ocr.ec !== null && ocr.ec !== undefined ? String(ocr.ec) : prev.ec,
+            cec: ocr.cec !== null && ocr.cec !== undefined ? String(ocr.cec) : prev.cec,
+            humus_percent: ocr.humus_percent !== null && ocr.humus_percent !== undefined ? String(ocr.humus_percent) : prev.humus_percent,
+            available_p_mg: ocr.available_p_mg !== null && ocr.available_p_mg !== undefined ? String(ocr.available_p_mg) : prev.available_p_mg,
+            exchangeable_k_mg: ocr.exchangeable_k_mg !== null && ocr.exchangeable_k_mg !== undefined ? String(ocr.exchangeable_k_mg) : prev.exchangeable_k_mg,
+            exchangeable_ca_mg: ocr.exchangeable_ca_mg !== null && ocr.exchangeable_ca_mg !== undefined ? String(ocr.exchangeable_ca_mg) : prev.exchangeable_ca_mg,
+            exchangeable_mg_mg: ocr.exchangeable_mg_mg !== null && ocr.exchangeable_mg_mg !== undefined ? String(ocr.exchangeable_mg_mg) : prev.exchangeable_mg_mg,
+            inorganic_n_mg: ocr.inorganic_n_mg !== null && ocr.inorganic_n_mg !== undefined ? String(ocr.inorganic_n_mg) : prev.inorganic_n_mg,
+          }));
+
+          alert('🎉 診断票の数値を自動抽出しました！内容をご確認の上、AI処方箋を生成してください。');
+        } catch (err: any) {
+          alert(`OCR読み取りエラー: ${err.message}`);
+        } finally {
+          setIsOcrLoading(false);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      alert(`ファイル読み込みエラー: ${err.message}`);
+      setIsOcrLoading(false);
+    }
+  };
+
+  // ✨ 全データ連携型 AI土壌診断＆処方箋 自動生成
+  const handleGenerateSoilAi = async () => {
+    setIsGeneratingAi(true);
+    try {
+      const tenantId = await getCurrentTenantId();
+
+      // 1. 自社資材マスタの肥料リストを取得
+      let userMaterials: string[] = [];
+      if (tenantId) {
+        const { data: matData } = await supabase
+          .from('materials')
+          .select('name, category, fertilizer_type')
+          .eq('user_id', tenantId)
+          .limit(20);
+        if (matData) {
+          userMaterials = matData.map(m => m.name);
+        }
+      }
+
+      // 2. 直近の施肥履歴の要約
+      const recentFertilizers = recentWorks.map(w => `${w.work_date}: ${w.work_type} (${w.notes || ''})`);
+
+      // 3. 塩基バランス等の計算
+      const ph = parseFloat(soilFormData.ph) || 0;
+      const ec = parseFloat(soilFormData.ec) || 0;
+      const cec = parseFloat(soilFormData.cec) || 0;
+      const humus = parseFloat(soilFormData.humus_percent) || 0;
+      const p = parseFloat(soilFormData.available_p_mg) || 0;
+      const k = parseFloat(soilFormData.exchangeable_k_mg) || 0;
+      const ca = parseFloat(soilFormData.exchangeable_ca_mg) || 0;
+      const mg = parseFloat(soilFormData.exchangeable_mg_mg) || 0;
+
+      const caMeq = ca / 28;
+      const mgMeq = mg / 20;
+      const kMeq = k / 47;
+      let baseSaturation = 0;
+      if (cec > 0) {
+        baseSaturation = Math.round(((caMeq + mgMeq + kMeq) / cec) * 100 * 10) / 10;
+      }
+      const caMgRatio = mgMeq > 0 ? Math.round((caMeq / mgMeq) * 10) / 10 : 0;
+      const mgKRatio = kMeq > 0 ? Math.round((mgMeq / kMeq) * 10) / 10 : 0;
+
+      const soilPayload = {
+        ph,
+        ec,
+        cec,
+        humus_percent: humus,
+        available_p_mg: p,
+        exchangeable_k_mg: k,
+        exchangeable_ca_mg: ca,
+        exchangeable_mg_mg: mg,
+        base_saturation_percent: baseSaturation,
+        ca_mg_ratio: caMgRatio,
+        mg_k_ratio: mgKRatio,
+      };
+
+      const res = await fetch('/api/soil-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'generate_prescription',
+          fieldName: field?.name,
+          fieldAreaSize: field?.area_size,
+          currentCropName: currentPlan?.crops?.name,
+          variety: currentPlan?.variety,
+          recentFertilizers,
+          userMaterials,
+          soilData: soilPayload
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'AI処方箋の生成に失敗しました');
+      }
+
+      setSoilFormData(prev => ({
+        ...prev,
+        diagnosis_summary: data.data.diagnosis_summary,
+        improvement_recommendations: data.data.improvement_recommendations
+      }));
+
+    } catch (err: any) {
+      alert(`AI診断エラー: ${err.message}`);
+    } finally {
+      setIsGeneratingAi(false);
+    }
   };
 
   // 地図の初期位置（ポリゴンの中心）
@@ -830,6 +997,38 @@ export default function FieldDetailPage() {
               </button>
             </div>
 
+            {/* 上部クイック操作アクション */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleOcrFileSelect}
+                accept="image/*,application/pdf"
+                className="hidden"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isOcrLoading}
+                  className="px-3 py-1.5 bg-white hover:bg-emerald-50 border border-emerald-300 text-emerald-700 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isOcrLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+                  {isOcrLoading ? '診断票を解析中...' : '📸 診断表の写真・PDFからAI自動入力'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSetStandardPreset}
+                  className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1"
+                >
+                  🌱 標準目安値をセット
+                </button>
+              </div>
+              <span className="text-[11px] text-slate-400 font-bold hidden sm:inline">
+                ※用紙を撮るだけで数値を自動補完
+              </span>
+            </div>
+
             <form onSubmit={handleSaveSoilDiagnosis} className="flex-1 overflow-y-auto space-y-4 pr-1">
               
               {/* 基本情報 */}
@@ -974,13 +1173,53 @@ export default function FieldDetailPage() {
                 </div>
               </div>
 
-              {/* 総合診断所見・処方箋 */}
+              {/* 💡 AI土壌診断＆処方箋ガイド ＆ 自動生成アクション */}
+              <div className="p-4 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 rounded-2xl border border-emerald-200/80 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-black text-emerald-900 flex items-center gap-1">
+                        <Sparkles className="w-4 h-4 text-emerald-600" />
+                        AI土壌診断 ＆ 施肥・改良処方箋
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-200/60 text-emerald-800 font-bold">
+                        全データ連携型
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-emerald-800/80 leading-snug">
+                      🌱 <span className="font-bold">これから土づくりを本格化する農家様・後継者育成にも最適。</span><br className="hidden sm:inline" />
+                      当圃場の作付・過去の施肥履歴・自社登録資材を統合分析し、農水省基準に準拠した処方箋を作成します。
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleGenerateSoilAi}
+                    disabled={isGeneratingAi}
+                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5 shrink-0 disabled:opacity-50"
+                  >
+                    {isGeneratingAi ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        農場データを分析中...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        ✨ AI処方箋を生成
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* 総合診断所見・処方箋（手動編集可能） */}
               <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">総合所見・コメント</label>
                   <textarea
                     rows={2}
-                    placeholder="例: 全体的に保肥力は標準。塩基バランス良好だがリン酸がやや蓄積傾向。"
+                    placeholder="AI処方箋を生成ボタンを押すか、JA診断票の所見をご入力ください。"
                     value={soilFormData.diagnosis_summary}
                     onChange={(e) => setSoilFormData({...soilFormData, diagnosis_summary: e.target.value})}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -989,12 +1228,15 @@ export default function FieldDetailPage() {
                 <div>
                   <label className="block text-xs font-bold text-emerald-800 mb-1">🌱 施肥・土壌改良処方箋</label>
                   <textarea
-                    rows={2}
-                    placeholder="例: 元肥のリン酸を2割減肥。堆肥1t/10a施用を推奨。"
+                    rows={3}
+                    placeholder="次回作付に向けた基肥の減肥・増肥、堆肥・石灰の施用指針がここに自動作成されます。"
                     value={soilFormData.improvement_recommendations}
                     onChange={(e) => setSoilFormData({...soilFormData, improvement_recommendations: e.target.value})}
                     className="w-full p-2.5 bg-slate-50 border border-emerald-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    ※ AIの提案は推奨目安です。地域の土壌や天候に合わせてご自由に加筆・修正して保存できます。
+                  </p>
                 </div>
               </div>
 
