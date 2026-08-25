@@ -922,11 +922,25 @@ function PortalContent() {
     }
   };
 
+  // 時刻表示ヘルパー（ISO文字列・HH:mmの双方に対応）
+  const formatDisplayTime = (val: string | null | undefined) => {
+    if (!val) return '';
+    if (val.includes('T')) {
+      try {
+        const d = new Date(val);
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      } catch (e) {
+        return val;
+      }
+    }
+    return val.substring(0, 5);
+  };
+
   // 出退勤アクション
   const handleClockAction = async (type: 'in' | 'out') => {
     if (!currentUser) return;
     const today = getJSTDate();
-    const time = getJSTTime();
+    const nowIso = new Date().toISOString();
     
     // workerProfile.id (UUID of workers table) が必要
     if (!workerProfile || !workerProfile.id) {
@@ -934,29 +948,33 @@ function PortalContent() {
       return;
     }
     const workerId = workerProfile.id;
+    const tenantUserId = workerProfile.user_id || (currentUser as any)?.user_id || localStorage.getItem('agri_owner_id') || null;
 
     try {
       if (type === 'in') {
-        const { data, error } = await supabase.from('attendance_logs').insert([{
+        const payload: any = {
           worker_id: workerId,
           date: today,
-          clock_in: time,
+          clock_in: nowIso,
           status: 'working'
-        }]).select().single();
+        };
+        if (tenantUserId) payload.user_id = tenantUserId;
+
+        const { data, error } = await supabase.from('attendance_logs').insert([payload]).select().single();
         if (error) throw error;
         setAttendance(data);
       } else {
         if (!attendance) return;
         const { data, error } = await supabase.from('attendance_logs').update({
-          clock_out: time,
+          clock_out: nowIso,
           status: 'left'
         }).eq('id', attendance.id).select().single();
         if (error) throw error;
         setAttendance(data);
       }
-    } catch (err) {
-      console.error('打刻エラー:', err);
-      alert('打刻に失敗しました。');
+    } catch (err: any) {
+      console.error('打刻エラー詳細:', err);
+      alert('打刻に失敗しました: ' + (err.message || '通信エラー'));
     }
   };
 
@@ -1202,7 +1220,7 @@ function PortalContent() {
                 >
                   <span className="text-2xl">🏃‍♂️</span>
                   <span>{t('portal_clockIn', language)}</span>
-                  {hasClockedIn && <span className="text-[10px] bg-slate-200 px-2 py-0.5 rounded mt-1">{attendance.clock_in}</span>}
+                  {hasClockedIn && <span className="text-[10px] bg-slate-200 px-2 py-0.5 rounded mt-1 font-bold">{formatDisplayTime(attendance.clock_in)}</span>}
                 </button>
                 <button 
                   onClick={() => handleClockAction('out')}
@@ -1215,7 +1233,7 @@ function PortalContent() {
                 >
                   <span className="text-2xl">🏠</span>
                   <span>{t('portal_clockOut', language)}</span>
-                  {hasClockedOut && <span className="text-[10px] bg-slate-200 px-2 py-0.5 rounded mt-1">{attendance.clock_out}</span>}
+                  {hasClockedOut && <span className="text-[10px] bg-slate-200 px-2 py-0.5 rounded mt-1 font-bold">{formatDisplayTime(attendance.clock_out)}</span>}
                 </button>
               </div>
 
