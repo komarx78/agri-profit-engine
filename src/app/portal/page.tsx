@@ -1068,50 +1068,31 @@ function PortalContent() {
 
           {/* 右側：ナビゲーション・ユーザー情報・言語切替・ログアウト */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-            {/* 現場日報入力へのリンク */}
-            <button
-              onClick={() => router.push('/work')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl font-black text-xs transition-colors shadow-2xs"
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">⏱️ 現場日報入力</span>
-              <span className="sm:hidden">日報</span>
-            </button>
-
-            {currentUser && (
-              <div className="flex items-center gap-1 sm:gap-2">
-                {/* PC用 ログイン中バッジ */}
-                <div className="hidden sm:flex items-center gap-1.5 text-xs font-black text-slate-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl shadow-2xs">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                  <span className="text-[10px] text-emerald-700 font-bold">{t('portal_loggedIn', language)}</span>
-                  <span className="text-slate-900 font-black truncate max-w-[120px]">{getTranslatedName(currentUser, language)}</span>
-                </div>
-
-                {/* スタッフ切り替えボタン（管理者のみ） */}
-                {role === 'admin' && (
-                  <button
-                    type="button"
-                    onClick={() => setShowWorkerGate(true)}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-2 sm:px-2.5 sm:py-1.5 rounded-xl border border-blue-200 transition-colors flex items-center gap-1 shrink-0"
-                    title="別の現場スタッフとしてログインし直す"
-                  >
-                    <UserCheck className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-                    <span className="hidden lg:inline">{t('switchWorker', language)}</span>
-                  </button>
-                )}
-              </div>
+            
+            {/* 管理者モード時の管理者画面リンク */}
+            {role === 'admin' && (
+              <Link
+                href="/admin/cultivations"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm rounded-xl transition-colors shadow-xs shrink-0"
+                title="管理者システム（作付け・地図・分析等）へ行く"
+              >
+                <Building className="w-4 h-4 shrink-0" />
+                <span>🏢 管理者画面へ</span>
+              </Link>
             )}
 
-            {/* 言語切り替え */}
-            <div className="flex items-center bg-slate-50 px-2 py-1.5 rounded-xl border border-slate-200 shrink-0">
-              <Globe2 className="w-3.5 h-3.5 text-slate-500 mr-1" />
-              <select 
+            {/* 言語選択 */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
+              <Languages className="w-3.5 h-3.5 text-slate-500 ml-1" />
+              <select
                 value={language}
-                onChange={(e: any) => setLanguage(e.target.value)}
-                className="bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                onChange={(e) => handleLanguageChange(e.target.value as LanguageCode)}
+                className="bg-transparent text-xs font-bold text-slate-700 outline-none pr-1 cursor-pointer"
               >
-                {LANGUAGES.map(l => (
-                  <option key={l.code} value={l.code}>{l.flag} {l.code.toUpperCase()}</option>
+                {LANGUAGES.map((lang) => (
+                  <option key={lang.code} value={lang.code}>
+                    {lang.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -1127,61 +1108,11 @@ function PortalContent() {
             </button>
           </div>
         </div>
-
-        {/* 🌟 2大ビュー切替スイッチ（管理者モード時のみ表示） */}
-        {role === 'admin' && (
-          <div className="bg-slate-100/90 border-t border-slate-200 backdrop-blur-xs py-2">
-            <div className="max-w-md mx-auto px-4 flex items-center justify-center">
-              <div className="bg-slate-200/80 p-1.5 rounded-2xl flex items-center gap-1.5 w-full border border-slate-300/60 shadow-inner">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActivePortalTab('admin');
-                    router.push('/portal?tab=admin');
-                  }}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
-                    activePortalTab === 'admin' || activePortalTab === 'dashboard' || activePortalTab === 'cultivations' || activePortalTab === 'cloud'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <Building className="w-4 h-4" />
-                  <span>🏢 管理者ホーム</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActivePortalTab('home');
-                    router.push('/portal?tab=home');
-                  }}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
-                    activePortalTab === 'home'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <LayoutDashboard className="w-4 h-4" />
-                  <span>📱 現場ホーム</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
         
-        {/* 1. 🏢 管理者ホーム（サイドバー付き完全統合管理ビュー） */}
-        {role === 'admin' && (activePortalTab === 'admin' || activePortalTab === 'dashboard' || activePortalTab === 'cultivations' || activePortalTab === 'cloud') && (
-          <AdminHub onSwitchToHome={() => {
-            setActivePortalTab('home');
-            router.push('/portal?tab=home');
-          }} />
-        )}
-
-        {/* 2. 📱 現場ホーム（一般スタッフモード時、または管理者でhome選択時） */}
-        {(role === 'worker' || activePortalTab === 'home') && (
+        {/* 📱 現場ホーム（一般スタッフ・パート用 出退勤打刻・タスク・日報・掲示板・マニュアル） */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* 左側カラム */}
@@ -1450,7 +1381,6 @@ function PortalContent() {
             </div>
           </div>
         </div>
-        )}
       </main>
 
       {/* フルスクリーン社内掲示板モーダル */}
