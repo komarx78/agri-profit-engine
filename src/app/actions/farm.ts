@@ -421,3 +421,68 @@ export async function getWorkerShareSettings(tenantId: string) {
     };
   }
 }
+
+// 6. 自社情報・請求設定の保存
+export async function saveCompanySettings(tenantId: string, settingsData: any) {
+  try {
+    const supabase = createAdminClient();
+    if (!tenantId) return { success: false, error: 'テナントIDが不正です' };
+
+    const { data: comp } = await supabase
+      .from('company_settings')
+      .select('id')
+      .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+      .maybeSingle();
+
+    const payload = {
+      company_name: settingsData.company_name || '',
+      postal_code: settingsData.postal_code || '',
+      address: settingsData.address || '',
+      phone: settingsData.phone || '',
+      invoice_number: settingsData.invoice_number || '',
+      bank_info: settingsData.bank_info || '',
+      updated_at: new Date().toISOString()
+    };
+
+    if (comp) {
+      const { error } = await supabase
+        .from('company_settings')
+        .update(payload)
+        .eq('id', comp.id);
+      if (error) throw error;
+      return { success: true, id: comp.id };
+    } else {
+      const { data, error } = await supabase
+        .from('company_settings')
+        .insert([{ ...payload, user_id: tenantId }])
+        .select()
+        .single();
+      if (error) throw error;
+      return { success: true, id: data?.id };
+    }
+  } catch (err: any) {
+    console.error('saveCompanySettings error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// 7. 自社情報・請求設定の取得
+export async function getCompanySettings(tenantId: string) {
+  try {
+    const supabase = createAdminClient();
+    if (!tenantId) return { success: false, data: null };
+
+    const { data, error } = await supabase
+      .from('company_settings')
+      .select('*')
+      .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+      .maybeSingle();
+
+    if (error && error.code !== 'PGRST116') throw error;
+    return { success: true, data };
+  } catch (err: any) {
+    console.error('getCompanySettings error:', err);
+    return { success: false, error: err.message, data: null };
+  }
+}
+

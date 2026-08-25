@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
-import { Settings, Save, CheckCircle2, Building, MapPin, Phone, FileText, Landmark, Clock } from 'lucide-react';
+import { saveCompanySettings, getCompanySettings } from '@/app/actions/farm';
+import { Settings, Save, CheckCircle2, Building, MapPin, Phone, FileText, Landmark } from 'lucide-react';
+import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 
 export default function SettingsPage() {
-  const [settingsId, setSettingsId] = useState<string | null>(null);
-  
   const [formData, setFormData] = useState({
     company_name: '',
     postal_code: '',
@@ -30,25 +29,15 @@ export default function SettingsPage() {
           return;
         }
 
-        const { data, error } = await supabase
-          .from('company_settings')
-          .select('*')
-          .eq('user_id', tenantId)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (error && error.code !== 'PGRST116') {
-          console.error(error);
-        } else if (data) {
-          setSettingsId(data.id);
+        const res = await getCompanySettings(tenantId);
+        if (res.success && res.data) {
           setFormData({
-            company_name: data.company_name || '',
-            postal_code: data.postal_code || '',
-            address: data.address || '',
-            phone: data.phone || '',
-            invoice_number: data.invoice_number || '',
-            bank_info: data.bank_info || '',
+            company_name: res.data.company_name || '',
+            postal_code: res.data.postal_code || '',
+            address: res.data.address || '',
+            phone: res.data.phone || '',
+            invoice_number: res.data.invoice_number || '',
+            bank_info: res.data.bank_info || '',
           });
         }
       } catch (err) {
@@ -74,35 +63,16 @@ export default function SettingsPage() {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) throw new Error('テナントIDが特定できません');
 
-      const dataToSave = {
-        ...formData,
-        user_id: tenantId,
-        updated_at: new Date().toISOString()
-      };
-
-      if (settingsId) {
-        // Update existing
-        const { error } = await supabase
-          .from('company_settings')
-          .update(payload)
-          .eq('id', settingsId);
-        if (error) throw error;
-      } else {
-        // Insert new
-        const { data, error } = await supabase
-          .from('company_settings')
-          .insert([payload])
-          .select()
-          .single();
-        if (error) throw error;
-        if (data) setSettingsId(data.id);
+      const res = await saveCompanySettings(tenantId, formData);
+      if (!res.success) {
+        throw new Error(res.error || '保存に失敗しました');
       }
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('保存に失敗しました。');
+      alert(`保存に失敗しました: ${err.message || '予期せぬエラー'}`);
     } finally {
       setIsSaving(false);
     }
@@ -113,7 +83,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8 pb-12">
+    <AdminOnlyGuard>
+      <div className="max-w-3xl mx-auto space-y-8 pb-12">
       <div>
         <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
           <Settings className="w-8 h-8 text-slate-600" />
@@ -253,5 +224,6 @@ export default function SettingsPage() {
         </div>
       </form>
     </div>
+    </AdminOnlyGuard>
   );
 }
