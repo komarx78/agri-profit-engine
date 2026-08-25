@@ -168,14 +168,56 @@ export default function PortalPage() {
           }
         }
 
-        if (session) {
-          // --- 管理者(またはAuth登録されたユーザー) ---
+        // 1. 現場作業者情報（agri_current_worker）を最優先で確認
+        const savedUser = typeof window !== 'undefined' ? localStorage.getItem('agri_current_worker') : null;
+
+        if (savedUser) {
+          try {
+            const workerData = JSON.parse(savedUser);
+            const isWorkerAdmin = workerData.role === 'admin';
+            currentRole = isWorkerAdmin ? 'admin' : 'worker';
+            setRole(isWorkerAdmin ? 'admin' : 'worker');
+            profile = workerData;
+            setWorkerProfile(workerData);
+            setCurrentUser(workerData);
+
+            // 所属農園ID（user_id）の確定
+            ownerId = workerData.user_id || (session ? session.user.id : '') || localStorage.getItem('agri_owner_id') || '';
+
+            // 旧キャッシュ対策：もしownerIdが空なら、自身(workerData.id)からDBを参照して農園IDを修復
+            if (!ownerId && workerData.id) {
+              const { data: wRecord } = await supabase.from('workers').select('user_id').eq('id', workerData.id).maybeSingle();
+              if (wRecord && wRecord.user_id) {
+                ownerId = wRecord.user_id;
+              }
+            }
+
+            if (ownerId) {
+              localStorage.setItem('agri_owner_id', ownerId);
+            }
+
+            // 会社名の取得
+            if (ownerId) {
+              const { data: companyData } = await supabase.from('company_settings').select('company_name').eq('user_id', ownerId).maybeSingle();
+              if (companyData && companyData.company_name) {
+                setCompanyName(companyData.company_name);
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem(`agri_company_${ownerId}`, companyData.company_name);
+                  localStorage.removeItem('agri_cached_company_name');
+                }
+              } else {
+                setCompanyName('');
+              }
+            }
+          } catch (e) {
+            console.error('Failed to parse saved worker:', e);
+          }
+        } else if (session) {
+          // 2. 現場作業者が未選択で、Supabase Auth セッションがある場合は管理者として起動
           ownerId = session.user.id;
           localStorage.setItem('agri_owner_id', ownerId);
-          
-          // オーナーの会社名を取得
+
           const { data: companyData } = await supabase.from('company_settings').select('company_name').eq('user_id', ownerId).maybeSingle();
-          
           if (companyData && companyData.company_name) {
             setCompanyName(companyData.company_name);
             if (typeof window !== 'undefined') {
@@ -189,57 +231,13 @@ export default function PortalPage() {
           currentRole = 'admin';
           setRole('admin');
           setCurrentUser({ name: '管理者', name_en: 'Admin', role: 'admin' });
-          
         } else {
-          // --- セッションなし（現場スタッフのPINログイン確認） ---
-          const savedUser = localStorage.getItem('agri_current_worker');
-          if (savedUser) {
-            const workerData = JSON.parse(savedUser);
-            const isWorkerAdmin = workerData.role === 'admin';
-            currentRole = isWorkerAdmin ? 'admin' : 'worker';
-            setRole(isWorkerAdmin ? 'admin' : 'worker');
-            profile = workerData;
-            setWorkerProfile(workerData);
-            setCurrentUser(workerData);
-            
-            // ワーカーの所属農園ID（user_id）を最優先で確定
-            ownerId = workerData.user_id || localStorage.getItem('agri_owner_id') || '';
-            
-            // 旧キャッシュ対策：もしownerIdが空なら、自身(workerData.id)からDBを参照して農園IDを自己修復
-            if (!ownerId && workerData.id) {
-              const { data: wRecord } = await supabase.from('workers').select('user_id').eq('id', workerData.id).maybeSingle();
-              if (wRecord && wRecord.user_id) {
-                ownerId = wRecord.user_id;
-              }
-            }
-
-            if (ownerId) {
-              localStorage.setItem('agri_owner_id', ownerId);
-            }
-            
-            // ワーカー用に会社名を取得 (ownerIdから厳格に取得)
-            if (ownerId) {
-              const { data: companyData } = await supabase.from('company_settings').select('company_name').eq('user_id', ownerId).maybeSingle();
-              if (companyData && companyData.company_name) {
-                setCompanyName(companyData.company_name);
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem(`agri_company_${ownerId}`, companyData.company_name);
-                  localStorage.removeItem('agri_cached_company_name');
-                }
-              } else {
-                setCompanyName('');
-              }
-            } else {
-              setCompanyName('');
-            }
-          } else {
-            // ローカルストレージにもなければ、WorkerGateを表示する
-            setShowWorkerGate(true);
-            setIsLoading(false);
-            return;
-          }
+          // 3. 作業者もセッションもない場合は WorkerGate（選択画面）を表示
+          setShowWorkerGate(true);
+          setIsLoading(false);
+          return;
         }
-        
+
         await fetchPortalData(ownerId, currentRole, profile);
 
         // URLクエリに manual=1 または openManual=true があればマニュアルモーダルを開く
@@ -1045,18 +1043,16 @@ export default function PortalPage() {
                   <span className="text-slate-900 font-black truncate max-w-[120px]">{getTranslatedName(currentUser, language)}</span>
                 </div>
 
-                {/* スタッフ切り替えボタン（管理者のみ） */}
-                {role === 'admin' && (
-                  <button
-                    type="button"
-                    onClick={() => setShowWorkerGate(true)}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-2 sm:px-2.5 sm:py-1.5 rounded-xl border border-blue-200 transition-colors flex items-center gap-1 shrink-0"
-                    title="別の現場スタッフとしてログインし直す"
-                  >
-                    <UserCheck className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-                    <span className="hidden lg:inline">{t('switchWorker', language)}</span>
-                  </button>
-                )}
+                {/* スタッフ切り替えボタン */}
+                <button
+                  type="button"
+                  onClick={() => setShowWorkerGate(true)}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-2 sm:px-2.5 sm:py-1.5 rounded-xl border border-blue-200 transition-colors flex items-center gap-1 shrink-0"
+                  title="別の現場スタッフとしてログインし直す"
+                >
+                  <UserCheck className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                  <span className="hidden lg:inline">{t('switchWorker', language)}</span>
+                </button>
               </div>
             )}
 
