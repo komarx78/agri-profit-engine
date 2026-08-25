@@ -236,6 +236,36 @@ export default function TasksPage() {
     }
   };
 
+  // タスクの巡回順序を即座に入れ替える（▲ / ▼ クイック並び替え）
+  const handleMoveTaskOrder = async (task: any, direction: 'up' | 'down', siblingTasks: any[]) => {
+    const currentIndex = siblingTasks.findIndex(t => t.id === task.id);
+    if (currentIndex < 0) return;
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= siblingTasks.length) return;
+
+    const targetTask = siblingTasks[targetIndex];
+    const newOrderForCurrent = targetIndex + 1;
+    const newOrderForTarget = currentIndex + 1;
+
+    // ローカルステートを即時更新してUIを快適に
+    setTasks(prev => prev.map(t => {
+      if (t.id === task.id) return { ...t, step_order: newOrderForCurrent };
+      if (t.id === targetTask.id) return { ...t, step_order: newOrderForTarget };
+      return t;
+    }));
+
+    try {
+      await supabase.from('work_logs').update({ step_order: newOrderForCurrent }).eq('id', task.id);
+      await supabase.from('work_logs').update({ step_order: newOrderForTarget }).eq('id', targetTask.id);
+      const activeTenantId = tenantId || await getCurrentTenantId();
+      if (activeTenantId) {
+        await fetchTasksData(activeTenantId);
+      }
+    } catch (e) {
+      console.error('Order update error:', e);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!window.confirm('本当に削除しますか？')) return;
     try {
@@ -449,9 +479,22 @@ export default function TasksPage() {
                           {t.crops && <span>🌱{t.crops.name}</span>}
                         </td>
                         <td className="px-6 py-4">
-                          <button onClick={() => handleDelete(t.id)} className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button 
+                              onClick={() => handleEditModal(t)} 
+                              className="p-2 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded-lg transition-colors font-bold text-xs flex items-center gap-1"
+                              title="編集"
+                            >
+                              ✏️ 編集
+                            </button>
+                            <button 
+                              onClick={() => handleDelete(t.id)} 
+                              className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                              title="削除"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -542,19 +585,21 @@ export default function TasksPage() {
                       </td>
                       {dates.map((d, i) => {
                         const dateStr = d.toISOString().split('T')[0];
-                        const cellTasks = tasks.filter(t => {
-                          if (t.work_date !== dateStr) return false;
-                          if (groupMode === 'worker') {
-                            if (item.id === 'unassigned') return !t.worker_id;
-                            return t.worker_id === item.id;
-                          } else if (groupMode === 'crop') {
-                            if (item.id === 'unassigned') return !t.crop_id;
-                            return t.crop_id === item.id;
-                          } else {
-                            if (item.id === 'unassigned') return !t.field_id;
-                            return t.field_id === item.id;
-                          }
-                        });
+                        const cellTasks = tasks
+                          .filter(t => {
+                            if (t.work_date !== dateStr) return false;
+                            if (groupMode === 'worker') {
+                              if (item.id === 'unassigned') return !t.worker_id;
+                              return t.worker_id === item.id;
+                            } else if (groupMode === 'crop') {
+                              if (item.id === 'unassigned') return !t.crop_id;
+                              return t.crop_id === item.id;
+                            } else {
+                              if (item.id === 'unassigned') return !t.field_id;
+                              return t.field_id === item.id;
+                            }
+                          })
+                          .sort((a, b) => (a.step_order || 1) - (b.step_order || 1));
 
                         return (
                           <td key={i} className="p-1.5 border-r border-slate-100 relative min-h-[60px] align-top">
@@ -572,18 +617,62 @@ export default function TasksPage() {
                               </button>
                               
                               <div className="relative z-10 flex flex-col gap-1.5 w-full">
-                                {cellTasks.map(task => (
-                                  <div key={task.id} onClick={() => handleEditModal(task)} className="bg-white border border-emerald-200 shadow-sm p-2 rounded-lg group/task hover:border-emerald-400 hover:shadow-md transition-all relative cursor-pointer">
-                                    <div className="flex items-center gap-1.5 mb-1 pr-6">
-                                      {task.step_order && task.step_order > 0 && (
+                                {cellTasks.map((task, taskIdx) => (
+                                  <div 
+                                    key={task.id} 
+                                    onClick={() => handleEditModal(task)} 
+                                    className="bg-white border border-emerald-200 shadow-sm p-2 rounded-lg group/task hover:border-emerald-400 hover:shadow-md transition-all relative cursor-pointer"
+                                  >
+                                    <div className="flex items-center justify-between gap-1 mb-1">
+                                      <div className="flex items-center gap-1.5 min-w-0">
                                         <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black flex items-center justify-center shrink-0">
-                                          {task.step_order}
+                                          {task.step_order || taskIdx + 1}
                                         </span>
-                                      )}
-                                      <div className="font-bold text-emerald-800 text-xs truncate" title={task.task_title}>
-                                        {task.task_title}
+                                        <div className="font-bold text-emerald-800 text-xs truncate" title={task.task_title}>
+                                          {task.task_title}
+                                        </div>
+                                      </div>
+
+                                      {/* ▲ / ▼ クイック並び替えボタン & 削除 */}
+                                      <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover/task:opacity-100 transition-opacity bg-white/90 rounded px-1">
+                                        {cellTasks.length > 1 && (
+                                          <>
+                                            <button
+                                              type="button"
+                                              disabled={taskIdx === 0}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleMoveTaskOrder(task, 'up', cellTasks);
+                                              }}
+                                              className="p-0.5 text-slate-400 hover:text-emerald-700 disabled:opacity-20 text-[10px] font-black"
+                                              title="順番を前へ"
+                                            >
+                                              ▲
+                                            </button>
+                                            <button
+                                              type="button"
+                                              disabled={taskIdx === cellTasks.length - 1}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleMoveTaskOrder(task, 'down', cellTasks);
+                                              }}
+                                              className="p-0.5 text-slate-400 hover:text-emerald-700 disabled:opacity-20 text-[10px] font-black"
+                                              title="順番を次へ"
+                                            >
+                                              ▼
+                                            </button>
+                                          </>
+                                        )}
+                                        <button 
+                                          onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }}
+                                          className="p-0.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                                          title="削除"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </button>
                                       </div>
                                     </div>
+
                                     <div className="text-[10px] text-slate-500 flex flex-col gap-0.5">
                                       {task.time_slot && (
                                         <span className="text-[9px] font-black text-amber-700 bg-amber-50 px-1 py-0.2 rounded w-max">
@@ -614,12 +703,6 @@ export default function TasksPage() {
                                         </div>
                                       )}
                                     </div>
-                                    <button 
-                                      onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }}
-                                      className="absolute top-1 right-1 opacity-0 group-hover/task:opacity-100 p-1 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
                                   </div>
                                 ))}
                               </div>
