@@ -21,10 +21,10 @@ export async function GET(request: Request) {
       auth: { persistSession: false }
     });
 
-    // 指定された農園（user_id）のワーカーのみを厳格に取得
+    // 指定された農園（user_id）のワーカーのみを厳格に取得（※ pin_code, hourly_wage などの機密情報は絶対に返さない）
     const { data, error } = await supabase
       .from('workers')
-      .select('*')
+      .select('id, name, name_en, name_vi, name_id, name_zh, name_si, name_km, role, user_id, department_id, created_at')
       .eq('user_id', ownerId)
       .order('name');
     

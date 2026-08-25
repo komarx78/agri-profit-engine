@@ -2,14 +2,28 @@
 
 import { supabase } from '@/lib/supabase';
 
+/**
+ * サーバー側で管理者セッションを検証し、なりすまし（IDOR）を防止するヘルパー
+ */
+async function resolveAuthenticatedTenantId(passedTenantId?: string | null): Promise<string | null> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && user.id) {
+      return user.id;
+    }
+  } catch (e) {}
+  return passedTenantId || null;
+}
+
 // ---------------------------
 // Customers
 // ---------------------------
 export async function getB2BCustomers(tenantId: string | null) {
   try {
+    const validTenantId = await resolveAuthenticatedTenantId(tenantId);
     let query = supabase.from('b2b_customers').select('*').order('created_at', { ascending: false });
-    if (tenantId) {
-      query = query.eq('user_id', tenantId);
+    if (validTenantId) {
+      query = query.eq('user_id', validTenantId);
     }
     const { data, error } = await query;
     if (error) throw error;
@@ -21,9 +35,10 @@ export async function getB2BCustomers(tenantId: string | null) {
 
 export async function createB2BCustomer(data: any, tenantId?: string | null) {
   try {
+    const validTenantId = await resolveAuthenticatedTenantId(tenantId);
     const payload = { ...data };
-    if (tenantId && !payload.user_id) {
-      payload.user_id = tenantId;
+    if (validTenantId) {
+      payload.user_id = validTenantId;
     }
     const { error } = await supabase.from('b2b_customers').insert([payload]);
     if (error) throw error;
@@ -38,6 +53,7 @@ export async function createB2BCustomer(data: any, tenantId?: string | null) {
 // ---------------------------
 export async function getB2BOrders(tenantId: string | null) {
   try {
+    const validTenantId = await resolveAuthenticatedTenantId(tenantId);
     let query = supabase
       .from('b2b_orders')
       .select(`
@@ -47,8 +63,8 @@ export async function getB2BOrders(tenantId: string | null) {
       `)
       .order('delivery_date', { ascending: true });
 
-    if (tenantId) {
-      query = query.eq('user_id', tenantId);
+    if (validTenantId) {
+      query = query.eq('user_id', validTenantId);
     }
 
     const { data, error } = await query;
@@ -61,10 +77,11 @@ export async function getB2BOrders(tenantId: string | null) {
 
 export async function createB2BOrder(orderData: any, orderItems: any[], tenantId?: string | null) {
   try {
+    const validTenantId = await resolveAuthenticatedTenantId(tenantId);
     // 1. Create Order
     const payload = { ...orderData };
-    if (tenantId && !payload.user_id) {
-      payload.user_id = tenantId;
+    if (validTenantId) {
+      payload.user_id = validTenantId;
     }
 
     const { data: newOrder, error: orderError } = await supabase
@@ -158,13 +175,14 @@ export async function deleteB2BOrder(orderId: string) {
 // ---------------------------
 export async function getB2BInvoices(tenantId: string | null) {
   try {
+    const validTenantId = await resolveAuthenticatedTenantId(tenantId);
     let query = supabase
       .from('b2b_invoices')
       .select('*, customer:b2b_customers(*)')
       .order('issue_date', { ascending: false });
 
-    if (tenantId) {
-      query = query.eq('user_id', tenantId);
+    if (validTenantId) {
+      query = query.eq('user_id', validTenantId);
     }
 
     const { data, error } = await query;
@@ -177,9 +195,10 @@ export async function getB2BInvoices(tenantId: string | null) {
 
 export async function createB2BInvoice(invoiceData: any, tenantId?: string | null) {
   try {
+    const validTenantId = await resolveAuthenticatedTenantId(tenantId);
     const payload = { ...invoiceData };
-    if (tenantId && !payload.user_id) {
-      payload.user_id = tenantId;
+    if (validTenantId) {
+      payload.user_id = validTenantId;
     }
     const { data, error } = await supabase
       .from('b2b_invoices')
@@ -208,6 +227,7 @@ export async function updateB2BInvoiceStatus(invoiceId: string, status: string) 
 
 export async function generateInvoicesForMonth(targetMonth: string, tenantId?: string | null) {
   try {
+    const validTenantId = await resolveAuthenticatedTenantId(tenantId);
     const startDate = `${targetMonth}-01`;
     const [yearStr, monthStr] = targetMonth.split('-');
     const nextMonth = new Date(Number(yearStr), Number(monthStr), 1);
@@ -220,8 +240,8 @@ export async function generateInvoicesForMonth(targetMonth: string, tenantId?: s
       .lt('delivery_date', endDate)
       .in('status', ['delivered', 'invoiced']);
 
-    if (tenantId) {
-      orderQuery = orderQuery.eq('user_id', tenantId);
+    if (validTenantId) {
+      orderQuery = orderQuery.eq('user_id', validTenantId);
     }
 
     const { data: deliveredOrders, error: orderErr } = await orderQuery;
@@ -265,8 +285,8 @@ export async function generateInvoicesForMonth(targetMonth: string, tenantId?: s
         status: 'issued'
       };
 
-      if (tenantId) {
-        invoiceData.user_id = tenantId;
+      if (validTenantId) {
+        invoiceData.user_id = validTenantId;
       }
 
       const { data: invData, error: invErr } = await supabase
