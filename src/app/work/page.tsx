@@ -986,12 +986,14 @@ export default function WorkEntryPage() {
                 </div>
               </div>
 
-              <button
-                onClick={() => router.push('/admin/cultivations')}
-                className="text-[10px] text-emerald-300 hover:text-white bg-emerald-800/60 px-2 py-1 rounded-lg border border-emerald-700 font-bold transition-all"
-              >
-                {t('detailBtn', language)}
-              </button>
+              {currentUser?.role === 'admin' && (
+                <button
+                  onClick={() => router.push('/admin/cultivations')}
+                  className="text-[10px] text-emerald-300 hover:text-white bg-emerald-800/60 px-2 py-1 rounded-lg border border-emerald-700 font-bold transition-all"
+                >
+                  {t('detailBtn', language)}
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-2 pt-1">
