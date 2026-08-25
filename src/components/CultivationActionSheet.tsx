@@ -70,6 +70,16 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
   const [publicFertResults, setPublicFertResults] = useState<any[]>([]);
   const [searchingPublicFert, setSearchingPublicFert] = useState(false);
 
+  // 新規自社肥料登録ステート
+  const [isAddingNewToMaster, setIsAddingNewToMaster] = useState(false);
+  const [newFertName, setNewFertName] = useState('');
+  const [newFertN, setNewFertN] = useState('0');
+  const [newFertP, setNewFertP] = useState('0');
+  const [newFertK, setNewFertK] = useState('0');
+  const [newFertPrice, setNewFertPrice] = useState('0');
+  const [newFertWeight, setNewFertWeight] = useState('20');
+  const [isSavingMaster, setIsSavingMaster] = useState(false);
+
   // 農薬リアルタイム安全判定ステート
   const [isCheckingPesticide, setIsCheckingPesticide] = useState(false);
   const [pesticideFamicData, setPesticideFamicData] = useState<any>(null);
@@ -588,6 +598,101 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
     setCustomP(String(item.p_percent || 0));
     setCustomK(String(item.k_percent || 0));
     setShowFertilizerSearchModal(false);
+  };
+
+  // 公的肥料を自社マスタ（materials）に登録して即時適用
+  const handleRegisterPublicToMaster = async (item: any) => {
+    setIsSavingMaster(true);
+    try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error('テナント認証情報が見つかりません');
+
+      const payload = {
+        user_id: tenantId,
+        name: item.fertilizer_name,
+        category: '肥料費',
+        material_type: 'fertilizer',
+        unit: '袋',
+        n_percent: item.n_percent || 0,
+        p_percent: item.p_percent || 0,
+        k_percent: item.k_percent || 0,
+        default_price: 0,
+        bag_weight: 20,
+        memo: `FAMIC公的登録: ${item.registration_no || ''} (${item.fertilizer_type || ''})`
+      };
+
+      const { data, error } = await supabase.from('materials').insert([payload]).select();
+      if (error) throw error;
+
+      if (data && data[0]) {
+        setFarmFertilizers(prev => [data[0], ...prev]);
+      }
+
+      // フォームに適用
+      setSelectedFertilizerName(item.fertilizer_name);
+      setCustomN(String(item.n_percent || 0));
+      setCustomP(String(item.p_percent || 0));
+      setCustomK(String(item.k_percent || 0));
+      setFertPricePerBag('0');
+      setShowFertilizerSearchModal(false);
+    } catch (e: any) {
+      alert(`自社マスタへの登録に失敗しました: ${e.message}`);
+    } finally {
+      setIsSavingMaster(false);
+    }
+  };
+
+  // 手動で新規肥料を自社マスタ（materials）に登録して即時適用
+  const handleCreateCustomMasterFertilizer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFertName.trim()) return;
+    setIsSavingMaster(true);
+    try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error('テナント認証情報が見つかりません');
+
+      const payload = {
+        user_id: tenantId,
+        name: newFertName.trim(),
+        category: '肥料費',
+        material_type: 'fertilizer',
+        unit: '袋',
+        n_percent: parseFloat(newFertN) || 0,
+        p_percent: parseFloat(newFertP) || 0,
+        k_percent: parseFloat(newFertK) || 0,
+        default_price: parseFloat(newFertPrice) || 0,
+        bag_weight: parseFloat(newFertWeight) || 20,
+        memo: '施肥入力画面より手動登録'
+      };
+
+      const { data, error } = await supabase.from('materials').insert([payload]).select();
+      if (error) throw error;
+
+      if (data && data[0]) {
+        setFarmFertilizers(prev => [data[0], ...prev]);
+      }
+
+      // フォームに適用
+      setSelectedFertilizerName(newFertName.trim());
+      setCustomN(String(parseFloat(newFertN) || 0));
+      setCustomP(String(parseFloat(newFertP) || 0));
+      setCustomK(String(parseFloat(newFertK) || 0));
+      setFertPricePerBag(String(parseFloat(newFertPrice) || 0));
+      
+      // リセット
+      setIsAddingNewToMaster(false);
+      setNewFertName('');
+      setNewFertN('0');
+      setNewFertP('0');
+      setNewFertK('0');
+      setNewFertPrice('0');
+      setNewFertWeight('20');
+      setShowFertilizerSearchModal(false);
+    } catch (e: any) {
+      alert(`自社マスタへの登録に失敗しました: ${e.message}`);
+    } finally {
+      setIsSavingMaster(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1494,18 +1599,20 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
         </div>
       )}
 
-      {/* 公的肥料マスター検索・選択モーダル */}
+      {/* 公的肥料マスター検索・自社マスタ登録モーダル */}
       {showFertilizerSearchModal && (
         <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[88vh] flex flex-col">
+            
+            {/* モーダルヘッダー */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                   <FlaskConical className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-white">全国公的肥料マスターから検索</h3>
-                  <p className="text-[11px] text-slate-400">FAMIC公的登録銘柄（4.5万件）から選択してN-P-K成分を自動適用します</p>
+                  <h3 className="text-base font-black text-white">肥料マスター選択・自社マスタ登録</h3>
+                  <p className="text-[11px] text-slate-400">公的4.5万件から検索、または新規肥料を自社資材マスタに即時登録できます</p>
                 </div>
               </div>
               <button 
@@ -1516,75 +1623,265 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
               </button>
             </div>
 
-            {/* 検索入力バー */}
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                autoFocus
-                placeholder="肥料名・銘柄名・メーカー名を入力（例: 硫酸アンモニア, 化成）..."
-                value={publicFertQuery}
-                onChange={(e) => handleSearchPublicFertilizer(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-              />
+            {/* モード切り替えタブ */}
+            <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setIsAddingNewToMaster(false)}
+                className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                  !isAddingNewToMaster
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Search className="w-3.5 h-3.5" />
+                全国公的マスターから検索・登録
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAddingNewToMaster(true)}
+                className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                  isAddingNewToMaster
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                手動で自社マスタに新規登録
+              </button>
             </div>
 
-            {/* 検索結果リスト */}
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1 min-h-[220px]">
-              {searchingPublicFert ? (
-                <div className="py-12 text-center text-slate-500 text-sm flex flex-col items-center justify-center">
-                  <Loader2 className="w-6 h-6 animate-spin text-emerald-400 mb-2" />
-                  データベースを検索中...
+            {/* 1. 公的マスター検索モード */}
+            {!isAddingNewToMaster ? (
+              <>
+                {/* 検索入力バー */}
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="肥料名・銘柄・メーカー名（例: 21, 硫酸, 14-14-14, ube）..."
+                    value={publicFertQuery}
+                    onChange={(e) => handleSearchPublicFertilizer(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
                 </div>
-              ) : publicFertResults.length > 0 ? (
-                publicFertResults.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => handleSelectPublicFertilizer(item)}
-                    className="w-full text-left p-3 rounded-xl bg-slate-950/60 hover:bg-emerald-950/40 border border-slate-800 hover:border-emerald-500/50 transition-all flex items-center justify-between group"
-                  >
+
+                {/* 検索結果リスト */}
+                <div className="flex-1 overflow-y-auto space-y-2 pr-1 min-h-[240px]">
+                  {searchingPublicFert ? (
+                    <div className="py-12 text-center text-slate-500 text-sm flex flex-col items-center justify-center">
+                      <Loader2 className="w-6 h-6 animate-spin text-emerald-400 mb-2" />
+                      データベースを検索中...
+                    </div>
+                  ) : publicFertResults.length > 0 ? (
+                    publicFertResults.map((item) => {
+                      const isAlreadyInFarm = farmFertilizers.some(f => f.name === item.fertilizer_name);
+                      return (
+                        <div
+                          key={item.id}
+                          className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800 hover:border-slate-700 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="font-bold text-white text-sm flex items-center gap-2 flex-wrap">
+                              <span>{item.fertilizer_name}</span>
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                                {item.fertilizer_type || '肥料'}
+                              </span>
+                              {isAlreadyInFarm && (
+                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
+                                  自社マスタ登録済
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-400 mt-0.5 truncate">
+                              {item.applicant_name ? `${item.applicant_name} | ` : ''}登録番号: {item.registration_no || '-'}
+                            </div>
+                            
+                            {/* N-P-K 比率 */}
+                            <div className="flex items-center gap-1.5 font-mono text-xs mt-1.5">
+                              <span className="px-1.5 py-0.2 bg-blue-950 text-blue-300 border border-blue-800 rounded text-[11px] font-black">
+                                N {item.n_percent}%
+                              </span>
+                              <span className="px-1.5 py-0.2 bg-amber-950 text-amber-300 border border-amber-800 rounded text-[11px] font-black">
+                                P {item.p_percent}%
+                              </span>
+                              <span className="px-1.5 py-0.2 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded text-[11px] font-black">
+                                K {item.k_percent}%
+                              </span>
+                              {item.other_ingredients && (
+                                <span className="text-[10px] text-slate-500 font-sans truncate max-w-[200px]">
+                                  {item.other_ingredients}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* アクションボタン群 */}
+                          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                            <button
+                              type="button"
+                              onClick={() => handleSelectPublicFertilizer(item)}
+                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition-all"
+                            >
+                              今回のみ適用
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isSavingMaster}
+                              onClick={() => handleRegisterPublicToMaster(item)}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1 disabled:opacity-50"
+                            >
+                              {isSavingMaster ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                              自社マスタに登録
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : publicFertQuery.trim() ? (
+                    <div className="py-12 text-center text-slate-500 text-sm space-y-2">
+                      <p>一致する肥料銘柄が見つかりませんでした。</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewFertName(publicFertQuery.trim());
+                          setIsAddingNewToMaster(true);
+                        }}
+                        className="text-xs font-bold text-emerald-400 hover:underline inline-flex items-center gap-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        「{publicFertQuery.trim()}」を手動で自社マスタに新規登録する ➔
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="py-12 text-center text-slate-500 text-xs space-y-2">
+                      <p>上の検索バーに肥料名やメーカー名を入力してください。</p>
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingNewToMaster(true)}
+                        className="text-xs font-bold text-emerald-400 hover:underline inline-flex items-center gap-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        手動で新規肥料を登録する場合はこちら ➔
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* 2. 手動で自社マスタ新規登録フォーム */
+              <form onSubmit={handleCreateCustomMasterFertilizer} className="flex-1 overflow-y-auto space-y-3.5 pr-1">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">肥料の名称 (銘柄名) *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="例: マイガーデンベジタブル, 自家配合ボカシ"
+                    value={newFertName}
+                    onChange={(e) => setNewFertName(e.target.value)}
+                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                {/* N-P-K 保証成分 */}
+                <div>
+                  <label className="block text-xs font-bold text-emerald-400 mb-1">保証成分比率 (%)</label>
+                  <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <div className="font-bold text-white group-hover:text-emerald-300 text-sm flex items-center gap-2">
-                        {item.fertilizer_name}
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                          {item.fertilizer_type || '肥料'}
-                        </span>
-                      </div>
-                      <div className="text-xs text-slate-400 mt-0.5">
-                        {item.applicant_name || '登録番号: ' + item.registration_no}
-                      </div>
+                      <span className="text-[10px] text-blue-400 font-bold block mb-0.5">窒素 (N %)</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        value={newFertN}
+                        onChange={(e) => setNewFertN(e.target.value)}
+                        className="w-full p-2 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-blue-500"
+                      />
                     </div>
+                    <div>
+                      <span className="text-[10px] text-amber-400 font-bold block mb-0.5">りん酸 (P %)</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        value={newFertP}
+                        onChange={(e) => setNewFertP(e.target.value)}
+                        className="w-full p-2 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-emerald-400 font-bold block mb-0.5">加里 (K %)</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        value={newFertK}
+                        onChange={(e) => setNewFertK(e.target.value)}
+                        className="w-full p-2 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+                </div>
 
-                    <div className="flex items-center gap-1 font-mono text-xs shrink-0 ml-3">
-                      <span className="px-1.5 py-0.5 bg-blue-950 text-blue-300 border border-blue-800 rounded text-[11px] font-black">
-                        N {item.n_percent}%
-                      </span>
-                      <span className="px-1.5 py-0.5 bg-amber-950 text-amber-300 border border-amber-800 rounded text-[11px] font-black">
-                        P {item.p_percent}%
-                      </span>
-                      <span className="px-1.5 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded text-[11px] font-black">
-                        K {item.k_percent}%
-                      </span>
+                {/* 単価・袋容量 */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">袋単価 (標準仕入価格)</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        value={newFertPrice}
+                        onChange={(e) => setNewFertPrice(e.target.value)}
+                        className="w-full p-2 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-emerald-500"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">円/袋</span>
                     </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">1袋あたりの重量</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        value={newFertWeight}
+                        onChange={(e) => setNewFertWeight(e.target.value)}
+                        className="w-full p-2 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-emerald-500"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">kg</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingNewToMaster(false)}
+                    className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white"
+                  >
+                    キャンセル
                   </button>
-                ))
-              ) : publicFertQuery.trim() ? (
-                <div className="py-12 text-center text-slate-500 text-sm">
-                  一致する肥料銘柄が見つかりませんでした。別のキーワードでお試しください。
+                  <button
+                    type="submit"
+                    disabled={isSavingMaster}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {isSavingMaster ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    自社マスタに登録して施肥入力に適用
+                  </button>
                 </div>
-              ) : (
-                <div className="py-12 text-center text-slate-500 text-xs">
-                  上の検索バーに肥料名やメーカー名を入力してください。
-                </div>
-              )}
-            </div>
+              </form>
+            )}
 
             <div className="pt-2 border-t border-slate-800 flex justify-end">
               <button
                 type="button"
                 onClick={() => setShowFertilizerSearchModal(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white"
+                className="px-4 py-1.5 text-xs font-bold text-slate-400 hover:text-white"
               >
                 閉じる
               </button>
