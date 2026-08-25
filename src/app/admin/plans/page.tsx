@@ -327,6 +327,7 @@ export default function PlansPage() {
     setMessage(null);
 
     try {
+      const tenantId = await getCurrentTenantId();
       const datesToInsert = generateDateRange(startDate, endDate);
       const cropId = crops.find(c => c.name === selectedCrop)?.id;
 
@@ -342,6 +343,7 @@ export default function PlansPage() {
             selectedFields.forEach(fieldName => {
               const fieldId = fields.find(f => f.name === fieldName)?.id;
               inserts.push({
+                user_id: tenantId,
                 crop_id: cropId || null,
                 field_id: fieldId || null,
                 work_type: selectedWorkType,
@@ -354,6 +356,7 @@ export default function PlansPage() {
             });
           } else {
             inserts.push({
+              user_id: tenantId,
               crop_id: cropId || null,
               field_id: null,
               work_type: selectedWorkType,
@@ -375,6 +378,7 @@ export default function PlansPage() {
         const total = calculatedTotal > 0 ? calculatedTotal : null;
 
         const inserts = datesToInsert.map(dateStr => ({
+          user_id: tenantId,
           crop_id: cropId || null,
           channel_id: channelId || null,
           sales_date: dateStr,

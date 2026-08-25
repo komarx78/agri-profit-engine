@@ -105,6 +105,11 @@ export default function CultivationSchedulePage() {
     
     setIsSaving(true);
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        throw new Error("ログインセッションが見つかりません。再ログインしてください。");
+      }
+
       // 1. 自動計算のための情報を取得
       const field = fields.find(f => f.id === formData.field_id);
       const standard = cropStandards.find(s => s.crop_id === formData.crop_id);
@@ -116,6 +121,7 @@ export default function CultivationSchedulePage() {
       const calculatedSeedlings = (area / 10) * seedlingsPer10a;
       
       const insertData = {
+        user_id: tenantId,
         field_id: formData.field_id,
         crop_id: formData.crop_id,
         variety: formData.variety || null,
@@ -164,14 +170,22 @@ export default function CultivationSchedulePage() {
   const fetchPlanDetails = async (plan: any) => {
     setIsPanelLoading(true);
     try {
-      const [workRes, salesRes] = await Promise.all([
-        supabase.from('work_logs').select(`
-          *,
-          workers (name, hourly_wage),
-          materials (default_price, category)
-        `).or(`plan_id.eq.${plan.id},crop_id.eq.${plan.crop_id}`).order('work_date', { ascending: false }),
-        supabase.from('sales_logs').select('*').or(`plan_id.eq.${plan.id},crop_id.eq.${plan.crop_id}`).order('sales_date', { ascending: false })
-      ]);
+      const tenantId = await getCurrentTenantId();
+      let workQuery = supabase.from('work_logs').select(`
+        *,
+        workers (name, hourly_wage),
+        materials (default_price, category)
+      `).or(`plan_id.eq.${plan.id},crop_id.eq.${plan.crop_id}`).order('work_date', { ascending: false });
+
+      let salesQuery = supabase.from('sales_logs').select('*')
+        .or(`plan_id.eq.${plan.id},crop_id.eq.${plan.crop_id}`).order('sales_date', { ascending: false });
+
+      if (tenantId) {
+        workQuery = workQuery.eq('user_id', tenantId);
+        salesQuery = salesQuery.eq('user_id', tenantId);
+      }
+
+      const [workRes, salesRes] = await Promise.all([workQuery, salesQuery]);
       setWorkLogs(workRes.data || []);
       setSalesLogs(salesRes.data || []);
     } catch (err) {
@@ -186,8 +200,12 @@ export default function CultivationSchedulePage() {
     if (!selectedPlan) return;
     setIsSaving(true);
     try {
+      const tenantId = await getCurrentTenantId();
       const { error } = await supabase.from('work_logs').insert([{
+        user_id: tenantId,
         plan_id: selectedPlan.id,
+        crop_id: selectedPlan.crop_id,
+        field_id: selectedPlan.field_id,
         work_date: newWork.date,
         work_type: newWork.type,
         duration_minutes: Number(newWork.duration) || 0,
@@ -209,8 +227,11 @@ export default function CultivationSchedulePage() {
     if (!selectedPlan) return;
     setIsSaving(true);
     try {
+      const tenantId = await getCurrentTenantId();
       const { error } = await supabase.from('sales_logs').insert([{
+        user_id: tenantId,
         plan_id: selectedPlan.id,
+        crop_id: selectedPlan.crop_id,
         sales_date: newSales.date,
         quantity: Number(newSales.quantity) || 0,
         total_sales: Number(newSales.price) || 0,
