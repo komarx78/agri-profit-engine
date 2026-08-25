@@ -607,7 +607,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       const tenantId = await getCurrentTenantId();
       if (!tenantId) throw new Error('テナント認証情報が見つかりません');
 
-      const payload = {
+      let payload: any = {
         user_id: tenantId,
         name: item.fertilizer_name,
         category: '肥料費',
@@ -616,16 +616,42 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
         n_percent: item.n_percent || 0,
         p_percent: item.p_percent || 0,
         k_percent: item.k_percent || 0,
+        fertilizer_type: item.fertilizer_type || '化成肥料',
+        fertilizer_usage: '共通',
+        bag_weight_kg: 20,
         default_price: 0,
-        bag_weight: 20,
         memo: `FAMIC公的登録: ${item.registration_no || ''} (${item.fertilizer_type || ''})`
       };
 
-      const { data, error } = await supabase.from('materials').insert([payload]).select();
+      let { data, error } = await supabase.from('materials').insert([payload]).select();
+
+      // スキーマ未定義カラムがあった場合の自動フォールバック
+      if (error && (error.code === 'PGRST204' || error.message?.includes('schema cache') || error.message?.includes('column'))) {
+        const basicPayload = {
+          user_id: tenantId,
+          name: item.fertilizer_name,
+          category: '肥料費',
+          material_type: 'fertilizer',
+          unit: '袋',
+          default_price: 0,
+          memo: `FAMIC公的登録: ${item.registration_no || ''} | N:${item.n_percent}% P:${item.p_percent}% K:${item.k_percent}%`
+        };
+        const fallbackRes = await supabase.from('materials').insert([basicPayload]).select();
+        data = fallbackRes.data;
+        error = fallbackRes.error;
+      }
+
       if (error) throw error;
 
       if (data && data[0]) {
-        setFarmFertilizers(prev => [data[0], ...prev]);
+        // メモリ上のデータにN-P-Kを補完
+        const savedItem = {
+          ...data[0],
+          n_percent: item.n_percent || 0,
+          p_percent: item.p_percent || 0,
+          k_percent: item.k_percent || 0
+        };
+        setFarmFertilizers(prev => [savedItem, ...prev]);
       }
 
       // フォームに適用
@@ -651,7 +677,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       const tenantId = await getCurrentTenantId();
       if (!tenantId) throw new Error('テナント認証情報が見つかりません');
 
-      const payload = {
+      let payload: any = {
         user_id: tenantId,
         name: newFertName.trim(),
         category: '肥料費',
@@ -661,15 +687,40 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
         p_percent: parseFloat(newFertP) || 0,
         k_percent: parseFloat(newFertK) || 0,
         default_price: parseFloat(newFertPrice) || 0,
-        bag_weight: parseFloat(newFertWeight) || 20,
+        bag_weight_kg: parseFloat(newFertWeight) || 20,
+        fertilizer_type: '化成肥料',
+        fertilizer_usage: '共通',
         memo: '施肥入力画面より手動登録'
       };
 
-      const { data, error } = await supabase.from('materials').insert([payload]).select();
+      let { data, error } = await supabase.from('materials').insert([payload]).select();
+
+      // スキーマ未定義カラムがあった場合の自動フォールバック
+      if (error && (error.code === 'PGRST204' || error.message?.includes('schema cache') || error.message?.includes('column'))) {
+        const basicPayload = {
+          user_id: tenantId,
+          name: newFertName.trim(),
+          category: '肥料費',
+          material_type: 'fertilizer',
+          unit: '袋',
+          default_price: parseFloat(newFertPrice) || 0,
+          memo: `施肥画面手動登録 | N:${newFertN}% P:${newFertP}% K:${newFertK}%`
+        };
+        const fallbackRes = await supabase.from('materials').insert([basicPayload]).select();
+        data = fallbackRes.data;
+        error = fallbackRes.error;
+      }
+
       if (error) throw error;
 
       if (data && data[0]) {
-        setFarmFertilizers(prev => [data[0], ...prev]);
+        const savedItem = {
+          ...data[0],
+          n_percent: parseFloat(newFertN) || 0,
+          p_percent: parseFloat(newFertP) || 0,
+          k_percent: parseFloat(newFertK) || 0
+        };
+        setFarmFertilizers(prev => [savedItem, ...prev]);
       }
 
       // フォームに適用
