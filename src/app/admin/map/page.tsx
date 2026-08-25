@@ -5,7 +5,7 @@ import { GoogleMap, useJsApiLoader, Polygon, InfoWindow } from '@react-google-ma
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { MapPin, Plus, Loader2, Save, X, Info, Search, Check, Trash2, Edit2, Palette, ArrowRight } from 'lucide-react';
+import { MapPin, Plus, Loader2, Save, X, Info, Search, Check, Trash2, Edit2, Palette, ArrowRight, FlaskConical } from 'lucide-react';
 import Link from 'next/link';
 
 const containerStyle = {
@@ -470,34 +470,36 @@ export default function MapPage() {
       setInfoWindowPos({ lat: e.latLng.lat(), lng: e.latLng.lng() });
     }
 
-    // 実際のデータを取得（最新の作付計画と作業履歴）
+    // 実際のデータを取得（最新の作付計画、作業履歴、土壌診断）
     try {
-      const { data: plansData } = await supabase
-        .from('cultivation_plans_v2')
-        .select(`*, crops(name)`)
-        .eq('field_id', field.id)
-        .order('year', { ascending: false })
-        .order('start_month', { ascending: false })
-        .limit(1);
+      const tenantId = await getCurrentTenantId();
+      const [plansRes, worksRes, soilRes] = await Promise.all([
+        supabase
+          .from('cultivation_plans_v2')
+          .select(`*, crops(name)`)
+          .eq('field_id', field.id)
+          .order('year', { ascending: false })
+          .order('start_month', { ascending: false })
+          .limit(1),
+        supabase
+          .from('work_logs')
+          .select(`*`)
+          .eq('field_id', field.id)
+          .order('work_date', { ascending: false })
+          .limit(2),
+        supabase
+          .from('soil_diagnoses')
+          .select('*')
+          .eq('field_id', field.id)
+          .order('diagnosis_date', { ascending: false })
+          .limit(1)
+      ]);
 
-      let latestPlan = null;
-      let works: any[] = [];
-      
-      if (plansData && plansData.length > 0) {
-        latestPlan = plansData[0];
-      }
+      const latestPlan = plansRes.data && plansRes.data.length > 0 ? plansRes.data[0] : null;
+      const works = worksRes.data || [];
+      const latestSoil = soilRes.data && soilRes.data.length > 0 ? soilRes.data[0] : null;
 
-      // 計画の有無に関わらず、この圃場に紐づく作業履歴を取得
-      const { data: worksData } = await supabase
-        .from('work_logs')
-        .select(`*`)
-        .or(latestPlan ? `plan_id.eq.${latestPlan.id},field_id.eq.${field.id}` : `field_id.eq.${field.id}`)
-        .order('work_date', { ascending: false })
-        .limit(2); // ポップアップ用なので2件だけ
-        
-      if (worksData) works = worksData;
-      
-      setSelectedFieldDetails({ plan: latestPlan, works });
+      setSelectedFieldDetails({ plan: latestPlan, works, soil: latestSoil } as any);
     } catch (err) {
       console.error("詳細データの取得に失敗しました", err);
     }
@@ -821,6 +823,23 @@ export default function MapPage() {
                       <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-slate-300" /></div>
                     )}
                   </div>
+
+                  {/* 最新土壌診断ステータス */}
+                  {selectedFieldDetails && (
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                      <span className="text-slate-500 font-bold flex items-center gap-1">
+                        <FlaskConical className="w-3.5 h-3.5 text-amber-600" /> 最新土壌診断:
+                      </span>
+                      {selectedFieldDetails.soil ? (
+                        <span className="font-bold text-slate-800">
+                          pH <span className="text-emerald-600 font-black">{selectedFieldDetails.soil.ph}</span>
+                          <span className="text-[10px] text-slate-400 ml-1">({selectedFieldDetails.soil.diagnosis_date})</span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-[10px]">未登録</span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 
                 <div className="mt-4 flex gap-2">
