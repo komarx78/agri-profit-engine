@@ -33,10 +33,11 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
 
-  // 公開ルート（認証不要）の判定
+  // 公開ルート（現場作業員・未認証アクセス許可）の判定
   const isPublicRoute =
     pathname.startsWith('/login') ||
     pathname.startsWith('/portal') ||
+    pathname.startsWith('/work') ||
     pathname.startsWith('/share') ||
     pathname.startsWith('/api')
 
