@@ -10,6 +10,7 @@ export default function MonthlyTimecardPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [logs, setLogs] = useState<any[]>([]);
   const [workers, setWorkers] = useState<any[]>([]);
+  const [attendanceRules, setAttendanceRules] = useState<any[]>([]);
   const [companySettings, setCompanySettings] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -38,7 +39,7 @@ export default function MonthlyTimecardPage() {
       const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
       const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
 
-      // 自社テナントの設定を取得
+      // 1. 自社テナントの設定を取得
       const { data: cData } = await supabase
         .from('company_settings')
         .select('*')
@@ -49,7 +50,18 @@ export default function MonthlyTimecardPage() {
 
       if (cData) setCompanySettings(cData);
 
-      // 自社テナントの従業員のみを取得
+      // 2. 勤怠ルール一覧を取得
+      try {
+        const { data: rData } = await supabase
+          .from('attendance_rules')
+          .select('*')
+          .eq('user_id', tenantId);
+        if (rData) setAttendanceRules(rData);
+      } catch (e) {
+        console.warn('Failed to load attendance rules:', e);
+      }
+
+      // 3. 自社テナントの従業員のみを取得
       const { data: wData } = await supabase
         .from('workers')
         .select('*')
@@ -60,7 +72,7 @@ export default function MonthlyTimecardPage() {
       setWorkers(currentWorkers);
       const workerIds = currentWorkers.map(w => w.id);
 
-      // 自社従業員の勤怠ログのみを取得
+      // 4. 自社従業員の勤怠ログのみを取得
       if (workerIds.length > 0) {
         const { data: lData, error } = await supabase
           .from('attendance_logs')
@@ -119,18 +131,20 @@ export default function MonthlyTimecardPage() {
   const calculateWorkHours = (log: any) => {
     if (!log.clock_in || !log.clock_out) return { totalMinutes: 0, roundedIn: null, roundedOut: null, restMins: 0 };
 
-    // workerの特定（UUIDの一致、または worker_id == pin_code などのレガシー互換を考慮）
-    // とりあえず id == worker_id で探す。
+    // workerの特定
     const worker = workers.find(w => w.id === log.worker_id) || {};
     const logDate = log.date; 
     
-    const stdStartStr = worker.standard_start_time || companySettings?.default_start_time || '08:00:00';
-    const stdEndStr = worker.standard_end_time || companySettings?.default_end_time || '17:00:00';
-    const stdRest = worker.standard_rest_minutes ?? companySettings?.default_rest_minutes ?? 60;
-    const autoRoundOut = companySettings?.auto_round_out_time ?? true;
+    // 紐づく勤怠ルールの特定
+    const matchedRule = attendanceRules.find(r => r.id === worker.attendance_rule_id);
 
-    const stdStart = new Date(`${logDate}T${stdStartStr}+09:00`);
-    const stdEnd = new Date(`${logDate}T${stdEndStr}+09:00`);
+    const stdStartStr = worker.standard_start_time || matchedRule?.start_time || companySettings?.default_start_time || '08:00:00';
+    const stdEndStr = worker.standard_end_time || matchedRule?.end_time || companySettings?.default_end_time || '17:00:00';
+    const stdRest = worker.standard_rest_minutes ?? matchedRule?.rest_minutes ?? companySettings?.default_rest_minutes ?? 60;
+    const autoRoundOut = matchedRule?.auto_round_out_time ?? companySettings?.auto_round_out_time ?? true;
+
+    const stdStart = new Date(`${logDate}T${stdStartStr.length === 5 ? stdStartStr + ':00' : stdStartStr}+09:00`);
+    const stdEnd = new Date(`${logDate}T${stdEndStr.length === 5 ? stdEndStr + ':00' : stdEndStr}+09:00`);
 
     let actualIn = new Date(log.clock_in);
     let actualOut = new Date(log.clock_out);
@@ -153,13 +167,20 @@ export default function MonthlyTimecardPage() {
 
   // サマリー計算（打刻ログベース）
   const summaryByWorker = logs.reduce((acc, log) => {
-    // 古いテストデータなどで worker_id が無い・一致しない場合は「不明」になる。
     const worker = workers.find(w => w.id === log.worker_id);
-    const workerId = worker ? worker.id : log.worker_id; // idがない場合は生のworker_idを使う
+    const workerId = worker ? worker.id : log.worker_id;
     const workerName = worker ? worker.name : `不明 (ID: ${log.worker_id.substring(0,8)}...)`;
+    const matchedRule = attendanceRules.find(r => r.id === worker?.attendance_rule_id);
     
     if (!acc[workerId]) {
-      acc[workerId] = { workerId, name: workerName, days: 0, totalMinutes: 0, breakMinutes: 0 };
+      acc[workerId] = { 
+        workerId, 
+        name: workerName, 
+        ruleName: matchedRule?.name || (worker?.standard_start_time ? `${worker.standard_start_time.substring(0,5)}〜${worker.standard_end_time?.substring(0,5)}` : '標準設定'),
+        days: 0, 
+        totalMinutes: 0, 
+        breakMinutes: 0 
+      };
     }
     
     if (log.clock_in && log.clock_out) {
@@ -204,7 +225,7 @@ export default function MonthlyTimecardPage() {
             月次タイムカード
           </h1>
           <p className="text-sm font-bold text-slate-500 mt-1">
-            定時丸め・休憩時間補正が適用された労働時間の集計です。
+            各スタッフの勤怠ルール（定時丸め・休憩時間補正）に基づいた労働時間の集計です。
           </p>
         </div>
         
@@ -255,6 +276,9 @@ export default function MonthlyTimecardPage() {
                 <span className="text-blue-600 flex items-center gap-2">
                   <Users className="w-5 h-5" />
                   {summaryByWorker[selectedWorkerId]?.name || '退職者・不明'} さんのタイムカード
+                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md font-black ml-2">
+                    {summaryByWorker[selectedWorkerId]?.ruleName}
+                  </span>
                 </span>
               </>
             )}
@@ -276,6 +300,7 @@ export default function MonthlyTimecardPage() {
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-sm font-bold text-slate-500">
                     <th className="p-4">従業員名</th>
+                    <th className="p-4">適用勤怠ルール</th>
                     <th className="p-4 text-center">出勤日数</th>
                     <th className="p-4 text-center">総休憩時間</th>
                     <th className="p-4 text-center">総労働時間（補正後）</th>
@@ -284,7 +309,7 @@ export default function MonthlyTimecardPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {summaryArray.length === 0 && (
-                    <tr><td colSpan={5} className="p-8 text-center text-slate-400 font-bold">打刻データがありません</td></tr>
+                    <tr><td colSpan={6} className="p-8 text-center text-slate-400 font-bold">打刻データがありません</td></tr>
                   )}
                   {summaryArray.map((worker: any) => (
                     <tr key={worker.workerId} className="hover:bg-slate-50">
@@ -295,6 +320,11 @@ export default function MonthlyTimecardPage() {
                           </div>
                           <span className="font-bold text-slate-800 text-base">{worker.name}</span>
                         </div>
+                      </td>
+                      <td className="p-4">
+                        <span className="inline-block bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-lg text-xs font-black">
+                          {worker.ruleName}
+                        </span>
                       </td>
                       <td className="p-4 text-center font-bold text-slate-700">{worker.days} 日</td>
                       <td className="p-4 text-center font-bold text-slate-500">
@@ -395,6 +425,7 @@ export default function MonthlyTimecardPage() {
                   <tr className="bg-slate-50 border-b border-slate-200 text-sm font-bold text-slate-500">
                     <th className="p-4 w-32">日付</th>
                     <th className="p-4">従業員名</th>
+                    <th className="p-4">適用勤怠ルール</th>
                     <th className="p-4 text-center">打刻時刻</th>
                     <th className="p-4 text-center">計算上(補正後)</th>
                     <th className="p-4 text-center w-48">休憩時間(分)</th>
@@ -403,15 +434,21 @@ export default function MonthlyTimecardPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {logs.length === 0 && (
-                    <tr><td colSpan={6} className="p-8 text-center text-slate-400 font-bold">打刻データがありません</td></tr>
+                    <tr><td colSpan={7} className="p-8 text-center text-slate-400 font-bold">打刻データがありません</td></tr>
                   )}
                   {logs.map((log: any) => {
                     const worker = workers.find(w => w.id === log.worker_id) || { name: `不明 (ID: ${log.worker_id.substring(0,8)})` };
+                    const matchedRule = attendanceRules.find(r => r.id === worker.attendance_rule_id);
                     const { totalMinutes, roundedIn, roundedOut } = calculateWorkHours(log);
                     return (
                       <tr key={log.id} className="hover:bg-slate-50 group">
                         <td className="p-4 font-bold text-slate-700">{log.date}</td>
                         <td className="p-4 font-bold text-slate-800">{worker.name}</td>
+                        <td className="p-4">
+                          <span className="inline-block bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded text-xs font-black">
+                            {matchedRule?.name || (worker.standard_start_time ? `${worker.standard_start_time.substring(0,5)}〜${worker.standard_end_time?.substring(0,5)}` : '標準設定')}
+                          </span>
+                        </td>
                         <td className="p-4 text-center">
                           <div className="text-xs text-slate-400 font-bold">
                             {formatTime(log.clock_in ? new Date(log.clock_in) : null)} 〜 {formatTime(log.clock_out ? new Date(log.clock_out) : null)}
@@ -432,6 +469,7 @@ export default function MonthlyTimecardPage() {
                               onClick={() => saveRestMinutes(log.id)}
                               disabled={isSaving}
                               className="p-1.5 bg-slate-100 hover:bg-blue-100 text-slate-400 hover:text-blue-600 rounded-md transition-colors"
+                              title="休憩時間を保存"
                             >
                               <Save className="w-4 h-4" />
                             </button>

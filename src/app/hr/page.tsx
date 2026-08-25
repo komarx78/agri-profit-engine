@@ -11,6 +11,7 @@ export default function HrDashboardPage() {
   const [attendanceLogs, setAttendanceLogs] = useState<any[]>([]);
   const [workLogs, setWorkLogs] = useState<any[]>([]);
   const [workers, setWorkers] = useState<any[]>([]);
+  const [attendanceRules, setAttendanceRules] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
@@ -44,7 +45,18 @@ export default function HrDashboardPage() {
         setWorkers(currentWorkers);
         const workerIds = currentWorkers.map(w => w.id);
 
-        // 2. 自社従業員の勤怠ログのみを取得
+        // 2. 勤怠ルール一覧を取得
+        try {
+          const { data: rData } = await supabase
+            .from('attendance_rules')
+            .select('*')
+            .eq('user_id', tenantId);
+          if (rData) setAttendanceRules(rData);
+        } catch (e) {
+          console.warn('attendance_rules fetch error:', e);
+        }
+
+        // 3. 自社従業員の勤怠ログのみを取得
         if (workerIds.length > 0) {
           const { data: attData } = await supabase
             .from('attendance_logs')
@@ -243,11 +255,23 @@ export default function HrDashboardPage() {
 
                       return (
                         <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-4 font-bold text-slate-800 flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-xs font-black">
-                              {worker?.name ? worker.name.charAt(0) : '員'}
+                          <td className="px-6 py-4 font-bold text-slate-800">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-xs font-black">
+                                {worker?.name ? worker.name.charAt(0) : '員'}
+                              </div>
+                              <div>
+                                <span>{worker?.name || '不明スタッフ'}</span>
+                                {(() => {
+                                  const matchedRule = attendanceRules.find(r => r.id === worker?.attendance_rule_id);
+                                  return (
+                                    <span className="block text-[10px] text-indigo-600 font-bold">
+                                      {matchedRule?.name || (worker?.standard_start_time ? `${worker.standard_start_time.substring(0,5)}〜${worker.standard_end_time?.substring(0,5)}` : '標準定時')}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                             </div>
-                            <span>{worker?.name || '不明スタッフ'}</span>
                           </td>
                           <td className="px-6 py-4 text-xs font-bold text-slate-600">
                             {log.clock_in ? log.clock_in.substring(0, 5) : '--:--'} 〜 {log.clock_out ? log.clock_out.substring(0, 5) : <span className="text-emerald-500">勤務中</span>}

@@ -8,6 +8,7 @@ import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 
 export default function HrEmployeesPage() {
   const [workers, setWorkers] = useState<any[]>([]);
+  const [attendanceRules, setAttendanceRules] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // モーダル用ステート
@@ -20,6 +21,7 @@ export default function HrEmployeesPage() {
     type: 'パート',
     join_date: new Date().toISOString().split('T')[0],
     weekly_days: 3,
+    attendance_rule_id: '',
     standard_start_time: '09:00',
     standard_end_time: '18:00',
     standard_rest_minutes: 60
@@ -30,6 +32,7 @@ export default function HrEmployeesPage() {
 
   useEffect(() => {
     fetchCompanySettings();
+    fetchAttendanceRules();
     fetchWorkers();
   }, []);
 
@@ -47,6 +50,23 @@ export default function HrEmployeesPage() {
       if (data) setCompanySettings(data);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const fetchAttendanceRules = async () => {
+    try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) return;
+      const { data, error } = await supabase
+        .from('attendance_rules')
+        .select('*')
+        .eq('user_id', tenantId)
+        .order('created_at', { ascending: true });
+      if (!error && data) {
+        setAttendanceRules(data);
+      }
+    } catch (err) {
+      console.error('fetchAttendanceRules error:', err);
     }
   };
 
@@ -83,12 +103,15 @@ export default function HrEmployeesPage() {
         type: worker.type || 'パート',
         join_date: worker.join_date || new Date().toISOString().split('T')[0],
         weekly_days: worker.weekly_days || 3,
+        attendance_rule_id: worker.attendance_rule_id || '',
         standard_start_time: worker.standard_start_time ? worker.standard_start_time.substring(0, 5) : '09:00',
         standard_end_time: worker.standard_end_time ? worker.standard_end_time.substring(0, 5) : '18:00',
         standard_rest_minutes: worker.standard_rest_minutes ?? 60
       });
     } else {
       setEditingId(null);
+      // デフォルトルールがあれば自動選択
+      const defaultRule = attendanceRules.find(r => r.is_default) || attendanceRules[0];
       setFormData({
         name: '',
         pin_code: '0000',
@@ -96,12 +119,32 @@ export default function HrEmployeesPage() {
         type: 'パート',
         join_date: new Date().toISOString().split('T')[0],
         weekly_days: 3,
-        standard_start_time: companySettings?.default_start_time ? companySettings.default_start_time.substring(0, 5) : '08:00',
-        standard_end_time: companySettings?.default_end_time ? companySettings.default_end_time.substring(0, 5) : '17:00',
-        standard_rest_minutes: companySettings?.default_rest_minutes ?? 60
+        attendance_rule_id: defaultRule ? defaultRule.id : '',
+        standard_start_time: defaultRule ? defaultRule.start_time.substring(0, 5) : (companySettings?.default_start_time ? companySettings.default_start_time.substring(0, 5) : '08:00'),
+        standard_end_time: defaultRule ? defaultRule.end_time.substring(0, 5) : (companySettings?.default_end_time ? companySettings.default_end_time.substring(0, 5) : '17:00'),
+        standard_rest_minutes: defaultRule ? defaultRule.rest_minutes : (companySettings?.default_rest_minutes ?? 60)
       });
     }
     setIsModalOpen(true);
+  };
+
+  // 勤怠ルール選択時のハンドラ
+  const handleSelectRule = (ruleId: string) => {
+    const selected = attendanceRules.find(r => r.id === ruleId);
+    if (selected) {
+      setFormData((prev: any) => ({
+        ...prev,
+        attendance_rule_id: selected.id,
+        standard_start_time: selected.start_time ? selected.start_time.substring(0, 5) : prev.standard_start_time,
+        standard_end_time: selected.end_time ? selected.end_time.substring(0, 5) : prev.standard_end_time,
+        standard_rest_minutes: selected.rest_minutes ?? prev.standard_rest_minutes
+      }));
+    } else {
+      setFormData((prev: any) => ({
+        ...prev,
+        attendance_rule_id: ''
+      }));
+    }
   };
 
   const handleSave = async () => {
@@ -119,6 +162,7 @@ export default function HrEmployeesPage() {
       const dataToSave = {
         ...formData,
         user_id: tenantId,
+        attendance_rule_id: formData.attendance_rule_id || null,
         standard_start_time: formData.standard_start_time.length === 5 ? formData.standard_start_time + ':00' : formData.standard_start_time,
         standard_end_time: formData.standard_end_time.length === 5 ? formData.standard_end_time + ':00' : formData.standard_end_time,
       };
@@ -217,13 +261,25 @@ export default function HrEmployeesPage() {
                       {w.join_date || '-'}
                     </td>
                     <td className="p-4 text-sm font-bold text-slate-600">
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        {w.standard_start_time ? w.standard_start_time.substring(0, 5) : '09:00'} 
-                        〜 
-                        {w.standard_end_time ? w.standard_end_time.substring(0, 5) : '18:00'}
-                      </div>
-                      <div className="text-xs text-slate-400 mt-0.5">休憩: {w.standard_rest_minutes ?? 60}分</div>
+                      {(() => {
+                        const matchedRule = attendanceRules.find(r => r.id === w.attendance_rule_id);
+                        return (
+                          <div className="space-y-1">
+                            {matchedRule && (
+                              <span className="inline-block bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded text-[11px] font-black">
+                                {matchedRule.name}
+                              </span>
+                            )}
+                            <div className="flex items-center gap-1 text-xs text-slate-700">
+                              <Clock className="w-3.5 h-3.5 text-slate-400" />
+                              {w.standard_start_time ? w.standard_start_time.substring(0, 5) : '09:00'} 
+                              〜 
+                              {w.standard_end_time ? w.standard_end_time.substring(0, 5) : '18:00'}
+                            </div>
+                            <div className="text-[11px] text-slate-400">休憩: {w.standard_rest_minutes ?? 60}分</div>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -350,17 +406,37 @@ export default function HrEmployeesPage() {
                 {/* 就業ルール設定 */}
                 <section>
                   <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <Clock className="w-4 h-4" /> 就業ルール (定時設定)
+                    <Clock className="w-4 h-4" /> 適用勤怠ルール (シフト定時)
                   </h3>
                   <div className="bg-indigo-50/50 p-5 rounded-xl border border-indigo-100 space-y-4 h-full">
-                    <div className="grid grid-cols-2 gap-4">
+                    {/* 勤怠ルール選択ドロップダウン */}
+                    <div>
+                      <label className="block text-xs font-bold text-indigo-900 mb-1">勤怠ルールを選択</label>
+                      <select
+                        value={formData.attendance_rule_id}
+                        onChange={e => handleSelectRule(e.target.value)}
+                        className="w-full p-3 bg-white border border-indigo-200 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-slate-800"
+                      >
+                        <option value="">-- 個別指定 / マスタ標準 --</option>
+                        {attendanceRules.map(r => (
+                          <option key={r.id} value={r.id}>
+                            {r.name} ({r.start_time?.substring(0,5)}〜{r.end_time?.substring(0,5)} / 休憩{r.rest_minutes}分)
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] font-bold text-indigo-500 mt-1">
+                        ※ルールを選ぶと下記の定時・休憩時間が自動セットされます。
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 pt-2 border-t border-indigo-100">
                       <div>
                         <label className="block text-xs font-bold text-slate-500 mb-1">出勤予定時刻</label>
                         <input 
                           type="time"
                           value={formData.standard_start_time}
                           onChange={e => setFormData({...formData, standard_start_time: e.target.value})}
-                          className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-slate-700"
+                          className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-slate-700"
                         />
                       </div>
                       <div>
@@ -369,7 +445,7 @@ export default function HrEmployeesPage() {
                           type="time"
                           value={formData.standard_end_time}
                           onChange={e => setFormData({...formData, standard_end_time: e.target.value})}
-                          className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-slate-700"
+                          className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-slate-700"
                         />
                       </div>
                     </div>
@@ -377,16 +453,13 @@ export default function HrEmployeesPage() {
                       <label className="block text-xs font-bold text-slate-500 mb-1">所定休憩時間</label>
                       <div className="flex items-center gap-2">
                         <input 
-                          type="number"
+                          type="number" 
                           value={formData.standard_rest_minutes}
                           onChange={e => setFormData({...formData, standard_rest_minutes: Number(e.target.value)})}
-                          className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-slate-700 text-right"
+                          className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 font-bold text-slate-700 text-right"
                         />
                         <span className="font-bold text-slate-500">分</span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-2">
-                        ※この時間を超えて労働した場合に残業として計上されます。
-                      </p>
                     </div>
                   </div>
                 </section>
