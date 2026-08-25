@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Database, Upload, FileText, CheckCircle2, AlertTriangle, 
   Loader2, Search, ArrowLeft, Trash2, Plus, Edit2, RefreshCw, 
-  Layers, FlaskConical, Check, X, ShieldAlert 
+  Layers, FlaskConical, Check, X, ShieldAlert, Copy, CheckCheck
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { createBrowserClient } from '@supabase/ssr';
@@ -20,16 +20,22 @@ export default function AdminFertilizersPage() {
   const [totalCount, setTotalCount] = useState<number>(0);
   const [fertilizers, setFertilizers] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<string>('all');
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [tableMissing, setTableMissing] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // 手動追加・編集モーダル
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [formData, setFormData] = useState({
     registration_no: '',
+    registration_date: '',
     fertilizer_name: '',
     fertilizer_type: '化成肥料',
     applicant_name: '',
+    applicant_address: '',
+    expiry_status: '有効',
     n_percent: '0',
     p_percent: '0',
     k_percent: '0',
@@ -37,7 +43,6 @@ export default function AdminFertilizersPage() {
     ca_percent: '0',
     other_ingredients: ''
   });
-  const [tableMissing, setTableMissing] = useState(false);
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -63,7 +68,7 @@ export default function AdminFertilizersPage() {
 
       setTotalCount(count || 0);
 
-      // 2. 直近・検索一覧（最大100件）
+      // 2. 一覧取得（最大100件）
       let query = supabase
         .from('m_fertilizers')
         .select('*')
@@ -71,7 +76,11 @@ export default function AdminFertilizersPage() {
         .limit(100);
 
       if (searchQuery.trim()) {
-        query = query.or(`fertilizer_name.ilike.%${searchQuery.trim()}%,applicant_name.ilike.%${searchQuery.trim()}%,registration_no.ilike.%${searchQuery.trim()}%`);
+        query = query.or(`fertilizer_name.ilike.%${searchQuery.trim()}%,applicant_name.ilike.%${searchQuery.trim()}%,registration_no.ilike.%${searchQuery.trim()}%,fertilizer_type.ilike.%${searchQuery.trim()}%`);
+      }
+
+      if (filterType !== 'all') {
+        query = query.ilike('fertilizer_type', `%${filterType}%`);
       }
 
       const { data, error } = await query;
@@ -87,15 +96,15 @@ export default function AdminFertilizersPage() {
 
   useEffect(() => {
     fetchStatsAndList();
-  }, [searchQuery]);
+  }, [searchQuery, filterType]);
 
-  // CSV列名ゆらぎ自動取得ヘルパー
+  // 列名柔軟取得ヘルパー
   const getValue = (row: any, possibleKeys: string[]) => {
     for (const k of Object.keys(row)) {
       const cleanKey = k.replace(/[\s　]+/g, '').replace(/["']/g, '').toLowerCase();
       for (const pk of possibleKeys) {
         const cleanPk = pk.replace(/[\s　]+/g, '').toLowerCase();
-        if (cleanKey.includes(cleanPk)) {
+        if (cleanKey === cleanPk || cleanKey.includes(cleanPk)) {
           return row[k] || '';
         }
       }
@@ -103,7 +112,7 @@ export default function AdminFertilizersPage() {
     return '';
   };
 
-  // 数値抽出ヘルパー (例: "14.0%" -> 14.0, "0" -> 0)
+  // 数値抽出ヘルパー (例: "21", "20.9", "14.0%" -> 20.9)
   const parsePercent = (val: any): number => {
     if (val === null || val === undefined) return 0;
     if (typeof val === 'number') return isNaN(val) ? 0 : val;
@@ -116,26 +125,24 @@ export default function AdminFertilizersPage() {
     return 0;
   };
 
-  // CSV一括インポート処理
+  // FAMIC公的CSV対応 インポートエンジン
   const handleImportCSV = async () => {
     if (!file) return;
     setLoading(true);
-    setStatus({ type: 'info', message: 'CSVファイルを解析しています...' });
+    setStatus({ type: 'info', message: '公的肥料CSVファイルを解析しています...' });
     setProgress(null);
 
-    // エンコーディング自動判定（Shift-JIS or UTF-8）
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      encoding: 'Shift-JIS', // 日本の公的CSVの多くはShift-JIS
+      encoding: 'Shift-JIS', // 日本の公的CSVの標準
       complete: async (results) => {
         try {
           let rows = results.data;
           
-          // ヘッダーが文字化けしている場合のUTF-8リトライ判定
+          // ヘッダー文字化けチェック（UTF-8リトライ判定）
           const firstRowKeys = rows.length > 0 ? Object.keys(rows[0]).join('') : '';
           if (firstRowKeys.includes('')) {
-            console.log('Shift-JIS文字化け検知。UTF-8で再パースします...');
             const utf8Results: any = await new Promise((resolve) => {
               Papa.parse(file, {
                 header: true,
@@ -149,39 +156,125 @@ export default function AdminFertilizersPage() {
 
           const parsedList = rows.map((row: any, idx: number) => {
             const vals = Object.values(row);
-            
-            const regNo = String(getValue(row, ['登録番号', '届出番号', 'registration_no', '番号']) || vals[0] || '').trim();
-            const fName = String(getValue(row, ['肥料の名称', '肥料名', '銘柄名', '名称', 'fertilizer_name', '品名']) || vals[1] || vals[2] || '').trim();
-            const fType = String(getValue(row, ['肥料の種類', '種類', 'fertilizer_type', '規格']) || vals[2] || vals[1] || '化成肥料').trim();
-            const applicant = String(getValue(row, ['登録を有する者の名称', '製造業者', '業者名', 'メーカー', 'applicant_name']) || vals[3] || '').trim();
 
-            const n = parsePercent(getValue(row, ['窒素全量', '窒素', 'n_percent', 'チッソ', 'n']));
-            const p = parsePercent(getValue(row, ['りん酸全量', '水溶性りん酸', 'りん酸', 'リン酸', 'p_percent', 'p']));
-            const k = parsePercent(getValue(row, ['加里全量', '水溶性加里', '加里', 'カリ', 'k_percent', 'k']));
-            const mg = parsePercent(getValue(row, ['苦土', '水溶性苦土', 'mg_percent', 'mg']));
-            const ca = parsePercent(getValue(row, ['石灰', 'ca_percent', 'ca']));
-            const other = String(getValue(row, ['その他', '含有成分', '備考', 'other_ingredients']) || '').trim();
+            // 1. 基本情報
+            const regNo = String(getValue(row, ['登録番号', '届出番号', 'registration_no']) || vals[0] || '').trim();
+            const regDate = String(getValue(row, ['登録年月日', 'registration_date']) || vals[1] || '').trim();
+            const fName = String(getValue(row, ['肥料の名称', '肥料名', '銘柄名', '名称', 'fertilizer_name']) || vals[2] || vals[0] || '').trim();
+            const applicant = String(getValue(row, ['肥料業者', '登録を有する者の名称', '製造業者', 'メーカー', 'applicant_name']) || '').trim();
+            const address = String(getValue(row, ['住所', 'applicant_address']) || '').trim();
+            const fType = String(getValue(row, ['肥料種類名称', '肥料の種類', '種類', 'fertilizer_type']) || '化成肥料').trim();
+            const expiry = String(getValue(row, ['失効区分', 'expiry_status']) || '').trim();
+
+            // 2. 成分コード1〜16 & 保証成分量1〜16（%）の解析
+            let nVal = 0, pVal = 0, kVal = 0, mgVal = 0, caVal = 0;
+            const otherDetails: string[] = [];
+            let hasTN = false;
+            let hasTP = false;
+            let hasTK = false;
+
+            // 列に直接「窒素」「りん酸」「加里」がある場合の事前取得
+            const directN = parsePercent(getValue(row, ['窒素全量', '窒素', 'n_percent', 'チッソ']));
+            const directP = parsePercent(getValue(row, ['りん酸全量', '水溶性りん酸', 'りん酸', 'リン酸', 'p_percent']));
+            const directK = parsePercent(getValue(row, ['加里全量', '水溶性加里', '加里', 'カリ', 'k_percent']));
+            const directMg = parsePercent(getValue(row, ['苦土', '水溶性苦土', 'mg_percent']));
+            const directCa = parsePercent(getValue(row, ['石灰', 'ca_percent']));
+
+            if (directN > 0) nVal = directN;
+            if (directP > 0) pVal = directP;
+            if (directK > 0) kVal = directK;
+            if (directMg > 0) mgVal = directMg;
+            if (directCa > 0) caVal = directCa;
+
+            // 成分コード1〜16ループ
+            for (let i = 1; i <= 16; i++) {
+              const codeKey = Object.keys(row).find(k => {
+                const clean = k.replace(/[\s　]+/g, '');
+                return clean === `成分コード${i}` || clean === `成分コード(${i})` || clean === `成分コード_${i}`;
+              });
+              const amountKey = Object.keys(row).find(k => {
+                const clean = k.replace(/[\s　]+/g, '');
+                return clean.includes(`保証成分量${i}`) || clean.includes(`保証成分量(${i})`) || clean.includes(`成分量${i}`);
+              });
+
+              const code = (codeKey ? String(row[codeKey] || '') : '').trim().toUpperCase();
+              const amount = parsePercent(amountKey ? row[amountKey] : 0);
+
+              if (!code || amount <= 0) continue;
+
+              // --- 窒素 (N) 系統 ---
+              if (code === 'TN' || code === 'N' || code.includes('全窒素')) {
+                nVal = amount;
+                hasTN = true;
+              } else if (code === 'AN' || code === 'NN' || code === 'UN' || code === 'ON' || code === 'CN' || code.includes('窒素')) {
+                if (!hasTN) {
+                  nVal += amount;
+                }
+                const label = code === 'AN' ? 'アンモニア性窒素' : code === 'NN' ? '硝酸性窒素' : code === 'UN' ? '尿素態窒素' : code;
+                otherDetails.push(`${label}:${amount}%`);
+              }
+              // --- りん酸 (P) 系統 ---
+              else if (code === 'TP' || code === 'P' || code.includes('全りん酸') || code.includes('全リン酸')) {
+                pVal = amount;
+                hasTP = true;
+              } else if (code === 'WP' || code === 'CP' || code === 'SP' || code.includes('りん酸') || code.includes('リン酸')) {
+                if (!hasTP) {
+                  pVal = Math.max(pVal, amount);
+                }
+                const label = code === 'WP' ? '水溶性りん酸' : code === 'CP' ? 'く溶性りん酸' : code === 'SP' ? '可溶性りん酸' : code;
+                otherDetails.push(`${label}:${amount}%`);
+              }
+              // --- 加里 (K) 系統 ---
+              else if (code === 'TK' || code === 'K' || code.includes('全加里') || code.includes('全カリ')) {
+                kVal = amount;
+                hasTK = true;
+              } else if (code === 'WK' || code === 'CK' || code.includes('加里') || code.includes('カリ')) {
+                if (!hasTK) {
+                  kVal = Math.max(kVal, amount);
+                }
+                const label = code === 'WK' ? '水溶性加里' : code === 'CK' ? 'く溶性加里' : code;
+                otherDetails.push(`${label}:${amount}%`);
+              }
+              // --- 苦土 (Mg) 系統 ---
+              else if (code.includes('MG') || code.includes('苦土')) {
+                mgVal = Math.max(mgVal, amount);
+                otherDetails.push(`苦土:${amount}%`);
+              }
+              // --- 石灰 (Ca) 系統 ---
+              else if (code.includes('CA') || code.includes('石灰') || code.includes('アルカリ')) {
+                caVal = Math.max(caVal, amount);
+                otherDetails.push(`石灰/アルカリ:${amount}%`);
+              }
+              // --- ほう素・マンガン・その他微量要素 ---
+              else {
+                const label = code === 'B' ? 'ほう素' : code === 'MN' ? 'マンガン' : code === 'FE' ? '鉄' : code;
+                otherDetails.push(`${label}:${amount}%`);
+              }
+            }
 
             return {
               registration_no: regNo || `REG-${Date.now()}-${idx}`,
+              registration_date: regDate,
               fertilizer_name: fName,
               fertilizer_type: fType || '普通肥料',
               applicant_name: applicant,
-              n_percent: n,
-              p_percent: p,
-              k_percent: k,
-              mg_percent: mg,
-              ca_percent: ca,
-              other_ingredients: other,
+              applicant_address: address,
+              expiry_status: expiry || '有効',
+              n_percent: Math.round(nVal * 100) / 100,
+              p_percent: Math.round(pVal * 100) / 100,
+              k_percent: Math.round(kVal * 100) / 100,
+              mg_percent: Math.round(mgVal * 100) / 100,
+              ca_percent: Math.round(caVal * 100) / 100,
+              other_ingredients: otherDetails.join(' / '),
               updated_at: new Date().toISOString()
             };
           }).filter((item: any) => item.fertilizer_name);
 
           if (parsedList.length === 0) {
-            throw new Error('有効な肥料データ（肥料名を含む行）が1件も見つかりませんでした。CSVの列名を確認してください。');
+            throw new Error('有効な肥料データ（肥料名を含む行）が見つかりませんでした。CSVファイルをご確認ください。');
           }
 
-          // 重複除去（登録番号または名称+メーカー単位）
+          // 重複除外
           const uniqueMap = new Map();
           parsedList.forEach((item: any) => {
             const key = item.registration_no || `${item.fertilizer_name}_${item.applicant_name}`;
@@ -199,11 +292,9 @@ export default function AdminFertilizersPage() {
               .upsert(chunk, { onConflict: 'registration_no' });
 
             if (error) {
-              // テーブル未作成エラー等の場合
               if (error.code === 'PGRST205' || error.message?.includes('schema cache') || error.message?.includes('m_fertilizers')) {
                 throw new Error('データベースに「m_fertilizers」テーブルが存在しません。SupabaseのSQL Editorでテーブル作成SQLを実行してください。');
               }
-              // 通常のinsertで再試行
               const { error: insertErr } = await supabase.from('m_fertilizers').insert(chunk);
               if (insertErr) {
                 throw new Error(`DB保存エラー: ${insertErr.message}`);
@@ -215,7 +306,7 @@ export default function AdminFertilizersPage() {
 
           setStatus({ 
             type: 'success', 
-            message: `🎉 肥料マスターのインポートが完了しました！（全 ${uniqueData.length} 件）` 
+            message: `🎉 FAMIC公的肥料マスターのインポートが完了しました！（全 ${uniqueData.length} 件）` 
           });
           setFile(null);
           fetchStatsAndList();
@@ -246,15 +337,18 @@ export default function AdminFertilizersPage() {
     }
   };
 
-  // 個別保存（新規 or 編集）
+  // 個別保存
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const payload: any = {
         registration_no: formData.registration_no || `REG-${Date.now()}`,
+        registration_date: formData.registration_date,
         fertilizer_name: formData.fertilizer_name,
         fertilizer_type: formData.fertilizer_type,
         applicant_name: formData.applicant_name,
+        applicant_address: formData.applicant_address,
+        expiry_status: formData.expiry_status,
         n_percent: parseFloat(formData.n_percent) || 0,
         p_percent: parseFloat(formData.p_percent) || 0,
         k_percent: parseFloat(formData.k_percent) || 0,
@@ -284,9 +378,12 @@ export default function AdminFertilizersPage() {
     setEditingItem(item);
     setFormData({
       registration_no: item.registration_no || '',
+      registration_date: item.registration_date || '',
       fertilizer_name: item.fertilizer_name || '',
       fertilizer_type: item.fertilizer_type || '化成肥料',
       applicant_name: item.applicant_name || '',
+      applicant_address: item.applicant_address || '',
+      expiry_status: item.expiry_status || '有効',
       n_percent: String(item.n_percent || 0),
       p_percent: String(item.p_percent || 0),
       k_percent: String(item.k_percent || 0),
@@ -308,6 +405,35 @@ export default function AdminFertilizersPage() {
     }
   };
 
+  const sqlCode = `-- 肥料マスターテーブル作成SQL
+CREATE TABLE IF NOT EXISTS public.m_fertilizers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    registration_no TEXT,
+    registration_date TEXT,
+    fertilizer_name TEXT NOT NULL,
+    fertilizer_type TEXT,
+    applicant_name TEXT,
+    applicant_address TEXT,
+    expiry_status TEXT,
+    n_percent NUMERIC(5,2) DEFAULT 0,
+    p_percent NUMERIC(5,2) DEFAULT 0,
+    k_percent NUMERIC(5,2) DEFAULT 0,
+    mg_percent NUMERIC(5,2) DEFAULT 0,
+    ca_percent NUMERIC(5,2) DEFAULT 0,
+    other_ingredients TEXT,
+    raw_data JSONB,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_m_fertilizers_name ON public.m_fertilizers (fertilizer_name);
+CREATE INDEX IF NOT EXISTS idx_m_fertilizers_reg_no ON public.m_fertilizers (registration_no);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_m_fertilizers_unique_reg ON public.m_fertilizers (registration_no) WHERE registration_no IS NOT NULL AND registration_no <> '';
+ALTER TABLE public.m_fertilizers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read on m_fertilizers" ON public.m_fertilizers FOR SELECT USING (true);
+CREATE POLICY "Allow public insert on m_fertilizers" ON public.m_fertilizers FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update on m_fertilizers" ON public.m_fertilizers FOR UPDATE USING (true);
+CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR DELETE USING (true);`;
+
   return (
     <div className="space-y-8 pb-12">
       
@@ -323,7 +449,7 @@ export default function AdminFertilizersPage() {
             全国肥料公的マスター管理
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            農林水産省・FAMIC等の登録肥料銘柄CSVを一括インポートし、N-P-K成分量データベースを統括管理します。
+            農林水産省/FAMIC公的登録銘柄CSV（成分コード1〜16）を自動解析し、N-P-K成分量データベースを統括管理します。
           </p>
         </div>
 
@@ -333,9 +459,12 @@ export default function AdminFertilizersPage() {
               setEditingItem(null);
               setFormData({
                 registration_no: '',
+                registration_date: '',
                 fertilizer_name: '',
                 fertilizer_type: '化成肥料',
                 applicant_name: '',
+                applicant_address: '',
+                expiry_status: '有効',
                 n_percent: '0',
                 p_percent: '0',
                 k_percent: '0',
@@ -360,46 +489,39 @@ export default function AdminFertilizersPage() {
         </div>
       </div>
 
-      {/* テーブル未作成アラート */}
+      {/* テーブル未作成アラート（SQLコピー付き） */}
       {tableMissing && (
-        <div className="p-6 rounded-3xl bg-amber-950/60 border border-amber-500/50 text-amber-200 shadow-xl space-y-3">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="w-6 h-6 text-amber-400 shrink-0" />
-            <div>
-              <h3 className="text-base font-black text-amber-300">
-                ⚠️ データベースに「m_fertilizers」テーブルがまだ作成されていません
-              </h3>
-              <p className="text-xs text-amber-200/80 mt-0.5">
-                CSVを登録するには、Supabaseの「SQL Editor」でテーブル作成SQLを実行していただく必要があります。
-              </p>
+        <div className="p-6 rounded-3xl bg-amber-950/70 border-2 border-amber-500/80 text-amber-200 shadow-2xl space-y-4 animate-pulse">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-amber-500/20 text-amber-400 rounded-2xl border border-amber-500/40">
+                <AlertTriangle className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-amber-300">
+                  ⚠️ Supabaseに「m_fertilizers」テーブルがまだ作成されていません
+                </h3>
+                <p className="text-xs text-amber-200/80 mt-0.5">
+                  CSVをインポートする前に、Supabaseダッシュボードの「SQL Editor」で以下のSQLを実行してください。
+                </p>
+              </div>
             </div>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(sqlCode);
+                setCopiedSql(true);
+                setTimeout(() => setCopiedSql(false), 2500);
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition-all shadow-md shrink-0"
+            >
+              {copiedSql ? <CheckCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              {copiedSql ? 'SQLをコピーしました！' : 'SQLコードをコピー'}
+            </button>
           </div>
-          <div className="pt-2">
-            <p className="text-xs font-bold text-amber-300 mb-1">実行するSQLコード（クリックしてコピー可能）:</p>
-            <pre className="p-3 bg-slate-950 rounded-xl border border-amber-500/30 text-[11px] font-mono text-slate-300 overflow-x-auto select-all">
-{`CREATE TABLE IF NOT EXISTS public.m_fertilizers (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    registration_no TEXT,
-    fertilizer_name TEXT NOT NULL,
-    fertilizer_type TEXT,
-    applicant_name TEXT,
-    n_percent NUMERIC(5,2) DEFAULT 0,
-    p_percent NUMERIC(5,2) DEFAULT 0,
-    k_percent NUMERIC(5,2) DEFAULT 0,
-    mg_percent NUMERIC(5,2) DEFAULT 0,
-    ca_percent NUMERIC(5,2) DEFAULT 0,
-    other_ingredients TEXT,
-    raw_data JSONB,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
-);
-ALTER TABLE public.m_fertilizers ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow public read on m_fertilizers" ON public.m_fertilizers FOR SELECT USING (true);
-CREATE POLICY "Allow public insert on m_fertilizers" ON public.m_fertilizers FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow public update on m_fertilizers" ON public.m_fertilizers FOR UPDATE USING (true);
-CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR DELETE USING (true);`}
-            </pre>
-          </div>
+
+          <pre className="p-4 bg-slate-950 rounded-2xl border border-amber-500/30 text-xs font-mono text-slate-300 overflow-x-auto select-all max-h-48">
+            {sqlCode}
+          </pre>
         </div>
       )}
 
@@ -439,15 +561,15 @@ CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR
             <FlaskConical className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">N-P-K成分 照合可能</p>
-            <p className="text-2xl font-black text-indigo-300 mt-0.5">100% リアルタイム</p>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">FAMIC成分コード解析</p>
+            <p className="text-2xl font-black text-indigo-300 mt-0.5">16成分 完全自動対応</p>
           </div>
         </div>
 
         <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">データベース操作</p>
-            <p className="text-xs text-slate-400 mt-1">全件再登録時のリセット</p>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">マスター操作</p>
+            <p className="text-xs text-slate-400 mt-1">全件再登録時の初期化</p>
           </div>
           <button
             onClick={handleClearAll}
@@ -467,9 +589,9 @@ CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR
             <Upload className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-lg font-black text-white">肥料CSV一括インポート</h2>
+            <h2 className="text-lg font-black text-white">FAMIC / 公的肥料CSV一括インポート</h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              農林水産省/FAMICデータ、または独自の肥料CSVファイル（Shift-JIS / UTF-8）を選択してください。
+              農林水産省・FAMIC形式（「登録番号」「肥料の名称」「成分コード1〜16」「保証成分量1〜16」等）のCSVに対応。
             </p>
           </div>
         </div>
@@ -482,7 +604,7 @@ CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR
                 {file ? file.name : 'ここに肥料CSVファイルをドラッグ＆ドロップ、またはクリックして選択'}
               </span>
               <span className="text-xs text-slate-500 mt-1">
-                ※「肥料名」「窒素(N)」「りん酸(P)」「加里(K)」等の列を自動判定してインポートします
+                ※「AN 21」等の成分コードから自動で「N: 21%」に変換・抽出して登録します
               </span>
               <input
                 type="file"
@@ -542,18 +664,37 @@ CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR
               <Layers className="w-5 h-5 text-indigo-400" />
               登録済み 肥料マスター一覧
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">直近の登録データおよび検索結果を表示しています。</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              直近の登録データおよび検索結果を表示しています（全 {totalCount.toLocaleString()} 件中）。
+            </p>
           </div>
 
-          <div className="relative w-full sm:w-80">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="肥料名・メーカー・登録番号で検索..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm font-bold text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-            />
+          <div className="flex items-center gap-3">
+            {/* 種類フィルタ */}
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-300 focus:outline-none focus:border-indigo-500"
+            >
+              <option value="all">すべての種類</option>
+              <option value="硫酸アンモニア">硫酸アンモニア</option>
+              <option value="化成肥料">化成肥料</option>
+              <option value="配合肥料">配合肥料</option>
+              <option value="尿素">尿素</option>
+              <option value="過リン酸石灰">過リン酸石灰</option>
+              <option value="加里">加里系</option>
+            </select>
+
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="肥料名・メーカー・登録番号..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm font-bold text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
           </div>
         </div>
 
@@ -563,8 +704,8 @@ CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR
               <tr>
                 <th className="p-4">登録番号</th>
                 <th className="p-4">肥料の名称 (銘柄)</th>
-                <th className="p-4">種類</th>
-                <th className="p-4">製造・メーカー</th>
+                <th className="p-4">肥料種類</th>
+                <th className="p-4">製造・肥料業者</th>
                 <th className="p-4 text-center">N - P - K 保証成分比率</th>
                 <th className="p-4 text-right">操作</th>
               </tr>
@@ -587,23 +728,36 @@ CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR
                 fertilizers.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-900/50 transition-colors">
                     <td className="p-4 text-xs font-mono text-slate-400 whitespace-nowrap">
-                      {item.registration_no || '-'}
+                      <div>{item.registration_no || '-'}</div>
+                      {item.registration_date && (
+                        <div className="text-[10px] text-slate-500">{item.registration_date}</div>
+                      )}
                     </td>
                     <td className="p-4 font-bold text-white">
-                      {item.fertilizer_name}
+                      <div className="flex items-center gap-2">
+                        {item.fertilizer_name}
+                        {item.expiry_status && item.expiry_status.includes('失効') && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 bg-rose-950 text-rose-300 border border-rose-800 rounded">
+                            {item.expiry_status}
+                          </span>
+                        )}
+                      </div>
                       {item.other_ingredients && (
-                        <span className="block text-[10px] text-slate-400 font-normal mt-0.5">
+                        <span className="block text-[10px] text-slate-400 font-normal mt-0.5 max-w-md truncate">
                           {item.other_ingredients}
                         </span>
                       )}
                     </td>
                     <td className="p-4 whitespace-nowrap">
                       <span className="text-xs px-2.5 py-0.5 rounded-md font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                        {item.fertilizer_type || '化成肥料'}
+                        {item.fertilizer_type || '普通肥料'}
                       </span>
                     </td>
                     <td className="p-4 text-xs text-slate-400 whitespace-nowrap">
-                      {item.applicant_name || '-'}
+                      <div>{item.applicant_name || '-'}</div>
+                      {item.applicant_address && (
+                        <div className="text-[10px] text-slate-500 max-w-xs truncate">{item.applicant_address}</div>
+                      )}
                     </td>
                     <td className="p-4 text-center whitespace-nowrap">
                       <div className="inline-flex items-center gap-1.5 font-mono text-xs font-black">
@@ -653,7 +807,7 @@ CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR
       {/* 手動追加・編集モーダル */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-lg font-black text-white flex items-center gap-2">
                 <FlaskConical className="w-5 h-5 text-emerald-400" />
@@ -670,7 +824,7 @@ CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR
                 <input
                   type="text"
                   required
-                  placeholder="例: オール14号化成"
+                  placeholder="例: ２１．０硫酸アンモニア"
                   value={formData.fertilizer_name}
                   onChange={(e) => setFormData({ ...formData, fertilizer_name: e.target.value })}
                   className="w-full p-3 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-emerald-500"
@@ -679,41 +833,50 @@ CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1">登録番号 / 届出番号</label>
+                  <label className="block text-xs font-bold text-slate-400 mb-1">登録番号</label>
                   <input
                     type="text"
-                    placeholder="例: 生第12345号"
+                    placeholder="例: 生第6号"
                     value={formData.registration_no}
                     onChange={(e) => setFormData({ ...formData, registration_no: e.target.value })}
                     className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-emerald-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1">肥料の種類</label>
-                  <select
+                  <label className="block text-xs font-bold text-slate-400 mb-1">肥料種類名称</label>
+                  <input
+                    type="text"
+                    placeholder="例: 硫酸アンモニア, 高度化成"
                     value={formData.fertilizer_type}
                     onChange={(e) => setFormData({ ...formData, fertilizer_type: e.target.value })}
                     className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="化成肥料">高度化成・化成肥料</option>
-                    <option value="単肥">単肥 (硫安・尿素等)</option>
-                    <option value="有機質肥料">有機質肥料 (油粕・鶏糞等)</option>
-                    <option value="液肥">液肥・葉面散布剤</option>
-                    <option value="微量要素複合">微量要素・土壌改良材</option>
-                    <option value="普通肥料">その他普通肥料</option>
-                  </select>
+                  />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1">製造業者・メーカー名</label>
-                <input
-                  type="text"
-                  placeholder="例: 〇〇アグリ株式会社"
-                  value={formData.applicant_name}
-                  onChange={(e) => setFormData({ ...formData, applicant_name: e.target.value })}
-                  className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-emerald-500"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1">肥料業者・メーカー名</label>
+                  <input
+                    type="text"
+                    placeholder="例: 日本化成株式会社"
+                    value={formData.applicant_name}
+                    onChange={(e) => setFormData({ ...formData, applicant_name: e.target.value })}
+                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1">失効区分</label>
+                  <select
+                    value={formData.expiry_status}
+                    onChange={(e) => setFormData({ ...formData, expiry_status: e.target.value })}
+                    className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="有効">有効</option>
+                    <option value="満期失効">満期失効</option>
+                    <option value="廃止">廃止</option>
+                  </select>
+                </div>
               </div>
 
               {/* N-P-K 保証成分 */}
@@ -790,7 +953,7 @@ CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR
                 <label className="block text-xs font-bold text-slate-400 mb-1">その他成分・特徴・備考</label>
                 <input
                   type="text"
-                  placeholder="例: 微量要素入り、緩効性チッソ配合"
+                  placeholder="例: アンモニア性窒素:21%"
                   value={formData.other_ingredients}
                   onChange={(e) => setFormData({ ...formData, other_ingredients: e.target.value })}
                   className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-emerald-500"
