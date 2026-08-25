@@ -101,11 +101,18 @@ export default function NurserySchedulePage() {
       // 画面表示用にデータをマージする (Schedules が無ければカラの初期データを作成)
       const mergedSchedules = fetchedPlans.map(plan => {
         const existingSchedule = fetchedSchedules.find(s => s.plan_id === plan.id);
-        return existingSchedule || {
-          plan_id: plan.id,
-          sown_quantity: 0,
-          schedule_data: {},
-          isNew: true
+        const savedLossRate = existingSchedule?.loss_rate !== undefined 
+          ? existingSchedule.loss_rate 
+          : (existingSchedule?.schedule_data?._loss_rate ?? 10);
+
+        return {
+          ...(existingSchedule || {
+            plan_id: plan.id,
+            sown_quantity: 0,
+            schedule_data: {},
+            isNew: true
+          }),
+          loss_rate: savedLossRate !== null && savedLossRate !== undefined ? Number(savedLossRate) : 10
         };
       });
       
@@ -116,6 +123,11 @@ export default function NurserySchedulePage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // 全行のロス率を一括変更する関数
+  const handleBulkLossRate = (rate: number) => {
+    setSchedules(prev => prev.map(s => ({ ...s, loss_rate: rate })));
   };
 
   const handleCellChange = (planId: string, field: string, value: any) => {
@@ -144,16 +156,27 @@ export default function NurserySchedulePage() {
       const existingSchedules = schedules.filter(s => !s.isNew);
 
       if (newSchedules.length > 0) {
-        const inserts = newSchedules.map(({ isNew, ...rest }) => rest);
+        const inserts = newSchedules.map(({ isNew, loss_rate, schedule_data, ...rest }) => ({
+          ...rest,
+          schedule_data: {
+            ...schedule_data,
+            _loss_rate: Number(loss_rate) || 0
+          }
+        }));
         const { error } = await supabase.from('nursery_schedules_v2').insert(inserts);
         if (error) throw error;
       }
 
       for (const schedule of existingSchedules) {
+        const scheduleDataWithMeta = {
+          ...schedule.schedule_data,
+          _loss_rate: Number(schedule.loss_rate) || 0
+        };
+
         const { error } = await supabase.from('nursery_schedules_v2')
           .update({
             sown_quantity: schedule.sown_quantity,
-            schedule_data: schedule.schedule_data
+            schedule_data: scheduleDataWithMeta
           })
           .eq('id', schedule.id);
         if (error) throw error;
@@ -263,45 +286,59 @@ export default function NurserySchedulePage() {
         </p>
       </div>
       
-      {/* ツールバー (入力モード選択) */}
-      <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
-        <div className="flex items-center gap-2 text-slate-500 font-bold text-sm ml-2">
-          <Paintbrush className="w-4 h-4" /> 入力時の色（作業種類）を選択：
+      {/* ツールバー (入力モード選択 & 一括ロス率設定) */}
+      <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 text-slate-500 font-bold text-sm ml-2">
+            <Paintbrush className="w-4 h-4" /> 入力時の色（作業種類）：
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setCurrentMode('sowing')}
+              className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
+                currentMode === 'sowing' ? 'bg-orange-100 border-orange-400 text-orange-800 shadow-sm' : 'border-transparent hover:bg-slate-50 text-slate-500'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-orange-400"></div> 種まき
+              </div>
+            </button>
+            <button 
+              onClick={() => setCurrentMode('potting')}
+              className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
+                currentMode === 'potting' ? 'bg-pink-100 border-pink-400 text-pink-800 shadow-sm' : 'border-transparent hover:bg-slate-50 text-slate-500'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-pink-400"></div> 鉢上げ
+              </div>
+            </button>
+            <button 
+              onClick={() => setCurrentMode('planting')}
+              className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
+                currentMode === 'planting' ? 'bg-green-100 border-green-500 text-green-800 shadow-sm' : 'border-transparent hover:bg-slate-50 text-slate-500'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-green-600"></div> 植え付け
+              </div>
+            </button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <button 
-            onClick={() => setCurrentMode('sowing')}
-            className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
-              currentMode === 'sowing' ? 'bg-orange-100 border-orange-400 text-orange-800 shadow-sm' : 'border-transparent hover:bg-slate-50 text-slate-500'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-orange-400"></div> 種まき
-            </div>
-          </button>
-          <button 
-            onClick={() => setCurrentMode('potting')}
-            className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
-              currentMode === 'potting' ? 'bg-pink-100 border-pink-400 text-pink-800 shadow-sm' : 'border-transparent hover:bg-slate-50 text-slate-500'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-pink-400"></div> 鉢上げ
-            </div>
-          </button>
-          <button 
-            onClick={() => setCurrentMode('planting')}
-            className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${
-              currentMode === 'planting' ? 'bg-green-100 border-green-500 text-green-800 shadow-sm' : 'border-transparent hover:bg-slate-50 text-slate-500'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-green-600"></div> 植え付け
-            </div>
-          </button>
-        </div>
-        <div className="ml-auto text-xs text-slate-400 mr-2">
-          ※ 選択した色の状態で表に文字（数字）を入力すると、そのセルに色が付きます。<br/>※ 消したい場合は文字を消して空にしてください。
+
+        {/* 一括ロス率設定 */}
+        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl">
+          <Calculator className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span className="text-xs font-bold text-slate-700">一括ロス率:</span>
+          {[5, 10, 15, 20].map(rate => (
+            <button
+              key={rate}
+              onClick={() => handleBulkLossRate(rate)}
+              className="px-2.5 py-1 text-xs font-bold bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-lg border border-slate-200 hover:border-emerald-300 transition-colors shadow-2xs"
+            >
+              {rate}%
+            </button>
+          ))}
         </div>
       </div>
 
@@ -315,10 +352,22 @@ export default function NurserySchedulePage() {
             <table className="w-full text-sm text-left whitespace-nowrap">
               <thead className="text-xs text-slate-700 bg-slate-50 sticky top-0 z-10">
                 <tr>
-                  <th className="px-3 py-4 border-b border-r font-black min-w-[150px] sticky left-0 bg-slate-100 z-20">定植先(圃場)</th>
-                  <th className="px-3 py-4 border-b border-r font-black min-w-[150px] sticky left-[150px] bg-slate-100 z-20">作目・品種</th>
-                  <th className="px-3 py-4 border-b border-r font-bold text-center">必要本数(自動計算)</th>
-                  <th className="px-3 py-4 border-b border-r font-bold text-center">播種量(実数)</th>
+                  <th className="px-3 py-4 border-b border-r font-black min-w-[140px] sticky left-0 bg-slate-100 z-20">定植先(圃場)</th>
+                  <th className="px-3 py-4 border-b border-r font-black min-w-[140px] sticky left-[140px] bg-slate-100 z-20">作目・品種</th>
+                  <th className="px-3 py-4 border-b border-r font-bold text-center min-w-[100px]">定植必要数</th>
+                  <th className="px-3 py-4 border-b border-r font-bold text-center min-w-[90px] bg-amber-50/60 text-amber-900">
+                    <div className="flex items-center justify-center gap-1">
+                      <span>ロス率</span>
+                      <span className="text-[10px] text-amber-600 font-normal">(%)</span>
+                    </div>
+                  </th>
+                  <th className="px-3 py-4 border-b border-r font-bold text-center min-w-[130px] bg-emerald-50/70 text-emerald-900">
+                    <div className="flex items-center justify-center gap-1">
+                      <span>目標播種数</span>
+                      <span className="text-[10px] text-emerald-600 font-normal">(自動計算)</span>
+                    </div>
+                  </th>
+                  <th className="px-3 py-4 border-b border-r font-bold text-center min-w-[110px]">播種量(実数)</th>
                   
                   {/* 日付ヘッダー (週) */}
                   {weeks.map((week, i) => (
@@ -332,17 +381,45 @@ export default function NurserySchedulePage() {
                 {plans.map((plan, idx) => {
                   const schedule = schedules.find(s => s.plan_id === plan.id);
                   if (!schedule) return null;
+
+                  const baseSeedlings = plan.calculated_seedlings || 0;
+                  const lossRate = schedule.loss_rate !== undefined ? Number(schedule.loss_rate) : 10;
+                  const targetSeedlings = Math.ceil(baseSeedlings * (1 + (lossRate / 100)));
                   
                   return (
                     <tr key={plan.id} className="border-b hover:bg-slate-50/50 transition-colors">
                       <td className="p-3 border-r sticky left-0 bg-white z-10 text-slate-600 font-bold">
                         {plan.fields?.name}
                       </td>
-                      <td className="p-3 border-r sticky left-[150px] bg-white z-10 text-slate-600 font-bold">
+                      <td className="p-3 border-r sticky left-[140px] bg-white z-10 text-slate-600 font-bold">
                         {plan.crops?.name} {plan.variety && <span className="text-emerald-600 text-xs ml-1">{plan.variety}</span>}
                       </td>
-                      <td className="p-3 border-r text-center font-black text-slate-700 bg-slate-50/50">
-                        {plan.calculated_seedlings?.toLocaleString()} 本
+                      <td className="p-3 border-r text-center font-bold text-slate-600 bg-slate-50/30">
+                        {baseSeedlings.toLocaleString()} <span className="text-xs text-slate-400 font-normal">本</span>
+                      </td>
+                      <td className="p-1 border-r bg-amber-50/20 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <input 
+                            type="number" 
+                            min="0"
+                            max="100"
+                            step="1"
+                            value={schedule.loss_rate ?? 10} 
+                            onChange={(e) => handleCellChange(plan.id, 'loss_rate', Number(e.target.value))}
+                            className="w-16 p-1.5 bg-white border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 text-center font-bold text-amber-800 text-xs shadow-2xs"
+                          />
+                          <span className="text-xs font-bold text-amber-700">%</span>
+                        </div>
+                      </td>
+                      <td className="p-3 border-r text-center font-black text-emerald-700 bg-emerald-50/50">
+                        <div className="flex flex-col items-center justify-center">
+                          <span className="text-sm">{targetSeedlings.toLocaleString()} <span className="text-xs font-normal">本</span></span>
+                          {lossRate > 0 && (
+                            <span className="text-[10px] text-emerald-600 font-bold">
+                              (+{(targetSeedlings - baseSeedlings).toLocaleString()}本)
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="p-1 border-r">
                         <input 
@@ -377,7 +454,7 @@ export default function NurserySchedulePage() {
                 })}
                 {plans.length === 0 && (
                   <tr>
-                    <td colSpan={4 + weeks.length} className="p-8 text-center text-slate-400 font-bold">
+                    <td colSpan={6 + weeks.length} className="p-8 text-center text-slate-400 font-bold">
                       現在、苗が必要な栽培計画はありません。「栽培計画表」から計画を作成してください。
                     </td>
                   </tr>
