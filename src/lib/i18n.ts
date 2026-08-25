@@ -264,6 +264,17 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   workContentLabel: { ja: '作業内容', en: 'Work Content', vi: 'Nội dung công việc', id: 'Isi Pekerjaan', zh: '作业内容', si: 'වැඩ අන්තර්ගතය', km: 'ខ្លឹមសារការងារ' },
   memoSectionLabel: { ja: 'メモ', en: 'Memo', vi: 'Ghi chú', id: 'Catatan', zh: '备注', si: 'සටහන', km: 'កំណត់ចំណាំ' },
 
+  // 指示・タスク
+  todayTasksHeader: { ja: '本日の指示・タスク', en: "Today's Assigned Tasks", vi: 'Chỉ thị & Nhiệm vụ hôm nay', id: 'Tugas Hari Ini', zh: '今日任务指示', si: 'අද උපදෙස් සහ කාර්යයන්', km: 'ការណែនាំ និង កិច្ចការថ្ងៃនេះ' },
+  detail: { ja: '詳細', en: 'Detail', vi: 'Chi tiết', id: 'Detail', zh: '详情', si: 'විස්තර', km: 'ព័ត៌មានលម្អិត' },
+  taskDetailTitle: { ja: '作業指示・タスク詳細', en: 'Task Details & Instructions', vi: 'Chi tiết chỉ thị & Nhiệm vụ', id: 'Detail Tugas & Instruksi', zh: '作业指示与任务详情', si: 'කාර්ය විස්තර සහ උපදෙස්', km: 'សេចក្តីលម្អិតកិច្ចការ និង ការណែនាំ' },
+  taskAssignee: { ja: '担当者', en: 'Assignee', vi: 'Người phụ trách', id: 'Penanggung Jawab', zh: '负责人', si: 'වගකිවයුතු පුද්ගලයා', km: 'អ្នកទទួលខុសត្រូវ' },
+  unspecified: { ja: '指定なし', en: 'Not specified', vi: 'Không chỉ định', id: 'Tidak ditentukan', zh: '未指定', si: 'නිශ්චිතව දක්වා නැත', km: 'មិនបានបញ្ជាក់' },
+  generalWork: { ja: '一般作業', en: 'General Work', vi: 'Công việc chung', id: 'Pekerjaan Umum', zh: '一般作业', si: 'සාමාන්‍ය වැඩ', km: 'ការងារទូទៅ' },
+  instructionsNotes: { ja: '指示・備考メモ', en: 'Instructions & Notes', vi: 'Chỉ thị & Ghi chú', id: 'Instruksi & Catatan', zh: '指示与备注', si: 'උපදෙස් සහ සටහන්', km: 'ការណែនាំ និង កំណត់ចំណាំ' },
+  applyTaskToInput: { ja: 'この指示を作業入力に反映する', en: 'Apply Task to Work Entry', vi: 'Áp dụng vào biểu mẫu ghi nhận', id: 'Terapkan Instruksi ke Form', zh: '将此指示填入作业记录', si: 'මෙම උපදෙස් වැඩ ආදානයට යොදන්න', km: 'អនុវត្តការណែនាំនេះទៅក្នុងការបញ្ចូលការងារ' },
+  close: { ja: '閉じる', en: 'Close', vi: 'Đóng', id: 'Tutup', zh: '关闭', si: 'වසා දමන්න', km: 'បិទ' },
+
   // 動画マニュアル関連
   videoManuals: { ja: '動画マニュアル集', en: 'Video Manuals', vi: 'Hướng dẫn bằng video', id: 'Manual Video', zh: '视频手册'
    , si: 'වීඩියෝ අත්පොත එකතුව', km: 'ការប្រមូលវីដេអូដោយដៃ' },
