@@ -15,6 +15,7 @@ import {
   CreditCard
 } from 'lucide-react';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
+import { useCompany } from '@/hooks/useCompany';
 
 export default function SalesManagementLayout({
   children,
@@ -22,6 +23,7 @@ export default function SalesManagementLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const { companyName } = useCompany();
 
   const navItems = [
     { name: '販売ダッシュボード', path: '/sales-management', icon: LayoutDashboard },
@@ -39,13 +41,20 @@ export default function SalesManagementLayout({
         <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col hidden md:flex sticky top-0 h-screen border-r border-slate-800">
           
           {/* ヘッダー */}
-          <div className="h-16 flex items-center px-5 border-b border-slate-800 bg-slate-950">
-            <div className="p-1.5 bg-indigo-500/20 text-indigo-400 rounded-xl mr-2.5">
-              <ShoppingCart className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="font-black text-white text-base leading-tight tracking-tight">販売管理システム</h1>
-              <p className="text-[10px] text-slate-400 font-bold">受注・出荷・請求書</p>
+          <div className="p-4 border-b border-slate-800 bg-slate-950">
+            <Link href="/" className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs font-bold transition-colors mb-2">
+              <ArrowLeft className="w-3.5 h-3.5" /> ポータルTOPへ
+            </Link>
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 rounded-xl shrink-0">
+                <ShoppingCart className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="font-black text-white text-sm truncate" title={companyName || '自社名未設定'}>
+                  {companyName || '自社名未設定'}
+                </div>
+                <p className="text-[10px] text-indigo-400 font-bold">販売・B2B受注管理</p>
+              </div>
             </div>
           </div>
           
@@ -98,9 +107,14 @@ export default function SalesManagementLayout({
           
           {/* モバイル用ヘッダー */}
           <header className="h-14 bg-slate-900 text-white flex items-center justify-between px-4 md:hidden border-b border-slate-800 sticky top-0 z-30">
-            <div className="flex items-center gap-2">
-              <ShoppingCart className="w-5 h-5 text-indigo-400" />
-              <span className="font-bold text-sm">販売管理</span>
+            <div className="flex items-center gap-2 min-w-0">
+              <ShoppingCart className="w-5 h-5 text-indigo-400 shrink-0" />
+              <div className="min-w-0">
+                <div className="font-bold text-xs text-white truncate max-w-[160px]">
+                  {companyName || '販売管理'}
+                </div>
+                <p className="text-[10px] text-indigo-400 font-bold">販売・受注システム</p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <Link href="/admin/cultivations" className="px-2.5 py-1 bg-emerald-900/60 text-emerald-300 text-xs font-bold rounded-lg border border-emerald-700">

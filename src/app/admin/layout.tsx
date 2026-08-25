@@ -33,13 +33,16 @@ import {
   CheckSquare,
   Inbox,
   Layout,
-  ShoppingCart
+  ShoppingCart,
+  Building
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useCompany } from '@/hooks/useCompany';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { companyName } = useCompany();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [tenantId, setTenantId] = useState<string>('');
   const [copied, setCopied] = useState(false);
@@ -165,10 +168,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans">
       
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:hidden sticky top-0 z-50">
-        <Link href="/" className="flex items-center gap-2 text-emerald-700 font-black text-lg">
-          <Cloud className="w-6 h-6" />
-          Cloud Portal
-        </Link>
+        <div className="flex items-center gap-2 min-w-0">
+          <Link href="/" className="flex items-center gap-1.5 text-emerald-700 font-black text-base shrink-0">
+            <Cloud className="w-5 h-5" />
+          </Link>
+          <div className="min-w-0">
+            <div className="text-xs font-black text-slate-800 truncate max-w-[170px]">
+              {companyName || 'Cloud Portal'}
+            </div>
+            <p className="text-[10px] font-bold text-emerald-600">農業司令塔</p>
+          </div>
+        </div>
         <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-slate-600">
           <Menu className="w-6 h-6" />
         </button>
@@ -215,11 +225,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       )}
 
       <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col sticky top-0 h-screen">
-        <div className="h-16 flex items-center px-6 border-b border-slate-100">
-          <Link href="/" className="flex items-center gap-2 text-emerald-700 font-black text-lg tracking-tight hover:text-emerald-800 transition-colors">
-            <Cloud className="w-6 h-6" />
-            <span>Cloud Portal<span className="text-sm text-emerald-500/80 ml-2">ホーム</span></span>
+        <div className="p-4 border-b border-slate-100 bg-emerald-50/40">
+          <Link href="/" className="flex items-center justify-between text-slate-500 hover:text-emerald-700 text-xs font-bold transition-colors mb-2">
+            <span className="flex items-center gap-1.5"><Cloud className="w-3.5 h-3.5 text-emerald-600" /> Cloud Portal</span>
+            <span className="text-[10px] text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full font-black">ホーム</span>
           </Link>
+          <div className="flex items-center gap-2.5 pt-1">
+            <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-sm">
+              <Building className="w-4 h-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-black text-slate-900 truncate" title={companyName || '自社名未設定'}>
+                {companyName || '自社名未設定'}
+              </div>
+              <p className="text-[10px] font-bold text-emerald-600">農業統合司令塔</p>
+            </div>
+          </div>
         </div>
         
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">

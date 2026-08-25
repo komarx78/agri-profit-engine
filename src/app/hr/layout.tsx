@@ -17,9 +17,11 @@ import {
   Cloud,
   Clock
 } from 'lucide-react';
+import { useCompany } from '@/hooks/useCompany';
 
 export default function HrLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { companyName } = useCompany();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // ペイウォール（課金の壁）のデモ用ステート。
@@ -67,20 +69,27 @@ export default function HrLayout({ children }: { children: React.ReactNode }) {
       
       {/* 独自ヘッダー（青ベース） */}
       <header className="h-16 bg-blue-700 text-white sticky top-0 z-50 shadow-sm flex items-center justify-between px-4 sm:px-6">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <button 
             className="md:hidden p-2 hover:bg-blue-600 rounded-lg transition-colors -ml-2"
             onClick={() => setIsMobileMenuOpen(true)}
           >
             <Menu className="w-6 h-6" />
           </button>
-          <div className="flex items-center gap-2 font-black text-lg">
-            <Building className="w-6 h-6 text-blue-300" />
-            <span className="tracking-tight">Agri-Profit <span className="font-medium opacity-80">| 人事労務</span></span>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 border border-blue-400 flex items-center justify-center text-white shrink-0">
+              <Building className="w-5 h-5" />
+            </div>
+            <div className="leading-tight min-w-0">
+              <div className="text-base font-black text-white truncate max-w-[180px] sm:max-w-xs">
+                {companyName || 'Agri-Profit'}
+              </div>
+              <p className="text-[10px] text-blue-200 font-bold">人事・労務管理システム</p>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 shrink-0">
           <Link 
             href="/" 
             className="flex items-center gap-1.5 text-sm font-bold text-blue-100 hover:text-white bg-blue-800/50 hover:bg-blue-800 px-3 py-1.5 rounded-lg transition-all"
@@ -95,7 +104,13 @@ export default function HrLayout({ children }: { children: React.ReactNode }) {
         
         {/* PC用サイドバー */}
         <aside className="hidden md:flex w-64 bg-white border-r border-slate-200 flex-col">
-          <div className="flex-1 overflow-y-auto py-6">
+          <div className="p-4 border-b border-slate-100 bg-blue-50/40">
+            <div className="text-xs font-black text-slate-800 truncate" title={companyName || '自社名未設定'}>
+              🏢 {companyName || '自社名未設定'}
+            </div>
+            <p className="text-[10px] text-blue-600 font-bold mt-0.5">人事労務ダッシュボード</p>
+          </div>
+          <div className="flex-1 overflow-y-auto py-4">
             <nav className="space-y-1 px-4">
               {navItems.map(item => {
                 const isActive = pathname === item.path;

@@ -15,6 +15,7 @@ import { getWorkerShareSettings } from '@/app/actions/farm';
 import { WorkerGate } from '@/components/WorkerGate';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
+import { useCompany } from '@/hooks/useCompany';
 import imageCompression from 'browser-image-compression';
 
 interface MasterItem {
@@ -74,6 +75,7 @@ const getJSTDate = () => {
 
 export default function WorkEntryPage() {
   const router = useRouter();
+  const { companyName } = useCompany();
   const [currentUser, setCurrentUser] = useState<{id: string, name: string, role: string} | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [language, setLanguage] = useState<LanguageCode>('ja');
@@ -851,8 +853,9 @@ export default function WorkEntryPage() {
               <Sprout className="w-4 h-4 stroke-[2.5]" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-xs sm:text-sm font-black tracking-tight text-white truncate leading-tight">
-                {t('systemTitle', language)}
+              <h1 className="text-xs sm:text-sm font-black tracking-tight text-white truncate leading-tight flex items-center gap-1">
+                <span className="truncate max-w-[130px] sm:max-w-[180px]">{companyName || t('systemTitle', language)}</span>
+                <span className="text-[9px] text-emerald-300 font-bold bg-emerald-900/80 px-1 py-0.2 rounded shrink-0">日報</span>
               </h1>
               <p className="text-[10px] font-bold text-emerald-400 truncate">
                 {language === 'ja' ? `${getTranslatedName(currentUser, language)} さん` : getTranslatedName(currentUser, language)}

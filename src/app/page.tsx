@@ -32,8 +32,10 @@ import {
   TrendingUp,
   Sparkles
 } from 'lucide-react';
+import { useCompany } from '@/hooks/useCompany';
 
 export default function PortalPage() {
+  const { companyName } = useCompany();
   const [currentDate] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
@@ -104,10 +106,20 @@ export default function PortalPage() {
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-sm">
-              <Building className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center shadow-sm text-white">
+              <Building className="w-5 h-5" />
             </div>
-            <span className="font-black text-xl text-slate-800 tracking-tight">Cloud Portal</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-black text-lg text-slate-900 tracking-tight">
+                  {companyName || 'Cloud Portal'}
+                </span>
+                <span className="text-[10px] font-black text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                  ポータルTOP
+                </span>
+              </div>
+              <p className="text-[10px] font-bold text-slate-400">農業経営クラウドシステム</p>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <Link 
@@ -119,7 +131,7 @@ export default function PortalPage() {
               <ArrowUpRight className="w-3.5 h-3.5 text-emerald-200" />
             </Link>
             <Link 
-              href="/portal"
+              href="/portal" 
               className="flex items-center gap-2 px-3.5 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-xl font-bold text-sm transition-colors shadow-sm"
             >
               <Layout className="w-4 h-4 text-blue-600" />
@@ -137,7 +149,10 @@ export default function PortalPage() {
               <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center border border-emerald-200">
                 <ShieldCheck className="w-5 h-5 text-emerald-600" />
               </div>
-              <span className="text-sm font-bold text-slate-700 hidden sm:block">システム管理者</span>
+              <div className="hidden sm:block text-left">
+                <div className="text-xs font-bold text-slate-700 leading-tight">システム管理者</div>
+                <div className="text-[10px] text-slate-400 font-medium truncate max-w-[120px]">{companyName || '自社アカウント'}</div>
+              </div>
             </div>
           </div>
         </div>
@@ -147,7 +162,9 @@ export default function PortalPage() {
         {/* 挨拶と日時 */}
         <div className="mb-8 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-black text-slate-800">こんにちは、システム管理者さん</h1>
+            <h1 className="text-2xl font-black text-slate-800">
+              こんにちは、{companyName ? `${companyName} の` : ''}管理者さん
+            </h1>
             <p className="text-sm font-bold text-slate-500 mt-1 flex items-center gap-2">
               <span>今日は {currentDate} です。</span>
               {loadingTasks ? (
