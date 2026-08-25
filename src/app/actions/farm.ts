@@ -11,26 +11,19 @@ export type TenantInfo = {
 // 1. 農園情報の取得
 export async function getFarmInfo(tenantId: string): Promise<{ success: boolean; data?: TenantInfo; error?: string }> {
   try {
+    if (!tenantId || tenantId === 'null' || tenantId === 'undefined') {
+      return { success: false, error: '指定された農園IDが無効です。' };
+    }
+
     const supabase = createAdminClient();
     
-    let { data, error } = await supabase
+    const { data, error } = await supabase
       .from('company_settings')
       .select('id, user_id, company_name, plan_type')
       .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
-
-    // フォールバック: 指定IDで見つからない場合は最新の登録農園を参照
-    if (!data) {
-      const { data: fb } = await supabase
-        .from('company_settings')
-        .select('id, user_id, company_name, plan_type')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (fb) {
-        data = fb;
-      }
-    }
 
     if (!data) {
       return { success: false, error: '指定された農園情報が見つかりませんでした。' };
@@ -40,7 +33,7 @@ export async function getFarmInfo(tenantId: string): Promise<{ success: boolean;
       success: true, 
       data: { 
         id: data.user_id || data.id, 
-        company_name: data.company_name || '佐原農園',
+        company_name: data.company_name || '',
         plan_type: data.plan_type || 'standard'
       } 
     };
@@ -53,31 +46,26 @@ export async function getFarmInfo(tenantId: string): Promise<{ success: boolean;
 // 2. 従業員リストの取得
 export async function getFarmWorkers(tenantId: string) {
   try {
+    if (!tenantId || tenantId === 'null' || tenantId === 'undefined') {
+      return { success: false, error: '農園IDが指定されていません。', data: [] };
+    }
+
     const supabase = createAdminClient();
 
     // まず tenantId から実際の ownerId (user_id) を解決
     let ownerId = tenantId;
-    let { data: comp } = await supabase
+    const { data: comp } = await supabase
       .from('company_settings')
       .select('user_id')
       .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+      .limit(1)
       .maybeSingle();
     
-    if (!comp) {
-      const { data: fb } = await supabase
-        .from('company_settings')
-        .select('user_id')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (fb) comp = fb;
-    }
-
     if (comp && comp.user_id) {
       ownerId = comp.user_id;
     }
 
-    // 指定された農園（ownerId）の作業者のみを厳格に取得
+    // 指定された農園（ownerIdまたはtenantId）の作業者のみを厳格に取得
     const { data, error } = await supabase
       .from('workers')
       .select('id, name, name_en, name_vi, name_id, name_zh, name_si, name_km, role, pin_code, user_id')
@@ -87,7 +75,7 @@ export async function getFarmWorkers(tenantId: string) {
     if (error) throw error;
     return { success: true, data: data || [] };
   } catch (error: any) {
-    return { success: false, error: '作業者一覧を取得できませんでした。' };
+    return { success: false, error: '作業者一覧を取得できませんでした。', data: [] };
   }
 }
 

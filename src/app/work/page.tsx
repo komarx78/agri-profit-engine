@@ -75,7 +75,20 @@ const getJSTDate = () => {
 
 export default function WorkEntryPage() {
   const router = useRouter();
-  const { companyName } = useCompany();
+  const [workerTenantId, setWorkerTenantId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const savedUser = localStorage.getItem('agri_current_worker');
+      if (savedUser) {
+        try {
+          const w = JSON.parse(savedUser);
+          if (w && w.user_id) return w.user_id;
+        } catch (e) {}
+      }
+      return localStorage.getItem('agri_owner_id') || null;
+    }
+    return null;
+  });
+  const { companyName } = useCompany(workerTenantId);
   const [currentUser, setCurrentUser] = useState<{id: string, name: string, role: string} | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [language, setLanguage] = useState<LanguageCode>('ja');
@@ -205,21 +218,24 @@ export default function WorkEntryPage() {
           .single();
 
         const ownerId = wProfile?.user_id || (currentUser as any).user_id;
+        if (ownerId) {
+          setWorkerTenantId(ownerId);
+        }
 
-        // 自社テナントのマスタのみを厳格に取得
+        // 自社テナントのマスタのみを厳格に取得（ownerIdがない場合は絶対に他社データを取得しない）
         const [cRes, fRes, mRes, chRes] = await Promise.all([
           ownerId 
             ? supabase.from('crops').select('*').eq('user_id', ownerId) 
-            : supabase.from('crops').select('*'),
+            : Promise.resolve({ data: [], error: null }),
           ownerId 
             ? supabase.from('fields').select('*').eq('user_id', ownerId) 
-            : supabase.from('fields').select('*'),
+            : Promise.resolve({ data: [], error: null }),
           ownerId 
             ? supabase.from('materials').select('*').eq('user_id', ownerId) 
-            : supabase.from('materials').select('*'),
+            : Promise.resolve({ data: [], error: null }),
           ownerId 
             ? supabase.from('sales_channels').select('*').eq('user_id', ownerId) 
-            : supabase.from('sales_channels').select('*')
+            : Promise.resolve({ data: [], error: null })
         ]);
 
         if (wProfile) setWorkerProfile(wProfile);

@@ -178,8 +178,12 @@ export default function PortalPage() {
           
           if (companyData && companyData.company_name) {
             setCompanyName(companyData.company_name);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(`agri_company_${ownerId}`, companyData.company_name);
+              localStorage.removeItem('agri_cached_company_name');
+            }
           } else {
-            setCompanyName('Cocotte');
+            setCompanyName('');
           }
 
           currentRole = 'admin';
@@ -213,12 +217,20 @@ export default function PortalPage() {
               localStorage.setItem('agri_owner_id', ownerId);
             }
             
-            // ワーカー用に会社名を取得 (ownerIdから)
-            const { data: companyData } = await supabase.from('company_settings').select('company_name').eq('user_id', ownerId).maybeSingle();
-            if (companyData && companyData.company_name) {
-              setCompanyName(companyData.company_name);
+            // ワーカー用に会社名を取得 (ownerIdから厳格に取得)
+            if (ownerId) {
+              const { data: companyData } = await supabase.from('company_settings').select('company_name').eq('user_id', ownerId).maybeSingle();
+              if (companyData && companyData.company_name) {
+                setCompanyName(companyData.company_name);
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem(`agri_company_${ownerId}`, companyData.company_name);
+                  localStorage.removeItem('agri_cached_company_name');
+                }
+              } else {
+                setCompanyName('');
+              }
             } else {
-              setCompanyName('Cocotte');
+              setCompanyName('');
             }
           } else {
             // ローカルストレージにもなければ、WorkerGateを表示する

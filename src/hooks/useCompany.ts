@@ -16,54 +16,61 @@ export interface CompanyInfo {
   refresh: () => Promise<void>;
 }
 
-const CACHE_KEY = 'agri_cached_company_name';
-
-export function useCompany(): CompanyInfo {
-  const [companyName, setCompanyName] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem(CACHE_KEY) || '';
-    }
-    return '';
-  });
+export function useCompany(explicitTenantId?: string | null): CompanyInfo {
+  const [companyName, setCompanyName] = useState<string>('');
   const [postalCode, setPostalCode] = useState<string>('');
   const [address, setAddress] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
   const [invoiceNumber, setInvoiceNumber] = useState<string>('');
   const [bankInfo, setBankInfo] = useState<string>('');
-  const [tenantId, setTenantId] = useState<string | null>(null);
+  const [tenantId, setTenantId] = useState<string | null>(explicitTenantId || null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const fetchCompany = useCallback(async () => {
     try {
-      // 1. テナントIDの取得
-      let currentTenant = await getCurrentTenantId();
+      // 1. テナントIDの決定（引数指定を最優先）
+      let currentTenant = explicitTenantId || null;
+
+      if (!currentTenant) {
+        currentTenant = await getCurrentTenantId();
+      }
 
       // 現場スタッフのフォールバック
       if (!currentTenant && typeof window !== 'undefined') {
-        currentTenant = localStorage.getItem('agri_owner_id');
+        const savedWorker = localStorage.getItem('agri_current_worker');
+        if (savedWorker) {
+          try {
+            const w = JSON.parse(savedWorker);
+            if (w && w.user_id) currentTenant = w.user_id;
+          } catch (e) {}
+        }
         if (!currentTenant) {
-          const savedWorker = localStorage.getItem('agri_current_worker');
-          if (savedWorker) {
-            try {
-              const w = JSON.parse(savedWorker);
-              if (w.user_id) currentTenant = w.user_id;
-            } catch (e) {}
-          }
+          currentTenant = localStorage.getItem('agri_owner_id');
         }
       }
 
       setTenantId(currentTenant);
 
-      if (!currentTenant) {
+      if (!currentTenant || currentTenant === 'null' || currentTenant === 'undefined') {
+        setCompanyName('');
         setIsLoading(false);
         return;
       }
 
-      // 2. company_settings テーブルから取得
+      // テナントID固有のキャッシュ確認
+      const tenantCacheKey = `agri_company_${currentTenant}`;
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem(tenantCacheKey);
+        if (cached) {
+          setCompanyName(cached);
+        }
+      }
+
+      // 2. company_settings テーブルから当該テナントIDのレコードのみを厳格に取得
       const { data, error } = await supabase
         .from('company_settings')
         .select('*')
-        .or(`user_id.eq.${currentTenant},id.eq.${currentTenant}`)
+        .eq('user_id', currentTenant)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -78,15 +85,20 @@ export function useCompany(): CompanyInfo {
         setBankInfo(data.bank_info || '');
 
         if (typeof window !== 'undefined' && name) {
-          localStorage.setItem(CACHE_KEY, name);
+          localStorage.setItem(tenantCacheKey, name);
+          // 旧グローバル汚染キャッシュを消去
+          localStorage.removeItem('agri_cached_company_name');
         }
+      } else {
+        // 自社情報が未登録の場合
+        setCompanyName('');
       }
     } catch (err) {
       console.warn('useCompany fetch error:', err);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [explicitTenantId]);
 
   useEffect(() => {
     fetchCompany();
@@ -104,3 +116,4 @@ export function useCompany(): CompanyInfo {
     refresh: fetchCompany,
   };
 }
+

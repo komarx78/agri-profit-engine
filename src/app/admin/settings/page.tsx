@@ -97,6 +97,11 @@ export default function SettingsPage() {
         if (data) setSettingsId(data.id);
       }
 
+      if (typeof window !== 'undefined' && formData.company_name) {
+        localStorage.setItem(`agri_company_${tenantId}`, formData.company_name);
+        localStorage.removeItem('agri_cached_company_name');
+      }
+
       setSaveSuccess(true);
       alert('自社情報を正常に保存しました！');
       setTimeout(() => setSaveSuccess(false), 3000);

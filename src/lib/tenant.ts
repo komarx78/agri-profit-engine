@@ -16,32 +16,30 @@ export async function getCurrentTenantId(): Promise<string | null> {
       return user.id;
     }
 
-    // 2. localStorage のフォールバック（現場作業者モード等の場合）
+    // 2. localStorage の現場作業者・テナント情報から厳格に取得
     if (typeof window !== 'undefined') {
-      const savedTenant = localStorage.getItem('current_tenant_id') || localStorage.getItem('tenant_id');
-      if (savedTenant) return savedTenant;
-
-      const workerData = localStorage.getItem('current_worker');
-      if (workerData) {
+      // 現場作業員データからの user_id（所属農園オーナーID）取得
+      const savedWorker = localStorage.getItem('agri_current_worker') || localStorage.getItem('current_worker');
+      if (savedWorker) {
         try {
-          const w = JSON.parse(workerData);
-          if (w.user_id) return w.user_id;
+          const w = JSON.parse(savedWorker);
+          if (w && w.user_id) return w.user_id;
         } catch (e) {}
+      }
+
+      // オーナーID / テナントIDストレージからの取得
+      const ownerId = localStorage.getItem('agri_owner_id');
+      if (ownerId && ownerId !== 'null' && ownerId !== 'undefined') {
+        return ownerId;
+      }
+
+      const savedTenant = localStorage.getItem('current_tenant_id') || localStorage.getItem('tenant_id');
+      if (savedTenant && savedTenant !== 'null' && savedTenant !== 'undefined') {
+        return savedTenant;
       }
     }
 
-    // 3. company_settings から最新の単一テナント（開発環境・フォールバック用）
-    const { data: comp } = await supabase
-      .from('company_settings')
-      .select('user_id')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (comp && comp.user_id) {
-      return comp.user_id;
-    }
-
+    // セッションも所属テナントも特定できない場合は絶対に null を返し、他社データを誤取得しない
     return null;
   } catch (error) {
     console.error('getCurrentTenantId error:', error);
