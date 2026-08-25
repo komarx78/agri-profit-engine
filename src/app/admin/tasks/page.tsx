@@ -6,6 +6,8 @@ import { supabase } from '@/lib/supabase';
 import { Calendar, CheckCircle2, Clock, MapPin, Sprout, Loader2, Plus, Trash2, Edit2, Users, Briefcase, X, List, LayoutGrid, ChevronLeft, ChevronRight } from 'lucide-react';
 import { autoTranslateMasterData } from '@/app/actions/translate';
 
+import { getCurrentTenantId } from '@/lib/tenant';
+
 export default function TasksPage() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [crops, setCrops] = useState<any[]>([]);
@@ -34,12 +36,27 @@ export default function TasksPage() {
   const [calendarDays, setCalendarDays] = useState<number>(7); // 2 = Today/Tomorrow, 7 = Week
   const [startDate, setStartDate] = useState(new Date());
 
+  const fetchTasksData = async (ownerId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('work_logs')
+        .select('id, work_date, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(name), fields(name), workers(name), departments(name)')
+        .eq('user_id', ownerId)
+        .eq('status', 'planned')
+        .order('work_date', { ascending: true });
+      if (!error && data) {
+        setTasks(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch tasks:', e);
+    }
+  };
+
   useEffect(() => {
     async function fetchData() {
       setIsLoading(true);
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const ownerId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
+        const ownerId = await getCurrentTenantId();
         if (!ownerId) {
           setIsLoading(false);
           return;
@@ -47,7 +64,7 @@ export default function TasksPage() {
         setTenantId(ownerId);
 
         const [tasksRes, cropsRes, fieldsRes, workersRes, deptsRes] = await Promise.all([
-          supabase.from('work_logs').select('id, work_date, task_title, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(name), fields(name), workers(name), departments(name)').eq('user_id', ownerId).eq('status', 'planned').order('work_date', { ascending: true }),
+          supabase.from('work_logs').select('id, work_date, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(name), fields(name), workers(name), departments(name)').eq('user_id', ownerId).eq('status', 'planned').order('work_date', { ascending: true }),
           supabase.from('crops').select('*').eq('user_id', ownerId).order('name'),
           supabase.from('fields').select('*').eq('user_id', ownerId).order('name'),
           supabase.from('workers').select('*').eq('user_id', ownerId).order('name'),
@@ -69,24 +86,35 @@ export default function TasksPage() {
   }, []);
 
   const handleSave = async () => {
-    if (!formData.work_date || !formData.task_title) return;
+    if (!formData.work_date || !formData.task_title) {
+      alert('予定日とタスク内容は必須です');
+      return;
+    }
     setIsSaving(true);
     try {
+      const activeTenantId = tenantId || await getCurrentTenantId();
+      if (!activeTenantId) throw new Error('農園IDが特定できません');
+
       // タスクタイトルの多言語AI自動翻訳を生成
-      const trans = await autoTranslateMasterData(formData.task_title);
-      const transPayload = {
-        task_title_en: trans.name_en || formData.task_title,
-        task_title_vi: trans.name_vi || formData.task_title,
-        task_title_id: trans.name_id || formData.task_title,
-        task_title_zh: trans.name_zh || formData.task_title,
-        task_title_si: trans.name_si || formData.task_title,
-        task_title_km: trans.name_km || formData.task_title,
-      };
+      let transPayload: any = {};
+      try {
+        const trans = await autoTranslateMasterData(formData.task_title);
+        transPayload = {
+          task_title_en: trans.name_en || formData.task_title,
+          task_title_vi: trans.name_vi || formData.task_title,
+          task_title_id: trans.name_id || formData.task_title,
+          task_title_zh: trans.name_zh || formData.task_title,
+          task_title_si: trans.name_si || formData.task_title,
+          task_title_km: trans.name_km || formData.task_title,
+        };
+      } catch (tErr) {
+        console.warn('Translation fallback:', tErr);
+      }
 
       if (editingTaskId) {
         // 編集保存（単一タスク更新）
         const assignment = formData.field_assignments[0] || { field_id: '', worker_ids: [] };
-        const updatePayload = {
+        const updatePayload: any = {
           work_date: formData.work_date,
           task_title: formData.task_title,
           work_type: formData.task_title,
@@ -97,16 +125,12 @@ export default function TasksPage() {
           ...transPayload
         };
 
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('work_logs')
           .update(updatePayload)
-          .eq('id', editingTaskId)
-          .select('id, work_date, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(*), fields(*), workers(*), departments(*)');
+          .eq('id', editingTaskId);
 
         if (error) throw error;
-        if (data && data.length > 0) {
-          setTasks(prev => prev.map(t => t.id === editingTaskId ? data[0] : t).sort((a, b) => a.work_date.localeCompare(b.work_date)));
-        }
       } else {
         // 新規作成（複数圃場 × 複数担当者の組み合わせを一括展開）
         const insertData: any[] = [];
@@ -121,7 +145,7 @@ export default function TasksPage() {
           if (wIds.length > 0) {
             wIds.forEach(wId => {
               insertData.push({
-                user_id: tenantId,
+                user_id: activeTenantId,
                 work_date: formData.work_date,
                 task_title: formData.task_title,
                 work_type: formData.task_title,
@@ -137,7 +161,7 @@ export default function TasksPage() {
             });
           } else {
             insertData.push({
-              user_id: tenantId,
+              user_id: activeTenantId,
               work_date: formData.work_date,
               task_title: formData.task_title,
               work_type: formData.task_title,
@@ -153,16 +177,15 @@ export default function TasksPage() {
           }
         });
 
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('work_logs')
-          .insert(insertData)
-          .select('id, work_date, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(*), fields(*), workers(*), departments(*)');
+          .insert(insertData);
         
         if (error) throw error;
-        if (data) {
-          setTasks(prev => [...prev, ...data].sort((a, b) => a.work_date.localeCompare(b.work_date)));
-        }
       }
+
+      // 一覧を最新化
+      await fetchTasksData(activeTenantId);
 
       setIsModalOpen(false);
       setEditingTaskId(null);
@@ -173,9 +196,13 @@ export default function TasksPage() {
         department_id: '',
         field_assignments: [{ field_id: '', worker_ids: [] }]
       });
-    } catch (err) {
-      console.error(err);
-      alert('保存に失敗しました');
+    } catch (err: any) {
+      console.error('Task save error:', err);
+      if (err.code === '42501' || err.status === 401 || err.message?.includes('permission') || err.message?.includes('policy')) {
+        alert('【権限エラー】Supabaseのwork_logsテーブルに対するRLS権限がありません。SQLを実行して権限を開放してください。');
+      } else {
+        alert('保存に失敗しました: ' + (err.message || '通信エラー'));
+      }
     } finally {
       setIsSaving(false);
     }
