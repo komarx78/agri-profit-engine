@@ -1121,25 +1121,25 @@ function PortalContent() {
           </div>
         </div>
 
-        {/* 🌟 2大ビュー切替スイッチ（管理者モード時のみ表示） */}
+        {/* 🌟 3大ビュー切替スイッチ（管理者モード時のみ表示） */}
         {role === 'admin' && (
           <div className="bg-slate-100/90 border-t border-slate-200 backdrop-blur-xs py-2">
-            <div className="max-w-md mx-auto px-4 flex items-center justify-center">
-              <div className="bg-slate-200/80 p-1 rounded-2xl flex items-center gap-1 w-full border border-slate-300/60 shadow-inner">
+            <div className="max-w-2xl mx-auto px-4 flex items-center justify-center">
+              <div className="bg-slate-200/80 p-1.5 rounded-2xl flex items-center gap-1.5 w-full border border-slate-300/60 shadow-inner">
                 <button
                   type="button"
                   onClick={() => {
-                    setActivePortalTab('home');
-                    router.push('/portal?tab=home');
+                    setActivePortalTab('cultivations');
+                    router.push('/portal?tab=cultivations');
                   }}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-black transition-all ${
-                    activePortalTab === 'home'
-                      ? 'bg-blue-600 text-white shadow-sm scale-100'
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
+                    activePortalTab === 'cultivations'
+                      ? 'bg-emerald-600 text-white shadow-sm'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
-                  <LayoutDashboard className="w-4 h-4" />
-                  <span>📱 現場ホーム（打刻・タスク）</span>
+                  <Sprout className="w-4 h-4" />
+                  <span>🌾 栽培司令塔</span>
                 </button>
 
                 <button
@@ -1148,14 +1148,30 @@ function PortalContent() {
                     setActivePortalTab('cloud');
                     router.push('/portal?tab=cloud');
                   }}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-black transition-all ${
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
                     activePortalTab === 'cloud'
-                      ? 'bg-slate-900 text-white shadow-sm scale-100'
+                      ? 'bg-slate-900 text-white shadow-sm'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
                   <Building className="w-4 h-4 text-emerald-400" />
-                  <span>🏢 CloudPortal（総合管理）</span>
+                  <span>🏢 総合管理 (CloudPortal)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePortalTab('home');
+                    router.push('/portal?tab=home');
+                  }}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
+                    activePortalTab === 'home'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span>📱 現場ホーム</span>
                 </button>
               </div>
             </div>
@@ -1165,7 +1181,12 @@ function PortalContent() {
 
       <main className="max-w-7xl mx-auto px-4 py-8">
         
-        {/* 1. 🏢 CloudPortal（総合管理）ビュー */}
+        {/* 1. 🌾 栽培・防除司令塔ビュー */}
+        {role === 'admin' && activePortalTab === 'cultivations' && (
+          <CultivationsHub initialSubTab="cultivations" />
+        )}
+
+        {/* 2. 🏢 CloudPortal（総合管理）ビュー */}
         {role === 'admin' && activePortalTab === 'cloud' && (
           <CloudPortalHub onSwitchToWork={() => {
             setActivePortalTab('home');
@@ -1173,8 +1194,8 @@ function PortalContent() {
           }} />
         )}
 
-        {/* 2. 📱 現場ホーム（一般スタッフモード時、または管理者でhome選択時） */}
-        {(role === 'worker' || activePortalTab === 'home') && (
+        {/* 3. 📱 現場ホーム（一般スタッフモード時、または管理者でhome選択時） */}
+        {(role === 'worker' || activePortalTab === 'home' || (activePortalTab !== 'cultivations' && activePortalTab !== 'cloud')) && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* 左側カラム */}
