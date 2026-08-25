@@ -333,7 +333,9 @@ export async function getPortalTasks(tenantId: string) {
       .from('work_logs')
       .select('*, crops(*), fields(*), workers(*)')
       .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`)
-      .order('work_date', { ascending: true });
+      .order('work_date', { ascending: true })
+      .order('step_order', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true });
 
     if (error) throw error;
     return { success: true, data: data || [] };
@@ -482,7 +484,14 @@ export async function savePlannedTask(
     task_title: string;
     crop_id?: string | null;
     department_id?: string | null;
-    field_assignments: Array<{ field_id: string; worker_ids: string[] }>;
+    memo?: string | null;
+    field_assignments: Array<{ 
+      field_id: string; 
+      worker_ids: string[];
+      step_order?: number;
+      time_slot?: string;
+      field_memo?: string;
+    }>;
     translations?: any;
   },
   editingTaskId?: string | null
@@ -499,6 +508,10 @@ export async function savePlannedTask(
       const workerIds = assignment.worker_ids || [];
       const primaryWorkerId = workerIds.length > 0 ? workerIds[0] : null;
 
+      const combinedMemo = assignment.field_memo 
+        ? (taskData.memo ? `${taskData.memo}\n${assignment.field_memo}` : assignment.field_memo)
+        : (taskData.memo || null);
+
       const updatePayload: any = {
         work_date: taskData.work_date,
         task_title: taskData.task_title,
@@ -507,6 +520,9 @@ export async function savePlannedTask(
         field_id: assignment.field_id || null,
         worker_id: primaryWorkerId,
         department_id: taskData.department_id || null,
+        memo: combinedMemo,
+        step_order: assignment.step_order || 1,
+        time_slot: assignment.time_slot || null,
         ...transPayload
       };
 
@@ -528,6 +544,9 @@ export async function savePlannedTask(
           field_id: assignment.field_id || null,
           worker_id: wId,
           department_id: taskData.department_id || null,
+          memo: combinedMemo,
+          step_order: assignment.step_order || 1,
+          time_slot: assignment.time_slot || null,
           status: 'planned',
           duration_minutes: 0,
           approval_status: null,
@@ -545,9 +564,13 @@ export async function savePlannedTask(
         ? taskData.field_assignments
         : [{ field_id: '', worker_ids: [] }];
 
-      assignments.forEach(assignment => {
+      assignments.forEach((assignment, idx) => {
         const fId = assignment.field_id || null;
         const wIds = assignment.worker_ids || [];
+        const stepNum = assignment.step_order || (idx + 1);
+        const combinedMemo = assignment.field_memo 
+          ? (taskData.memo ? `${taskData.memo}\n${assignment.field_memo}` : assignment.field_memo)
+          : (taskData.memo || null);
 
         if (wIds.length > 0) {
           wIds.forEach(wId => {
@@ -560,6 +583,9 @@ export async function savePlannedTask(
               field_id: fId,
               worker_id: wId,
               department_id: taskData.department_id || null,
+              memo: combinedMemo,
+              step_order: stepNum,
+              time_slot: assignment.time_slot || null,
               status: 'planned',
               duration_minutes: 0,
               approval_status: null,
@@ -576,6 +602,9 @@ export async function savePlannedTask(
             field_id: fId,
             worker_id: null,
             department_id: taskData.department_id || null,
+            memo: combinedMemo,
+            step_order: stepNum,
+            time_slot: assignment.time_slot || null,
             status: 'planned',
             duration_minutes: 0,
             approval_status: null,

@@ -84,7 +84,11 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
     };
   });
 
-  const selectedDayAllEvents = selectedDate ? events.filter(e => normalizeDateStr(e.date) === selectedDate) : [];
+  const selectedDayAllEvents = selectedDate 
+    ? events
+        .filter(e => normalizeDateStr(e.date) === selectedDate)
+        .sort((a, b) => (a.stepOrder || 1) - (b.stepOrder || 1))
+    : [];
   const selectedDayEvents = filterMode === 'mine' ? selectedDayAllEvents.filter(isEventForMe) : selectedDayAllEvents;
   const selectedDayObj = weekDays.find(d => d.dateStr === selectedDate);
 
@@ -148,7 +152,10 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
       <div className="overflow-x-auto pb-4">
         <div className="grid grid-cols-7 gap-2 min-w-[800px]">
           {weekDays.map(day => {
-            let dayEvents = events.filter(e => normalizeDateStr(e.date) === day.dateStr);
+            let dayEvents = events
+              .filter(e => normalizeDateStr(e.date) === day.dateStr)
+              .sort((a, b) => (a.stepOrder || 1) - (b.stepOrder || 1));
+
             if (filterMode === 'mine') {
               dayEvents = dayEvents.filter(isEventForMe);
             }
@@ -170,7 +177,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                 {/* タスクブロックエリア */}
                 <div className="flex flex-col gap-2 flex-1 bg-slate-50/50 rounded-xl p-1.5 min-h-[150px] group-hover:bg-blue-50/30 transition-colors">
                   {dayEvents.length > 0 ? (
-                    dayEvents.map(event => {
+                    dayEvents.map((event, eventIdx) => {
                       const isMine = isEventForMe(event);
                       return (
                         <div 
@@ -184,7 +191,20 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                           }`}
                         >
                           <div className="flex items-center justify-between">
-                            <div className={`w-6 h-1 rounded-full ${isMine ? 'bg-amber-500' : day.isToday ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
+                            <div className="flex items-center gap-1.5">
+                              {event.stepOrder && (
+                                <span className={`w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center ${
+                                  isMine ? 'bg-amber-600 text-white' : 'bg-emerald-600 text-white'
+                                }`}>
+                                  {event.stepOrder}
+                                </span>
+                              )}
+                              {event.timeSlot && (
+                                <span className="text-[9px] font-bold text-amber-700 bg-amber-100 px-1 py-0.2 rounded">
+                                  {event.timeSlot}
+                                </span>
+                              )}
+                            </div>
                             {isMine && (
                               <span className="text-[9px] font-black bg-amber-500 text-white px-1.5 py-0.2 rounded-md flex items-center gap-0.5">
                                 <Star className="w-2.5 h-2.5 fill-white" /> {t('cal_you', language)}
@@ -212,6 +232,11 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                                 </span>
                               </div>
                             )}
+                            {event.memo && (
+                              <div className="text-[9px] text-slate-400 truncate flex items-center gap-0.5 mt-0.5">
+                                <span>📝</span> {event.memo}
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -228,7 +253,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
         </div>
       </div>
 
-      {/* 1日詳細モーダル */}
+      {/* 1日詳細モーダル（巡回タイムライン形式） */}
       {selectedDate && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedDate(null)}>
           <div 
@@ -244,7 +269,9 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                   <h3 className="font-black text-slate-800 text-lg">
                     {selectedDate.replace(/-/g, '/')} ({selectedDayObj?.dayName})
                   </h3>
-                  <p className="text-xs font-bold text-slate-500">{t('cal_dailyScheduleDetail', language)}</p>
+                  <p className="text-xs font-bold text-slate-500">
+                    {filterMode === 'mine' ? '本日の担当タスク・巡回ルート' : t('cal_dailyScheduleDetail', language)}
+                  </p>
                 </div>
               </div>
               <button 
@@ -287,50 +314,92 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                   <p className="text-slate-400 font-bold">{t('cal_noTasksThisDay', language)}</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {selectedDayEvents.map(event => {
+                <div className="space-y-4">
+                  {selectedDayEvents.map((event, idx) => {
                     const isMine = isEventForMe(event);
+                    const stepNum = event.stepOrder || (idx + 1);
+
                     return (
-                      <div 
-                        key={event.id} 
-                        className={`p-4 bg-white rounded-2xl border shadow-sm transition-all ${
-                          isMine ? 'border-amber-300 ring-2 ring-amber-300/60 bg-amber-50/40' : 'border-slate-200'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-black tracking-wider">
-                            {t('cal_scheduledBadge', language)}
-                          </span>
-                          {isMine && (
-                            <span className="bg-amber-500 text-white px-2 py-0.5 rounded-full text-[10px] font-black flex items-center gap-1">
-                              <Star className="w-3 h-3 fill-white" /> {t('cal_yourAssignedTask', language)}
-                            </span>
+                      <div key={event.id} className="relative">
+                        {/* 巡回ステップカード */}
+                        <div 
+                          className={`p-5 bg-white rounded-2xl border shadow-sm transition-all relative ${
+                            isMine ? 'border-amber-300 ring-2 ring-amber-300/60 bg-amber-50/40' : 'border-slate-200'
+                          }`}
+                        >
+                          {/* ステップバッジ & 予定時刻 */}
+                          <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-black flex items-center gap-1 shadow-xs ${
+                                isMine ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white'
+                              }`}>
+                                <span>STEP {stepNum}</span>
+                              </span>
+                              {event.timeSlot && (
+                                <span className="bg-amber-100 text-amber-800 text-[11px] font-black px-2 py-0.5 rounded-md">
+                                  ⏱️ {event.timeSlot}
+                                </span>
+                              )}
+                              <span className="text-[10px] font-bold text-slate-400">
+                                {idx === 0 ? '最初に向かう圃場' : `第${stepNum}の巡回`}
+                              </span>
+                            </div>
+
+                            {isMine && (
+                              <span className="bg-amber-500 text-white px-2 py-0.5 rounded-full text-[10px] font-black flex items-center gap-1">
+                                <Star className="w-3 h-3 fill-white" /> {t('cal_yourAssignedTask', language)}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* タスク名 */}
+                          <h4 className="font-black text-slate-800 text-base mb-3">
+                            {getTranslatedWorkType(event.title, language as any) || event.title}
+                          </h4>
+
+                          {/* 📝 指示メモ（存在する場合に強調表示） */}
+                          {event.memo && (
+                            <div className="mb-3 p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-950 leading-relaxed font-bold flex items-start gap-2">
+                              <span className="text-base shrink-0">📝</span>
+                              <div>
+                                <span className="text-[10px] text-amber-700 block font-black mb-0.5">作業指示・留意事項:</span>
+                                <p className="whitespace-pre-wrap">{event.memo}</p>
+                              </div>
+                            </div>
                           )}
-                        </div>
-                        <h4 className="font-black text-slate-800 text-base mb-3">
-                          {getTranslatedWorkType(event.title, language as any) || event.title}
-                        </h4>
-                        
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className={`p-3 rounded-xl border ${isMine ? 'bg-amber-50/60 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
-                            <div className="text-[10px] text-slate-400 font-bold mb-1 flex items-center gap-1">
-                              <Users className="w-3 h-3" /> {t('cal_assigneeWho', language)}
-                            </div>
-                            <div className={`font-bold text-sm ${isMine ? 'text-amber-900 font-black' : 'text-slate-700'}`}>
-                              {getTranslatedWorkType(event.workerName, language as any) || event.workerName || t('cal_allStaffOption', language)} {isMine && t('cal_myselfSuffix', language)}
-                            </div>
-                          </div>
                           
-                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                            <div className="text-[10px] text-slate-400 font-bold mb-1 flex items-center gap-1">
-                              <MapPin className="w-3 h-3" /> {t('cal_locationWhere', language)}
+                          {/* 割り当て情報 */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className={`p-3 rounded-xl border ${isMine ? 'bg-amber-50/60 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
+                              <div className="text-[10px] text-slate-400 font-bold mb-1 flex items-center gap-1">
+                                <Users className="w-3 h-3" /> {t('cal_assigneeWho', language)}
+                              </div>
+                              <div className={`font-bold text-sm ${isMine ? 'text-amber-900 font-black' : 'text-slate-700'}`}>
+                                {getTranslatedWorkType(event.workerName, language as any) || event.workerName || t('cal_allStaffOption', language)} {isMine && t('cal_myselfSuffix', language)}
+                              </div>
                             </div>
-                            <div className="font-bold text-slate-700 text-sm line-clamp-2">
-                              {getTranslatedWorkType(event.fieldName, language as any) || event.fieldName || '-'} 
-                              {event.cropName && <span className="text-amber-600 ml-1">({getTranslatedWorkType(event.cropName, language as any) || event.cropName})</span>}
+                            
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                              <div className="text-[10px] text-slate-400 font-bold mb-1 flex items-center gap-1">
+                                <MapPin className="w-3 h-3 text-emerald-500" /> {t('cal_locationWhere', language)}
+                              </div>
+                              <div className="font-bold text-slate-700 text-sm line-clamp-2">
+                                {getTranslatedWorkType(event.fieldName, language as any) || event.fieldName || '-'} 
+                                {event.cropName && <span className="text-amber-600 ml-1">({getTranslatedWorkType(event.cropName, language as any) || event.cropName})</span>}
+                              </div>
                             </div>
                           </div>
                         </div>
+
+                        {/* 次の圃場への巡回コネクタ矢印 */}
+                        {idx < selectedDayEvents.length - 1 && (
+                          <div className="flex items-center justify-center my-1.5">
+                            <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-200/80 rounded-full text-[10px] font-black text-slate-500 shadow-2xs">
+                              <span>⬇️</span>
+                              <span>次の圃場へ移動（STEP {stepNum + 1}）</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

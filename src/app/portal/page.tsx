@@ -1020,6 +1020,9 @@ function PortalContent() {
       workerName: wName,
       fieldName: fieldName,
       cropName: cropName,
+      memo: t.memo || '',
+      stepOrder: t.step_order || 1,
+      timeSlot: t.time_slot || '',
       color: '#10B981'
     };
   });

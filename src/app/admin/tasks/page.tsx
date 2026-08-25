@@ -26,8 +26,9 @@ export default function TasksPage() {
     task_title: '',
     crop_id: '',
     department_id: '',
+    memo: '',
     field_assignments: [
-      { field_id: '', worker_ids: [] as string[] }
+      { field_id: '', worker_ids: [] as string[], step_order: 1, time_slot: '', field_memo: '' }
     ]
   });
 
@@ -41,10 +42,11 @@ export default function TasksPage() {
     try {
       const { data, error } = await supabase
         .from('work_logs')
-        .select('id, work_date, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(name), fields(name), workers(name), departments(name)')
+        .select('id, work_date, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, memo, step_order, time_slot, crops(name), fields(name), workers(name), departments(name)')
         .eq('user_id', ownerId)
         .eq('status', 'planned')
-        .order('work_date', { ascending: true });
+        .order('work_date', { ascending: true })
+        .order('step_order', { ascending: true, nullsFirst: false });
       if (!error && data) {
         setTasks(data);
       }
@@ -65,7 +67,7 @@ export default function TasksPage() {
         setTenantId(ownerId);
 
         const [tasksRes, cropsRes, fieldsRes, workersRes, deptsRes] = await Promise.all([
-          supabase.from('work_logs').select('id, work_date, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, crops(name), fields(name), workers(name), departments(name)').eq('user_id', ownerId).eq('status', 'planned').order('work_date', { ascending: true }),
+          supabase.from('work_logs').select('id, work_date, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, memo, step_order, time_slot, crops(name), fields(name), workers(name), departments(name)').eq('user_id', ownerId).eq('status', 'planned').order('work_date', { ascending: true }).order('step_order', { ascending: true, nullsFirst: false }),
           supabase.from('crops').select('*').eq('user_id', ownerId).order('name'),
           supabase.from('fields').select('*').eq('user_id', ownerId).order('name'),
           supabase.from('workers').select('*').eq('user_id', ownerId).order('name'),
@@ -122,7 +124,14 @@ export default function TasksPage() {
             task_title: formData.task_title,
             crop_id: formData.crop_id || null,
             department_id: formData.department_id || null,
-            field_assignments: formData.field_assignments,
+            memo: formData.memo || null,
+            field_assignments: formData.field_assignments.map((fa: any, i: number) => ({
+              field_id: fa.field_id || '',
+              worker_ids: fa.worker_ids || [],
+              step_order: fa.step_order || (i + 1),
+              time_slot: fa.time_slot || '',
+              field_memo: fa.field_memo || ''
+            })),
             translations: transPayload
           },
           editingTaskId
@@ -146,6 +155,9 @@ export default function TasksPage() {
             field_id: assignment.field_id || null,
             worker_id: (assignment.worker_ids && assignment.worker_ids.length > 0) ? assignment.worker_ids[0] : null,
             department_id: formData.department_id || null,
+            memo: formData.memo || null,
+            step_order: assignment.step_order || 1,
+            time_slot: assignment.time_slot || null,
             ...transPayload
           };
           const { error: cErr } = await supabase.from('work_logs').update(updatePayload).eq('id', editingTaskId);
@@ -156,9 +168,10 @@ export default function TasksPage() {
             ? formData.field_assignments
             : [{ field_id: '', worker_ids: [] }];
 
-          assignments.forEach((assignment: any) => {
+          assignments.forEach((assignment: any, idx: number) => {
             const fId = assignment.field_id || null;
             const wIds = assignment.worker_ids || [];
+            const stepNum = assignment.step_order || (idx + 1);
             if (wIds.length > 0) {
               wIds.forEach((wId: string) => {
                 insertData.push({
@@ -170,6 +183,9 @@ export default function TasksPage() {
                   field_id: fId,
                   worker_id: wId,
                   department_id: formData.department_id || null,
+                  memo: formData.memo || null,
+                  step_order: stepNum,
+                  time_slot: assignment.time_slot || null,
                   status: 'planned',
                   duration_minutes: 0,
                   ...transPayload
@@ -185,6 +201,9 @@ export default function TasksPage() {
                 field_id: fId,
                 worker_id: null,
                 department_id: formData.department_id || null,
+                memo: formData.memo || null,
+                step_order: stepNum,
+                time_slot: assignment.time_slot || null,
                 status: 'planned',
                 duration_minutes: 0,
                 ...transPayload
@@ -206,7 +225,8 @@ export default function TasksPage() {
         task_title: '',
         crop_id: '',
         department_id: '',
-        field_assignments: [{ field_id: '', worker_ids: [] }]
+        memo: '',
+        field_assignments: [{ field_id: '', worker_ids: [], step_order: 1, time_slot: '', field_memo: '' }]
       });
     } catch (err: any) {
       console.error('Task save error:', err);
@@ -247,10 +267,14 @@ export default function TasksPage() {
       task_title: '',
       crop_id: cropId || '',
       department_id: '',
+      memo: '',
       field_assignments: [
         {
           field_id: fieldId || '',
-          worker_ids: workerId ? [workerId] : []
+          worker_ids: workerId ? [workerId] : [],
+          step_order: 1,
+          time_slot: '',
+          field_memo: ''
         }
       ]
     });
@@ -264,10 +288,14 @@ export default function TasksPage() {
       task_title: task.task_title || '',
       crop_id: task.crop_id || '',
       department_id: task.department_id || '',
+      memo: task.memo || '',
       field_assignments: [
         {
           field_id: task.field_id || '',
-          worker_ids: task.worker_id ? [task.worker_id] : []
+          worker_ids: task.worker_id ? [task.worker_id] : [],
+          step_order: task.step_order || 1,
+          time_slot: task.time_slot || '',
+          field_memo: ''
         }
       ]
     });
@@ -383,7 +411,26 @@ export default function TasksPage() {
                     {tasks.map(t => (
                       <tr key={t.id} className="hover:bg-emerald-50/30 transition-colors">
                         <td className="px-6 py-4">{t.work_date}</td>
-                        <td className="px-6 py-4 font-bold text-slate-900">{t.task_title || '-'}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            {t.step_order && t.step_order > 0 && (
+                              <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] font-black flex items-center justify-center shrink-0">
+                                {t.step_order}
+                              </span>
+                            )}
+                            <span className="font-bold text-slate-900">{t.task_title || '-'}</span>
+                            {t.time_slot && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded-md">
+                                {t.time_slot}
+                              </span>
+                            )}
+                          </div>
+                          {t.memo && (
+                            <p className="text-xs text-slate-500 font-normal mt-1 flex items-start gap-1">
+                              <span className="text-slate-400 font-bold">📝</span> {t.memo}
+                            </p>
+                          )}
+                        </td>
                         <td className="px-6 py-4 flex items-center gap-2">
                           {t.departments && (
                             <span className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded-md text-xs">
@@ -438,45 +485,50 @@ export default function TasksPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-slate-500">グループ:</span>
-                  <select 
-                    value={groupMode} 
-                    onChange={e => setGroupMode(e.target.value as 'worker'|'field'|'crop')}
-                    className="text-sm font-bold bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none"
-                  >
-                    <option value="field">圃場別</option>
-                    <option value="crop">作物別</option>
-                    <option value="worker">担当者別</option>
-                  </select>
+                  <div className="bg-white border border-slate-200 rounded-lg p-0.5 flex">
+                    <button 
+                      onClick={() => setGroupMode('field')} 
+                      className={`px-3 py-1 text-xs font-bold rounded ${groupMode === 'field' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      圃場別
+                    </button>
+                    <button 
+                      onClick={() => setGroupMode('worker')} 
+                      className={`px-3 py-1 text-xs font-bold rounded ${groupMode === 'worker' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      作業者別
+                    </button>
+                    <button 
+                      onClick={() => setGroupMode('crop')} 
+                      className={`px-3 py-1 text-xs font-bold rounded ${groupMode === 'crop' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      作目別
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
 
             <div className="overflow-x-auto relative">
-              <table className="w-full text-sm text-left whitespace-nowrap min-w-[800px] border-collapse">
-                <thead className="text-xs text-slate-700 bg-slate-50 sticky top-0 z-20">
-                  <tr>
-                    <th className="w-44 px-4 py-3 text-left font-bold text-slate-600 border-r sticky left-0 bg-slate-50 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                      {groupMode === 'worker' ? '担当者' : groupMode === 'crop' ? '作物' : '圃場'}
+              <table className="w-full border-collapse text-left text-xs table-fixed min-w-[800px]">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600">
+                    <th className="p-3 font-black w-48 border-r sticky left-0 bg-slate-50 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                      {groupMode === 'worker' ? '作業者' : groupMode === 'crop' ? '作目' : '圃場'}
                     </th>
                     {dates.map((d, i) => {
                       const isToday = d.toDateString() === new Date().toDateString();
-                      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                       return (
-                        <th key={i} className={`px-2 py-2 border-b border-r text-center min-w-[140px] ${isToday ? 'bg-emerald-50/80 border-emerald-200' : ''}`}>
-                          <div className={`font-black text-lg ${isToday ? 'text-emerald-600' : 'text-slate-800'}`}>
-                            {d.getMonth() + 1}/{d.getDate()}
-                          </div>
-                          <div className={`text-[10px] font-bold ${isWeekend ? 'text-rose-500' : 'text-slate-500'}`}>
-                            ({getWeekDayStr(d)})
-                          </div>
+                        <th key={i} className={`p-2.5 font-black text-center border-r border-slate-200 min-w-[150px] ${isToday ? 'bg-emerald-50 text-emerald-800' : ''}`}>
+                          <div>{d.getMonth() + 1}/{d.getDate()} ({['日','月','火','水','木','金','土'][d.getDay()]})</div>
                         </th>
                       );
                     })}
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-100">
                   {groupedItems.map(item => (
-                    <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors group">
+                    <tr key={item.id} className="hover:bg-slate-50/50 group">
                       <td className="px-4 py-3 border-r sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] group-hover:bg-slate-50">
                         <div className="font-bold text-slate-700 truncate max-w-[160px] flex items-center gap-2">
                           {groupMode === 'worker' ? (
@@ -490,7 +542,6 @@ export default function TasksPage() {
                       </td>
                       {dates.map((d, i) => {
                         const dateStr = d.toISOString().split('T')[0];
-                        // このマスに該当するタスクを抽出
                         const cellTasks = tasks.filter(t => {
                           if (t.work_date !== dateStr) return false;
                           if (groupMode === 'worker') {
@@ -505,12 +556,9 @@ export default function TasksPage() {
                           }
                         });
 
-                        const isToday = d.toDateString() === new Date().toDateString();
-
                         return (
-                          <td key={i} className={`p-1.5 border-r border-slate-100 relative min-h-[60px] align-top ${isToday ? 'bg-emerald-50/10' : ''}`}>
+                          <td key={i} className="p-1.5 border-r border-slate-100 relative min-h-[60px] align-top">
                             <div className="min-h-[50px] relative group/cell">
-                              {/* 追加ボタン（ホバー時） */}
                               <button 
                                 onClick={() => handleOpenModal(
                                   dateStr, 
@@ -523,14 +571,25 @@ export default function TasksPage() {
                                 <Plus className="w-5 h-5 text-emerald-500" />
                               </button>
                               
-                              {/* タスクカード */}
                               <div className="relative z-10 flex flex-col gap-1.5 w-full">
                                 {cellTasks.map(task => (
                                   <div key={task.id} onClick={() => handleEditModal(task)} className="bg-white border border-emerald-200 shadow-sm p-2 rounded-lg group/task hover:border-emerald-400 hover:shadow-md transition-all relative cursor-pointer">
-                                    <div className="font-bold text-emerald-800 text-xs truncate mb-1 pr-6" title={task.task_title}>
-                                      {task.task_title}
+                                    <div className="flex items-center gap-1.5 mb-1 pr-6">
+                                      {task.step_order && task.step_order > 0 && (
+                                        <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black flex items-center justify-center shrink-0">
+                                          {task.step_order}
+                                        </span>
+                                      )}
+                                      <div className="font-bold text-emerald-800 text-xs truncate" title={task.task_title}>
+                                        {task.task_title}
+                                      </div>
                                     </div>
                                     <div className="text-[10px] text-slate-500 flex flex-col gap-0.5">
+                                      {task.time_slot && (
+                                        <span className="text-[9px] font-black text-amber-700 bg-amber-50 px-1 py-0.2 rounded w-max">
+                                          ⏱️ {task.time_slot}
+                                        </span>
+                                      )}
                                       {groupMode === 'worker' && task.fields && (
                                         <div className="flex items-center gap-1 truncate"><MapPin className="w-3 h-3 text-emerald-500"/> {task.fields.name}</div>
                                       )}
@@ -548,6 +607,11 @@ export default function TasksPage() {
                                       )}
                                       {groupMode === 'crop' && task.fields && (
                                         <div className="flex items-center gap-1 truncate"><MapPin className="w-3 h-3 text-emerald-500"/> {task.fields.name}</div>
+                                      )}
+                                      {task.memo && (
+                                        <div className="text-[9px] text-slate-400 truncate flex items-center gap-0.5 mt-0.5">
+                                          <span>📝</span> {task.memo}
+                                        </div>
                                       )}
                                     </div>
                                     <button 
@@ -573,8 +637,8 @@ export default function TasksPage() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden my-8">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-emerald-50">
               <h3 className="font-bold text-emerald-800 flex items-center gap-2">
                 {editingTaskId ? <Edit2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
@@ -585,7 +649,7 @@ export default function TasksPage() {
               </button>
             </div>
             
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">予定日 <span className="text-rose-500">*</span></label>
                 <input 
@@ -602,8 +666,22 @@ export default function TasksPage() {
                   type="text" 
                   value={formData.task_title} 
                   onChange={e => setFormData({...formData, task_title: e.target.value})}
-                  placeholder="例: キャベツの収穫、A棟の追肥"
+                  placeholder="例: きゅうりの収穫、A棟の誘引・葉かき"
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1 flex items-center gap-1">
+                  <span>📝 作業指示メモ・注意事項</span>
+                  <span className="text-[10px] text-slate-400 font-normal">(現場ポータルに表示されます)</span>
+                </label>
+                <textarea 
+                  rows={2}
+                  value={formData.memo || ''} 
+                  onChange={e => setFormData({...formData, memo: e.target.value})}
+                  placeholder="例: 午前中に収穫完了すること。傷果は別カゴへ分ける。ハウスの温度に注意。"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
@@ -624,110 +702,195 @@ export default function TasksPage() {
                 </div>
               </div>
 
-              {/* 圃場と担当者の割り当て（複数圃場スロット） */}
               <div className="space-y-3 pt-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-black text-slate-700 flex items-center gap-1.5">
-                    <MapPin className="w-4 h-4 text-emerald-600" />
-                    圃場と担当者の割り当て
-                  </label>
+                  <div>
+                    <label className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                      <MapPin className="w-4 h-4 text-emerald-600" />
+                      圃場と担当者の巡回割り当て
+                    </label>
+                    <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                      複数の圃場を回る場合、上から順に「巡回ステップ」として現場に案内されます
+                    </p>
+                  </div>
                   {!editingTaskId && (
                     <button
                       type="button"
                       onClick={() => {
+                        const currentList = formData.field_assignments || [];
                         setFormData({
                           ...formData,
                           field_assignments: [
-                            ...formData.field_assignments,
-                            { field_id: '', worker_ids: [] }
+                            ...currentList,
+                            { 
+                              field_id: '', 
+                              worker_ids: [], 
+                              step_order: currentList.length + 1,
+                              time_slot: '',
+                              field_memo: ''
+                            }
                           ]
                         });
                       }}
                       className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200"
                     >
-                      <Plus className="w-3.5 h-3.5" /> 圃場を追加
+                      <Plus className="w-3.5 h-3.5" /> 次の圃場を追加
                     </button>
                   )}
                 </div>
 
-                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
-                  {formData.field_assignments?.map((assignment: any, idx: number) => (
-                    <div key={idx} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 relative group">
-                      
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex-1">
-                          <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                            圃場 {formData.field_assignments.length > 1 ? `#${idx + 1}` : ''}
-                          </label>
-                          <select
-                            value={assignment.field_id}
-                            onChange={(e) => {
-                              const newAssignments = [...formData.field_assignments];
-                              newAssignments[idx].field_id = e.target.value;
-                              setFormData({ ...formData, field_assignments: newAssignments });
-                            }}
-                            className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
-                          >
-                            <option value="">(圃場を選択 / 指定なし)</option>
-                            {fields.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                          </select>
-                        </div>
+                <div className="space-y-3">
+                  {formData.field_assignments?.map((assignment: any, idx: number) => {
+                    const stepNum = idx + 1;
+                    return (
+                      <div key={idx} className="bg-slate-50 p-4 rounded-2xl border-2 border-emerald-100/80 space-y-3 relative group">
+                        
+                        <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-black flex items-center justify-center shadow-xs">
+                              {stepNum}
+                            </span>
+                            <span className="text-xs font-black text-slate-800">
+                              {formData.field_assignments.length > 1 ? `第${stepNum}の圃場（STEP ${stepNum}）` : '担当圃場'}
+                            </span>
+                          </div>
 
-                        {!editingTaskId && formData.field_assignments.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newAssignments = formData.field_assignments.filter((_: any, i: number) => i !== idx);
-                              setFormData({ ...formData, field_assignments: newAssignments });
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors mt-4"
-                            title="この圃場を削除"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
+                          <div className="flex items-center gap-1">
+                            {formData.field_assignments.length > 1 && (
+                              <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => {
+                                    if (idx === 0) return;
+                                    const list = [...formData.field_assignments];
+                                    const temp = list[idx - 1];
+                                    list[idx - 1] = list[idx];
+                                    list[idx] = temp;
+                                    setFormData({ ...formData, field_assignments: list });
+                                  }}
+                                  className="px-1.5 py-0.5 text-xs font-bold text-slate-500 hover:text-emerald-600 disabled:opacity-30"
+                                  title="順番を上へ"
+                                >
+                                  ▲
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === formData.field_assignments.length - 1}
+                                  onClick={() => {
+                                    if (idx === formData.field_assignments.length - 1) return;
+                                    const list = [...formData.field_assignments];
+                                    const temp = list[idx + 1];
+                                    list[idx + 1] = list[idx];
+                                    list[idx] = temp;
+                                    setFormData({ ...formData, field_assignments: list });
+                                  }}
+                                  className="px-1.5 py-0.5 text-xs font-bold text-slate-500 hover:text-emerald-600 disabled:opacity-30"
+                                  title="順番を下へ"
+                                >
+                                  ▼
+                                </button>
+                              </div>
+                            )}
 
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-500 mb-1.5">
-                          この圃場の担当者（複数選択可）
-                        </label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {workers.map(w => {
-                            const isSelected = assignment.worker_ids?.includes(w.id);
-                            return (
+                            {!editingTaskId && formData.field_assignments.length > 1 && (
                               <button
-                                key={w.id}
                                 type="button"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  const newAssignments = [...formData.field_assignments];
-                                  const currentWorkers = newAssignments[idx].worker_ids || [];
-                                  if (isSelected) {
-                                    newAssignments[idx].worker_ids = currentWorkers.filter((id: string) => id !== w.id);
-                                  } else {
-                                    newAssignments[idx].worker_ids = [...currentWorkers, w.id];
-                                  }
+                                onClick={() => {
+                                  const newAssignments = formData.field_assignments.filter((_: any, i: number) => i !== idx);
                                   setFormData({ ...formData, field_assignments: newAssignments });
                                 }}
-                                className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all border ${
-                                  isSelected
-                                    ? 'bg-emerald-500 text-white border-emerald-600 shadow-xs'
-                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
-                                }`}
+                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                title="この圃場を削除"
                               >
-                                {w.name}
+                                <Trash2 className="w-4 h-4" />
                               </button>
-                            );
-                          })}
-                          {(!workers || workers.length === 0) && (
-                            <span className="text-[11px] text-slate-400">担当者が登録されていません</span>
-                          )}
+                            )}
+                          </div>
                         </div>
-                      </div>
 
-                    </div>
-                  ))}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                              対象の圃場 <span className="text-rose-500">*</span>
+                            </label>
+                            <select
+                              value={assignment.field_id}
+                              onChange={(e) => {
+                                const newAssignments = [...formData.field_assignments];
+                                newAssignments[idx].field_id = e.target.value;
+                                setFormData({ ...formData, field_assignments: newAssignments });
+                              }}
+                              className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
+                            >
+                              <option value="">(圃場を選択 / 指定なし)</option>
+                              {fields.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                              移動予定の時間帯・目安
+                            </label>
+                            <select
+                              value={assignment.time_slot || ''}
+                              onChange={(e) => {
+                                const newAssignments = [...formData.field_assignments];
+                                newAssignments[idx].time_slot = e.target.value;
+                                setFormData({ ...formData, field_assignments: newAssignments });
+                              }}
+                              className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
+                            >
+                              <option value="">(指定なし)</option>
+                              <option value="午前">☀️ 午前</option>
+                              <option value="午後">☕ 午後</option>
+                              <option value="夕方">🌙 夕方</option>
+                              <option value="終日">終日</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-500 mb-1.5">
+                            この圃場の担当者（複数選択可）
+                          </label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {workers.map(w => {
+                              const isSelected = assignment.worker_ids?.includes(w.id);
+                              return (
+                                <button
+                                  key={w.id}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    const newAssignments = [...formData.field_assignments];
+                                    const currentWorkers = newAssignments[idx].worker_ids || [];
+                                    if (isSelected) {
+                                      newAssignments[idx].worker_ids = currentWorkers.filter((id: string) => id !== w.id);
+                                    } else {
+                                      newAssignments[idx].worker_ids = [...currentWorkers, w.id];
+                                    }
+                                    setFormData({ ...formData, field_assignments: newAssignments });
+                                  }}
+                                  className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all border ${
+                                    isSelected
+                                      ? 'bg-emerald-500 text-white border-emerald-600 shadow-xs'
+                                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  {w.name}
+                                </button>
+                              );
+                            })}
+                            {(!workers || workers.length === 0) && (
+                              <span className="text-[11px] text-slate-400">担当者が登録されていません</span>
+                            )}
+                          </div>
+                        </div>
+
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
