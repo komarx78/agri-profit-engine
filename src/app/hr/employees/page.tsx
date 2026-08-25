@@ -182,12 +182,17 @@ export default function HrEmployeesPage() {
       const wStart = worker.standard_start_time ? worker.standard_start_time.substring(0, 5) : '';
       const wEnd = worker.standard_end_time ? worker.standard_end_time.substring(0, 5) : '';
 
-      if (!ruleId && attendanceRules.length > 0) {
-        const found = attendanceRules.find(r => 
+      let matched = attendanceRules.find(r => String(r.id) === String(ruleId) || r.name === ruleId);
+      if (!matched && attendanceRules.length > 0) {
+        matched = attendanceRules.find(r => 
           r.start_time?.substring(0, 5) === wStart && r.end_time?.substring(0, 5) === wEnd
         );
-        if (found) ruleId = found.id;
+        if (matched) ruleId = matched.id;
       }
+
+      const finalStart = matched?.start_time ? matched.start_time.substring(0, 5) : (wStart || '08:00');
+      const finalEnd = matched?.end_time ? matched.end_time.substring(0, 5) : (wEnd || '17:00');
+      const finalRest = matched?.rest_minutes ?? (worker.standard_rest_minutes ?? 60);
 
       setFormData({
         name: worker.name || '',
@@ -198,9 +203,9 @@ export default function HrEmployeesPage() {
         join_date: worker.join_date || new Date().toISOString().split('T')[0],
         weekly_days: worker.weekly_days || 3,
         attendance_rule_id: ruleId,
-        standard_start_time: wStart || '08:00',
-        standard_end_time: wEnd || '17:00',
-        standard_rest_minutes: worker.standard_rest_minutes ?? 60
+        standard_start_time: finalStart,
+        standard_end_time: finalEnd,
+        standard_rest_minutes: finalRest
       });
     } else {
       setEditingId(null);
@@ -215,9 +220,9 @@ export default function HrEmployeesPage() {
         join_date: new Date().toISOString().split('T')[0],
         weekly_days: 3,
         attendance_rule_id: defaultRule ? defaultRule.id : '',
-        standard_start_time: defaultRule ? defaultRule.start_time.substring(0, 5) : (companySettings?.default_start_time ? companySettings.default_start_time.substring(0, 5) : '08:00'),
-        standard_end_time: defaultRule ? defaultRule.end_time.substring(0, 5) : (companySettings?.default_end_time ? companySettings.default_end_time.substring(0, 5) : '17:00'),
-        standard_rest_minutes: defaultRule ? defaultRule.rest_minutes : (companySettings?.default_rest_minutes ?? 60)
+        standard_start_time: defaultRule?.start_time ? defaultRule.start_time.substring(0, 5) : (companySettings?.default_start_time ? companySettings.default_start_time.substring(0, 5) : '08:00'),
+        standard_end_time: defaultRule?.end_time ? defaultRule.end_time.substring(0, 5) : (companySettings?.default_end_time ? companySettings.default_end_time.substring(0, 5) : '17:00'),
+        standard_rest_minutes: defaultRule?.rest_minutes ?? (companySettings?.default_rest_minutes ?? 60)
       });
     }
     setIsModalOpen(true);
@@ -430,6 +435,11 @@ export default function HrEmployeesPage() {
                           r.name === w.attendance_rule_id ||
                           (r.start_time?.substring(0, 5) === w.standard_start_time?.substring(0, 5) && r.end_time?.substring(0, 5) === w.standard_end_time?.substring(0, 5))
                         );
+
+                        const displayStart = matchedRule?.start_time ? matchedRule.start_time.substring(0, 5) : (w.standard_start_time ? w.standard_start_time.substring(0, 5) : '08:00');
+                        const displayEnd = matchedRule?.end_time ? matchedRule.end_time.substring(0, 5) : (w.standard_end_time ? w.standard_end_time.substring(0, 5) : '17:00');
+                        const displayRest = matchedRule?.rest_minutes ?? (w.standard_rest_minutes ?? 60);
+
                         return (
                           <div className="space-y-1">
                             {matchedRule && (
@@ -439,11 +449,9 @@ export default function HrEmployeesPage() {
                             )}
                             <div className="flex items-center gap-1 text-xs text-slate-700">
                               <Clock className="w-3.5 h-3.5 text-slate-400" />
-                              {w.standard_start_time ? w.standard_start_time.substring(0, 5) : (matchedRule?.start_time ? matchedRule.start_time.substring(0, 5) : '08:00')} 
-                              〜 
-                              {w.standard_end_time ? w.standard_end_time.substring(0, 5) : (matchedRule?.end_time ? matchedRule.end_time.substring(0, 5) : '17:00')}
+                              {displayStart} 〜 {displayEnd}
                             </div>
-                            <div className="text-[11px] text-slate-400">休憩: {w.standard_rest_minutes ?? (matchedRule?.rest_minutes ?? 60)}分</div>
+                            <div className="text-[11px] text-slate-400">休憩: {displayRest}分</div>
                           </div>
                         );
                       })()}
