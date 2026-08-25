@@ -20,6 +20,7 @@ import CultivationsHub from '@/components/CultivationsHub';
 import HrManagementHub from '@/components/HrManagementHub';
 import CloudPortalHub from '@/components/CloudPortalHub';
 import ManagementDashboardHub from '@/components/ManagementDashboardHub';
+import AdminHub from '@/components/AdminHub';
 import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
 import { getPortalTasks } from '@/app/actions/farm';
@@ -59,18 +60,18 @@ function PortalContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawTab = searchParams.get('tab');
-  const initialTab = (rawTab === 'cultivations' ? 'dashboard' : rawTab as 'home' | 'cloud' | 'dashboard' | 'hr') || 'dashboard';
+  const initialTab = (rawTab === 'home' ? 'home' : 'admin');
 
-  // 統合タブステート: dashboard(経営ダッシュボード) | cloud(CloudPortal総合管理) | home(現場ホーム)
-  const [activePortalTab, setActivePortalTab] = useState<'home' | 'cloud' | 'dashboard' | 'cultivations' | 'hr'>(initialTab);
+  // 統合2大タブステート: admin(管理者ホーム) | home(現場ホーム)
+  const [activePortalTab, setActivePortalTab] = useState<'admin' | 'home' | 'cloud' | 'dashboard' | 'cultivations' | 'hr'>(initialTab);
 
   useEffect(() => {
     const tabParam = searchParams.get('tab') as any;
     if (tabParam) {
-      if (tabParam === 'cultivations') {
-        setActivePortalTab('dashboard');
-      } else if (['home', 'cloud', 'dashboard', 'hr'].includes(tabParam)) {
-        setActivePortalTab(tabParam);
+      if (tabParam === 'home') {
+        setActivePortalTab('home');
+      } else {
+        setActivePortalTab('admin');
       }
     }
   }, [searchParams]);
@@ -1135,17 +1136,17 @@ function PortalContent() {
                 <button
                   type="button"
                   onClick={() => {
-                    setActivePortalTab('dashboard');
-                    router.push('/portal?tab=dashboard');
+                    setActivePortalTab('admin');
+                    router.push('/portal?tab=admin');
                   }}
                   className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
-                    activePortalTab === 'dashboard' || activePortalTab === 'cultivations'
+                    activePortalTab === 'admin' || activePortalTab === 'dashboard' || activePortalTab === 'cultivations' || activePortalTab === 'cloud'
                       ? 'bg-emerald-600 text-white shadow-sm'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
-                  <Sprout className="w-4 h-4" />
-                  <span>🌱 作付け・経営司令塔</span>
+                  <Building className="w-4 h-4" />
+                  <span>🏢 管理者ホーム</span>
                 </button>
 
                 <button
@@ -1171,13 +1172,16 @@ function PortalContent() {
 
       <main className="max-w-7xl mx-auto px-4 py-8">
         
-        {/* 1. 🌱 作付け・作業統合司令塔（経営ダッシュボード）ビュー */}
-        {role === 'admin' && (activePortalTab === 'dashboard' || activePortalTab === 'cultivations') && (
-          <CultivationsHub initialSubTab="cultivations" />
+        {/* 1. 🏢 管理者ホーム（サイドバー付き完全統合管理ビュー） */}
+        {role === 'admin' && (activePortalTab === 'admin' || activePortalTab === 'dashboard' || activePortalTab === 'cultivations' || activePortalTab === 'cloud') && (
+          <AdminHub onSwitchToHome={() => {
+            setActivePortalTab('home');
+            router.push('/portal?tab=home');
+          }} />
         )}
 
-        {/* 2. 📱 現場ホーム（一般スタッフモード時、または管理者でhome選択時、またはその他） */}
-        {(role === 'worker' || activePortalTab === 'home' || (activePortalTab !== 'dashboard' && activePortalTab !== 'cultivations')) && (
+        {/* 2. 📱 現場ホーム（一般スタッフモード時、または管理者でhome選択時） */}
+        {(role === 'worker' || activePortalTab === 'home') && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* 左側カラム */}
