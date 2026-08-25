@@ -527,6 +527,10 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
     }
   };
 
+  const handleCloseModal = () => {
+    setActiveCategory(null);
+  };
+
   // 日本語・英数・カナの全角半角正規化バリエーション生成ヘルパー
   const generateSearchKeywords = (query: string): string[] => {
     if (!query || !query.trim()) return [];
