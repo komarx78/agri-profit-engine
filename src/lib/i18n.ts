@@ -264,6 +264,20 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   workContentLabel: { ja: '作業内容', en: 'Work Content', vi: 'Nội dung công việc', id: 'Isi Pekerjaan', zh: '作业内容', si: 'වැඩ අන්තර්ගතය', km: 'ខ្លឹមសារការងារ' },
   memoSectionLabel: { ja: 'メモ', en: 'Memo', vi: 'Ghi chú', id: 'Catatan', zh: '备注', si: 'සටහන', km: 'កំណត់ចំណាំ' },
 
+  // カレンダー・スケジュール
+  cal_allEvents: { ja: '全員の予定', en: "Everyone's Schedule", vi: 'Lịch của tất cả', id: 'Jadwal Semua', zh: '全员日程', si: 'සැමගේ කාලසටහන', km: 'កាលវិភាគទាំងអស់' },
+  cal_myTasksOnly: { ja: '担当タスクのみ', en: 'My Tasks Only', vi: 'Chỉ nhiệm vụ của tôi', id: 'Hanya Tugas Saya', zh: '仅我的任务', si: 'මගේ කාර්යයන් පමණි', km: 'កិច្ចការរបស់ខ្ញុំតែប៉ុណ្ណោះ' },
+  cal_targetWorker: { ja: '担当者表示:', en: 'Worker Filter:', vi: 'Lọc theo người:', id: 'Filter Pekerja:', zh: '按人员筛选:', si: 'සේවක පෙරහන:', km: 'តម្រងបុគ្គលិក:' },
+  cal_allStaffOption: { ja: '全員', en: 'All Staff', vi: 'Tất cả nhân viên', id: 'Semua Staf', zh: '全员', si: 'සියලුම සේවකයින්', km: 'បុគ្គលិកទាំងអស់' },
+  cal_highlighting: { ja: 'をハイライト中', en: 'highlighted', vi: 'đang được đánh dấu', id: 'sedang disorot', zh: '高亮显示中', si: 'උද්දීපනය කර ඇත', km: 'កំពុងរំលេច' },
+  cal_dailyScheduleDetail: { ja: '1日のスケジュール詳細', en: "Day's Schedule Details", vi: 'Chi tiết lịch trình trong ngày', id: 'Detail Jadwal Harian', zh: '当日日程详情', si: 'දවසේ කාලසටහන විස්තර', km: 'សេចក្តីលម្អិតកាលវិភាគប្រចាំថ្ងៃ' },
+  cal_noTasksThisDay: { ja: 'この日のタスク・予定はありません', en: 'No tasks or events on this day', vi: 'Không có nhiệm vụ hoặc sự kiện nào trong ngày này', id: 'Tidak ada tugas atau acara pada hari ini', zh: '本日没有任务或日程', si: 'මෙම දිනයේ කාර්යයන් හෝ සිදුවීම් නොමැත', km: 'មិនមានកិច្ចការ ឬ ព្រឹត្តិការណ៍នៅថ្ងៃនេះទេ' },
+  cal_scheduledBadge: { ja: '予定', en: 'Scheduled', vi: 'Dự kiến', id: 'Terjadwal', zh: '计划', si: 'සැලසුම් කර ඇත', km: 'បានកំណត់ពេល' },
+  cal_yourAssignedTask: { ja: 'あなたの担当タスク', en: 'Your Assigned Task', vi: 'Nhiệm vụ của bạn', id: 'Tugas Anda', zh: '您的负责任务', si: 'ඔබගේ වගකීම් කාර්යය', km: 'កិច្ចការដែលអ្នកទទួលខុសត្រូវ' },
+  cal_assigneeWho: { ja: '担当者 (誰が)', en: 'Assignee (Who)', vi: 'Người phụ trách (Ai)', id: 'Penanggung Jawab (Siapa)', zh: '负责人 (谁)', si: 'වගකිවයුතු (කවුද)', km: 'អ្នកទទួលខុសត្រូវ (នរណា)' },
+  cal_locationWhere: { ja: '場所 (どこで)', en: 'Location (Where)', vi: 'Địa điểm (Ở đâu)', id: 'Lokasi (Di mana)', zh: '场所 (何处)', si: 'ස්ථානය (කොහේද)', km: 'ទីតាំង (កន្លែងណា)' },
+  cal_myselfSuffix: { ja: '(自分)', en: '(Me)', vi: '(Tôi)', id: '(Saya)', zh: '(自己)', si: '(මම)', km: '(ខ្ញុំ)' },
+
   // 指示・タスク
   todayTasksHeader: { ja: '本日の指示・タスク', en: "Today's Assigned Tasks", vi: 'Chỉ thị & Nhiệm vụ hôm nay', id: 'Tugas Hari Ini', zh: '今日任务指示', si: 'අද උපදෙස් සහ කාර්යයන්', km: 'ការណែនាំ និង កិច្ចការថ្ងៃនេះ' },
   detail: { ja: '詳細', en: 'Detail', vi: 'Chi tiết', id: 'Detail', zh: '详情', si: 'විස්තර', km: 'ព័ត៌មានលម្អិត' },

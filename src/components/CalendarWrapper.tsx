@@ -84,7 +84,8 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
     };
   });
 
-  const selectedDayEvents = selectedDate ? events.filter(e => normalizeDateStr(e.date) === selectedDate) : [];
+  const selectedDayAllEvents = selectedDate ? events.filter(e => normalizeDateStr(e.date) === selectedDate) : [];
+  const selectedDayEvents = filterMode === 'mine' ? selectedDayAllEvents.filter(isEventForMe) : selectedDayAllEvents;
   const selectedDayObj = weekDays.find(d => d.dateStr === selectedDate);
 
   return (
@@ -243,7 +244,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                   <h3 className="font-black text-slate-800 text-lg">
                     {selectedDate.replace(/-/g, '/')} ({selectedDayObj?.dayName})
                   </h3>
-                  <p className="text-xs font-bold text-slate-500">1日のスケジュール詳細</p>
+                  <p className="text-xs font-bold text-slate-500">{t('cal_dailyScheduleDetail', language)}</p>
                 </div>
               </div>
               <button 
@@ -253,11 +254,37 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {/* モーダル内フィルタ切替タブ */}
+            <div className="px-6 pt-3 pb-1 bg-slate-50 flex items-center justify-between gap-2 border-b border-slate-100">
+              <div className="flex items-center gap-1 bg-slate-200/80 p-1 rounded-xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setFilterMode('all')}
+                  className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1 ${
+                    filterMode === 'all' ? 'bg-white text-slate-800 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Users className="w-3 h-3" />
+                  <span>{t('cal_allEvents', language)} ({selectedDayAllEvents.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterMode('mine')}
+                  className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1 ${
+                    filterMode === 'mine' ? 'bg-amber-500 text-white shadow-xs font-black' : 'text-slate-500 hover:text-amber-700'
+                  }`}
+                >
+                  <Star className="w-3 h-3" />
+                  <span>{t('cal_myTasksOnly', language)} ({selectedDayAllEvents.filter(isEventForMe).length})</span>
+                </button>
+              </div>
+            </div>
             
             <div className="p-6 overflow-y-auto flex-1 bg-slate-50">
               {selectedDayEvents.length === 0 ? (
                 <div className="text-center py-12 bg-white rounded-2xl border border-slate-200 border-dashed">
-                  <p className="text-slate-400 font-bold">この日のタスク・予定はありません</p>
+                  <p className="text-slate-400 font-bold">{t('cal_noTasksThisDay', language)}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -272,11 +299,11 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                       >
                         <div className="flex items-center justify-between mb-2">
                           <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-black tracking-wider">
-                            予定
+                            {t('cal_scheduledBadge', language)}
                           </span>
                           {isMine && (
                             <span className="bg-amber-500 text-white px-2 py-0.5 rounded-full text-[10px] font-black flex items-center gap-1">
-                              <Star className="w-3 h-3 fill-white" /> あなたの担当タスク
+                              <Star className="w-3 h-3 fill-white" /> {t('cal_yourAssignedTask', language)}
                             </span>
                           )}
                         </div>
@@ -287,16 +314,16 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                         <div className="grid grid-cols-2 gap-3">
                           <div className={`p-3 rounded-xl border ${isMine ? 'bg-amber-50/60 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
                             <div className="text-[10px] text-slate-400 font-bold mb-1 flex items-center gap-1">
-                              <Users className="w-3 h-3" /> 担当者 (誰が)
+                              <Users className="w-3 h-3" /> {t('cal_assigneeWho', language)}
                             </div>
                             <div className={`font-bold text-sm ${isMine ? 'text-amber-900 font-black' : 'text-slate-700'}`}>
-                              {getTranslatedWorkType(event.workerName, language as any) || event.workerName || '全体'} {isMine && '(自分)'}
+                              {getTranslatedWorkType(event.workerName, language as any) || event.workerName || t('cal_allStaffOption', language)} {isMine && t('cal_myselfSuffix', language)}
                             </div>
                           </div>
                           
                           <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                             <div className="text-[10px] text-slate-400 font-bold mb-1 flex items-center gap-1">
-                              <MapPin className="w-3 h-3" /> 場所 (どこで)
+                              <MapPin className="w-3 h-3" /> {t('cal_locationWhere', language)}
                             </div>
                             <div className="font-bold text-slate-700 text-sm line-clamp-2">
                               {getTranslatedWorkType(event.fieldName, language as any) || event.fieldName || '-'} 
@@ -316,7 +343,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                 onClick={() => setSelectedDate(null)}
                 className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors"
               >
-                閉じる
+                {t('close', language)}
               </button>
             </div>
           </div>
