@@ -272,12 +272,12 @@ export default function HrEmployeesPage() {
       };
 
       let savedWorkerId = editingId;
+      let isDbSuccess = false;
 
       try {
         if (editingId) {
           const { error } = await supabase.from('workers').update(dataToSave).eq('id', editingId).eq('user_id', tenantId);
           if (error) {
-            // カラムが無い場合のフォールバック（基本項目のみ）
             console.warn('Update fallback without rule columns:', error);
             const fallbackData = {
               name: dataToSave.name,
@@ -288,8 +288,10 @@ export default function HrEmployeesPage() {
               join_date: dataToSave.join_date,
               weekly_days: dataToSave.weekly_days
             };
-            await supabase.from('workers').update(fallbackData).eq('id', editingId).eq('user_id', tenantId);
+            const { error: fErr } = await supabase.from('workers').update(fallbackData).eq('id', editingId).eq('user_id', tenantId);
+            if (fErr) throw fErr;
           }
+          isDbSuccess = true;
         } else {
           const { data: newW, error } = await supabase.from('workers').insert([dataToSave]).select().single();
           if (error) {
@@ -304,14 +306,21 @@ export default function HrEmployeesPage() {
               weekly_days: dataToSave.weekly_days,
               user_id: tenantId
             };
-            const { data: retryW } = await supabase.from('workers').insert([fallbackData]).select().single();
+            const { data: retryW, error: fErr } = await supabase.from('workers').insert([fallbackData]).select().single();
+            if (fErr) throw fErr;
             if (retryW) savedWorkerId = retryW.id;
           } else if (newW) {
             savedWorkerId = newW.id;
           }
+          isDbSuccess = true;
         }
-      } catch (dbErr) {
+      } catch (dbErr: any) {
         console.error('DB save error:', dbErr);
+        if (dbErr.code === '42501' || dbErr.message?.includes('JWT') || dbErr.message?.includes('permission') || dbErr.status === 401) {
+          alert('【権限エラー (401)】\nSupabaseのRLSポリシーにより書き込みが拒否されました。\nチャットでご案内するSQLを実行して権限を更新してください。');
+        } else {
+          alert('保存時にDBエラーが発生しました: ' + (dbErr.message || '通信エラー'));
+        }
       }
 
       // localStorage にワーカーごとのルール設定をキャッシュ保存
@@ -330,9 +339,11 @@ export default function HrEmployeesPage() {
       }
 
       await fetchWorkers();
-      setIsModalOpen(false);
+      if (isDbSuccess) {
+        setIsModalOpen(false);
+      }
     } catch (err: any) {
-      alert('保存に失敗しました: ' + err.message);
+      alert('保存処理に失敗しました: ' + err.message);
     } finally {
       setIsSaving(false);
     }
