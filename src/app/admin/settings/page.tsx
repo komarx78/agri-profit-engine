@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
-import { saveCompanySettings, getCompanySettings } from '@/app/actions/farm';
 import { Settings, Save, CheckCircle2, Building, MapPin, Phone, FileText, Landmark } from 'lucide-react';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 
 export default function SettingsPage() {
+  const [settingsId, setSettingsId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     company_name: '',
     postal_code: '',
@@ -29,15 +30,21 @@ export default function SettingsPage() {
           return;
         }
 
-        const res = await getCompanySettings(tenantId);
-        if (res.success && res.data) {
+        const { data, error } = await supabase
+          .from('company_settings')
+          .select('*')
+          .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+          .maybeSingle();
+
+        if (data) {
+          setSettingsId(data.id);
           setFormData({
-            company_name: res.data.company_name || '',
-            postal_code: res.data.postal_code || '',
-            address: res.data.address || '',
-            phone: res.data.phone || '',
-            invoice_number: res.data.invoice_number || '',
-            bank_info: res.data.bank_info || '',
+            company_name: data.company_name || '',
+            postal_code: data.postal_code || '',
+            address: data.address || '',
+            phone: data.phone || '',
+            invoice_number: data.invoice_number || '',
+            bank_info: data.bank_info || '',
           });
         }
       } catch (err) {
@@ -63,9 +70,31 @@ export default function SettingsPage() {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) throw new Error('テナントIDが特定できません');
 
-      const res = await saveCompanySettings(tenantId, formData);
-      if (!res.success) {
-        throw new Error(res.error || '保存に失敗しました');
+      const dataToSave = {
+        company_name: formData.company_name || '',
+        postal_code: formData.postal_code || '',
+        address: formData.address || '',
+        phone: formData.phone || '',
+        invoice_number: formData.invoice_number || '',
+        bank_info: formData.bank_info || '',
+        user_id: tenantId,
+        updated_at: new Date().toISOString()
+      };
+
+      if (settingsId) {
+        const { error } = await supabase
+          .from('company_settings')
+          .update(dataToSave)
+          .eq('id', settingsId);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase
+          .from('company_settings')
+          .insert([dataToSave])
+          .select()
+          .single();
+        if (error) throw error;
+        if (data) setSettingsId(data.id);
       }
 
       setSaveSuccess(true);
