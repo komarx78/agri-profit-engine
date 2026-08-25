@@ -941,8 +941,7 @@ function PortalContent() {
         const payload: any = {
           worker_id: workerId,
           date: today,
-          clock_in: nowIso,
-          status: 'working'
+          clock_in: nowIso
         };
         if (tenantUserId) payload.user_id = tenantUserId;
 
@@ -952,8 +951,7 @@ function PortalContent() {
       } else {
         if (!attendance) return;
         const { data, error } = await supabase.from('attendance_logs').update({
-          clock_out: nowIso,
-          status: 'left'
+          clock_out: nowIso
         }).eq('id', attendance.id).select().single();
         if (error) throw error;
         setAttendance(data);
