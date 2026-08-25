@@ -96,6 +96,61 @@ function CultivationsHubContent() {
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [historyTypeFilter, setHistoryTypeFilter] = useState<'all' | 'sprayOnly' | 'workOnly'>('all');
 
+  // 履歴の訂正・編集用ステート
+  const [editingLog, setEditingLog] = useState<any | null>(null);
+  const [editWorkDate, setEditWorkDate] = useState<string>('');
+  const [editFieldId, setEditFieldId] = useState<string>('');
+  const [editCropId, setEditCropId] = useState<string>('');
+  const [editWorkType, setEditWorkType] = useState<string>('');
+  const [editDuration, setEditDuration] = useState<string>('');
+  const [editMemo, setEditMemo] = useState<string>('');
+  const [isUpdatingLog, setIsUpdatingLog] = useState(false);
+
+  // 履歴の直接新規登録用ステート
+  const [isDirectAddModalOpen, setIsDirectAddModalOpen] = useState(false);
+  const [directAddDate, setDirectAddDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [directAddFieldId, setDirectAddFieldId] = useState<string>('');
+  const [directAddCropId, setDirectAddCropId] = useState<string>('');
+  const [directAddWorkType, setDirectAddWorkType] = useState<string>('収穫');
+  const [directAddDuration, setDirectAddDuration] = useState<string>('60');
+  const [directAddMemo, setDirectAddMemo] = useState<string>('');
+  const [isDirectAdding, setIsDirectAdding] = useState(false);
+
+  // 作業者向け生産性共有設定ステート
+  const [isShareSettingsOpen, setIsShareSettingsOpen] = useState(false);
+  const [shareSettings, setShareSettings] = useState<{
+    showYieldPerHour: boolean;
+    showRevenuePerHour: boolean;
+    showTeamTotals: boolean;
+  }>({
+    showYieldPerHour: true,
+    showRevenuePerHour: true,
+    showTeamTotals: true
+  });
+
+  // 設定の初期読み込み
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('agri_worker_share_settings');
+        if (saved) {
+          setShareSettings(JSON.parse(saved));
+        }
+      } catch (e) {
+        console.warn('Failed to load share settings:', e);
+      }
+    }
+  }, []);
+
+  const handleSaveShareSettings = (newSettings: any) => {
+    setShareSettings(newSettings);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('agri_worker_share_settings', JSON.stringify(newSettings));
+    }
+    setIsShareSettingsOpen(false);
+    showToast('作業者への生産性共有設定を保存しました！');
+  };
+
   // --- タブ4: 予定ステート ---
   const [plannedTasks, setPlannedTasks] = useState<any[]>([]);
 
@@ -424,6 +479,100 @@ function CultivationsHubContent() {
     }
   };
 
+  // 作業記録の編集モーダルを開く
+  const handleOpenEditModal = (log: any) => {
+    setEditingLog(log);
+    setEditWorkDate(log.work_date || new Date().toISOString().split('T')[0]);
+    setEditFieldId(log.field_id || '');
+    setEditCropId(log.crop_id || '');
+    setEditWorkType(log.work_type || '農作業');
+    setEditDuration(String(log.duration_minutes || 60));
+    setEditMemo(log.memo || '');
+  };
+
+  // 作業記録の訂正・保存処理
+  const handleUpdateWorkLog = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLog) return;
+    setIsUpdatingLog(true);
+    try {
+      const { error } = await supabase
+        .from('work_logs')
+        .update({
+          work_date: editWorkDate,
+          field_id: editFieldId || null,
+          crop_id: editCropId || null,
+          work_type: editWorkType,
+          duration_minutes: parseInt(editDuration, 10) || 60,
+          memo: editMemo
+        })
+        .eq('id', editingLog.id);
+
+      if (error) throw error;
+      setEditingLog(null);
+      setToastMessage('作業記録を訂正・更新しました！');
+      fetchAllData();
+    } catch (err: any) {
+      console.error(err);
+      alert('更新に失敗しました: ' + err.message);
+    } finally {
+      setIsUpdatingLog(false);
+    }
+  };
+
+  // 作業記録の削除処理
+  const handleDeleteWorkLog = async (logId: string) => {
+    if (!window.confirm('この作業記録を削除してもよろしいですか？\n※削除した記録は元に戻せません。')) return;
+    try {
+      const { error } = await supabase
+        .from('work_logs')
+        .delete()
+        .eq('id', logId);
+
+      if (error) throw error;
+      setToastMessage('作業記録を削除しました');
+      fetchAllData();
+    } catch (err: any) {
+      console.error(err);
+      alert('削除に失敗しました: ' + err.message);
+    }
+  };
+
+  // 作業記録の直接新規登録処理
+  const handleDirectAddWorkLog = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsDirectAdding(true);
+    try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error('テナント情報の取得に失敗しました');
+
+      const { error } = await supabase
+        .from('work_logs')
+        .insert([{
+          user_id: tenantId,
+          work_date: directAddDate,
+          field_id: directAddFieldId || null,
+          crop_id: directAddCropId || null,
+          work_type: directAddWorkType,
+          duration_minutes: parseInt(directAddDuration, 10) || 60,
+          memo: directAddMemo ? directAddMemo.trim() : `[直接登録] ${directAddWorkType}`,
+          status: 'completed',
+          created_at: new Date().toISOString()
+        }]);
+
+      if (error) throw error;
+      setIsDirectAddModalOpen(false);
+      setDirectAddMemo('');
+      setToastMessage('新規作業記録を登録しました！');
+      fetchAllData();
+    } catch (err: any) {
+      console.error(err);
+      alert('登録に失敗しました: ' + err.message);
+    } finally {
+      setIsDirectAdding(false);
+    }
+  };
+
   // タスク完了処理
   const handleCompleteTask = async (taskId: string) => {
     try {
@@ -463,7 +612,22 @@ function CultivationsHubContent() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Link
+                href="/work"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+                title="スマホ用 現場作業日報画面へ"
+              >
+                <span>📱 スマホ現場日報へ</span>
+              </Link>
+              <button
+                type="button"
+                onClick={() => setIsShareSettingsOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-colors"
+                title="作業者に共有する生産高（kg/h、金額等）を設定"
+              >
+                <span>⚙️ 生産性共有設定</span>
+              </button>
               <Link
                 href="/"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
@@ -472,17 +636,10 @@ function CultivationsHubContent() {
                 <span>🏠 トップ</span>
               </Link>
               <Link
-                href="/portal"
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition-colors"
-                title="出退勤・現場ポータルへ"
-              >
-                <span>📱 現場ポータル</span>
-              </Link>
-              <Link
                 href="/admin/map"
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold transition-colors"
               >
-                <MapIcon className="w-3.5 h-3.5 text-emerald-600" />
+                <MapIcon className="w-3.5 h-3.5 text-slate-600" />
                 <span className="hidden sm:inline">作付地図・気象</span>
                 <span className="sm:hidden">地図</span>
               </Link>
@@ -1075,7 +1232,7 @@ function CultivationsHubContent() {
         {activeMainTab === 'history' && (
           <div className="space-y-4">
             
-            {/* 履歴フィルターバー */}
+            {/* 履歴フィルターバー & 新規直接登録ボタン */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
               <div className="relative flex-1 max-w-sm">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1088,33 +1245,44 @@ function CultivationsHubContent() {
                 />
               </div>
 
-              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setHistoryTypeFilter('all')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      historyTypeFilter === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    すべて ({workLogs.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryTypeFilter('sprayOnly')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      historyTypeFilter === 'sprayOnly' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    農薬散布のみ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryTypeFilter('workOnly')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      historyTypeFilter === 'workOnly' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    一般作業のみ
+                  </button>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => setHistoryTypeFilter('all')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    historyTypeFilter === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
-                  }`}
+                  onClick={() => setIsDirectAddModalOpen(true)}
+                  className="flex items-center gap-1 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all"
                 >
-                  すべて ({workLogs.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setHistoryTypeFilter('sprayOnly')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    historyTypeFilter === 'sprayOnly' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  農薬散布のみ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setHistoryTypeFilter('workOnly')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    historyTypeFilter === 'workOnly' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  一般作業のみ
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>＋ 新規記録を登録</span>
                 </button>
               </div>
             </div>
@@ -1124,7 +1292,7 @@ function CultivationsHubContent() {
               <div className="py-16 text-center bg-white rounded-3xl border border-slate-200 p-8 shadow-xs">
                 <History className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                 <h3 className="text-base font-bold text-slate-700 mb-1">記録が見つかりません</h3>
-                <p className="text-xs text-slate-400">条件を変更するか、作付け画面から日誌を登録してください。</p>
+                <p className="text-xs text-slate-400">条件を変更するか、右上の「＋ 新規記録を登録」から直接追加してください。</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -1185,10 +1353,33 @@ function CultivationsHubContent() {
 
                         </div>
 
-                        <div className="text-right shrink-0 text-xs text-slate-400 font-semibold flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>{log.duration_minutes || 60}分</span>
+                        {/* 右側：所要時間 ＆ 編集・削除アクション */}
+                        <div className="text-right shrink-0 space-y-2 flex flex-col items-end">
+                          <div className="text-xs text-slate-400 font-semibold flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>{log.duration_minutes || 60}分</span>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditModal(log)}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors border border-slate-200 shadow-2xs"
+                              title="この作業記録を訂正・編集"
+                            >
+                              ✏️ 訂正
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteWorkLog(log.id)}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                              title="この作業記録を削除"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
+
                       </div>
                     </div>
                   );
@@ -1267,6 +1458,348 @@ function CultivationsHubContent() {
         )}
 
       </main>
+
+      {/* ========================================================================= */}
+      {/* 5. モーダル群: 訂正・編集、直接登録、作業者生産性共有設定 */}
+      {/* ========================================================================= */}
+
+      {/* ① 作業記録の訂正・編集モーダル */}
+      {editingLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
+                  ✏️
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">作業記録の訂正・編集</h3>
+                  <p className="text-xs text-slate-500">入力内容の間違いを修正して更新します</p>
+                </div>
+              </div>
+              <button onClick={() => setEditingLog(null)} className="p-1.5 rounded-full text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateWorkLog} className="p-6 space-y-4 overflow-y-auto">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">作業日</label>
+                <input
+                  type="date"
+                  required
+                  value={editWorkDate}
+                  onChange={(e) => setEditWorkDate(e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">対象圃場</label>
+                  <select
+                    value={editFieldId}
+                    onChange={(e) => setEditFieldId(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium"
+                  >
+                    <option value="">(未指定)</option>
+                    {fields.map(f => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">対象作物</label>
+                  <select
+                    value={editCropId}
+                    onChange={(e) => setEditCropId(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium"
+                  >
+                    <option value="">(未指定)</option>
+                    {crops.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">作業区分</label>
+                  <input
+                    type="text"
+                    required
+                    value={editWorkType}
+                    onChange={(e) => setEditWorkType(e.target.value)}
+                    placeholder="収穫、定植、散布など"
+                    className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">所要時間 (分)</label>
+                  <input
+                    type="number"
+                    required
+                    value={editDuration}
+                    onChange={(e) => setEditDuration(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">作業メモ・数量・詳細</label>
+                <textarea
+                  rows={4}
+                  value={editMemo}
+                  onChange={(e) => setEditMemo(e.target.value)}
+                  placeholder="使用薬剤、肥料数量、収穫kg数など"
+                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium resize-none"
+                />
+              </div>
+
+              <div className="pt-3 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingLog(null)}
+                  className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingLog}
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2"
+                >
+                  {isUpdatingLog ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  <span>訂正内容を保存</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ② 作業記録の直接新規追加モーダル */}
+      {isDirectAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                  ➕
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">作業記録の直接登録</h3>
+                  <p className="text-xs text-slate-500">過去日や当日の作業日誌を直接記録します</p>
+                </div>
+              </div>
+              <button onClick={() => setIsDirectAddModalOpen(false)} className="p-1.5 rounded-full text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleDirectAddWorkLog} className="p-6 space-y-4 overflow-y-auto">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">作業日</label>
+                <input
+                  type="date"
+                  required
+                  value={directAddDate}
+                  onChange={(e) => setDirectAddDate(e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">対象圃場</label>
+                  <select
+                    value={directAddFieldId}
+                    onChange={(e) => setDirectAddFieldId(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium"
+                  >
+                    <option value="">(選択してください)</option>
+                    {fields.map(f => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">対象作物</label>
+                  <select
+                    value={directAddCropId}
+                    onChange={(e) => setDirectAddCropId(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium"
+                  >
+                    <option value="">(選択してください)</option>
+                    {crops.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">作業区分</label>
+                  <select
+                    value={directAddWorkType}
+                    onChange={(e) => setDirectAddWorkType(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium"
+                  >
+                    <option value="収穫">収穫</option>
+                    <option value="定植">定植</option>
+                    <option value="播種">播種</option>
+                    <option value="施肥">施肥</option>
+                    <option value="農薬散布">農薬散布</option>
+                    <option value="除草・草刈り">除草・草刈り</option>
+                    <option value="整枝・誘引">整枝・誘引</option>
+                    <option value="出荷調製">出荷調製</option>
+                    <option value="片付け・メンテナンス">片付け・メンテナンス</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">所要時間 (分)</label>
+                  <input
+                    type="number"
+                    required
+                    value={directAddDuration}
+                    onChange={(e) => setDirectAddDuration(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">作業メモ・数量など</label>
+                <textarea
+                  rows={3}
+                  value={directAddMemo}
+                  onChange={(e) => setDirectAddMemo(e.target.value)}
+                  placeholder="例: トマト 240kg収穫、Aコンテナ12箱"
+                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white font-medium resize-none"
+                />
+              </div>
+
+              <div className="pt-3 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsDirectAddModalOpen(false)}
+                  className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDirectAdding}
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2"
+                >
+                  {isDirectAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  <span>作業記録を登録</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ③ 作業者向け生産性共有設定モーダル */}
+      {isShareSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100 flex flex-col">
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+                  ⚙️
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">作業者画面の生産性共有設定</h3>
+                  <p className="text-xs text-slate-500">現場作業者（/work）に共有する項目を選択</p>
+                </div>
+              </div>
+              <button onClick={() => setIsShareSettingsOpen(false)} className="p-1.5 rounded-full text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed bg-indigo-50/60 p-3 rounded-xl border border-indigo-100">
+                💡 雇用スタッフの意欲とチーム効率を高めるため、作業者画面の上部に「本日の生産性」を表示します。農家様の方針に合わせて表示項目を自由に選択できます。
+              </p>
+
+              <div className="space-y-3 pt-1">
+                <label className="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <span>🌾 1時間あたりの収穫量 (kg/h)</span>
+                    </span>
+                    <p className="text-[11px] text-slate-400">作業スピードと効率向上の目標になります</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={shareSettings.showYieldPerHour}
+                    onChange={(e) => setShareSettings(prev => ({ ...prev, showYieldPerHour: e.target.checked }))}
+                    className="w-5 h-5 text-indigo-600 rounded-md border-slate-300 focus:ring-indigo-500"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <span>💰 1時間あたりの生産高・金額 (円/h)</span>
+                    </span>
+                    <p className="text-[11px] text-slate-400">金額を見せたくない場合はOFFにできます</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={shareSettings.showRevenuePerHour}
+                    onChange={(e) => setShareSettings(prev => ({ ...prev, showRevenuePerHour: e.target.checked }))}
+                    className="w-5 h-5 text-indigo-600 rounded-md border-slate-300 focus:ring-indigo-500"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <span>⏱️ チーム総稼働時間・総作業件数</span>
+                    </span>
+                    <p className="text-[11px] text-slate-400">チーム全体の進捗感を共有します</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={shareSettings.showTeamTotals}
+                    onChange={(e) => setShareSettings(prev => ({ ...prev, showTeamTotals: e.target.checked }))}
+                    className="w-5 h-5 text-indigo-600 rounded-md border-slate-300 focus:ring-indigo-500"
+                  />
+                </label>
+              </div>
+
+              <div className="pt-3 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsShareSettingsOpen(false)}
+                  className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveShareSettings(shareSettings)}
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>設定を保存</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

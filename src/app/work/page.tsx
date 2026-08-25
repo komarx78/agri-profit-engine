@@ -128,6 +128,33 @@ export default function WorkEntryPage() {
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
 
+  // 生産性共有ステート
+  const [productivity, setProductivity] = useState<{
+    yieldPerHour: number;
+    revenuePerHour: number;
+    todayHarvestKg: number;
+    todayHours: number;
+    todayRevenueYen: number;
+    hasData: boolean;
+  }>({
+    yieldPerHour: 0,
+    revenuePerHour: 0,
+    todayHarvestKg: 0,
+    todayHours: 0,
+    todayRevenueYen: 0,
+    hasData: false
+  });
+
+  const [shareSettings, setShareSettings] = useState<{
+    showYieldPerHour: boolean;
+    showRevenuePerHour: boolean;
+    showTeamTotals: boolean;
+  }>({
+    showYieldPerHour: true,
+    showRevenuePerHour: true,
+    showTeamTotals: true
+  });
+
   const [activeWorkLog, setActiveWorkLog] = useState<any>(null);
   const [elapsedMinutes, setElapsedMinutes] = useState<number>(0);
   const [customWorkTypes, setCustomWorkTypes] = useState<string[]>([]);
@@ -306,6 +333,67 @@ export default function WorkEntryPage() {
             .order('created_at', { ascending: false })
             .limit(50);
           if (bPosts) setBoardPosts(bPosts);
+
+          // 共有設定の読み込み
+          if (typeof window !== 'undefined') {
+            try {
+              const saved = localStorage.getItem('agri_worker_share_settings');
+              if (saved) setShareSettings(JSON.parse(saved));
+            } catch (e) {}
+          }
+
+          // 本日のチーム労働生産性の計算 (自社テナント全体)
+          try {
+            const todayStr = getJSTDate();
+            const [todayLogsRes, todaySalesRes] = await Promise.all([
+              ownerId 
+                ? supabase.from('work_logs').select('duration_minutes, work_type, memo, material_quantity').eq('work_date', todayStr).eq('user_id', ownerId)
+                : supabase.from('work_logs').select('duration_minutes, work_type, memo, material_quantity').eq('work_date', todayStr),
+              ownerId 
+                ? supabase.from('sales_logs').select('amount, total_amount, quantity').eq('sale_date', todayStr).eq('user_id', ownerId)
+                : supabase.from('sales_logs').select('amount, total_amount, quantity').eq('sale_date', todayStr)
+            ]);
+
+            let totalMinutes = 0;
+            let totalHarvestKg = 0;
+            let totalRevenue = 0;
+
+            if (todayLogsRes.data) {
+              todayLogsRes.data.forEach((l: any) => {
+                totalMinutes += (l.duration_minutes || 0);
+                if (l.work_type?.includes('収穫') || l.memo?.includes('収穫') || l.memo?.includes('kg')) {
+                  const kgMatch = (l.memo || '').match(/(\d+(\.\d+)?)\s*kg/i);
+                  if (kgMatch) {
+                    totalHarvestKg += parseFloat(kgMatch[1]);
+                  } else if (l.material_quantity) {
+                    totalHarvestKg += l.material_quantity;
+                  }
+                }
+              });
+            }
+
+            if (todaySalesRes.data) {
+              todaySalesRes.data.forEach((s: any) => {
+                totalRevenue += (s.total_amount || s.amount || 0);
+                totalHarvestKg += (s.quantity || 0);
+              });
+            }
+
+            const totalHours = totalMinutes > 0 ? totalMinutes / 60 : (totalHarvestKg > 0 ? 1 : 0);
+            const yieldPerHour = totalHours > 0 ? Math.round((totalHarvestKg / totalHours) * 10) / 10 : totalHarvestKg;
+            const revenuePerHour = totalHours > 0 ? Math.round(totalRevenue / totalHours) : totalRevenue;
+
+            setProductivity({
+              yieldPerHour,
+              revenuePerHour,
+              todayHarvestKg: Math.round(totalHarvestKg * 10) / 10,
+              todayHours: Math.round(totalHours * 10) / 10,
+              todayRevenueYen: Math.round(totalRevenue),
+              hasData: totalMinutes > 0 || totalHarvestKg > 0 || totalRevenue > 0
+            });
+          } catch (pErr) {
+            console.warn('Productivity calculation error:', pErr);
+          }
         }
       } catch (err) {
         console.log(err);
@@ -839,8 +927,68 @@ export default function WorkEntryPage() {
         </div>
       </header>
 
-      <div className="max-w-md mx-auto px-4 pt-6">
+      <div className="max-w-md mx-auto px-4 pt-4 space-y-4">
         
+        {/* ===================== 本日のチーム労働生産性カード ===================== */}
+        {(shareSettings.showYieldPerHour || shareSettings.showRevenuePerHour || shareSettings.showTeamTotals) && (
+          <div className="bg-gradient-to-br from-emerald-900/80 via-teal-900/60 to-emerald-950 p-4 rounded-3xl border border-emerald-500/30 shadow-lg relative overflow-hidden backdrop-blur-md">
+            <div className="flex items-center justify-between gap-2 mb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-amber-400/20 text-amber-300 rounded-xl border border-amber-400/30">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black text-white tracking-wide flex items-center gap-1.5">
+                    <span>本日のチーム生産性</span>
+                    <span className="text-[9px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 rounded-full font-bold">リアルタイム</span>
+                  </h3>
+                  <p className="text-[10px] text-emerald-300/80 font-medium">みんなの頑張りがチームの力になります！🚀</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => router.push('/admin/cultivations')}
+                className="text-[10px] text-emerald-300 hover:text-white bg-emerald-800/60 px-2 py-1 rounded-lg border border-emerald-700 font-bold transition-all"
+              >
+                詳細 ➔
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              {shareSettings.showYieldPerHour && (
+                <div className="bg-emerald-950/70 p-2.5 rounded-2xl border border-emerald-800/60 text-center">
+                  <span className="text-[10px] font-bold text-emerald-300/90 block mb-0.5">🌾 1時間あたり収穫量</span>
+                  <div className="flex items-baseline justify-center gap-1">
+                    <span className="text-xl font-black text-amber-300 tracking-tight">
+                      {productivity.yieldPerHour > 0 ? productivity.yieldPerHour : '--'}
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-400">kg/h</span>
+                  </div>
+                </div>
+              )}
+
+              {shareSettings.showRevenuePerHour && (
+                <div className="bg-emerald-950/70 p-2.5 rounded-2xl border border-emerald-800/60 text-center">
+                  <span className="text-[10px] font-bold text-emerald-300/90 block mb-0.5">💰 1時間あたり生産高</span>
+                  <div className="flex items-baseline justify-center gap-1">
+                    <span className="text-xl font-black text-teal-300 tracking-tight">
+                      {productivity.revenuePerHour > 0 ? `¥${productivity.revenuePerHour.toLocaleString()}` : '--'}
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-400">/h</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {shareSettings.showTeamTotals && (
+              <div className="mt-2 pt-2 border-t border-emerald-800/60 flex items-center justify-between text-[11px] font-bold text-emerald-200/90 px-1">
+                <span>⏱️ 本日チーム総稼働: <strong className="text-white">{productivity.todayHours}時間</strong></span>
+                <span>収穫合計: <strong className="text-amber-300">{productivity.todayHarvestKg}kg</strong></span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ===================== 勤怠タブ ===================== */}
         {activeTab === 'attendance' && (
           <div className="space-y-6">
