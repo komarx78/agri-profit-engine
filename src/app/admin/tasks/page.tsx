@@ -7,6 +7,7 @@ import { Calendar, CheckCircle2, Clock, MapPin, Sprout, Loader2, Plus, Trash2, E
 import { autoTranslateMasterData } from '@/app/actions/translate';
 
 import { getCurrentTenantId } from '@/lib/tenant';
+import { savePlannedTask, deletePlannedTask } from '@/app/actions/farm';
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<any[]>([]);
@@ -111,77 +112,22 @@ export default function TasksPage() {
         console.warn('Translation fallback:', tErr);
       }
 
-      if (editingTaskId) {
-        // 編集保存（単一タスク更新）
-        const assignment = formData.field_assignments[0] || { field_id: '', worker_ids: [] };
-        const updatePayload: any = {
+      // サーバーアクション経由で安全に保存（RLSバイパス）
+      const result = await savePlannedTask(
+        activeTenantId,
+        {
           work_date: formData.work_date,
           task_title: formData.task_title,
-          work_type: formData.task_title,
           crop_id: formData.crop_id || null,
-          field_id: assignment.field_id || null,
-          worker_id: (assignment.worker_ids && assignment.worker_ids.length > 0) ? assignment.worker_ids[0] : null,
           department_id: formData.department_id || null,
-          ...transPayload
-        };
+          field_assignments: formData.field_assignments,
+          translations: transPayload
+        },
+        editingTaskId
+      );
 
-        const { error } = await supabase
-          .from('work_logs')
-          .update(updatePayload)
-          .eq('id', editingTaskId);
-
-        if (error) throw error;
-      } else {
-        // 新規作成（複数圃場 × 複数担当者の組み合わせを一括展開）
-        const insertData: any[] = [];
-        const assignments = formData.field_assignments && formData.field_assignments.length > 0
-          ? formData.field_assignments
-          : [{ field_id: '', worker_ids: [] }];
-
-        assignments.forEach((assignment: { field_id: string, worker_ids: string[] }) => {
-          const fId = assignment.field_id || null;
-          const wIds = assignment.worker_ids || [];
-
-          if (wIds.length > 0) {
-            wIds.forEach(wId => {
-              insertData.push({
-                user_id: activeTenantId,
-                work_date: formData.work_date,
-                task_title: formData.task_title,
-                work_type: formData.task_title,
-                crop_id: formData.crop_id || null,
-                field_id: fId,
-                worker_id: wId,
-                department_id: formData.department_id || null,
-                status: 'planned',
-                duration_minutes: 0,
-                approval_status: null,
-                ...transPayload
-              });
-            });
-          } else {
-            insertData.push({
-              user_id: activeTenantId,
-              work_date: formData.work_date,
-              task_title: formData.task_title,
-              work_type: formData.task_title,
-              crop_id: formData.crop_id || null,
-              field_id: fId,
-              worker_id: null,
-              department_id: formData.department_id || null,
-              status: 'planned',
-              duration_minutes: 0,
-              approval_status: null,
-              ...transPayload
-            });
-          }
-        });
-
-        const { error } = await supabase
-          .from('work_logs')
-          .insert(insertData);
-        
-        if (error) throw error;
+      if (!result.success) {
+        throw new Error(result.error || 'タスクの保存に失敗しました');
       }
 
       // 一覧を最新化
@@ -198,11 +144,7 @@ export default function TasksPage() {
       });
     } catch (err: any) {
       console.error('Task save error:', err);
-      if (err.code === '42501' || err.status === 401 || err.message?.includes('permission') || err.message?.includes('policy')) {
-        alert('【権限エラー】Supabaseのwork_logsテーブルに対するRLS権限がありません。SQLを実行して権限を開放してください。');
-      } else {
-        alert('保存に失敗しました: ' + (err.message || '通信エラー'));
-      }
+      alert('保存に失敗しました: ' + (err.message || '通信エラー'));
     } finally {
       setIsSaving(false);
     }
@@ -211,8 +153,17 @@ export default function TasksPage() {
   const handleDelete = async (id: string) => {
     if (!window.confirm('本当に削除しますか？')) return;
     try {
-      await supabase.from('work_logs').delete().eq('id', id);
-      setTasks(tasks.filter(t => t.id !== id));
+      const res = await deletePlannedTask(id);
+      if (res.success) {
+        const activeTenantId = tenantId || await getCurrentTenantId();
+        if (activeTenantId) {
+          await fetchTasksData(activeTenantId);
+        } else {
+          setTasks(tasks.filter(t => t.id !== id));
+        }
+      } else {
+        alert('削除に失敗しました: ' + res.error);
+      }
     } catch (err) {
       console.error(err);
     }

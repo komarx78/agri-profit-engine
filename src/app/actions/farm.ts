@@ -474,3 +474,139 @@ export async function getCompanySettings(tenantId: string) {
   }
 }
 
+// 8. タスク（予定）の安全な作成・編集保存（RLSバイパス）
+export async function savePlannedTask(
+  tenantId: string, 
+  taskData: {
+    work_date: string;
+    task_title: string;
+    crop_id?: string | null;
+    department_id?: string | null;
+    field_assignments: Array<{ field_id: string; worker_ids: string[] }>;
+    translations?: any;
+  },
+  editingTaskId?: string | null
+) {
+  try {
+    const supabase = createAdminClient();
+    if (!tenantId) return { success: false, error: 'テナントIDが不正です' };
+
+    const transPayload = taskData.translations || {};
+
+    if (editingTaskId) {
+      // 編集更新
+      const assignment = taskData.field_assignments[0] || { field_id: '', worker_ids: [] };
+      const workerIds = assignment.worker_ids || [];
+      const primaryWorkerId = workerIds.length > 0 ? workerIds[0] : null;
+
+      const updatePayload: any = {
+        work_date: taskData.work_date,
+        task_title: taskData.task_title,
+        work_type: taskData.task_title,
+        crop_id: taskData.crop_id || null,
+        field_id: assignment.field_id || null,
+        worker_id: primaryWorkerId,
+        department_id: taskData.department_id || null,
+        ...transPayload
+      };
+
+      const { error: updateError } = await supabase
+        .from('work_logs')
+        .update(updatePayload)
+        .eq('id', editingTaskId);
+
+      if (updateError) throw updateError;
+
+      // 2人目以降の担当者が追加された場合は追加作成
+      if (workerIds.length > 1) {
+        const additionalInserts = workerIds.slice(1).map(wId => ({
+          user_id: tenantId,
+          work_date: taskData.work_date,
+          task_title: taskData.task_title,
+          work_type: taskData.task_title,
+          crop_id: taskData.crop_id || null,
+          field_id: assignment.field_id || null,
+          worker_id: wId,
+          department_id: taskData.department_id || null,
+          status: 'planned',
+          duration_minutes: 0,
+          approval_status: null,
+          ...transPayload
+        }));
+
+        await supabase.from('work_logs').insert(additionalInserts);
+      }
+
+      return { success: true };
+    } else {
+      // 新規一括作成
+      const insertData: any[] = [];
+      const assignments = taskData.field_assignments && taskData.field_assignments.length > 0
+        ? taskData.field_assignments
+        : [{ field_id: '', worker_ids: [] }];
+
+      assignments.forEach(assignment => {
+        const fId = assignment.field_id || null;
+        const wIds = assignment.worker_ids || [];
+
+        if (wIds.length > 0) {
+          wIds.forEach(wId => {
+            insertData.push({
+              user_id: tenantId,
+              work_date: taskData.work_date,
+              task_title: taskData.task_title,
+              work_type: taskData.task_title,
+              crop_id: taskData.crop_id || null,
+              field_id: fId,
+              worker_id: wId,
+              department_id: taskData.department_id || null,
+              status: 'planned',
+              duration_minutes: 0,
+              approval_status: null,
+              ...transPayload
+            });
+          });
+        } else {
+          insertData.push({
+            user_id: tenantId,
+            work_date: taskData.work_date,
+            task_title: taskData.task_title,
+            work_type: taskData.task_title,
+            crop_id: taskData.crop_id || null,
+            field_id: fId,
+            worker_id: null,
+            department_id: taskData.department_id || null,
+            status: 'planned',
+            duration_minutes: 0,
+            approval_status: null,
+            ...transPayload
+          });
+        }
+      });
+
+      const { error: insertError } = await supabase
+        .from('work_logs')
+        .insert(insertData);
+
+      if (insertError) throw insertError;
+      return { success: true };
+    }
+  } catch (err: any) {
+    console.error('savePlannedTask error:', err);
+    return { success: false, error: err.message || 'タスクの保存に失敗しました' };
+  }
+}
+
+// 9. タスクの削除
+export async function deletePlannedTask(taskId: string) {
+  try {
+    const supabase = createAdminClient();
+    const { error } = await supabase.from('work_logs').delete().eq('id', taskId);
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('deletePlannedTask error:', err);
+    return { success: false, error: err.message || 'タスクの削除に失敗しました' };
+  }
+}
+
