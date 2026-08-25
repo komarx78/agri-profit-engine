@@ -1043,16 +1043,18 @@ export default function PortalPage() {
                   <span className="text-slate-900 font-black truncate max-w-[120px]">{getTranslatedName(currentUser, language)}</span>
                 </div>
 
-                {/* スタッフ切り替えボタン */}
-                <button
-                  type="button"
-                  onClick={() => setShowWorkerGate(true)}
-                  className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-2 sm:px-2.5 sm:py-1.5 rounded-xl border border-blue-200 transition-colors flex items-center gap-1 shrink-0"
-                  title="別の現場スタッフとしてログインし直す"
-                >
-                  <UserCheck className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-                  <span className="hidden lg:inline">{t('switchWorker', language)}</span>
-                </button>
+                {/* スタッフ切り替えボタン（管理者のみ） */}
+                {role === 'admin' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowWorkerGate(true)}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-2 sm:px-2.5 sm:py-1.5 rounded-xl border border-blue-200 transition-colors flex items-center gap-1 shrink-0"
+                    title="別の現場スタッフとしてログインし直す"
+                  >
+                    <UserCheck className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                    <span className="hidden lg:inline">{t('switchWorker', language)}</span>
+                  </button>
+                )}
               </div>
             )}
 
