@@ -17,13 +17,14 @@ export default function HrEmployeesPage() {
   const [formData, setFormData] = useState<any>({
     name: '',
     pin_code: '0000',
+    role: 'worker',
     hourly_wage: 1000,
     type: 'パート',
     join_date: new Date().toISOString().split('T')[0],
     weekly_days: 3,
     attendance_rule_id: '',
-    standard_start_time: '09:00',
-    standard_end_time: '18:00',
+    standard_start_time: '08:00',
+    standard_end_time: '17:00',
     standard_rest_minutes: 60
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -76,11 +77,21 @@ export default function HrEmployeesPage() {
         try {
           const { data: comp } = await supabase
             .from('company_settings')
-            .select('attendance_rules')
+            .select('attendance_rules, default_start_time, default_end_time, default_rest_minutes, auto_round_out_time')
             .eq('user_id', tenantId)
             .maybeSingle();
-          if (comp?.attendance_rules && Array.isArray(comp.attendance_rules)) {
+          if (comp?.attendance_rules && Array.isArray(comp.attendance_rules) && comp.attendance_rules.length > 0) {
             rules = comp.attendance_rules;
+          } else if (comp?.default_start_time) {
+            rules = [{
+              id: 'rule-default',
+              name: '通常勤務 (マスタ標準)',
+              start_time: comp.default_start_time,
+              end_time: comp.default_end_time || '17:00',
+              rest_minutes: comp.default_rest_minutes ?? 60,
+              auto_round_out_time: comp.auto_round_out_time ?? true,
+              is_default: true
+            }];
           }
         } catch (e) {}
       }
@@ -91,9 +102,22 @@ export default function HrEmployeesPage() {
         if (saved) {
           try {
             const p = JSON.parse(saved);
-            if (Array.isArray(p)) rules = p;
+            if (Array.isArray(p) && p.length > 0) rules = p;
           } catch (e) {}
         }
+      }
+
+      // 4. それでも無ければ初期ルール
+      if (rules.length === 0) {
+        rules = [{
+          id: 'rule-1',
+          name: 'ルール1 (通常勤務)',
+          start_time: '08:00',
+          end_time: '17:00',
+          rest_minutes: 60,
+          auto_round_out_time: true,
+          is_default: true
+        }];
       }
 
       setAttendanceRules(rules);
@@ -128,16 +152,28 @@ export default function HrEmployeesPage() {
   const openModal = (worker: any = null) => {
     if (worker) {
       setEditingId(worker.id);
+      // 該当するルールの特定
+      let ruleId = worker.attendance_rule_id || '';
+      if (!ruleId && attendanceRules.length > 0) {
+        const wStart = worker.standard_start_time ? worker.standard_start_time.substring(0, 5) : '';
+        const wEnd = worker.standard_end_time ? worker.standard_end_time.substring(0, 5) : '';
+        const found = attendanceRules.find(r => 
+          r.start_time?.substring(0, 5) === wStart && r.end_time?.substring(0, 5) === wEnd
+        );
+        if (found) ruleId = found.id;
+      }
+
       setFormData({
         name: worker.name || '',
         pin_code: worker.pin_code || '0000',
+        role: worker.role || 'worker',
         hourly_wage: worker.hourly_wage || 0,
         type: worker.type || 'パート',
         join_date: worker.join_date || new Date().toISOString().split('T')[0],
         weekly_days: worker.weekly_days || 3,
-        attendance_rule_id: worker.attendance_rule_id || '',
-        standard_start_time: worker.standard_start_time ? worker.standard_start_time.substring(0, 5) : '09:00',
-        standard_end_time: worker.standard_end_time ? worker.standard_end_time.substring(0, 5) : '18:00',
+        attendance_rule_id: ruleId,
+        standard_start_time: worker.standard_start_time ? worker.standard_start_time.substring(0, 5) : '08:00',
+        standard_end_time: worker.standard_end_time ? worker.standard_end_time.substring(0, 5) : '17:00',
         standard_rest_minutes: worker.standard_rest_minutes ?? 60
       });
     } else {
@@ -147,6 +183,7 @@ export default function HrEmployeesPage() {
       setFormData({
         name: '',
         pin_code: '0000',
+        role: 'worker',
         hourly_wage: 1000,
         type: 'パート',
         join_date: new Date().toISOString().split('T')[0],
@@ -162,14 +199,17 @@ export default function HrEmployeesPage() {
 
   // 勤怠ルール選択時のハンドラ
   const handleSelectRule = (ruleId: string) => {
-    const selected = attendanceRules.find(r => r.id === ruleId);
+    const selected = attendanceRules.find(r => String(r.id) === String(ruleId) || r.name === ruleId);
     if (selected) {
+      const sStart = selected.start_time ? selected.start_time.substring(0, 5) : '08:00';
+      const sEnd = selected.end_time ? selected.end_time.substring(0, 5) : '17:00';
+      const sRest = Number(selected.rest_minutes) ?? 60;
       setFormData((prev: any) => ({
         ...prev,
-        attendance_rule_id: selected.id,
-        standard_start_time: selected.start_time ? selected.start_time.substring(0, 5) : prev.standard_start_time,
-        standard_end_time: selected.end_time ? selected.end_time.substring(0, 5) : prev.standard_end_time,
-        standard_rest_minutes: selected.rest_minutes ?? prev.standard_rest_minutes
+        attendance_rule_id: selected.id || selected.name,
+        standard_start_time: sStart,
+        standard_end_time: sEnd,
+        standard_rest_minutes: sRest
       }));
     } else {
       setFormData((prev: any) => ({
@@ -194,6 +234,7 @@ export default function HrEmployeesPage() {
       const dataToSave = {
         ...formData,
         user_id: tenantId,
+        role: formData.role || 'worker',
         attendance_rule_id: formData.attendance_rule_id || null,
         standard_start_time: formData.standard_start_time.length === 5 ? formData.standard_start_time + ':00' : formData.standard_start_time,
         standard_end_time: formData.standard_end_time.length === 5 ? formData.standard_end_time + ':00' : formData.standard_end_time,
@@ -260,8 +301,8 @@ export default function HrEmployeesPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-sm font-bold text-slate-500">
-                  <th className="p-4">氏名</th>
-                  <th className="p-4">ログイン情報</th>
+                  <th className="p-4">氏名 / 権限</th>
+                  <th className="p-4">基本時給</th>
                   <th className="p-4">雇用形態</th>
                   <th className="p-4">入社日</th>
                   <th className="p-4">就業ルール(定時)</th>
@@ -272,15 +313,29 @@ export default function HrEmployeesPage() {
                 {workers.map((w: any) => (
                   <tr key={w.id} className="hover:bg-slate-50 group transition-colors">
                     <td className="p-4">
-                      <div className="font-bold text-slate-800 text-base">{w.name}</div>
-                      <div className="text-xs text-slate-400 mt-1">時給: ¥{w.hourly_wage?.toLocaleString() || 0}</div>
-                    </td>
-                    <td className="p-4">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded w-fit">
-                          PIN: {w.pin_code || '未設定'}
-                        </span>
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black">
+                          {w.name.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-800 text-base">{w.name}</span>
+                            {w.role === 'admin' ? (
+                              <span className="bg-purple-100 text-purple-700 border border-purple-200 px-2 py-0.5 rounded text-[10px] font-black">
+                                管理者 (admin)
+                              </span>
+                            ) : (
+                              <span className="bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                                一般
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-slate-400 font-mono">PIN: {w.pin_code || '----'}</div>
+                        </div>
                       </div>
+                    </td>
+                    <td className="p-4 font-black text-slate-700">
+                      ¥{w.hourly_wage?.toLocaleString() || 0}
                     </td>
                     <td className="p-4">
                       {w.type === '正社員' ? (
@@ -304,9 +359,9 @@ export default function HrEmployeesPage() {
                             )}
                             <div className="flex items-center gap-1 text-xs text-slate-700">
                               <Clock className="w-3.5 h-3.5 text-slate-400" />
-                              {w.standard_start_time ? w.standard_start_time.substring(0, 5) : '09:00'} 
+                              {w.standard_start_time ? w.standard_start_time.substring(0, 5) : '08:00'} 
                               〜 
-                              {w.standard_end_time ? w.standard_end_time.substring(0, 5) : '18:00'}
+                              {w.standard_end_time ? w.standard_end_time.substring(0, 5) : '17:00'}
                             </div>
                             <div className="text-[11px] text-slate-400">休憩: {w.standard_rest_minutes ?? 60}分</div>
                           </div>
@@ -350,10 +405,10 @@ export default function HrEmployeesPage() {
               {/* 基本情報 */}
               <section>
                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                  <UserIcon /> 基本・ログイン情報
+                  <Users className="w-4 h-4" /> 基本・ログイン情報
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="md:col-span-3">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="md:col-span-2">
                     <label className="block text-xs font-bold text-slate-500 mb-1">氏名 (必須)</label>
                     <input 
                       type="text" 
@@ -363,7 +418,18 @@ export default function HrEmployeesPage() {
                       placeholder="例: 山田 太郎"
                     />
                   </div>
-                  <div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-slate-500 mb-1">権限 (Role)</label>
+                    <select
+                      value={formData.role || 'worker'}
+                      onChange={e => setFormData({...formData, role: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold text-slate-700"
+                    >
+                      <option value="worker">一般作業員 (worker)</option>
+                      <option value="admin">管理者 (admin)</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
                     <label className="block text-xs font-bold text-slate-500 mb-1">現場ログインPIN (4桁)</label>
                     <input 
                       type="text" 
@@ -374,7 +440,7 @@ export default function HrEmployeesPage() {
                       placeholder="0000"
                     />
                   </div>
-                  <div>
+                  <div className="md:col-span-2">
                     <label className="block text-xs font-bold text-slate-500 mb-1">基本時給 (円)</label>
                     <input 
                       type="number" 
