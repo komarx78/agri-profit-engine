@@ -69,6 +69,8 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
   const [publicFertQuery, setPublicFertQuery] = useState('');
   const [publicFertResults, setPublicFertResults] = useState<any[]>([]);
   const [searchingPublicFert, setSearchingPublicFert] = useState(false);
+  const searchRequestIdRef = React.useRef(0);
+  const searchDebounceTimerRef = React.useRef<any>(null);
 
   // 新規自社肥料登録ステート
   const [isAddingNewToMaster, setIsAddingNewToMaster] = useState(false);
@@ -564,36 +566,57 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
     return Array.from(set).filter(k => k.length > 0);
   };
 
-  const handleSearchPublicFertilizer = async (query: string) => {
+  const handleSearchPublicFertilizer = (query: string) => {
     setPublicFertQuery(query);
-    if (!query.trim()) {
+    const cleanQuery = query.trim();
+    if (!cleanQuery) {
       setPublicFertResults([]);
+      setSearchingPublicFert(false);
       return;
     }
-    setSearchingPublicFert(true);
-    try {
-      const keywords = generateSearchKeywords(query);
-      const orConditions = keywords.flatMap(k => [
-        `fertilizer_name.ilike.%${k}%`,
-        `applicant_name.ilike.%${k}%`,
-        `fertilizer_type.ilike.%${k}%`,
-        `registration_no.ilike.%${k}%`
-      ]).join(',');
 
-      const { data, error } = await supabase
-        .from('m_fertilizers')
-        .select('*')
-        .or(orConditions)
-        .limit(30);
-
-      if (!error && data) {
-        setPublicFertResults(data);
-      }
-    } catch (e) {
-      console.error('Search error:', e);
-    } finally {
-      setSearchingPublicFert(false);
+    if (searchDebounceTimerRef.current) {
+      clearTimeout(searchDebounceTimerRef.current);
     }
+
+    setSearchingPublicFert(true);
+
+    searchDebounceTimerRef.current = setTimeout(async () => {
+      const requestId = ++searchRequestIdRef.current;
+      try {
+        // スペース区切りの単語分割（AND検索対応）
+        const words = cleanQuery.split(/[\s　]+/).filter(w => w.length > 0);
+        let queryBuilder = supabase.from('m_fertilizers').select('*');
+
+        for (const word of words) {
+          const keywords = generateSearchKeywords(word);
+          const orConditions = keywords.flatMap(k => [
+            `fertilizer_name.ilike.%${k}%`,
+            `applicant_name.ilike.%${k}%`,
+            `fertilizer_type.ilike.%${k}%`,
+            `registration_no.ilike.%${k}%`
+          ]).join(',');
+          queryBuilder = queryBuilder.or(orConditions);
+        }
+
+        const { data, error } = await queryBuilder.limit(40);
+
+        // 最新のリクエストのみステートに反映（古い遅延レスポンスを破棄）
+        if (requestId === searchRequestIdRef.current) {
+          if (!error && data) {
+            setPublicFertResults(data);
+          } else if (error) {
+            console.warn('Search query warning:', error);
+          }
+          setSearchingPublicFert(false);
+        }
+      } catch (e) {
+        if (requestId === searchRequestIdRef.current) {
+          console.error('Search error:', e);
+          setSearchingPublicFert(false);
+        }
+      }
+    }, 200);
   };
 
   const handleSelectPublicFertilizer = (item: any) => {
