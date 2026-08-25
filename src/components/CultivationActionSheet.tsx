@@ -492,10 +492,14 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
     setPriceAmount('');
 
     if (category === 'fertilizer') {
-      setSelectedFertilizerName(FERTILIZER_PRESETS[0].name);
+      const initialF = farmFertilizers.length > 0 ? farmFertilizers[0] : null;
+      setSelectedFertilizerName(initialF ? initialF.name : 'その他（手入力）');
+      setCustomN(String(initialF?.n_percent ?? initialF?.n_ratio ?? 0));
+      setCustomP(String(initialF?.p_percent ?? initialF?.p_ratio ?? 0));
+      setCustomK(String(initialF?.k_percent ?? initialF?.k_ratio ?? 0));
+      setFertPricePerBag(String(initialF?.default_price || initialF?.unit_price || 0));
       setFertilizerType('元肥');
       setFertBags('3');
-      setFertPricePerBag(String(FERTILIZER_PRESETS[0].pricePerBag));
     } else if (category === 'pesticide') {
       const initialP = farmPesticides.length > 0 ? farmPesticides[0] : null;
       setItemName(initialP ? initialP.name : 'カスケード乳剤');
