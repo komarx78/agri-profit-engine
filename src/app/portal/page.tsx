@@ -1103,78 +1103,43 @@ function PortalContent() {
           </div>
         </div>
 
-        {/* 🌟 統合ナビゲーションバー（管理者モード時のみ表示） */}
+        {/* 🌟 2大ビュー切替スイッチ（管理者モード時のみ表示） */}
         {role === 'admin' && (
-          <div className="bg-slate-50/90 border-t border-slate-200 backdrop-blur-xs">
-            <div className="max-w-7xl mx-auto px-3 sm:px-4 flex items-center gap-2 overflow-x-auto py-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setActivePortalTab('home');
-                  router.push('/portal?tab=home');
-                }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 ${
-                  activePortalTab === 'home'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white'
-                }`}
-              >
-                <LayoutDashboard className="w-4 h-4" />
-                <span>📱 現場ホーム（打刻・タスク）</span>
-              </button>
+          <div className="bg-slate-100/90 border-t border-slate-200 backdrop-blur-xs py-2">
+            <div className="max-w-md mx-auto px-4 flex items-center justify-center">
+              <div className="bg-slate-200/80 p-1 rounded-2xl flex items-center gap-1 w-full border border-slate-300/60 shadow-inner">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePortalTab('home');
+                    router.push('/portal?tab=home');
+                  }}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-black transition-all ${
+                    activePortalTab === 'home'
+                      ? 'bg-blue-600 text-white shadow-sm scale-100'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span>📱 現場ホーム（打刻・タスク）</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setActivePortalTab('cloud');
-                  router.push('/portal?tab=cloud');
-                }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 ${
-                  activePortalTab === 'cloud'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white'
-                }`}
-              >
-                <Building className="w-4 h-4 text-emerald-400" />
-                <span>🏢 CloudPortal（総合管理）</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setActivePortalTab('cultivations');
-                  router.push('/portal?tab=cultivations');
-                }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 ${
-                  activePortalTab === 'cultivations'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white'
-                }`}
-              >
-                <Sprout className="w-4 h-4" />
-                <span>🌾 栽培・防除司令塔</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setActivePortalTab('hr');
-                  router.push('/portal?tab=hr');
-                }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 ${
-                  activePortalTab === 'hr'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white'
-                }`}
-              >
-                <Clock className="w-4 h-4" />
-                <span>⏱ 勤怠・労務管理</span>
-                {pendingApprovals.length > 0 && (
-                  <span className="px-1.5 py-0.2 bg-rose-500 text-white text-[10px] rounded-full">
-                    {pendingApprovals.length}
-                  </span>
-                )}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActivePortalTab('cloud');
+                    router.push('/portal?tab=cloud');
+                  }}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-black transition-all ${
+                    activePortalTab === 'cloud'
+                      ? 'bg-slate-900 text-white shadow-sm scale-100'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <Building className="w-4 h-4 text-emerald-400" />
+                  <span>🏢 CloudPortal（総合管理）</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1182,7 +1147,7 @@ function PortalContent() {
 
       <main className="max-w-7xl mx-auto px-4 py-8">
         
-        {/* 1. 🏢 CloudPortal（総合管理）タブ */}
+        {/* 1. 🏢 CloudPortal（総合管理）ビュー */}
         {role === 'admin' && activePortalTab === 'cloud' && (
           <CloudPortalHub onSwitchToWork={() => {
             setActivePortalTab('home');
@@ -1190,17 +1155,7 @@ function PortalContent() {
           }} />
         )}
 
-        {/* 2. 🌾 栽培・防除司令塔タブ */}
-        {role === 'admin' && activePortalTab === 'cultivations' && (
-          <CultivationsHub initialSubTab="cultivations" />
-        )}
-
-        {/* 3. ⏱ 勤怠・労務管理タブ */}
-        {role === 'admin' && activePortalTab === 'hr' && (
-          <HrManagementHub />
-        )}
-
-        {/* 4. 📱 現場ホーム（一般スタッフモード時、または管理者でhome選択時） */}
+        {/* 2. 📱 現場ホーム（一般スタッフモード時、または管理者でhome選択時） */}
         {(role === 'worker' || activePortalTab === 'home') && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
