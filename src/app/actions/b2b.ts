@@ -51,6 +51,76 @@ export async function createB2BCustomer(data: any, tenantId?: string | null) {
   }
 }
 
+export async function getB2BPortalData(tokenOrId: string) {
+  try {
+    const adminClient = getAdminSupabase();
+    if (!tokenOrId) return { success: false, error: 'Token is required' };
+
+    // 1. order_token で検索
+    let { data: custData } = await adminClient
+      .from('b2b_customers')
+      .select('*')
+      .eq('order_token', tokenOrId)
+      .maybeSingle();
+
+    // 2. もし見つからず、かつ UUID 形式なら id で検索
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tokenOrId);
+    if (!custData && isUuid) {
+      const res = await adminClient
+        .from('b2b_customers')
+        .select('*')
+        .eq('id', tokenOrId)
+        .maybeSingle();
+      custData = res.data;
+    }
+
+    if (!custData) {
+      return { success: false, error: 'Customer not found' };
+    }
+
+    const farmOwnerId = custData.user_id;
+
+    // 農園の会社設定を取得
+    let companyName = '当農園';
+    if (farmOwnerId) {
+      const { data: companyData } = await adminClient
+        .from('company_settings')
+        .select('company_name')
+        .eq('user_id', farmOwnerId)
+        .maybeSingle();
+      if (companyData?.company_name) {
+        companyName = companyData.company_name;
+      }
+    }
+
+    // 該当農園の作目一覧を取得
+    let cropQuery = adminClient.from('crops').select('*');
+    if (farmOwnerId) {
+      cropQuery = cropQuery.eq('user_id', farmOwnerId);
+    }
+    const { data: cropsData } = await cropQuery;
+
+    // 過去の請求書を取得
+    const { data: invoicesData } = await adminClient
+      .from('b2b_invoices')
+      .select('*')
+      .eq('customer_id', custData.id)
+      .order('target_month', { ascending: false });
+
+    return {
+      success: true,
+      customer: {
+        ...custData,
+        company_name: companyName
+      },
+      crops: cropsData || [],
+      invoices: invoicesData || []
+    };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
 // ---------------------------
 // Orders
 // ---------------------------

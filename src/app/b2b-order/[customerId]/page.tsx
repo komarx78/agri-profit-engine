@@ -3,8 +3,7 @@
 import React, { useState, useEffect, use } from 'react';
 import { Truck, CheckCircle2, ShoppingCart, Plus, Minus, AlertCircle, FileText } from 'lucide-react';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
-import { createB2BOrder } from '@/app/actions/b2b';
+import { getB2BPortalData, createB2BOrder } from '@/app/actions/b2b';
 
 export default function B2BClientOrderPage({ params }: { params: Promise<{ customerId: string }> }) {
   const unwrappedParams = use(params);
@@ -14,9 +13,6 @@ export default function B2BClientOrderPage({ params }: { params: Promise<{ custo
   const [crops, setCrops] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // orderToken をベースにする想定だが、ここでは便宜的に customerId または token を使う
-  // 今回のモック実装では、URLパラメータを token として検索する
   
   const [cart, setCart] = useState<{[key: string]: number}>({});
   const [deliveryDate, setDeliveryDate] = useState(() => {
@@ -30,45 +26,18 @@ export default function B2BClientOrderPage({ params }: { params: Promise<{ custo
 
   useEffect(() => {
     async function load() {
-      // order_token または id で顧客を検索
-      const { data: custData } = await supabase
-        .from('b2b_customers')
-        .select('*')
-        .or(`order_token.eq.${customerId},id.eq.${customerId}`)
-        .maybeSingle();
-        
-      if (custData) {
-        const farmOwnerId = custData.user_id;
-
-        // 農園の会社設定を取得
-        let compQuery = supabase.from('company_settings').select('company_name');
-        if (farmOwnerId) {
-          compQuery = compQuery.eq('user_id', farmOwnerId);
+      try {
+        const res = await getB2BPortalData(customerId);
+        if (res.success && res.customer) {
+          setCustomer(res.customer);
+          setCrops(res.crops || []);
+          setInvoices(res.invoices || []);
         }
-        const { data: companyData } = await compQuery.maybeSingle();
-        
-        setCustomer({
-          ...custData,
-          company_name: companyData?.company_name || '当農園'
-        });
-
-        // 該当農園の作目一覧を取得
-        let cropQuery = supabase.from('crops').select('*');
-        if (farmOwnerId) {
-          cropQuery = cropQuery.eq('user_id', farmOwnerId);
-        }
-        const { data: cropData } = await cropQuery;
-        if (cropData) setCrops(cropData);
-
-        // 過去の請求書を取得
-        const { data: invData } = await supabase
-          .from('b2b_invoices')
-          .select('*')
-          .eq('customer_id', custData.id)
-          .order('target_month', { ascending: false });
-        if (invData) setInvoices(invData);
+      } catch (err) {
+        console.error('Portal load error:', err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     load();
   }, [customerId]);
@@ -111,7 +80,7 @@ export default function B2BClientOrderPage({ params }: { params: Promise<{ custo
       total_price: 0
     }));
 
-    const res = await createB2BOrder(orderData, orderItems);
+    const res = await createB2BOrder(orderData, orderItems, customer.user_id);
     
     setIsSubmitting(false);
     if (res.success) {
