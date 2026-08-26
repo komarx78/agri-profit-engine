@@ -129,15 +129,26 @@ function PortalContent() {
     }));
   }, [trimRangesInput]);
 
+  // 言語切り替えハンドラー
+  const handleLanguageChange = (newLang: LanguageCode) => {
+    setLanguage(newLang);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('agri_language', newLang);
+    }
+  };
+
   // 自由入力タスクタイトルのリアルタイム自動翻訳
   useEffect(() => {
-    if (language === 'ja' || tasks.length === 0) return;
+    if (language === 'ja' || tasks.length === 0) {
+      return;
+    }
 
+    let isMounted = true;
     const translateTitles = async () => {
       const untranslated: string[] = [];
       tasks.forEach(t => {
         const title = t.task_title || t.work_type;
-        if (title && !dynamicTranslations[title]) {
+        if (title) {
           untranslated.push(title);
         }
       });
@@ -145,7 +156,7 @@ function PortalContent() {
       if (untranslated.length === 0) return;
 
       const uniqueList = Array.from(new Set(untranslated));
-      const newMap = { ...dynamicTranslations };
+      const newMap: Record<string, string> = {};
 
       await Promise.all(
         uniqueList.map(async (rawText) => {
@@ -158,10 +169,16 @@ function PortalContent() {
         })
       );
 
-      setDynamicTranslations(newMap);
+      if (isMounted) {
+        setDynamicTranslations(prev => ({ ...prev, ...newMap }));
+      }
     };
 
     translateTitles();
+
+    return () => {
+      isMounted = false;
+    };
   }, [language, tasks]);
 
   // 有給・休暇関連ステート
@@ -182,6 +199,14 @@ function PortalContent() {
   useEffect(() => {
     const init = async () => {
       try {
+        // 保存された言語設定の復元
+        if (typeof window !== 'undefined') {
+          const savedLang = localStorage.getItem('agri_language') as LanguageCode;
+          if (savedLang && ['ja', 'en', 'vi', 'id', 'zh', 'si', 'km'].includes(savedLang)) {
+            setLanguage(savedLang);
+          }
+        }
+
         const { data: { session } } = await supabase.auth.getSession();
         
         let ownerId = '';

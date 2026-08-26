@@ -197,7 +197,7 @@ export default function WorkEntryPage() {
     }
 
     const savedUser = localStorage.getItem('agri_current_worker');
-    const savedLang = localStorage.getItem('agri_lang') || localStorage.getItem('agri_lang_sales') as LanguageCode;
+    const savedLang = (localStorage.getItem('agri_language') || localStorage.getItem('agri_lang') || localStorage.getItem('agri_lang_sales')) as LanguageCode;
     if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
       setLanguage(savedLang as LanguageCode);
     }
