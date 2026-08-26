@@ -12,7 +12,8 @@ import {
   PackageOpen, Sprout, Smartphone, Receipt, TrendingUp, Pointer, Banknote,
   FileSpreadsheet, Store, Calculator, Database, Camera, ExternalLink, HelpCircle,
   Truck, Scissors, Sliders, Check, Languages, Wand2, Edit3, Save, RotateCcw,
-  FlaskConical, History, CheckSquare, BarChart3, Users, Settings, Building
+  FlaskConical, History, CheckSquare, BarChart3, Users, Settings, Building,
+  ChevronDown, ChevronUp, Eye
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import VideoPlayerWithSubtitles, { Narration } from '@/components/VideoPlayerWithSubtitles';
@@ -102,6 +103,7 @@ function PortalContent() {
   const [trimEndInput, setTrimEndInput] = useState<string>('');
   const [studioSeekTime, setStudioSeekTime] = useState<number | null>(null);
   const [studioPlayTrigger, setStudioPlayTrigger] = useState<number>(0);
+  const [expandedNarrations, setExpandedNarrations] = useState<Record<number, boolean>>({});
   
   // テロップ作成フォーム
   const [telopStartSec, setTelopStartSec] = useState<string>('0');
@@ -515,6 +517,7 @@ function PortalContent() {
     setTrimEndInput(manual.trim_end ? String(manual.trim_end) : '');
     setStudioSeekTime(manual.trim_start ? Number(manual.trim_start) : 0);
     setStudioPlayTrigger(0);
+    setExpandedNarrations({});
     setTelopStartSec('0');
     setTelopEndSec('3');
     setTelopJa('');
@@ -2897,65 +2900,200 @@ function PortalContent() {
 
               {/* タイムライン一覧 */}
               <div className="bg-slate-900 rounded-3xl p-5 border border-slate-800 shadow-xl flex-1 flex flex-col min-h-[300px]">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-black text-white flex items-center gap-2">
-                    <Sliders className="w-4 h-4 text-emerald-400" />
-                    タイムラインテロップ一覧
-                  </h2>
-                  <span className="text-xs font-bold text-slate-400">
-                    全 {editingNarrations.length} 件
-                  </span>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-black text-white flex items-center gap-2">
+                      <Sliders className="w-4 h-4 text-emerald-400" />
+                      タイムラインテロップ一覧
+                    </h2>
+                    <span className="text-[11px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700 font-mono">
+                      全 {editingNarrations.length} 件
+                    </span>
+                  </div>
+
+                  {editingNarrations.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allOpen = Object.keys(expandedNarrations).length === editingNarrations.length && Object.values(expandedNarrations).every(Boolean);
+                        if (allOpen) {
+                          setExpandedNarrations({});
+                        } else {
+                          const newMap: Record<number, boolean> = {};
+                          editingNarrations.forEach((_, i) => { newMap[i] = true; });
+                          setExpandedNarrations(newMap);
+                        }
+                      }}
+                      className="text-[10px] font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded-xl border border-slate-700 transition-colors flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs"
+                    >
+                      <Globe2 className="w-3 h-3 text-purple-400" />
+                      <span>
+                        {Object.keys(expandedNarrations).length === editingNarrations.length && Object.values(expandedNarrations).every(Boolean)
+                          ? '全翻訳を閉じる'
+                          : '全翻訳を一括展開'}
+                      </span>
+                    </button>
+                  )}
                 </div>
 
-                <div className="flex-1 overflow-y-auto space-y-2.5 max-h-[350px] pr-1">
+                <div className="flex-1 overflow-y-auto space-y-3 max-h-[420px] pr-1">
                   {isLoadingNarrations ? (
                     <div className="py-12 text-center text-slate-500">
                       <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-rose-500" />
                       <span>テロップデータを読み込み中...</span>
                     </div>
                   ) : editingNarrations.length === 0 ? (
-                    <div className="py-12 text-center text-slate-500 text-xs">
+                    <div className="py-12 text-center text-slate-500 text-xs leading-relaxed">
                       まだテロップが登録されていません。<br/>
-                      上のフォームから秒数を指定して追加してください。
+                      上のフォームから秒数を指定し、AI翻訳または手入力で追加してください。
                     </div>
                   ) : (
-                    editingNarrations.map((n, idx) => (
-                      <div
-                        key={idx}
-                        className={`p-3 rounded-2xl border transition-all ${
-                          studioPlaybackTime >= n.start_time && studioPlaybackTime <= n.end_time
-                            ? 'bg-rose-500/20 border-rose-500/50 shadow-md'
-                            : 'bg-slate-800/80 border-slate-700/80 hover:border-slate-600'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-[10px] font-black font-mono px-2 py-0.5 bg-slate-900 text-emerald-400 rounded-md border border-slate-700">
-                            ⏱️ {n.start_time.toFixed(1)}s 〜 {n.end_time.toFixed(1)}s
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteNarrationFromStudio(idx)}
-                            className="p-1 text-slate-400 hover:text-rose-400 transition-colors"
-                            title="テロップを削除"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        <p className="text-xs font-bold text-white mb-1">
-                          {n.script_ja}
-                        </p>
-                        {(n.script_vi || n.translations?.vi || n.script_en || n.translations?.en) && (
-                          <div className="text-[10px] text-slate-400 space-y-0.5 border-t border-slate-700/50 pt-1 mt-1">
-                            {(n.script_vi || n.translations?.vi) && (
-                              <p className="truncate">🇻🇳 {n.script_vi || n.translations?.vi}</p>
-                            )}
-                            {(n.script_en || n.translations?.en) && (
-                              <p className="truncate">🇺🇸 {n.script_en || n.translations?.en}</p>
+                    editingNarrations.map((n, idx) => {
+                      const isExpanded = !!expandedNarrations[idx];
+                      const isCurrentTime = studioPlaybackTime >= n.start_time && studioPlaybackTime <= n.end_time;
+
+                      // 各言語のテキストを取得する関数
+                      const getLangText = (code: string): string => {
+                        if (n.translations && n.translations[code]) return n.translations[code];
+                        if (code === 'ja') return n.script_ja || '';
+                        if (code === 'en') return n.script_en || '';
+                        if (code === 'vi') return n.script_vi || '';
+                        if (code === 'id') return n.script_id || '';
+                        if (code === 'zh') return n.script_zh || '';
+                        if (code === 'si') return n.script_si || '';
+                        if (code === 'km') return n.script_km || '';
+                        return '';
+                      };
+
+                      // 登録済み翻訳言語の数をカウント (日本語除く)
+                      const targetLangs = LANGUAGES.filter(l => l.code !== 'ja');
+                      const translatedLangs = targetLangs.filter(l => Boolean(getLangText(l.code)));
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`p-3.5 rounded-2xl border transition-all ${
+                            isCurrentTime
+                              ? 'bg-rose-500/15 border-rose-500/60 shadow-lg shadow-rose-950/40 ring-1 ring-rose-500/40'
+                              : 'bg-slate-800/85 border-slate-700/80 hover:border-slate-600 shadow-sm'
+                          }`}
+                        >
+                          {/* 上部ヘッダー */}
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[11px] font-black font-mono px-2 py-0.5 bg-slate-950 text-emerald-400 rounded-lg border border-slate-700 shadow-inner">
+                                ⏱️ {n.start_time.toFixed(1)}s 〜 {n.end_time.toFixed(1)}s
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setStudioSeekTime(n.start_time);
+                                  setStudioPlayTrigger(Date.now());
+                                }}
+                                className="px-2 py-0.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-[10px] font-bold rounded-lg border border-rose-500/30 flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
+                                title="このテロップの秒数から動画をプレビュー再生します"
+                              >
+                                <Play className="w-2.5 h-2.5 fill-rose-300" />
+                                <span>再生</span>
+                              </button>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteNarrationFromStudio(idx)}
+                              className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                              title="テロップを削除"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          {/* 日本語テキスト */}
+                          <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-700/60 mb-2">
+                            <div className="flex items-center gap-1.5 text-[10px] font-black text-rose-400 mb-1">
+                              <span>🇯🇵 日本語（マスター）</span>
+                            </div>
+                            <p className="text-xs font-bold text-white leading-relaxed">
+                              {n.script_ja}
+                            </p>
+                          </div>
+
+                          {/* 翻訳展開ボタン / 翻訳状況バー */}
+                          <div className="pt-1 border-t border-slate-700/50">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedNarrations(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                              className={`w-full py-1.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
+                                isExpanded
+                                  ? 'bg-purple-900/40 text-purple-200 border border-purple-500/40'
+                                  : 'bg-slate-900/60 hover:bg-slate-900 text-slate-300 hover:text-white border border-slate-700/60'
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <Globe2 className="w-3.5 h-3.5 text-purple-400" />
+                                <span className="text-[11px]">多言語翻訳:</span>
+                                <span className="flex items-center gap-1 text-[11px]">
+                                  {translatedLangs.length > 0 ? (
+                                    translatedLangs.map(l => (
+                                      <span key={l.code} title={`${l.name}: ${getLangText(l.code)}`}>
+                                        {l.flag}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span className="text-slate-500 text-[10px]">未翻訳</span>
+                                  )}
+                                </span>
+                                <span className="text-[10px] text-purple-300 font-mono font-normal">
+                                  ({translatedLangs.length}/{targetLangs.length}言語)
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1 text-[11px] text-purple-300">
+                                <span>{isExpanded ? '閉じる' : '全言語を確認'}</span>
+                                {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                              </div>
+                            </button>
+
+                            {/* 展開時の全翻訳一覧 */}
+                            {isExpanded && (
+                              <div className="mt-2 space-y-2 p-2.5 bg-slate-950/80 rounded-xl border border-purple-500/30 text-xs animate-in fade-in duration-150">
+                                {targetLangs.map(l => {
+                                  const text = getLangText(l.code);
+                                  return (
+                                    <div key={l.code} className="p-2 bg-slate-900/90 rounded-lg border border-slate-800 space-y-1">
+                                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
+                                        <span className="flex items-center gap-1">
+                                          <span>{l.flag}</span>
+                                          <span className="text-slate-200">{l.name}</span>
+                                          <span className="uppercase text-[9px] text-slate-500 font-mono">({l.code})</span>
+                                        </span>
+                                        {text ? (
+                                          <span className="text-emerald-400 text-[10px] font-bold flex items-center gap-0.5">
+                                            <Check className="w-3 h-3" /> 翻訳済
+                                          </span>
+                                        ) : (
+                                          <span className="text-slate-500 text-[10px]">未設定</span>
+                                        )}
+                                      </div>
+                                      {text ? (
+                                        <p className="text-slate-100 text-[11px] leading-relaxed font-medium pl-1.5 border-l-2 border-purple-500/50">
+                                          {text}
+                                        </p>
+                                      ) : (
+                                        <p className="text-slate-500 italic text-[10px] pl-1.5">
+                                          (この言語の翻訳はまだ生成されていません)
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             )}
                           </div>
-                        )}
-                      </div>
-                    ))
+
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </div>
