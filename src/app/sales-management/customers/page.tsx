@@ -221,16 +221,24 @@ export default function CustomersPage() {
                       </div>
                     </td>
                     <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-200">
-                          {c.closing_day === 31 ? '月末' : `${c.closing_day}日`}締め
-                        </span>
-                        <span className="text-slate-400 font-bold text-sm">➔</span>
-                        <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg text-xs font-bold border border-blue-100">
-                          {c.payment_month === 0 ? '当月' : c.payment_month === 1 ? '翌月' : '翌々月'}
-                          {c.payment_day === 31 ? '末' : `${c.payment_day}日`}払い
-                        </span>
-                      </div>
+                      {c.payment_day === 0 || c.closing_day === 0 ? (
+                        <div className="flex items-center gap-2">
+                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-lg text-xs font-black flex items-center gap-1">
+                            <span>💵</span> 当日現金払い（都度）
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-200">
+                            {c.closing_day === 31 ? '月末' : `${c.closing_day}日`}締め
+                          </span>
+                          <span className="text-slate-400 font-bold text-sm">➔</span>
+                          <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg text-xs font-bold border border-blue-100">
+                            {c.payment_month === 0 ? '当月' : c.payment_month === 1 ? '翌月' : '翌々月'}
+                            {c.payment_day === 31 ? '末' : `${c.payment_day}日`}払い
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td className="p-4 text-center">
                       {c.order_token ? (
@@ -326,50 +334,116 @@ export default function CustomersPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-black text-slate-700 mb-1.5">締め日</label>
-                  <select 
-                    value={formData.closing_day}
-                    onChange={e => setFormData({...formData, closing_day: Number(e.target.value)})}
-                    className="w-full border border-slate-300 rounded-xl px-4 py-2.5 font-bold text-sm text-slate-800 focus:outline-none focus:border-blue-500"
+              {/* 決済・支払条件 */}
+              <div className="space-y-3 pt-1">
+                <label className="block text-xs font-black text-slate-700">決済方法・支払条件</label>
+                
+                {/* 決済タイプ切替タブ */}
+                <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData({
+                        ...formData,
+                        closing_day: 31,
+                        payment_month: 1,
+                        payment_day: 31
+                      });
+                    }}
+                    className={`py-2 text-xs font-black rounded-lg transition-all ${
+                      formData.payment_day !== 0 && formData.closing_day !== 0
+                        ? 'bg-white text-blue-700 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
                   >
-                    <option value={5}>5日締め</option>
-                    <option value={10}>10日締め</option>
-                    <option value={15}>15日締め</option>
-                    <option value={20}>20日締め</option>
-                    <option value={25}>25日締め</option>
-                    <option value={31}>月末締め</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-black text-slate-700 mb-1.5">支払日 (月)</label>
-                  <select 
-                    value={formData.payment_month}
-                    onChange={e => setFormData({...formData, payment_month: Number(e.target.value)})}
-                    className="w-full border border-slate-300 rounded-xl px-4 py-2.5 font-bold text-sm text-slate-800 focus:outline-none focus:border-blue-500"
+                    🏢 掛売り・締め請求
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData({
+                        ...formData,
+                        closing_day: 0,
+                        payment_month: 0,
+                        payment_day: 0
+                      });
+                    }}
+                    className={`py-2 text-xs font-black rounded-lg transition-all ${
+                      formData.payment_day === 0 || formData.closing_day === 0
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
                   >
-                    <option value={0}>当月</option>
-                    <option value={1}>翌月</option>
-                    <option value={2}>翌々月</option>
-                  </select>
+                    💵 当日現金払い
+                  </button>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-black text-slate-700 mb-1.5">支払日 (日)</label>
-                <select 
-                  value={formData.payment_day}
-                  onChange={e => setFormData({...formData, payment_day: Number(e.target.value)})}
-                  className="w-full border border-slate-300 rounded-xl px-4 py-2.5 font-bold text-sm text-slate-800 focus:outline-none focus:border-blue-500"
-                >
-                  <option value={5}>5日払い</option>
-                  <option value={10}>10日払い</option>
-                  <option value={15}>15日払い</option>
-                  <option value={20}>20日払い</option>
-                  <option value={25}>25日払い</option>
-                  <option value={31}>月末払い</option>
-                </select>
+                {formData.payment_day === 0 || formData.closing_day === 0 ? (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-800 space-y-1">
+                    <p className="font-black flex items-center gap-1">
+                      <span>✅</span> 当日現金払い（都度決済）が選択されています
+                    </p>
+                    <p className="text-[11px] text-emerald-600">
+                      納品時・販売時にその場で現金決済を行うため、締め日や月次請求書の発行は不要です。
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">締め日</label>
+                        <select 
+                          value={formData.closing_day}
+                          onChange={e => setFormData({...formData, closing_day: Number(e.target.value)})}
+                          className="w-full border border-slate-300 rounded-xl px-4 py-2.5 font-bold text-sm text-slate-800 focus:outline-none focus:border-blue-500"
+                        >
+                          <option value={5}>5日締め</option>
+                          <option value={10}>10日締め</option>
+                          <option value={15}>15日締め</option>
+                          <option value={20}>20日締め</option>
+                          <option value={25}>25日締め</option>
+                          <option value={31}>月末締め</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">支払日 (月)</label>
+                        <select 
+                          value={formData.payment_month}
+                          onChange={e => setFormData({...formData, payment_month: Number(e.target.value)})}
+                          className="w-full border border-slate-300 rounded-xl px-4 py-2.5 font-bold text-sm text-slate-800 focus:outline-none focus:border-blue-500"
+                        >
+                          <option value={0}>当月</option>
+                          <option value={1}>翌月</option>
+                          <option value={2}>翌々月</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">支払日 (日)</label>
+                      <select 
+                        value={formData.payment_day}
+                        onChange={e => {
+                          const val = Number(e.target.value);
+                          if (val === 0) {
+                            setFormData({ ...formData, payment_day: 0, closing_day: 0, payment_month: 0 });
+                          } else {
+                            setFormData({ ...formData, payment_day: val });
+                          }
+                        }}
+                        className="w-full border border-slate-300 rounded-xl px-4 py-2.5 font-bold text-sm text-slate-800 focus:outline-none focus:border-blue-500"
+                      >
+                        <option value={0}>💵 当日現金払い（即時）</option>
+                        <option value={5}>5日払い</option>
+                        <option value={10}>10日払い</option>
+                        <option value={15}>15日払い</option>
+                        <option value={20}>20日払い</option>
+                        <option value={25}>25日払い</option>
+                        <option value={31}>月末払い</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="pt-4 flex gap-3">
