@@ -1494,15 +1494,14 @@ export default function WorkEntryPage() {
             
             {/* 上段：注文カレンダー ＆ 配達・収穫予定 */}
             {(() => {
-              // 向こう7日間の日付リストを生成
-              const daysList = Array.from({ length: 7 }).map((_, idx) => {
+              // 週間フル7日間の日付リストを生成 (モーダル用)
+              const fullWeekDaysList = Array.from({ length: 7 }).map((_, idx) => {
                 const d = new Date();
                 d.setDate(d.getDate() + idx);
                 const dateStr = d.toISOString().split('T')[0];
                 const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
                 const label = idx === 0 ? '今日' : idx === 1 ? '明日' : idx === 2 ? '明後日' : `${d.getMonth() + 1}/${d.getDate()}`;
                 
-                // 該当日の未納品注文字数
                 const dayPendingOrders = allB2bOrders.filter(o => o.delivery_date === dateStr && o.status === 'pending');
                 const dayAllOrders = allB2bOrders.filter(o => o.delivery_date === dateStr);
                 
@@ -1517,8 +1516,11 @@ export default function WorkEntryPage() {
                 };
               });
 
+              // メイン画面の直近4日間ピル (スクロールなしでピタッと美しく収める)
+              const topFourDays = fullWeekDaysList.slice(0, 4);
+
               // 現在選択中の日付の注文データ
-              const currentSelectedDay = daysList.find(d => d.dateStr === selectedDeliveryDate) || daysList[0];
+              const currentSelectedDay = fullWeekDaysList.find(d => d.dateStr === selectedDeliveryDate) || fullWeekDaysList[0];
               const selectedOrders = allB2bOrders.filter(o => o.delivery_date === selectedDeliveryDate);
               
               // 選択日の作目別合計収穫量（サマリー）を計算
@@ -1541,41 +1543,41 @@ export default function WorkEntryPage() {
               });
 
               return (
-                <section className="bg-emerald-900/40 p-5 rounded-3xl border border-emerald-800/40 shadow-sm relative overflow-hidden space-y-4">
+                <section className="bg-emerald-900/40 p-4 sm:p-5 rounded-3xl border border-emerald-800/40 shadow-sm relative overflow-hidden space-y-4">
                   {/* ヘッダー */}
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <div>
-                      <h2 className="text-base font-black text-emerald-300 flex items-center gap-2">
-                        <Calendar className="w-5 h-5 text-emerald-400" />
-                        <span>📅 配達・収穫予定（注文カレンダー）</span>
+                      <h2 className="text-sm sm:text-base font-black text-emerald-300 flex items-center gap-2">
+                        <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
+                        <span>📅 配達・収穫予定</span>
                       </h2>
-                      <p className="text-[11px] font-bold text-emerald-300/70 mt-0.5">
-                        明日・明後日以降の注文量や収穫目標を確認できます
+                      <p className="text-[10px] sm:text-[11px] font-bold text-emerald-300/70 mt-0.5">
+                        明日・明後日の注文量と収穫目標
                       </p>
                     </div>
 
                     <button
                       type="button"
                       onClick={() => setShowWeekCalendarModal(true)}
-                      className="px-3 py-1.5 bg-emerald-700/80 hover:bg-emerald-600 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-xs shrink-0"
+                      className="px-3 py-2 bg-emerald-700/90 hover:bg-emerald-600 active:scale-95 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-xs shrink-0 border border-emerald-600/50"
                     >
                       <span>📊 週間まとめ</span>
                     </button>
                   </div>
 
-                  {/* 7日間クイック日付スライダー（横スクロール対応） */}
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 no-scrollbar">
-                    {daysList.map(item => {
+                  {/* 直近4日間ピル（スクロールバーなし！4等分でスッキリ整然） */}
+                  <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+                    {topFourDays.map(item => {
                       const isSelected = selectedDeliveryDate === item.dateStr;
                       return (
                         <button
                           key={item.dateStr}
                           type="button"
                           onClick={() => setSelectedDeliveryDate(item.dateStr)}
-                          className={`flex-1 min-w-[76px] py-2 px-2 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer relative ${
+                          className={`py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer relative ${
                             isSelected
                               ? 'bg-emerald-500 text-emerald-950 shadow-md font-black ring-2 ring-emerald-300'
-                              : 'bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-200/90 border border-emerald-800/50'
+                              : 'bg-emerald-950/70 hover:bg-emerald-900/70 text-emerald-200/90 border border-emerald-800/60'
                           }`}
                         >
                           <span className={`text-[10px] font-black ${isSelected ? 'text-emerald-950' : 'text-emerald-400'}`}>
@@ -1585,7 +1587,7 @@ export default function WorkEntryPage() {
                             {item.monthDate} ({item.dayOfWeek})
                           </span>
                           {item.pendingCount > 0 ? (
-                            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black mt-0.5 ${
+                            <span className={`text-[10px] px-2 py-0.2 rounded-full font-black mt-0.5 ${
                               isSelected ? 'bg-emerald-950 text-emerald-300' : 'bg-rose-500 text-white shadow-xs'
                             }`}>
                               {item.pendingCount}件
@@ -1709,7 +1711,7 @@ export default function WorkEntryPage() {
                         {/* カレンダー本体（7列グリッド / モバイル横スクロール） */}
                         <div className="p-3 sm:p-5 overflow-y-auto overflow-x-auto flex-1 custom-scrollbar">
                           <div className="min-w-[720px] grid grid-cols-7 gap-2.5">
-                            {daysList.map((item, idx) => {
+                            {fullWeekDaysList.map((item, idx) => {
                               // 日ごとの作目別合計
                               const daySum: Record<string, { name: string; quantity: number; unit: string; rawCrop: any }> = {};
                               item.orders.forEach(o => {
