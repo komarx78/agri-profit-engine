@@ -18,12 +18,18 @@ export interface Narration {
   translations?: Record<string, string>;
 }
 
+export interface TrimRange {
+  start: number;
+  end?: number | null;
+}
+
 interface VideoPlayerProps {
   videoUrl: string;
   narrations?: Narration[];
   language?: LanguageCode | string;
   trimStart?: number;
   trimEnd?: number;
+  trimRanges?: TrimRange[];
   seekToTime?: number | null;
   playTrigger?: number;
   onTimeUpdate?: (time: number) => void;
@@ -38,6 +44,7 @@ export default function VideoPlayerWithSubtitles({
   language: initialLanguage = 'ja', 
   trimStart = 0,
   trimEnd,
+  trimRanges,
   seekToTime,
   playTrigger,
   onTimeUpdate,
@@ -71,6 +78,22 @@ export default function VideoPlayerWithSubtitles({
     }
   }, [videoUrl]);
 
+  // 有効な再生区間リストを正規化
+  const getNormalizedRanges = (): TrimRange[] => {
+    if (trimRanges && trimRanges.length > 0) {
+      return [...trimRanges]
+        .map(r => ({
+          start: Number(r.start) || 0,
+          end: r.end !== undefined && r.end !== null && String(r.end).trim() !== '' ? Number(r.end) : undefined
+        }))
+        .sort((a, b) => a.start - b.start);
+    }
+    if ((trimStart && trimStart > 0) || (trimEnd && trimEnd > 0)) {
+      return [{ start: Number(trimStart) || 0, end: trimEnd ? Number(trimEnd) : undefined }];
+    }
+    return [];
+  };
+
   // 指定秒数への動的シーク
   useEffect(() => {
     if (seekToTime !== undefined && seekToTime !== null && videoRef.current) {
@@ -79,11 +102,12 @@ export default function VideoPlayerWithSubtitles({
     }
   }, [seekToTime]);
 
-  // テスト再生トリガー（trimStartから自動再生開始）
+  // テスト再生トリガー（第1区間のstartから自動連続再生開始）
   useEffect(() => {
     if (playTrigger !== undefined && playTrigger > 0 && videoRef.current) {
-      const start = Math.max(0, trimStart || 0);
-      videoRef.current.currentTime = start;
+      const ranges = getNormalizedRanges();
+      const firstStart = ranges.length > 0 ? ranges[0].start : (trimStart || 0);
+      videoRef.current.currentTime = Math.max(0, firstStart);
       setIsLoading(true);
       videoRef.current.play().then(() => {
         setIsPlaying(true);
@@ -93,14 +117,17 @@ export default function VideoPlayerWithSubtitles({
         setIsLoading(false);
       });
     }
-  }, [playTrigger, trimStart]);
+  }, [playTrigger, trimRanges, trimStart]);
 
   // メタデータロード完了時の処理
   const handleLoadedMetadata = () => {
     setIsLoading(false);
     setHasError(false);
     if (videoRef.current) {
-      if (trimStart > 0) {
+      const ranges = getNormalizedRanges();
+      if (ranges.length > 0 && ranges[0].start > 0) {
+        videoRef.current.currentTime = ranges[0].start;
+      } else if (trimStart > 0) {
         videoRef.current.currentTime = trimStart;
       }
       if (autoPlay) {
@@ -141,8 +168,36 @@ export default function VideoPlayerWithSubtitles({
       onTimeUpdate(time);
     }
 
-    // トリミング制御（末尾を超えたら先頭へ戻すか停止）
-    if (trimEnd && trimEnd > 0 && time >= trimEnd) {
+    // ✂️ 複数区間（マルチセグメント）ジャンプカット制御
+    const ranges = getNormalizedRanges();
+    if (ranges.length > 0) {
+      // 現在時刻がどの区間に属しているかを判定
+      const currentRangeIdx = ranges.findIndex(r => {
+        const end = r.end && r.end > 0 ? r.end : Infinity;
+        return time >= r.start - 0.05 && time < end;
+      });
+
+      if (currentRangeIdx === -1) {
+        // 現在時刻がどの再生区間にも属していない（スキップ区間に突入）
+        if (time < ranges[0].start) {
+          // 第1区間の開始秒より前なら第1区間へシーク
+          videoRef.current.currentTime = ranges[0].start;
+        } else {
+          // 次の再生区間を探す
+          const nextRange = ranges.find(r => r.start > time);
+          if (nextRange) {
+            // ⏩ 次の有効区間の開始秒へ瞬時にジャンプカット！
+            videoRef.current.currentTime = nextRange.start;
+          } else {
+            // 最後の区間の終了秒を超えた場合 -> 一時停止して先頭に戻す
+            videoRef.current.currentTime = ranges[0].start;
+            videoRef.current.pause();
+            setIsPlaying(false);
+          }
+        }
+      }
+    } else if (trimEnd && trimEnd > 0 && time >= trimEnd) {
+      // 単一トリミングフォールバック
       if (videoRef.current) {
         videoRef.current.currentTime = trimStart || 0;
         videoRef.current.pause();
@@ -214,11 +269,24 @@ export default function VideoPlayerWithSubtitles({
         onWaiting={() => setIsLoading(true)}
         onPlay={() => {
           if (videoRef.current) {
-            if (trimStart > 0 && videoRef.current.currentTime < trimStart - 0.25) {
-              videoRef.current.currentTime = trimStart;
-            }
-            if (trimEnd && trimEnd > 0 && videoRef.current.currentTime >= trimEnd) {
-              videoRef.current.currentTime = trimStart || 0;
+            const ranges = getNormalizedRanges();
+            if (ranges.length > 0) {
+              const curTime = videoRef.current.currentTime;
+              const inRange = ranges.some(r => {
+                const end = r.end && r.end > 0 ? r.end : Infinity;
+                return curTime >= r.start - 0.25 && curTime < end;
+              });
+              if (!inRange) {
+                const nextRange = ranges.find(r => r.start > curTime) || ranges[0];
+                videoRef.current.currentTime = nextRange.start;
+              }
+            } else {
+              if (trimStart > 0 && videoRef.current.currentTime < trimStart - 0.25) {
+                videoRef.current.currentTime = trimStart;
+              }
+              if (trimEnd && trimEnd > 0 && videoRef.current.currentTime >= trimEnd) {
+                videoRef.current.currentTime = trimStart || 0;
+              }
             }
           }
           setIsLoading(false);

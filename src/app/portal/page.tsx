@@ -16,7 +16,7 @@ import {
   ChevronDown, ChevronUp, Eye
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import VideoPlayerWithSubtitles, { Narration } from '@/components/VideoPlayerWithSubtitles';
+import VideoPlayerWithSubtitles, { Narration, TrimRange } from '@/components/VideoPlayerWithSubtitles';
 import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
 import { getPortalTasks } from '@/app/actions/farm';
@@ -99,8 +99,9 @@ function PortalContent() {
   const [editingNarrations, setEditingNarrations] = useState<Narration[]>([]);
   const [isLoadingNarrations, setIsLoadingNarrations] = useState(false);
   const [studioPlaybackTime, setStudioPlaybackTime] = useState<number>(0);
-  const [trimStartInput, setTrimStartInput] = useState<string>('0');
-  const [trimEndInput, setTrimEndInput] = useState<string>('');
+  const [trimRangesInput, setTrimRangesInput] = useState<Array<{ start: string; end: string }>>([
+    { start: '0', end: '' }
+  ]);
   const [studioSeekTime, setStudioSeekTime] = useState<number | null>(null);
   const [studioPlayTrigger, setStudioPlayTrigger] = useState<number>(0);
   const [expandedNarrations, setExpandedNarrations] = useState<Record<number, boolean>>({});
@@ -116,6 +117,7 @@ function PortalContent() {
 
   // 再生中動画用のテロップ一覧・トリミング
   const [playingNarrations, setPlayingNarrations] = useState<Narration[]>([]);
+  const [playingTrimRanges, setPlayingTrimRanges] = useState<TrimRange[]>([]);
   const [playingTrimStart, setPlayingTrimStart] = useState<number>(0);
   const [playingTrimEnd, setPlayingTrimEnd] = useState<number | undefined>(undefined);
 
@@ -475,13 +477,25 @@ function PortalContent() {
     }
   };
 
-  // 動画再生（多言語字幕・トリミング付き）
+  // 動画再生（多言語字幕・複数区間トリミング付き）
   const handlePlayManualVideo = async (manual: any) => {
     if (!manual) return;
     const url = await resolveVideoUrl(manual.video_url);
     setPlayingVideoUrl(url);
     setPlayingTrimStart(Number(manual.trim_start) || 0);
     setPlayingTrimEnd(manual.trim_end ? Number(manual.trim_end) : undefined);
+
+    // 複数区間トリミングの解析
+    let parsedRanges: TrimRange[] = [];
+    if (manual.trim_ranges && Array.isArray(manual.trim_ranges)) {
+      parsedRanges = manual.trim_ranges;
+    } else if (typeof manual.trim_ranges === 'string') {
+      try { parsedRanges = JSON.parse(manual.trim_ranges); } catch (e) {}
+    }
+    if (parsedRanges.length === 0 && ((manual.trim_start && Number(manual.trim_start) > 0) || manual.trim_end)) {
+      parsedRanges = [{ start: Number(manual.trim_start) || 0, end: manual.trim_end ? Number(manual.trim_end) : undefined }];
+    }
+    setPlayingTrimRanges(parsedRanges);
 
     // テロップ一覧を取得
     try {
@@ -513,9 +527,35 @@ function PortalContent() {
   // 🎬 動画編集スタジオ（エディタ）を開く
   const handleOpenStudio = async (manual: any) => {
     setEditingManual(manual);
-    setTrimStartInput(manual.trim_start ? String(manual.trim_start) : '0');
-    setTrimEndInput(manual.trim_end ? String(manual.trim_end) : '');
-    setStudioSeekTime(manual.trim_start ? Number(manual.trim_start) : 0);
+    
+    // 複数区間トリミングの初期化
+    let parsedRanges: Array<{ start: string; end: string }> = [];
+    if (manual.trim_ranges && Array.isArray(manual.trim_ranges)) {
+      parsedRanges = manual.trim_ranges.map((r: any) => ({
+        start: String(r.start ?? '0'),
+        end: r.end !== undefined && r.end !== null ? String(r.end) : ''
+      }));
+    } else if (typeof manual.trim_ranges === 'string') {
+      try {
+        const arr = JSON.parse(manual.trim_ranges);
+        if (Array.isArray(arr)) {
+          parsedRanges = arr.map((r: any) => ({
+            start: String(r.start ?? '0'),
+            end: r.end !== undefined && r.end !== null ? String(r.end) : ''
+          }));
+        }
+      } catch (e) {}
+    }
+    
+    if (parsedRanges.length === 0) {
+      parsedRanges = [{
+        start: manual.trim_start ? String(manual.trim_start) : '0',
+        end: manual.trim_end ? String(manual.trim_end) : ''
+      }];
+    }
+    
+    setTrimRangesInput(parsedRanges);
+    setStudioSeekTime(parseFloat(parsedRanges[0].start) || 0);
     setStudioPlayTrigger(0);
     setExpandedNarrations({});
     setTelopStartSec('0');
@@ -632,19 +672,40 @@ function PortalContent() {
     setIsSavingStudio(true);
 
     try {
-      const trimStart = parseFloat(trimStartInput) || 0;
-      const trimEnd = trimEndInput ? parseFloat(trimEndInput) : null;
+      // 有効なトリミング区間のクリーンアップ & ソート
+      const cleanedRanges = trimRangesInput
+        .map(r => ({
+          start: Math.max(0, parseFloat(r.start) || 0),
+          end: r.end && r.end.trim() !== '' && !isNaN(parseFloat(r.end)) ? parseFloat(r.end) : null
+        }))
+        .sort((a, b) => a.start - b.start);
 
-      // 1. video_manuals のトリミング秒数を更新
+      const firstStart = cleanedRanges.length > 0 ? cleanedRanges[0].start : 0;
+      const lastEnd = cleanedRanges.length > 0 ? cleanedRanges[cleanedRanges.length - 1].end : null;
+
+      // 1. video_manuals のトリミング秒数 & 複数区間を更新
+      const updatePayload: any = {
+        trim_start: firstStart,
+        trim_end: lastEnd,
+        trim_ranges: cleanedRanges
+      };
+
       const { error: manualError } = await supabase
         .from('video_manuals')
-        .update({
-          trim_start: trimStart,
-          trim_end: trimEnd
-        })
+        .update(updatePayload)
         .eq('id', editingManual.id);
 
-      if (manualError) throw manualError;
+      if (manualError) {
+        console.warn('Fallback saving without trim_ranges:', manualError);
+        const { error: fallbackErr } = await supabase
+          .from('video_manuals')
+          .update({
+            trim_start: firstStart,
+            trim_end: lastEnd
+          })
+          .eq('id', editingManual.id);
+        if (fallbackErr) throw fallbackErr;
+      }
 
       // 2. 既存の video_narrations を一旦削除
       await supabase.from('video_narrations').delete().eq('video_id', editingManual.id);
@@ -1945,6 +2006,7 @@ function PortalContent() {
                         videoUrl={playingVideoUrl}
                         narrations={playingNarrations}
                         language={language}
+                        trimRanges={playingTrimRanges}
                         trimStart={playingTrimStart}
                         trimEnd={playingTrimEnd}
                         autoPlay={true}
@@ -2650,8 +2712,10 @@ function PortalContent() {
                     videoUrl={editingVideoUrl}
                     narrations={editingNarrations}
                     language={language}
-                    trimStart={parseFloat(trimStartInput) || 0}
-                    trimEnd={trimEndInput ? parseFloat(trimEndInput) : undefined}
+                    trimRanges={trimRangesInput.map(r => ({
+                      start: parseFloat(r.start) || 0,
+                      end: r.end && r.end.trim() !== '' && !isNaN(parseFloat(r.end)) ? parseFloat(r.end) : undefined
+                    }))}
                     seekToTime={studioSeekTime}
                     playTrigger={studioPlayTrigger}
                     onTimeUpdate={(t) => setStudioPlaybackTime(t)}
@@ -2671,109 +2735,183 @@ function PortalContent() {
                       setTelopStartSec(studioPlaybackTime.toFixed(1));
                       setTelopEndSec((studioPlaybackTime + 3).toFixed(1));
                     }}
-                    className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded-xl font-black transition-all flex items-center gap-1"
+                    className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded-xl font-black transition-all flex items-center gap-1 cursor-pointer active:scale-95"
                   >
                     <span>📌 {studioPlaybackTime.toFixed(1)}秒を開始にセット</span>
                   </button>
                 </div>
               </div>
 
-              {/* ✂️ カット・トリミング設定パネル */}
+              {/* ✂️ カット・トリミング設定パネル（複数区間・ジャンプカット対応） */}
               <div className="bg-slate-900 rounded-3xl p-5 border border-slate-800 shadow-xl space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="text-sm font-black text-white flex items-center gap-2">
-                    <Scissors className="w-4 h-4 text-amber-400" />
-                    動画のカット・トリミング設定
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const start = parseFloat(trimStartInput) || 0;
-                      setStudioSeekTime(start);
-                      setStudioPlayTrigger(Date.now());
-                    }}
-                    className="text-xs font-bold text-amber-300 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 px-3 py-1 rounded-xl transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
-                    title="設定したトリミング範囲（先頭カット〜末尾カット）でテスト再生します"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-amber-300" />
-                    <span>余分な前後をスキップ再生（テスト）</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* 先頭カット */}
-                  <div className="bg-slate-800/60 p-3.5 rounded-2xl border border-slate-700/60 space-y-2">
-                    <label className="block text-xs font-bold text-slate-300">
-                      再生開始秒数（先頭カット）
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        value={trimStartInput}
-                        onChange={e => {
-                          const val = e.target.value;
-                          setTrimStartInput(val);
-                          const num = parseFloat(val);
-                          if (!isNaN(num)) setStudioSeekTime(num);
-                        }}
-                        className="w-24 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs font-black text-white focus:outline-none focus:border-amber-400 font-mono"
-                      />
-                      <span className="text-xs text-slate-400">秒</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTrimStartInput(studioPlaybackTime.toFixed(1));
-                          setStudioSeekTime(studioPlaybackTime);
-                        }}
-                        className="ml-auto px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded-lg transition-colors"
-                      >
-                        現在秒をセット
-                      </button>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-black text-white flex items-center gap-2">
+                      <Scissors className="w-4 h-4 text-amber-400" />
+                      動画のカット・トリミング設定（複数シーン連結）
+                    </h2>
+                    <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/30 font-mono">
+                      {trimRangesInput.length}シーン
+                    </span>
                   </div>
 
-                  {/* 末尾カット */}
-                  <div className="bg-slate-800/60 p-3.5 rounded-2xl border border-slate-700/60 space-y-2">
-                    <label className="block text-xs font-bold text-slate-300">
-                      再生終了秒数（末尾カット）
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        placeholder="最後まで"
-                        value={trimEndInput}
-                        onChange={e => {
-                          const val = e.target.value;
-                          setTrimEndInput(val);
-                          const num = parseFloat(val);
-                          if (!isNaN(num)) setStudioSeekTime(num);
-                        }}
-                        className="w-24 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs font-black text-white focus:outline-none focus:border-amber-400 font-mono"
-                      />
-                      <span className="text-xs text-slate-400">秒</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTrimEndInput(studioPlaybackTime.toFixed(1));
-                          setStudioSeekTime(studioPlaybackTime);
-                        }}
-                        className="ml-auto px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded-lg transition-colors"
-                      >
-                        現在秒をセット
-                      </button>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const lastRange = trimRangesInput[trimRangesInput.length - 1];
+                        const nextStart = lastRange && lastRange.end ? (parseFloat(lastRange.end) + 2).toFixed(1) : (studioPlaybackTime + 2).toFixed(1);
+                        setTrimRangesInput(prev => [...prev, { start: nextStart, end: '' }]);
+                      }}
+                      className="text-xs font-bold text-slate-200 bg-slate-800 hover:bg-slate-700 hover:text-white border border-slate-700 px-3 py-1 rounded-xl transition-all flex items-center gap-1 active:scale-95 shadow-sm cursor-pointer"
+                      title="スキップしたい部分を飛ばし、次の再生シーンを追加します"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>シーンを追加</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const firstStart = parseFloat(trimRangesInput[0]?.start) || 0;
+                        setStudioSeekTime(firstStart);
+                        setStudioPlayTrigger(Date.now());
+                      }}
+                      className="text-xs font-bold text-amber-300 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 px-3 py-1 rounded-xl transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
+                      title="不要な区間を自動スキップし、設定した全シーンを連続ジャンプカット再生します"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-amber-300" />
+                      <span>全カットを連続テスト再生</span>
+                    </button>
                   </div>
                 </div>
 
-                <div className="text-[11px] text-slate-400 bg-slate-950/60 px-3 py-2 rounded-xl border border-slate-800 flex items-center justify-between">
-                  <span>💡 トリミング状態:</span>
-                  <span className="font-mono text-amber-300 font-bold">
-                    {parseFloat(trimStartInput) > 0 ? `${trimStartInput}秒から` : '先頭から'} 〜 {trimEndInput ? `${trimEndInput}秒まで` : '最後まで'} を再生
-                  </span>
+                {/* 各シーン区間リスト */}
+                <div className="space-y-3 max-h-[260px] overflow-y-auto pr-1">
+                  {trimRangesInput.map((r, rIdx) => {
+                    const isSingle = trimRangesInput.length === 1;
+                    return (
+                      <div key={rIdx} className="bg-slate-800/70 p-3.5 rounded-2xl border border-slate-700/80 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-amber-300 bg-slate-900 px-2 py-0.5 rounded-md border border-slate-700 font-mono">
+                              🎬 シーン {rIdx + 1}
+                            </span>
+                            <span className="text-[11px] text-slate-400 font-mono">
+                              {r.start}s 〜 {r.end ? `${r.end}s` : '最後まで'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const start = parseFloat(r.start) || 0;
+                                setStudioSeekTime(start);
+                                setStudioPlayTrigger(Date.now());
+                              }}
+                              className="px-2 py-0.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-[10px] font-bold rounded-lg border border-rose-500/30 flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
+                              title="このシーンだけをプレビュー再生します"
+                            >
+                              <Play className="w-2.5 h-2.5 fill-rose-300" />
+                              <span>このシーンを再生</span>
+                            </button>
+
+                            {!isSingle && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTrimRangesInput(prev => prev.filter((_, i) => i !== rIdx));
+                                }}
+                                className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                                title="このシーンを削除"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-700/50">
+                          {/* シーン開始秒数 */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold text-slate-300 whitespace-nowrap">開始:</span>
+                            <input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              value={r.start}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setTrimRangesInput(prev => prev.map((item, i) => i === rIdx ? { ...item, start: val } : item));
+                                const num = parseFloat(val);
+                                if (!isNaN(num)) setStudioSeekTime(num);
+                              }}
+                              className="w-20 px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs font-black text-white focus:outline-none focus:border-amber-400 font-mono text-center"
+                            />
+                            <span className="text-xs text-slate-400">秒</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const timeStr = studioPlaybackTime.toFixed(1);
+                                setTrimRangesInput(prev => prev.map((item, i) => i === rIdx ? { ...item, start: timeStr } : item));
+                                setStudioSeekTime(studioPlaybackTime);
+                              }}
+                              className="ml-auto px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded-lg transition-colors cursor-pointer active:scale-95"
+                              title="現在の再生秒数を開始秒にセット"
+                            >
+                              現在秒
+                            </button>
+                          </div>
+
+                          {/* シーン終了秒数 */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold text-slate-300 whitespace-nowrap">終了:</span>
+                            <input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              placeholder={rIdx === trimRangesInput.length - 1 ? '最後まで' : '秒数指定'}
+                              value={r.end}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setTrimRangesInput(prev => prev.map((item, i) => i === rIdx ? { ...item, end: val } : item));
+                                const num = parseFloat(val);
+                                if (!isNaN(num)) setStudioSeekTime(num);
+                              }}
+                              className="w-20 px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs font-black text-white focus:outline-none focus:border-amber-400 font-mono text-center"
+                            />
+                            <span className="text-xs text-slate-400">秒</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const timeStr = studioPlaybackTime.toFixed(1);
+                                setTrimRangesInput(prev => prev.map((item, i) => i === rIdx ? { ...item, end: timeStr } : item));
+                                setStudioSeekTime(studioPlaybackTime);
+                              }}
+                              className="ml-auto px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded-lg transition-colors cursor-pointer active:scale-95"
+                              title="現在の再生秒数を終了秒にセット"
+                            >
+                              現在秒
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* 連結プレビューサマリー */}
+                <div className="text-[11px] text-slate-400 bg-slate-950/80 px-3.5 py-2.5 rounded-2xl border border-slate-800 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-300">💡 連結ジャンプカット再生ルート:</span>
+                    <span className="text-[10px] text-emerald-400 font-mono">
+                      (スキップ区間は自動ジャンプ)
+                    </span>
+                  </div>
+                  <p className="font-mono text-amber-300 font-bold break-all leading-relaxed">
+                    {trimRangesInput.map((r, i) => `${parseFloat(r.start) || 0}s〜${r.end ? `${r.end}s` : '最後まで'}`).join(' ⏩ ')}
+                  </p>
                 </div>
               </div>
 
