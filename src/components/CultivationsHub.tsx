@@ -34,6 +34,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { CultivationActionSheet, CultivationTarget } from '@/components/CultivationActionSheet';
 import { saveWorkerShareSettings, getWorkerShareSettings } from '@/app/actions/farm';
+import { generateComprehensiveSearchKeywords, isFuzzyMatch } from '@/lib/fuzzySearch';
 import Link from 'next/link';
 
 interface CultivationItem {
@@ -642,7 +643,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     };
   }, [workLogs, fertAnalysisCropId, fertAnalysisFieldId]);
 
-  // 公的肥料マスター ＆ 自社マスタ統合検索
+  // 公的肥料マスター ＆ 自社マスタ統合検索（全方位あいまい検索）
   const handleSearchFertilizers = async (q: string) => {
     setSearchFertQuery(q);
     if (!q.trim()) {
@@ -655,43 +656,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
 
     setIsLoadingFertilizers(true);
     try {
-      const raw = q.trim();
-      const set = new Set<string>();
-      set.add(raw);
-      const toZenkaku = raw.replace(/[A-Za-z0-9!-~]/g, (s) => String.fromCharCode(s.charCodeAt(0) + 0xFEE0)).replace(/ /g, '　');
-      set.add(toZenkaku);
-      const toHankaku = raw.replace(/[！-～]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).replace(/　/g, ' ');
-      set.add(toHankaku);
-      const toKatakana = raw.replace(/[\u3041-\u3096]/g, (m) => String.fromCharCode(m.charCodeAt(0) + 0x60));
-      set.add(toKatakana);
-      const toHiragana = raw.replace(/[\u30A1-\u30F6]/g, (m) => String.fromCharCode(m.charCodeAt(0) - 0x60));
-      set.add(toHiragana);
-
-      // 主要メーカー・用語の漢字 ↔ カナ相互展開辞書
-      const nameDict: Record<string, string[]> = {
-        '昭和': ['ショウワ', 'しょうわ', '昭和', 'SHOWA'],
-        'ショウワ': ['昭和', 'しょうわ', 'ショウワ', 'SHOWA'],
-        'しょうわ': ['昭和', 'ショウワ', 'しょうわ', 'SHOWA'],
-        '住友': ['スミトモ', 'すみとも', '住友', 'SUMITOMO'],
-        'スミトモ': ['住友', 'すみとも', 'スミトモ', 'SUMITOMO'],
-        '三菱': ['ミツビシ', 'みつびし', '三菱'],
-        '三井': ['ミツイ', 'みつい', '三井'],
-        '日産': ['ニッサン', 'にっさん', '日産'],
-        '全農': ['ゼンノウ', 'ぜんのう', '全農', 'JA', 'ＪＡ'],
-        'クミアイ': ['組合', 'くみあい', 'クミアイ'],
-        '協和': ['キョウワ', 'きょうわ', '協和'],
-        'ホウ素': ['ほう素', 'ホウ素', 'ホウソ', '硼素', 'B'],
-        'マンガン': ['Mn', 'マンガン', 'まんがん'],
-        'ケイ酸': ['珪酸', 'ケイ酸', 'けいさん', 'SiO2']
-      };
-
-      Object.entries(nameDict).forEach(([key, syns]) => {
-        if (raw.includes(key)) {
-          syns.forEach(s => set.add(raw.replace(key, s)));
-        }
-      });
-
-      const keywords = Array.from(set).filter(Boolean);
+      const keywords = generateComprehensiveSearchKeywords(q);
       const orConditions = keywords.flatMap(k => [
         `fertilizer_name.ilike.%${k}%`,
         `applicant_name.ilike.%${k}%`,
@@ -705,12 +670,12 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
         .from('m_fertilizers')
         .select('*')
         .or(orConditions)
-        .limit(60);
+        .limit(100);
 
-      // 2. 自農園マスタ（materials）からもキーワード一致するものを抽出
+      // 2. 自農園マスタ（materials）からも全方位あいまい一致するものを抽出
       const matchedFarmItems = farmRegisteredFertilizers.filter(rf => {
         const targetStr = `${rf.name} ${rf.specification || ''} ${rf.fertilizer_type || ''}`;
-        return keywords.some(k => targetStr.toLowerCase().includes(k.toLowerCase()));
+        return isFuzzyMatch(targetStr, q) || keywords.some(k => targetStr.toLowerCase().includes(k.toLowerCase()));
       }).map(rf => ({
         id: rf.id,
         fertilizer_name: rf.name,
