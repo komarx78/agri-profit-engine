@@ -107,6 +107,8 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
     nPercent: string;
     pPercent: string;
     kPercent: string;
+    caPercent?: string;
+    mgPercent?: string;
     bagWeight: number;
   }
 
@@ -122,6 +124,8 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       nPercent: '0',
       pPercent: '0',
       kPercent: '0',
+      caPercent: '0',
+      mgPercent: '0',
       bagWeight: 20
     }
   ]);
@@ -195,13 +199,15 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
     });
   }, [selectedCultivations, quantity, durationMinutes, quantityMode, durationMode, totalAreaAcre]);
 
-  // 複数肥料（マルチ肥料）成分＆原価の合算計算エンジン
+  // 複数肥料（マルチ肥料）成分＆原価の合算計算エンジン (N-P-K-Ca-Mg)
   const multiFertCalculation = useMemo(() => {
     let grandTotalWeightKg = 0;
     let grandTotalCost = 0;
     let grandTotalNPer10a = 0;
     let grandTotalPPer10a = 0;
     let grandTotalKPer10a = 0;
+    let grandTotalCaPer10a = 0;
+    let grandTotalMgPer10a = 0;
 
     const itemCalcs = fertilizerItems.map((item) => {
       const farmItem = farmFertilizers.find(f => f.name === item.name);
@@ -209,6 +215,8 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       const nRatio = parseFloat(item.nPercent) || (farmItem ? parseFloat(farmItem.n_percent ?? farmItem.n_ratio) || 0 : 0);
       const pRatio = parseFloat(item.pPercent) || (farmItem ? parseFloat(farmItem.p_percent ?? farmItem.p_ratio) || 0 : 0);
       const kRatio = parseFloat(item.kPercent) || (farmItem ? parseFloat(farmItem.k_percent ?? farmItem.k_ratio) || 0 : 0);
+      const caRatio = parseFloat(item.caPercent || '0') || (farmItem ? parseFloat(farmItem.ca_percent) || 0 : 0);
+      const mgRatio = parseFloat(item.mgPercent || '0') || (farmItem ? parseFloat(farmItem.mg_percent) || 0 : 0);
       const bagKg = farmItem ? parseFloat(farmItem.bag_weight || farmItem.capacity) || 20 : item.bagWeight || 20;
       const bagPrice = parseFloat(item.pricePerBag) || (farmItem ? parseFloat(farmItem.default_price || farmItem.unit_price) || 0 : 0);
 
@@ -227,6 +235,8 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       const nPer10a = (weightPer10a * nRatio) / 100;
       const pPer10a = (weightPer10a * pRatio) / 100;
       const kPer10a = (weightPer10a * kRatio) / 100;
+      const caPer10a = (weightPer10a * caRatio) / 100;
+      const mgPer10a = (weightPer10a * mgRatio) / 100;
       const totalCost = bagsCount * bagPrice;
 
       grandTotalWeightKg += totalWeightKg;
@@ -234,12 +244,16 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       grandTotalNPer10a += nPer10a;
       grandTotalPPer10a += pPer10a;
       grandTotalKPer10a += kPer10a;
+      grandTotalCaPer10a += caPer10a;
+      grandTotalMgPer10a += mgPer10a;
 
       return {
         ...item,
         nRatio,
         pRatio,
         kRatio,
+        caRatio,
+        mgRatio,
         bagKg,
         bagPrice,
         totalWeightKg: Math.round(totalWeightKg * 10) / 10,
@@ -247,6 +261,8 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
         nPer10a: Math.round(nPer10a * 10) / 10,
         pPer10a: Math.round(pPer10a * 10) / 10,
         kPer10a: Math.round(kPer10a * 10) / 10,
+        caPer10a: Math.round(caPer10a * 10) / 10,
+        mgPer10a: Math.round(mgPer10a * 10) / 10,
         totalCost: Math.round(totalCost)
       };
     });
@@ -257,7 +273,9 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
       grandTotalCost: Math.round(grandTotalCost),
       grandTotalNPer10a: Math.round(grandTotalNPer10a * 10) / 10,
       grandTotalPPer10a: Math.round(grandTotalPPer10a * 10) / 10,
-      grandTotalKPer10a: Math.round(grandTotalKPer10a * 10) / 10
+      grandTotalKPer10a: Math.round(grandTotalKPer10a * 10) / 10,
+      grandTotalCaPer10a: Math.round(grandTotalCaPer10a * 10) / 10,
+      grandTotalMgPer10a: Math.round(grandTotalMgPer10a * 10) / 10
     };
   }, [fertilizerItems, farmFertilizers, totalAreaAcre]);
 
@@ -822,7 +840,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
           .map(item => `${item.name} ${item.totalWeightKg}kg(${item.bagsCount}袋)`)
           .join(' + ');
 
-        const fertMemoText = `[施肥:${fertilizerType}] ${fertDetailSummary} | 合計N:${multiFertCalculation.grandTotalNPer10a}kg P:${multiFertCalculation.grandTotalPPer10a}kg K:${multiFertCalculation.grandTotalKPer10a}kg/10a | 総費用:¥${multiFertCalculation.grandTotalCost.toLocaleString()} ${memo}`.trim();
+        const fertMemoText = `[施肥:${fertilizerType}] ${fertDetailSummary} | 合計N:${multiFertCalculation.grandTotalNPer10a}kg P:${multiFertCalculation.grandTotalPPer10a}kg K:${multiFertCalculation.grandTotalKPer10a}kg Ca:${multiFertCalculation.grandTotalCaPer10a}kg Mg:${multiFertCalculation.grandTotalMgPer10a}kg/10a | 総費用:¥${multiFertCalculation.grandTotalCost.toLocaleString()} ${memo}`.trim();
 
         // 1. work_logs へ Insert
         const workRecords = selectedCultivations.map(c => ({
@@ -1316,18 +1334,26 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
                       <span className="text-amber-800 font-bold">総重量: {multiFertCalculation.grandTotalWeightKg}kg</span>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 text-center">
                       <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg">
-                        <div className="text-[10px] font-extrabold text-blue-600">N (窒素) 合計</div>
+                        <div className="text-[10px] font-extrabold text-blue-600">N (窒素)</div>
                         <div className="text-sm font-black text-blue-900">{multiFertCalculation.grandTotalNPer10a} <span className="text-[10px]">kg</span></div>
                       </div>
                       <div className="p-2 bg-orange-50 border border-orange-200 rounded-lg">
-                        <div className="text-[10px] font-extrabold text-orange-600">P (リン酸) 合計</div>
+                        <div className="text-[10px] font-extrabold text-orange-600">P (リン酸)</div>
                         <div className="text-sm font-black text-orange-900">{multiFertCalculation.grandTotalPPer10a} <span className="text-[10px]">kg</span></div>
                       </div>
                       <div className="p-2 bg-purple-50 border border-purple-200 rounded-lg">
-                        <div className="text-[10px] font-extrabold text-purple-600">K (カリ) 合計</div>
+                        <div className="text-[10px] font-extrabold text-purple-600">K (カリ)</div>
                         <div className="text-sm font-black text-purple-900">{multiFertCalculation.grandTotalKPer10a} <span className="text-[10px]">kg</span></div>
+                      </div>
+                      <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <div className="text-[10px] font-extrabold text-yellow-700">Ca (石灰)</div>
+                        <div className="text-sm font-black text-yellow-900">{multiFertCalculation.grandTotalCaPer10a} <span className="text-[10px]">kg</span></div>
+                      </div>
+                      <div className="p-2 bg-teal-50 border border-teal-200 rounded-lg">
+                        <div className="text-[10px] font-extrabold text-teal-700">Mg (苦土)</div>
+                        <div className="text-sm font-black text-teal-900">{multiFertCalculation.grandTotalMgPer10a} <span className="text-[10px]">kg</span></div>
                       </div>
                     </div>
 

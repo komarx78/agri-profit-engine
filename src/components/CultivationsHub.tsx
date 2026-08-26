@@ -505,29 +505,40 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     let totalN = 0;
     let totalP = 0;
     let totalK = 0;
+    let totalCa = 0;
+    let totalMg = 0;
     let totalCost = 0;
     let totalKg = 0;
 
     let basalN = 0;
     let basalP = 0;
     let basalK = 0;
+    let basalCa = 0;
+    let basalMg = 0;
+
     let topdressN = 0;
     let topdressP = 0;
     let topdressK = 0;
+    let topdressCa = 0;
+    let topdressMg = 0;
 
     const parsedLogs = fertLogs.map(log => {
       const memo = log.memo || '';
       
-      // 合計N:3.1kg P:2.2kg K:0.5kg/10a のパース
+      // 合計N:3.1kg P:2.2kg K:0.5kg Ca:1.0kg Mg:0.5kg/10a のパース
       const nMatch = memo.match(/合計N:([\d.]+)kg/i) || memo.match(/N:([\d.]+)kg/i);
       const pMatch = memo.match(/P:([\d.]+)kg/i);
       const kMatch = memo.match(/K:([\d.]+)kg/i);
+      const caMatch = memo.match(/Ca:([\d.]+)kg/i);
+      const mgMatch = memo.match(/Mg:([\d.]+)kg/i);
       const costMatch = memo.match(/総費用:¥([\d,]+)/i) || memo.match(/¥([\d,]+)/i);
       const kgMatch = memo.match(/(\d+(\.\d+)?)\s*kg/i);
 
       const nVal = nMatch ? parseFloat(nMatch[1]) : 0;
       const pVal = pMatch ? parseFloat(pMatch[1]) : 0;
       const kVal = kMatch ? parseFloat(kMatch[1]) : 0;
+      const caVal = caMatch ? parseFloat(caMatch[1]) : 0;
+      const mgVal = mgMatch ? parseFloat(mgMatch[1]) : 0;
       const costVal = costMatch ? parseInt(costMatch[1].replace(/,/g, ''), 10) : 0;
       const kgVal = kgMatch ? parseFloat(kgMatch[1]) : 0;
 
@@ -537,6 +548,8 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
       totalN += nVal;
       totalP += pVal;
       totalK += kVal;
+      totalCa += caVal;
+      totalMg += mgVal;
       totalCost += costVal;
       totalKg += kgVal;
 
@@ -544,37 +557,65 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
         basalN += nVal;
         basalP += pVal;
         basalK += kVal;
+        basalCa += caVal;
+        basalMg += mgVal;
       }
       if (isTopdress) {
         topdressN += nVal;
         topdressP += pVal;
         topdressK += kVal;
+        topdressCa += caVal;
+        topdressMg += mgVal;
       }
+
+      // 微量要素・土壌改良成分の検出（ホウ素、マンガン、ケイ酸、鉄、腐植酸等）
+      const microNutrients: string[] = [];
+      if (/ホウ素|ほう素|\bB\b/i.test(memo)) microNutrients.push('ホウ素 (B)');
+      if (/マンガン|\bMn\b/i.test(memo)) microNutrients.push('マンガン (Mn)');
+      if (/ケイ酸|珪酸|\bSiO2\b/i.test(memo)) microNutrients.push('ケイ酸 (SiO2)');
+      if (/鉄|\bFe\b/i.test(memo)) microNutrients.push('鉄 (Fe)');
+      if (/亜鉛|\bZn\b/i.test(memo)) microNutrients.push('亜鉛 (Zn)');
+      if (/有機|堆肥|牛糞|豚糞|鶏糞|ボカシ|アミノ酸/i.test(memo)) microNutrients.push('有機質・アミノ酸');
+      if (/石灰|カルシウム/i.test(memo) && caVal === 0) microNutrients.push('石灰質');
+      if (/苦土|マグネシウム/i.test(memo) && mgVal === 0) microNutrients.push('苦土質');
 
       return {
         ...log,
         nVal,
         pVal,
         kVal,
+        caVal,
+        mgVal,
         costVal,
         kgVal,
+        microNutrients,
         isBasal,
         isTopdress
       };
     });
 
+    // 全ログから微量要素のユニークリストを集計
+    const allMicroNutrients = Array.from(new Set(parsedLogs.flatMap(l => l.microNutrients)));
+
     return {
       totalN: Math.round(totalN * 10) / 10,
       totalP: Math.round(totalP * 10) / 10,
       totalK: Math.round(totalK * 10) / 10,
+      totalCa: Math.round(totalCa * 10) / 10,
+      totalMg: Math.round(totalMg * 10) / 10,
       totalCost,
       totalKg: Math.round(totalKg * 10) / 10,
       basalN: Math.round(basalN * 10) / 10,
       basalP: Math.round(basalP * 10) / 10,
       basalK: Math.round(basalK * 10) / 10,
+      basalCa: Math.round(basalCa * 10) / 10,
+      basalMg: Math.round(basalMg * 10) / 10,
       topdressN: Math.round(topdressN * 10) / 10,
       topdressP: Math.round(topdressP * 10) / 10,
       topdressK: Math.round(topdressK * 10) / 10,
+      topdressCa: Math.round(topdressCa * 10) / 10,
+      topdressMg: Math.round(topdressMg * 10) / 10,
+      allMicroNutrients,
       parsedLogs
     };
   }, [workLogs, fertAnalysisCropId, fertAnalysisFieldId]);
@@ -1159,65 +1200,125 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                   </div>
                 </div>
 
-                {/* 3大成分メーターカード (青・橙・紫) */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* 5大主要養分メーターカード (N-P-K-Ca-Mg) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
                   {/* 🔵 N (窒素) */}
-                  <div className="bg-slate-800/90 border border-blue-500/30 rounded-2xl p-4 flex flex-col justify-between relative overflow-hidden shadow-inner">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-black text-blue-300 uppercase tracking-wider">🔵 N (窒素) 累計</span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-200 border border-blue-400/30">kg/10a</span>
+                  <div className="bg-slate-800/90 border border-blue-500/30 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden shadow-inner">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-black text-blue-300 uppercase tracking-wider">🔵 N (窒素)</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-200 border border-blue-400/30">kg/10a</span>
                     </div>
                     <div>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalN}</span>
-                        <span className="text-xs font-bold text-slate-400">kg / 10a</span>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalN}</span>
+                        <span className="text-[11px] font-bold text-slate-400">kg</span>
                       </div>
-                      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-700/50 text-[11px] text-slate-300 font-bold">
-                        <span>元肥: <strong className="text-blue-400">{fertilizerAnalytics.basalN}kg</strong></span>
+                      <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-700/50 text-[10px] text-slate-300 font-bold">
+                        <span>元: <strong className="text-blue-400">{fertilizerAnalytics.basalN}</strong></span>
                         <span>•</span>
-                        <span>追肥: <strong className="text-cyan-400">{fertilizerAnalytics.topdressN}kg</strong></span>
+                        <span>追: <strong className="text-cyan-400">{fertilizerAnalytics.topdressN}</strong></span>
                       </div>
                     </div>
                   </div>
 
                   {/* 🟠 P (リン酸) */}
-                  <div className="bg-slate-800/90 border border-amber-500/30 rounded-2xl p-4 flex flex-col justify-between relative overflow-hidden shadow-inner">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-black text-amber-300 uppercase tracking-wider">🟠 P (リン酸) 累計</span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-200 border border-amber-400/30">kg/10a</span>
+                  <div className="bg-slate-800/90 border border-amber-500/30 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden shadow-inner">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-black text-amber-300 uppercase tracking-wider">🟠 P (リン酸)</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-400/30">kg/10a</span>
                     </div>
                     <div>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalP}</span>
-                        <span className="text-xs font-bold text-slate-400">kg / 10a</span>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalP}</span>
+                        <span className="text-[11px] font-bold text-slate-400">kg</span>
                       </div>
-                      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-700/50 text-[11px] text-slate-300 font-bold">
-                        <span>元肥: <strong className="text-amber-400">{fertilizerAnalytics.basalP}kg</strong></span>
+                      <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-700/50 text-[10px] text-slate-300 font-bold">
+                        <span>元: <strong className="text-amber-400">{fertilizerAnalytics.basalP}</strong></span>
                         <span>•</span>
-                        <span>追肥: <strong className="text-yellow-400">{fertilizerAnalytics.topdressP}kg</strong></span>
+                        <span>追: <strong className="text-yellow-400">{fertilizerAnalytics.topdressP}</strong></span>
                       </div>
                     </div>
                   </div>
 
                   {/* 🟣 K (カリ) */}
-                  <div className="bg-slate-800/90 border border-purple-500/30 rounded-2xl p-4 flex flex-col justify-between relative overflow-hidden shadow-inner">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-black text-purple-300 uppercase tracking-wider">🟣 K (カリ) 累計</span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-200 border border-purple-400/30">kg/10a</span>
+                  <div className="bg-slate-800/90 border border-purple-500/30 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden shadow-inner">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-black text-purple-300 uppercase tracking-wider">🟣 K (カリ)</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-400/30">kg/10a</span>
                     </div>
                     <div>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalK}</span>
-                        <span className="text-xs font-bold text-slate-400">kg / 10a</span>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalK}</span>
+                        <span className="text-[11px] font-bold text-slate-400">kg</span>
                       </div>
-                      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-700/50 text-[11px] text-slate-300 font-bold">
-                        <span>元肥: <strong className="text-purple-400">{fertilizerAnalytics.basalK}kg</strong></span>
+                      <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-700/50 text-[10px] text-slate-300 font-bold">
+                        <span>元: <strong className="text-purple-400">{fertilizerAnalytics.basalK}</strong></span>
                         <span>•</span>
-                        <span>追肥: <strong className="text-pink-400">{fertilizerAnalytics.topdressK}kg</strong></span>
+                        <span>追: <strong className="text-pink-400">{fertilizerAnalytics.topdressK}</strong></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 🟡 Ca (カルシウム・石灰) */}
+                  <div className="bg-slate-800/90 border border-yellow-500/30 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden shadow-inner">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-black text-yellow-300 uppercase tracking-wider">🟡 Ca (石灰)</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-200 border border-yellow-400/30">kg/10a</span>
+                    </div>
+                    <div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalCa}</span>
+                        <span className="text-[11px] font-bold text-slate-400">kg</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-700/50 text-[10px] text-slate-300 font-bold">
+                        <span>元: <strong className="text-yellow-400">{fertilizerAnalytics.basalCa}</strong></span>
+                        <span>•</span>
+                        <span>追: <strong className="text-amber-300">{fertilizerAnalytics.topdressCa}</strong></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 🟢 Mg (苦土・マグネシウム) */}
+                  <div className="bg-slate-800/90 border border-teal-500/30 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden shadow-inner">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-black text-teal-300 uppercase tracking-wider">🟢 Mg (苦土)</span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-200 border border-teal-400/30">kg/10a</span>
+                    </div>
+                    <div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalMg}</span>
+                        <span className="text-[11px] font-bold text-slate-400">kg</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-700/50 text-[10px] text-slate-300 font-bold">
+                        <span>元: <strong className="text-teal-400">{fertilizerAnalytics.basalMg}</strong></span>
+                        <span>•</span>
+                        <span>追: <strong className="text-emerald-300">{fertilizerAnalytics.topdressMg}</strong></span>
                       </div>
                     </div>
                   </div>
                 </div>
+
+                {/* 🧪 微量要素・土壌改良・有機質投入状況パネル */}
+                {fertilizerAnalytics.allMicroNutrients.length > 0 && (
+                  <div className="p-3 bg-slate-800/80 rounded-2xl border border-teal-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-teal-300 flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                        <span>投入済みの微量要素・土壌改良成分:</span>
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {fertilizerAnalytics.allMicroNutrients.map((item, idx) => (
+                          <span key={idx} className="px-2 py-0.5 bg-teal-900/60 border border-teal-500/40 text-teal-200 rounded-lg text-[11px] font-black shadow-xs">
+                            ✨ {item}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-bold hidden sm:inline">
+                      ※微量要素（ホウ素・マンガン・ケイ酸等）は作物の生理障害防止・耐病性に寄与
+                    </span>
+                  </div>
+                )}
 
                 {/* 施肥実績タイムライン（直近の施肥履歴） */}
                 {fertilizerAnalytics.parsedLogs.length > 0 && (
@@ -1242,10 +1343,17 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                             </div>
                             <p className="text-[11px] text-slate-400 truncate">{log.memo}</p>
                           </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
                             {log.nVal > 0 && <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px] font-bold">N:{log.nVal}kg</span>}
                             {log.pVal > 0 && <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px] font-bold">P:{log.pVal}kg</span>}
                             {log.kVal > 0 && <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded text-[10px] font-bold">K:{log.kVal}kg</span>}
+                            {log.caVal > 0 && <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-300 rounded text-[10px] font-bold">Ca:{log.caVal}kg</span>}
+                            {log.mgVal > 0 && <span className="px-1.5 py-0.5 bg-teal-500/20 text-teal-300 rounded text-[10px] font-bold">Mg:{log.mgVal}kg</span>}
+                            {log.microNutrients?.map((m: string, mIdx: number) => (
+                              <span key={mIdx} className="px-1.5 py-0.5 bg-emerald-900/50 text-emerald-300 rounded text-[10px] font-bold border border-emerald-700/50">
+                                {m}
+                              </span>
+                            ))}
                           </div>
                         </div>
                       ))}
