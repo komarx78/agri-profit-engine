@@ -51,6 +51,58 @@ export async function createB2BCustomer(data: any, tenantId?: string | null) {
   }
 }
 
+export async function updateB2BCustomer(customerId: string, data: any) {
+  try {
+    const adminClient = getAdminSupabase();
+    const payload = {
+      name: data.name,
+      type: data.type,
+      closing_day: data.closing_day,
+      payment_month: data.payment_month,
+      payment_day: data.payment_day,
+      updated_at: new Date().toISOString()
+    };
+    const { error } = await adminClient
+      .from('b2b_customers')
+      .update(payload)
+      .eq('id', customerId);
+    if (error) throw error;
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function deleteB2BCustomer(customerId: string) {
+  try {
+    const adminClient = getAdminSupabase();
+    
+    // 関連する注文データの存在確認
+    const { data: relatedOrders } = await adminClient
+      .from('b2b_orders')
+      .select('id')
+      .eq('customer_id', customerId)
+      .limit(1);
+
+    if (relatedOrders && relatedOrders.length > 0) {
+      return { 
+        success: false, 
+        error: 'この顧客には受注・納品データが存在するため削除できません。' 
+      };
+    }
+
+    const { error } = await adminClient
+      .from('b2b_customers')
+      .delete()
+      .eq('id', customerId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
 export async function getB2BPortalData(tokenOrId: string) {
   try {
     const adminClient = getAdminSupabase();
