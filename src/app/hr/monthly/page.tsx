@@ -284,7 +284,7 @@ export default function MonthlyTimecardPage() {
         isoClockOut = new Date(`${editModal.date}T${editModal.clockOut}:00+09:00`).toISOString();
       }
 
-      const payload: any = {
+      let payload: any = {
         date: editModal.date,
         worker_id: editModal.workerId,
         user_id: tenantId,
@@ -299,10 +299,22 @@ export default function MonthlyTimecardPage() {
 
       if (editModal.logId) {
         // UPDATE
-        const { error } = await supabase
+        let { error } = await supabase
           .from('attendance_logs')
           .update(payload)
           .eq('id', editModal.logId);
+
+        // もし memo や status カラムがDBに未追加の場合のフォールバック
+        if (error && (error.message?.includes('memo') || error.message?.includes('status') || (error as any).code === 'PGRST204')) {
+          delete payload.memo;
+          delete payload.status;
+          const retryRes = await supabase
+            .from('attendance_logs')
+            .update(payload)
+            .eq('id', editModal.logId);
+          error = retryRes.error;
+        }
+
         if (error) throw error;
 
         setLogs(prev => prev.map(l => l.id === editModal.logId ? { ...l, ...payload } : l));
@@ -311,15 +323,26 @@ export default function MonthlyTimecardPage() {
       } else {
         // INSERT
         payload.created_at = new Date().toISOString();
-        const { data, error } = await supabase
+        let insertRes = await supabase
           .from('attendance_logs')
           .insert([payload])
           .select();
-        if (error) throw error;
 
-        if (data && data[0]) {
-          setLogs(prev => [data[0], ...prev]);
-          setEditingRestMinutes(prev => ({ ...prev, [data[0].id]: editModal.restMinutes }));
+        // もし memo や status カラムがDBに未追加の場合のフォールバック
+        if (insertRes.error && (insertRes.error.message?.includes('memo') || insertRes.error.message?.includes('status') || (insertRes.error as any).code === 'PGRST204')) {
+          delete payload.memo;
+          delete payload.status;
+          insertRes = await supabase
+            .from('attendance_logs')
+            .insert([payload])
+            .select();
+        }
+
+        if (insertRes.error) throw insertRes.error;
+
+        if (insertRes.data && insertRes.data[0]) {
+          setLogs(prev => [insertRes.data[0], ...prev]);
+          setEditingRestMinutes(prev => ({ ...prev, [insertRes.data[0].id]: editModal.restMinutes }));
         }
         showToast(`🎉 ${editModal.date} の打刻データを登録しました！`);
       }
