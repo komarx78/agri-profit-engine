@@ -36,7 +36,7 @@ export default function SalesHistoryPage() {
       const [logsRes, channelsRes, cropsRes] = await Promise.all([
         supabase
           .from('sales_logs')
-          .select('id, sales_date, quantity, unit, total_sales, channel_id, crop_id, unit_price')
+          .select('id, sales_date, quantity, unit, total_sales, channel_id, crop_id')
           .eq('user_id', tenantId)
           .or('status.neq.planned,status.is.null')
           .order('sales_date', { ascending: false })
@@ -86,7 +86,7 @@ export default function SalesHistoryPage() {
   // 価格編集モーダルを開く
   const handleOpenEdit = (log: any) => {
     setEditingLog(log);
-    const unitPrice = log.unit_price || (log.quantity > 0 && log.total_sales > 0 ? Math.round(log.total_sales / log.quantity) : '');
+    const unitPrice = (log.quantity > 0 && log.total_sales > 0) ? Math.round(log.total_sales / log.quantity) : '';
     setEditUnitPrice(unitPrice ? String(unitPrice) : '');
     setEditTotalSales(log.total_sales ? String(log.total_sales) : '');
   };
@@ -116,19 +116,17 @@ export default function SalesHistoryPage() {
     setIsSavingPrice(true);
     try {
       const finalTotal = parseFloat(editTotalSales) || 0;
-      const finalUnit = parseFloat(editUnitPrice) || (editingLog.quantity > 0 ? Math.round(finalTotal / editingLog.quantity) : 0);
 
       const { error } = await supabase
         .from('sales_logs')
         .update({
-          total_sales: finalTotal,
-          unit_price: finalUnit
+          total_sales: finalTotal
         })
         .eq('id', editingLog.id);
 
       if (error) throw error;
 
-      setSalesLogs(prev => prev.map(l => l.id === editingLog.id ? { ...l, total_sales: finalTotal, unit_price: finalUnit } : l));
+      setSalesLogs(prev => prev.map(l => l.id === editingLog.id ? { ...l, total_sales: finalTotal } : l));
       setEditingLog(null);
     } catch (err: any) {
       alert('保存エラー: ' + err.message);
@@ -159,7 +157,7 @@ export default function SalesHistoryPage() {
     if (filteredLogs.length === 0) return;
     
     const exportData = filteredLogs.map(log => {
-      const unitPrice = log.unit_price || (log.quantity > 0 && log.total_sales > 0 ? Math.round(log.total_sales / log.quantity) : 0);
+      const unitPrice = (log.quantity > 0 && log.total_sales > 0) ? Math.round(log.total_sales / log.quantity) : 0;
       return {
         '出荷日': log.sales_date || '',
         '作目': log.crops?.name || '不明',
@@ -278,7 +276,7 @@ export default function SalesHistoryPage() {
               ) : (
                 filteredLogs.map((log) => {
                   const hasPrice = log.total_sales && log.total_sales > 0;
-                  const unitPrice = log.unit_price || (hasPrice && log.quantity > 0 ? Math.round(log.total_sales / log.quantity) : 0);
+                  const unitPrice = (hasPrice && log.quantity > 0) ? Math.round(log.total_sales / log.quantity) : 0;
                   
                   return (
                     <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">

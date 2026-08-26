@@ -43,7 +43,6 @@ export default function SalesHistoryPage() {
             quantity,
             unit,
             total_sales,
-            unit_price,
             channel_id,
             crop_id
           `)
@@ -99,7 +98,7 @@ export default function SalesHistoryPage() {
   // 価格編集モーダルを開く
   const handleOpenEdit = (log: any) => {
     setEditingLog(log);
-    const unitPrice = log.unit_price || (log.quantity > 0 && log.total_sales > 0 ? Math.round(log.total_sales / log.quantity) : '');
+    const unitPrice = (log.quantity > 0 && log.total_sales > 0) ? Math.round(log.total_sales / log.quantity) : '';
     setEditUnitPrice(unitPrice ? String(unitPrice) : '');
     setEditTotalSales(log.total_sales ? String(log.total_sales) : '');
   };
@@ -129,19 +128,17 @@ export default function SalesHistoryPage() {
     setIsSavingPrice(true);
     try {
       const finalTotal = parseFloat(editTotalSales) || 0;
-      const finalUnit = parseFloat(editUnitPrice) || (editingLog.quantity > 0 ? Math.round(finalTotal / editingLog.quantity) : 0);
 
       const { error } = await supabase
         .from('sales_logs')
         .update({
-          total_sales: finalTotal,
-          unit_price: finalUnit
+          total_sales: finalTotal
         })
         .eq('id', editingLog.id);
 
       if (error) throw error;
 
-      setSalesLogs(prev => prev.map(l => l.id === editingLog.id ? { ...l, total_sales: finalTotal, unit_price: finalUnit } : l));
+      setSalesLogs(prev => prev.map(l => l.id === editingLog.id ? { ...l, total_sales: finalTotal } : l));
       setEditingLog(null);
     } catch (err: any) {
       alert('保存エラー: ' + err.message);
