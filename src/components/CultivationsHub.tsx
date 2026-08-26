@@ -481,10 +481,32 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
 
   // --- 肥料管理フィルタリング ---
   const filteredFertilizers = useMemo(() => {
+    // 1. 「自社マスタ登録済のみ」タブの場合: 自農園マスタ（materials）から直接生成
+    if (fertCategoryTab === 'registered') {
+      return farmRegisteredFertilizers.map(rf => {
+        const matchedOfficial = officialFertilizers.find(f => f.fertilizer_name === rf.name);
+        return {
+          id: rf.id,
+          fertilizer_name: rf.name,
+          applicant_name: matchedOfficial?.applicant_name || '自農園マスタ登録品',
+          fertilizer_type: rf.fertilizer_type || matchedOfficial?.fertilizer_type || '自社登録肥料',
+          registration_no: rf.specification || matchedOfficial?.registration_no || '',
+          registration_date: matchedOfficial?.registration_date || '',
+          n_percent: rf.n_percent ?? rf.n_ratio ?? matchedOfficial?.n_percent ?? 0,
+          p_percent: rf.p_percent ?? rf.p_ratio ?? matchedOfficial?.p_percent ?? 0,
+          k_percent: rf.k_percent ?? rf.k_ratio ?? matchedOfficial?.k_percent ?? 0,
+          ca_percent: rf.ca_percent ?? matchedOfficial?.ca_percent ?? 0,
+          mg_percent: rf.mg_percent ?? matchedOfficial?.mg_percent ?? 0,
+          other_ingredients: matchedOfficial?.other_ingredients || '',
+          default_price: rf.default_price || rf.unit_price,
+          bag_weight: rf.bag_weight || rf.capacity || 20,
+          isFarmRegistered: true
+        };
+      });
+    }
+
+    // 2. その他のカテゴリまたは検索時の場合
     return officialFertilizers.filter(f => {
-      if (fertCategoryTab === 'registered') {
-        return farmRegisteredFertilizers.some(rf => rf.name === f.fertilizer_name);
-      }
       if (fertCategoryTab !== 'all') {
         if (!f.fertilizer_type?.includes(fertCategoryTab)) return false;
       }
@@ -1502,14 +1524,30 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                               その他成分: {fert.other_ingredients}
                             </div>
                           )}
+
+                          {/* 自社マスタ設定価格・荷姿情報 */}
+                          {(fert.default_price || fert.bag_weight) && (
+                            <div className="mt-2 text-xs font-bold text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-200 flex items-center justify-between">
+                              {fert.bag_weight && <span>荷姿: <strong>{fert.bag_weight}kg / 袋</strong></span>}
+                              {fert.default_price && <span className="text-emerald-800">購入単価: <strong>¥{Number(fert.default_price).toLocaleString()}</strong></span>}
+                            </div>
+                          )}
                         </div>
 
                         {/* アクション */}
                         <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                          {isRegistered ? (
-                            <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200 flex items-center gap-1">
-                              <Check className="w-3.5 h-3.5" /> 自農園マスタ登録済
-                            </span>
+                          {isRegistered || fert.isFarmRegistered ? (
+                            <div className="w-full flex items-center justify-between">
+                              <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200 flex items-center gap-1">
+                                <Check className="w-3.5 h-3.5" /> 自農園マスタ登録済
+                              </span>
+                              <Link
+                                href="/admin/masters"
+                                className="text-[11px] font-bold text-slate-500 hover:text-slate-800 underline"
+                              >
+                                単価・荷姿を変更 ➔
+                              </Link>
+                            </div>
                           ) : (
                             <button
                               type="button"
