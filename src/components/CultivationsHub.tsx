@@ -642,7 +642,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     };
   }, [workLogs, fertAnalysisCropId, fertAnalysisFieldId]);
 
-  // 公的肥料マスター検索
+  // 公的肥料マスター ＆ 自社マスタ統合検索
   const handleSearchFertilizers = async (q: string) => {
     setSearchFertQuery(q);
     if (!q.trim()) {
@@ -676,15 +676,41 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
         `other_ingredients.ilike.%${k}%`
       ]).join(',');
 
-      const { data, error } = await supabase
+      // 1. 公的マスター検索
+      const { data: publicData, error } = await supabase
         .from('m_fertilizers')
         .select('*')
         .or(orConditions)
         .limit(60);
 
-      if (!error && data) {
-        setOfficialFertilizers(data);
-      }
+      // 2. 自農園マスタ（materials）からもキーワード一致するものを抽出
+      const matchedFarmItems = farmRegisteredFertilizers.filter(rf => {
+        const targetStr = `${rf.name} ${rf.specification || ''} ${rf.fertilizer_type || ''}`;
+        return keywords.some(k => targetStr.toLowerCase().includes(k.toLowerCase()));
+      }).map(rf => ({
+        id: rf.id,
+        fertilizer_name: rf.name,
+        applicant_name: '自農園マスタ登録品',
+        fertilizer_type: rf.fertilizer_type || '自社登録肥料',
+        registration_no: rf.specification || '',
+        n_percent: rf.n_percent ?? rf.n_ratio ?? 0,
+        p_percent: rf.p_percent ?? rf.p_ratio ?? 0,
+        k_percent: rf.k_percent ?? rf.k_ratio ?? 0,
+        ca_percent: rf.ca_percent ?? 0,
+        mg_percent: rf.mg_percent ?? 0,
+        default_price: rf.default_price || rf.unit_price,
+        bag_weight: rf.bag_weight || rf.capacity || 20,
+        isFarmRegistered: true
+      }));
+
+      // 公的マスターデータと自社マスタデータをマージ（自社品を先頭に）
+      const publicItems = (!error && publicData) ? publicData : [];
+      const combined = [
+        ...matchedFarmItems,
+        ...publicItems.filter(p => !matchedFarmItems.some(f => f.fertilizer_name === p.fertilizer_name))
+      ];
+
+      setOfficialFertilizers(combined);
     } catch (e) {
       console.error('Fertilizer search error:', e);
     } finally {
