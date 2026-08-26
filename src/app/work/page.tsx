@@ -1686,72 +1686,165 @@ export default function WorkEntryPage() {
                     )}
                   </div>
 
-                  {/* 📊 週間まとめカレンダーモーダル */}
+                  {/* 📊 週間まとめカレンダーモーダル（本格グリッドカレンダー形式） */}
                   {showWeekCalendarModal && (
-                    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-                      <div className="bg-emerald-950 border border-emerald-700/80 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
-                        <div className="p-5 border-b border-emerald-800/80 flex items-center justify-between bg-emerald-900/50">
-                          <h3 className="text-base font-black text-white flex items-center gap-2">
-                            <span>📊</span> 週間注文・収穫カレンダー（7日間）
-                          </h3>
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-3 sm:p-6 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="bg-emerald-950 border border-emerald-700/80 rounded-3xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh]">
+                        {/* ヘッダー */}
+                        <div className="p-4 sm:p-5 border-b border-emerald-800/80 flex items-center justify-between bg-emerald-900/60">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-5 h-5 text-emerald-400" />
+                            <h3 className="text-base sm:text-lg font-black text-white">
+                              週間 注文・収穫カレンダー（向こう7日間）
+                            </h3>
+                          </div>
                           <button
                             onClick={() => setShowWeekCalendarModal(false)}
-                            className="text-emerald-400 hover:text-white p-1 rounded-lg hover:bg-emerald-800 transition-colors"
+                            className="text-emerald-400 hover:text-white p-1.5 rounded-xl hover:bg-emerald-800 transition-colors"
                           >
                             ✕
                           </button>
                         </div>
 
-                        <div className="p-5 overflow-y-auto space-y-4 custom-scrollbar">
-                          {daysList.map(item => {
-                            // 日ごとの作目別合計
-                            const daySum: Record<string, { name: string; quantity: number; unit: string; rawCrop: any }> = {};
-                            item.orders.forEach(o => {
-                              o.items?.forEach((i: any) => {
-                                const cObj = i.crops || i.crop || { name: '作物' };
-                                const cName = cObj.name || '作物';
-                                const k = `${cName}_${i.unit || 'kg'}`;
-                                if (!daySum[k]) daySum[k] = { name: cName, quantity: 0, unit: i.unit || 'kg', rawCrop: cObj };
-                                daySum[k].quantity += Number(i.quantity) || 0;
+                        {/* カレンダー本体（7列グリッド / モバイル横スクロール） */}
+                        <div className="p-3 sm:p-5 overflow-y-auto overflow-x-auto flex-1 custom-scrollbar">
+                          <div className="min-w-[720px] grid grid-cols-7 gap-2.5">
+                            {daysList.map((item, idx) => {
+                              // 日ごとの作目別合計
+                              const daySum: Record<string, { name: string; quantity: number; unit: string; rawCrop: any }> = {};
+                              item.orders.forEach(o => {
+                                o.items?.forEach((i: any) => {
+                                  const cObj = i.crops || i.crop || { name: '作物' };
+                                  const cName = cObj.name || '作物';
+                                  const k = `${cName}_${i.unit || 'kg'}`;
+                                  if (!daySum[k]) daySum[k] = { name: cName, quantity: 0, unit: i.unit || 'kg', rawCrop: cObj };
+                                  daySum[k].quantity += Number(i.quantity) || 0;
+                                });
                               });
-                            });
 
-                            return (
-                              <div key={item.dateStr} className="bg-emerald-900/40 border border-emerald-800/60 rounded-2xl p-4 space-y-2">
-                                <div className="flex items-center justify-between border-b border-emerald-800/40 pb-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-black text-white text-sm">
-                                      {item.monthDate} ({item.dayOfWeek})
-                                    </span>
-                                    <span className="text-[11px] font-bold text-emerald-400">
+                              const isToday = idx === 0;
+                              const isTomorrow = idx === 1;
+                              const isSelected = selectedDeliveryDate === item.dateStr;
+
+                              return (
+                                <div 
+                                  key={item.dateStr} 
+                                  className={`rounded-2xl border flex flex-col min-h-[360px] max-h-[460px] overflow-hidden transition-all ${
+                                    isSelected
+                                      ? 'border-emerald-400 bg-emerald-900/50 shadow-lg ring-2 ring-emerald-400/60'
+                                      : isToday
+                                      ? 'border-emerald-500/80 bg-emerald-900/30'
+                                      : 'border-emerald-800/60 bg-emerald-950/70'
+                                  }`}
+                                >
+                                  {/* 日付ヘッダー */}
+                                  <div className={`p-2.5 text-center border-b ${
+                                    isToday 
+                                      ? 'bg-emerald-600 text-white font-black' 
+                                      : isTomorrow 
+                                      ? 'bg-emerald-800/90 text-emerald-200 border-emerald-700' 
+                                      : 'bg-emerald-900/60 text-emerald-300 border-emerald-800/70'
+                                  }`}>
+                                    <div className="text-[11px] font-black tracking-wider">
                                       {item.label}
-                                    </span>
+                                    </div>
+                                    <div className="text-sm font-black mt-0.5">
+                                      {item.monthDate} ({item.dayOfWeek})
+                                    </div>
+                                    <div className="text-[10px] mt-0.5 font-bold opacity-90">
+                                      {item.pendingCount > 0 ? `未納品: ${item.pendingCount}件` : '注文なし'}
+                                    </div>
                                   </div>
-                                  <span className="text-xs font-bold text-emerald-300">
-                                    {item.orders.length}件の注文
-                                  </span>
-                                </div>
 
-                                {Object.keys(daySum).length === 0 ? (
-                                  <p className="text-xs text-emerald-500/50 font-bold py-1">予定なし</p>
-                                ) : (
-                                  <div className="flex flex-wrap gap-1.5 pt-1">
-                                    {Object.values(daySum).map((s, sIdx) => (
-                                      <span key={sIdx} className="bg-emerald-950 text-emerald-300 border border-emerald-700 px-2.5 py-1 rounded-lg text-xs font-bold">
-                                        {getTranslatedName(s.rawCrop, language)}: {s.quantity}{getTranslatedUnit(s.unit, language)}
-                                      </span>
-                                    ))}
+                                  {/* カレンダーセルの中身 */}
+                                  <div className="p-2 space-y-2 flex-1 overflow-y-auto custom-scrollbar">
+                                    {/* 🌾 収穫目標サマリー */}
+                                    {Object.keys(daySum).length > 0 && (
+                                      <div className="bg-emerald-900/80 border border-emerald-600/50 p-2 rounded-xl space-y-1 shadow-xs">
+                                        <div className="text-[10px] font-black text-emerald-300 flex items-center gap-1">
+                                          <span>🌾</span> 収穫目標:
+                                        </div>
+                                        <div className="space-y-1">
+                                          {Object.values(daySum).map((s, sIdx) => (
+                                            <div key={sIdx} className="bg-emerald-950 px-2 py-0.5 rounded text-[11px] font-black text-emerald-200 flex justify-between">
+                                              <span className="truncate">{getTranslatedName(s.rawCrop, language)}</span>
+                                              <span>{s.quantity}{getTranslatedUnit(s.unit, language)}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* 📦 顧客別注文カード */}
+                                    {item.orders.length === 0 ? (
+                                      <div className="text-center py-8 text-emerald-500/30 text-[11px] font-bold">
+                                        予定なし
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-1.5">
+                                        <div className="text-[10px] font-bold text-emerald-400/80 px-1">
+                                          注文一覧 ({item.orders.length}件):
+                                        </div>
+                                        {item.orders.map(o => {
+                                          const isDelivered = o.status === 'delivered' || o.status === 'invoiced';
+                                          return (
+                                            <div
+                                              key={o.id}
+                                              className={`p-2 rounded-xl border text-[11px] space-y-1 ${
+                                                isDelivered
+                                                  ? 'bg-emerald-950/40 border-emerald-900/50 opacity-60'
+                                                  : 'bg-emerald-900/50 border-emerald-700/60 shadow-xs'
+                                              }`}
+                                            >
+                                              <div className="flex items-center justify-between font-black text-white">
+                                                <span className="truncate">{o.customer?.name}</span>
+                                                {isDelivered ? (
+                                                  <span className="text-[9px] text-emerald-400 bg-emerald-950 px-1.5 py-0.2 rounded">済</span>
+                                                ) : (
+                                                  <span className="text-[9px] text-rose-400 bg-rose-950/80 px-1.5 py-0.2 rounded">未</span>
+                                                )}
+                                              </div>
+                                              <div className="text-[10px] text-emerald-300/80 font-bold truncate">
+                                                {o.items?.map((i: any) => `${getTranslatedName(i.crops || i.crop || { name: '作物' }, language)} ${i.quantity}${getTranslatedUnit(i.unit || 'kg', language)}`).join(', ')}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
                                   </div>
-                                )}
-                              </div>
-                            );
-                          })}
+
+                                  {/* フッター：この日を選択ボタン */}
+                                  <div className="p-2 border-t border-emerald-800/60 bg-emerald-950/90">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedDeliveryDate(item.dateStr);
+                                        setShowWeekCalendarModal(false);
+                                      }}
+                                      className={`w-full py-1.5 rounded-xl text-[11px] font-black transition-all ${
+                                        isSelected
+                                          ? 'bg-emerald-500 text-emerald-950 font-black shadow-xs'
+                                          : 'bg-emerald-800/60 hover:bg-emerald-700 text-emerald-200'
+                                      }`}
+                                    >
+                                      {isSelected ? '✓ 選択中' : 'この日を開く'}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
 
-                        <div className="p-4 border-t border-emerald-800/80 bg-emerald-900/30 text-right">
+                        {/* モーダルフッター */}
+                        <div className="p-4 border-t border-emerald-800/80 bg-emerald-900/40 flex items-center justify-between">
+                          <p className="text-xs font-bold text-emerald-300/70 hidden sm:block">
+                            💡 各日の「この日を開く」ボタンを押すと、その日の配達・納品詳細へ直接切り替わります。
+                          </p>
                           <button
                             onClick={() => setShowWeekCalendarModal(false)}
-                            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-colors"
+                            className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black rounded-xl text-xs transition-all shadow-md ml-auto"
                           >
                             閉じる
                           </button>
