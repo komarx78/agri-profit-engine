@@ -314,7 +314,7 @@ export default function WorkEntryPage() {
           const { data: farmWorkers } = await supabase
             .from('workers')
             .select('id')
-            .eq('user_id', wRes.data.user_id);
+            .eq('user_id', ownerId);
           const workerIds = farmWorkers?.map(w => w.id) || [currentUser.id];
 
           const { data: pastLogs } = await supabase
@@ -617,22 +617,51 @@ export default function WorkEntryPage() {
     try {
       const cropId = crops.find(c => c.name === selectedSalesCrop)?.id;
       const channelId = salesChannels.find(c => c.name === selectedSalesChannel)?.id;
-      
-      const { error } = await supabase.from('sales_logs').insert([
-        {
-          user_id: workerProfile?.user_id || (currentUser as any)?.user_id || null,
-          crop_id: cropId || null,
-          channel_id: channelId || null,
-          sales_date: getJSTDate(),
-          quantity: parseFloat(salesQuantity) || 0,
-          unit: salesUnit,
-          status: 'completed',
-          worker_id: currentUser?.id || null
+      const ownerId = workerProfile?.user_id || (currentUser as any)?.user_id || null;
+      const qty = parseFloat(salesQuantity) || 0;
+
+      // 該当の販売価格マスタがあれば単価を取得（登録がなければ事後入力・確定用としてnull）
+      let unitPrice: number | null = null;
+      let totalSales: number | null = null;
+
+      if (ownerId) {
+        const { data: priceData } = await supabase
+          .from('sales_prices')
+          .select('price_per_unit')
+          .eq('user_id', ownerId)
+          .eq('crop_name', selectedSalesCrop)
+          .eq('channel_name', selectedSalesChannel)
+          .maybeSingle();
+
+        if (priceData && priceData.price_per_unit) {
+          unitPrice = Number(priceData.price_per_unit);
+          totalSales = qty * unitPrice;
         }
-      ]);
+      }
+      
+      const insertPayload: any = {
+        user_id: ownerId,
+        crop_id: cropId || null,
+        channel_id: channelId || null,
+        sales_date: getJSTDate(),
+        quantity: qty,
+        unit: salesUnit,
+        status: 'completed',
+        notes: currentUser?.name ? `出荷者: ${currentUser.name}` : null
+      };
+
+      if (unitPrice !== null) {
+        insertPayload.unit_price = unitPrice;
+        insertPayload.total_sales = totalSales;
+      }
+
+      const { error } = await supabase.from('sales_logs').insert([insertPayload]);
       if (error) throw error;
       
-      alert("都度出荷を記録しました！");
+      alert(unitPrice !== null 
+        ? `都度出荷を記録しました！\n（マスタ単価: ¥${unitPrice} / 想定売上: ¥${totalSales?.toLocaleString()}）`
+        : `都度出荷を記録しました！\n（※確定金額は精算書到着後に売上管理画面で入力できます）`
+      );
       setSelectedSalesCrop('');
       setSelectedSalesChannel('');
       setSalesQuantity('');
