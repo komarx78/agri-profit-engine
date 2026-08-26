@@ -667,6 +667,30 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
       const toHiragana = raw.replace(/[\u30A1-\u30F6]/g, (m) => String.fromCharCode(m.charCodeAt(0) - 0x60));
       set.add(toHiragana);
 
+      // 主要メーカー・用語の漢字 ↔ カナ相互展開辞書
+      const nameDict: Record<string, string[]> = {
+        '昭和': ['ショウワ', 'しょうわ', '昭和', 'SHOWA'],
+        'ショウワ': ['昭和', 'しょうわ', 'ショウワ', 'SHOWA'],
+        'しょうわ': ['昭和', 'ショウワ', 'しょうわ', 'SHOWA'],
+        '住友': ['スミトモ', 'すみとも', '住友', 'SUMITOMO'],
+        'スミトモ': ['住友', 'すみとも', 'スミトモ', 'SUMITOMO'],
+        '三菱': ['ミツビシ', 'みつびし', '三菱'],
+        '三井': ['ミツイ', 'みつい', '三井'],
+        '日産': ['ニッサン', 'にっさん', '日産'],
+        '全農': ['ゼンノウ', 'ぜんのう', '全農', 'JA', 'ＪＡ'],
+        'クミアイ': ['組合', 'くみあい', 'クミアイ'],
+        '協和': ['キョウワ', 'きょうわ', '協和'],
+        'ホウ素': ['ほう素', 'ホウ素', 'ホウソ', '硼素', 'B'],
+        'マンガン': ['Mn', 'マンガン', 'まんがん'],
+        'ケイ酸': ['珪酸', 'ケイ酸', 'けいさん', 'SiO2']
+      };
+
+      Object.entries(nameDict).forEach(([key, syns]) => {
+        if (raw.includes(key)) {
+          syns.forEach(s => set.add(raw.replace(key, s)));
+        }
+      });
+
       const keywords = Array.from(set).filter(Boolean);
       const orConditions = keywords.flatMap(k => [
         `fertilizer_name.ilike.%${k}%`,
