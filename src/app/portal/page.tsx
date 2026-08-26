@@ -456,7 +456,10 @@ function PortalContent() {
     setIsLoadingManuals(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const ownerId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
+      let ownerId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
+      if (!ownerId && workerProfile && workerProfile.user_id) {
+        ownerId = workerProfile.user_id;
+      }
       
       if (!ownerId) {
         setVideoManuals([]);
@@ -887,7 +890,10 @@ function PortalContent() {
   const loadFullBoardPosts = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const ownerId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
+      let ownerId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
+      if (!ownerId && workerProfile && workerProfile.user_id) {
+        ownerId = workerProfile.user_id;
+      }
       
       if (!ownerId) {
         setAllBoardPosts([]);
@@ -917,7 +923,10 @@ function PortalContent() {
     setIsPostingBoard(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const ownerId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
+      let ownerId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
+      if (!ownerId && workerProfile && workerProfile.user_id) {
+        ownerId = workerProfile.user_id;
+      }
 
       let translations = {};
       try {
