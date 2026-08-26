@@ -17,14 +17,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Mock fallback not supported for this mode' }, { status: 500 });
     }
 
-    // Mode A: 1繝・く繧ｹ繝医ｒ隍・焚險€隱槭∈鄙ｻ險ｳ (謚慕ｨｿ譎ら畑)
+    // Mode A: 1テキストを複数言語へ翻訳 (投稿時用)
     if (targetLanguages && Array.isArray(targetLanguages) && textToTranslate) {
-      const prompt = `Translate the following Japanese text into the following languages: ${targetLanguages.join(', ')}.
-      Return ONLY a valid JSON object where keys are the language codes/names and values are the translated texts.
-      Do not include markdown blocks like \`\`\`json.
-      
-      Text to translate:
-      ${textToTranslate}`;
+      const langMapping: Record<string, string> = {
+        en: 'English',
+        vi: 'Vietnamese',
+        id: 'Indonesian',
+        zh: 'Chinese (Simplified)',
+        si: 'Sinhala (Sri Lanka)',
+        km: 'Khmer (Cambodia)'
+      };
+
+      const requestedList = targetLanguages.map(code => `${code}: ${langMapping[code] || code}`).join('\n');
+
+      const prompt = `Translate the following Japanese text into these target languages:
+${requestedList}
+
+Return ONLY a valid JSON object where keys EXACTLY match the requested language codes (${targetLanguages.map(c => `"${c}"`).join(', ')}) and values are the translated texts.
+Do not wrap with markdown blocks like \`\`\`json.
+
+Text to translate:
+${textToTranslate}`;
 
       let result;
       try {
@@ -40,7 +53,35 @@ export async function POST(req: Request) {
         rawText = rawText.replace(/^```(json)?\n?/, '').replace(/\n?```$/, '');
       }
       
-      return NextResponse.json({ translations: JSON.parse(rawText) });
+      let parsed: Record<string, string> = {};
+      try {
+        parsed = JSON.parse(rawText);
+      } catch (pErr) {
+        console.error('Failed to parse JSON translations:', rawText);
+      }
+
+      // キーの正規化 (sinhala -> si, khmer -> km, 大文字小文字等)
+      const normalized: Record<string, string> = {};
+      Object.keys(parsed).forEach(k => {
+        const lowerK = k.toLowerCase().trim();
+        if (lowerK === 'si' || lowerK === 'sinhala' || lowerK === 'sri lanka' || lowerK.includes('sinhala')) {
+          normalized['si'] = parsed[k];
+        } else if (lowerK === 'km' || lowerK === 'khmer' || lowerK === 'cambodia' || lowerK.includes('khmer')) {
+          normalized['km'] = parsed[k];
+        } else if (lowerK === 'en' || lowerK === 'english') {
+          normalized['en'] = parsed[k];
+        } else if (lowerK === 'vi' || lowerK === 'vietnamese') {
+          normalized['vi'] = parsed[k];
+        } else if (lowerK === 'id' || lowerK === 'indonesian') {
+          normalized['id'] = parsed[k];
+        } else if (lowerK === 'zh' || lowerK === 'chinese') {
+          normalized['zh'] = parsed[k];
+        } else {
+          normalized[k] = parsed[k];
+        }
+      });
+
+      return NextResponse.json({ translations: normalized });
     }
 
     // Mode B: 隍・焚繝・く繧ｹ繝医ｒ1險隱槭∈鄙ｻ險ｳ (譌｢蟄倅ｺ呈鋤)

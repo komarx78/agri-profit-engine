@@ -646,7 +646,9 @@ function PortalContent() {
           en: telopJa,
           vi: telopJa,
           id: telopJa,
-          zh: telopJa
+          zh: telopJa,
+          si: telopJa,
+          km: telopJa
         });
       }
     } catch (e) {
@@ -3081,6 +3083,8 @@ function PortalContent() {
                       {telopTranslations.vi && <p><span className="text-slate-400">🇻🇳 VI:</span> {telopTranslations.vi}</p>}
                       {telopTranslations.id && <p><span className="text-slate-400">🇮🇩 ID:</span> {telopTranslations.id}</p>}
                       {telopTranslations.zh && <p><span className="text-slate-400">🇨🇳 ZH:</span> {telopTranslations.zh}</p>}
+                      {telopTranslations.si && <p><span className="text-slate-400">🇱🇰 SI (スリランカ):</span> {telopTranslations.si}</p>}
+                      {telopTranslations.km && <p><span className="text-slate-400">🇰🇭 KM (カンボジア):</span> {telopTranslations.km}</p>}
                     </div>
                   </div>
                 )}
