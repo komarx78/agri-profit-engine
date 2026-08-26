@@ -19,6 +19,8 @@ interface AttendanceRuleItem {
 export default function HrSettingsPage() {
   const [settingsId, setSettingsId] = useState<string | null>(null);
   const [lineNotificationTime, setLineNotificationTime] = useState('17:30');
+  const [isTestingLine, setIsTestingLine] = useState(false);
+  const [lineTestResult, setLineTestResult] = useState<any>(null);
   
   // 複数勤怠ルール
   const [rules, setRules] = useState<AttendanceRuleItem[]>([]);
@@ -476,14 +478,47 @@ export default function HrSettingsPage() {
 
           {/* LINE通知設定セクション */}
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-            <h2 className="text-base font-black text-slate-800 mb-3 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-emerald-600" />
-              <span>LINE通知設定</span>
-            </h2>
-            <div className="bg-emerald-50/60 p-4 rounded-xl border border-emerald-100 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+              <h2 className="text-base font-black text-slate-800 flex items-center gap-2">
+                <Clock className="w-5 h-5 text-emerald-600" />
+                <span>LINE退勤アラート通知設定</span>
+              </h2>
+              
+              {/* 即時テスト送信ボタン */}
+              <button
+                type="button"
+                onClick={async () => {
+                  if (isTestingLine) return;
+                  setIsTestingLine(true);
+                  setLineTestResult(null);
+                  try {
+                    const tenantId = await getCurrentTenantId();
+                    const res = await fetch(`/api/line-cron?key=my_super_secret_key_123&force=true${tenantId ? `&tenant_id=${tenantId}` : ''}`);
+                    const data = await res.json();
+                    setLineTestResult(data);
+                  } catch (e: any) {
+                    setLineTestResult({ error: e.message || '通信エラー' });
+                  } finally {
+                    setIsTestingLine(false);
+                  }
+                }}
+                disabled={isTestingLine}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm disabled:opacity-50 shrink-0"
+              >
+                {isTestingLine ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <span>🔔 今すぐLINE通知をテスト実行</span>
+                )}
+              </button>
+            </div>
+
+            <div className="bg-emerald-50/60 p-4 rounded-xl border border-emerald-100 space-y-4">
               <p className="text-xs font-bold text-slate-600">
                 出勤したまま退勤を忘れている従業員に対して、自動でLINE通知（アラート）を送る時間を設定します。
+                （※スタッフのLINE連携・通知ON/OFFは「従業員マスタ」から設定可能です）
               </p>
+              
               <div className="max-w-xs">
                 <label className="block text-xs font-bold text-slate-500 mb-1">退勤忘れ通知の送信時間</label>
                 <input
@@ -493,6 +528,46 @@ export default function HrSettingsPage() {
                   className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:outline-none focus:border-emerald-500"
                 />
               </div>
+
+              {/* テスト結果のリアルタイム表示 */}
+              {lineTestResult && (
+                <div className="p-3 bg-white rounded-xl border border-emerald-200 text-xs font-bold space-y-1.5 animate-in fade-in">
+                  <div className="flex items-center gap-1.5 text-emerald-800 font-black">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>LINEテスト送信結果: {lineTestResult.status === 'success' ? '成功' : '失敗'}</span>
+                  </div>
+                  {lineTestResult.message && (
+                    <p className="text-slate-600">{lineTestResult.message}</p>
+                  )}
+                  {lineTestResult.notified_count !== undefined && (
+                    <p className="text-emerald-700 font-bold">
+                      送信完了: {lineTestResult.notified_count} 件
+                    </p>
+                  )}
+                  {lineTestResult.push_results && lineTestResult.push_results.length > 0 && (
+                    <ul className="list-disc list-inside text-slate-600 pl-1">
+                      {lineTestResult.push_results.map((r: any, idx: number) => (
+                        <li key={idx}>
+                          {r.name}: {r.status === 200 ? '✅ LINE送信成功' : `❌ 送信失敗 (${r.error || r.status})`}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {lineTestResult.skipped_results && lineTestResult.skipped_results.length > 0 && (
+                    <div className="pt-1 text-[11px] text-amber-700">
+                      <p className="font-bold">⚠️ 送信スキップ対象:</p>
+                      <ul className="list-disc list-inside pl-1 text-slate-500">
+                        {lineTestResult.skipped_results.map((s: any, idx: number) => (
+                          <li key={idx}>{s.name} - {s.reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {lineTestResult.error && (
+                    <p className="text-rose-600">エラー: {lineTestResult.error}</p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

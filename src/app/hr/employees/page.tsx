@@ -25,7 +25,9 @@ export default function HrEmployeesPage() {
     attendance_rule_id: '',
     standard_start_time: '08:00',
     standard_end_time: '17:00',
-    standard_rest_minutes: 60
+    standard_rest_minutes: 60,
+    line_user_id: '',
+    is_line_notification_enabled: true
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -205,7 +207,9 @@ export default function HrEmployeesPage() {
         attendance_rule_id: ruleId,
         standard_start_time: finalStart,
         standard_end_time: finalEnd,
-        standard_rest_minutes: finalRest
+        standard_rest_minutes: finalRest,
+        line_user_id: worker.line_user_id || '',
+        is_line_notification_enabled: worker.is_line_notification_enabled ?? true
       });
     } else {
       setEditingId(null);
@@ -222,7 +226,9 @@ export default function HrEmployeesPage() {
         attendance_rule_id: defaultRule ? defaultRule.id : '',
         standard_start_time: defaultRule?.start_time ? defaultRule.start_time.substring(0, 5) : (companySettings?.default_start_time ? companySettings.default_start_time.substring(0, 5) : '08:00'),
         standard_end_time: defaultRule?.end_time ? defaultRule.end_time.substring(0, 5) : (companySettings?.default_end_time ? companySettings.default_end_time.substring(0, 5) : '17:00'),
-        standard_rest_minutes: defaultRule?.rest_minutes ?? (companySettings?.default_rest_minutes ?? 60)
+        standard_rest_minutes: defaultRule?.rest_minutes ?? (companySettings?.default_rest_minutes ?? 60),
+        line_user_id: '',
+        is_line_notification_enabled: true
       });
     }
     setIsModalOpen(true);
@@ -396,8 +402,8 @@ export default function HrEmployeesPage() {
                   <th className="p-4">氏名 / 権限</th>
                   <th className="p-4">基本時給</th>
                   <th className="p-4">雇用形態</th>
-                  <th className="p-4">入社日</th>
                   <th className="p-4">就業ルール(定時)</th>
+                  <th className="p-4">LINE通知</th>
                   <th className="p-4 text-center">操作</th>
                 </tr>
               </thead>
@@ -439,9 +445,6 @@ export default function HrEmployeesPage() {
                       )}
                     </td>
                     <td className="p-4 text-sm font-bold text-slate-600">
-                      {w.join_date || '-'}
-                    </td>
-                    <td className="p-4 text-sm font-bold text-slate-600">
                       {(() => {
                         const matchedRule = attendanceRules.find(r => 
                           String(r.id) === String(w.attendance_rule_id) || 
@@ -454,20 +457,30 @@ export default function HrEmployeesPage() {
                         const displayRest = matchedRule?.rest_minutes ?? (w.standard_rest_minutes ?? 60);
 
                         return (
-                          <div className="space-y-1">
-                            {matchedRule && (
-                              <span className="inline-block bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded text-[11px] font-black">
-                                {matchedRule.name}
-                              </span>
-                            )}
-                            <div className="flex items-center gap-1 text-xs text-slate-700">
-                              <Clock className="w-3.5 h-3.5 text-slate-400" />
-                              {displayStart} 〜 {displayEnd}
+                          <div>
+                            <div className="text-slate-800 font-bold">{matchedRule ? matchedRule.name : '個別/標準'}</div>
+                            <div className="text-xs text-slate-400 font-medium">
+                              {displayStart} 〜 {displayEnd} (休{displayRest}分)
                             </div>
-                            <div className="text-[11px] text-slate-400">休憩: {displayRest}分</div>
                           </div>
                         );
                       })()}
+                    </td>
+                    <td className="p-4">
+                      {w.line_user_id ? (
+                        w.is_line_notification_enabled !== false ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            受信ON
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-xs font-bold">
+                            OFF
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-xs text-slate-400 font-medium">未連携</span>
+                      )}
                     </td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -676,6 +689,44 @@ export default function HrEmployeesPage() {
                   </div>
                 </section>
               </div>
+
+              {/* 💬 LINE退勤アラート連携設定 */}
+              <section className="pt-4 border-t border-slate-100">
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <span>💬 LINE退勤アラート連携</span>
+                </h3>
+                <div className="bg-emerald-50/50 p-5 rounded-xl border border-emerald-100 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-bold text-slate-600 mb-1">LINE ユーザーID (line_user_id)</label>
+                      <input 
+                        type="text" 
+                        value={formData.line_user_id || ''}
+                        onChange={e => setFormData({...formData, line_user_id: e.target.value.trim()})}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-xs text-slate-700 font-mono"
+                        placeholder="例: U89851b2fdeef65c8082a921727a56314"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">LINE通知の受信</label>
+                      <label className="flex items-center gap-2 p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:bg-emerald-50 transition-colors">
+                        <input 
+                          type="checkbox"
+                          checked={formData.is_line_notification_enabled ?? true}
+                          onChange={e => setFormData({...formData, is_line_notification_enabled: e.target.checked})}
+                          className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                        />
+                        <span className="text-xs font-bold text-slate-700 select-none">
+                          退勤アラートを受信する
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                  <p className="text-[11px] font-bold text-emerald-700">
+                    ※LINE公式アカウントとお友達登録後、個別のLINEユーザーIDを入力することで、退勤忘れ時に自動でLINEメッセージが届きます。
+                  </p>
+                </div>
+              </section>
 
             </div>
             

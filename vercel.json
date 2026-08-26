@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/line-cron?key=my_super_secret_key_123",
+      "schedule": "*/10 * * * *"
+    }
+  ]
+}
