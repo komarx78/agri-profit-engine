@@ -858,13 +858,14 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
         if (workErr) throw workErr;
 
         // 2. 実績の場合、資材経費 (material_costs) にも原価を自動計上
-        if (isRecord && fertCalculation.totalCost > 0) {
-          const costPerField = fertCalculation.totalCost / selectedCultivations.length;
+        if (isRecord && multiFertCalculation.grandTotalCost > 0) {
+          const costPerField = multiFertCalculation.grandTotalCost / selectedCultivations.length;
+          const fertNames = multiFertCalculation.items.map(i => i.name).join(' + ');
           const costRecords = selectedCultivations.map(c => ({
             user_id: currentUserId,
             crop_id: c.cropId || null,
             expense_date: formDate,
-            item_name: `肥料: ${selectedFertilizerName} (${fertilizerType}) - ${c.fieldName}`,
+            item_name: `肥料: ${fertNames} (${fertilizerType}) - ${c.fieldName}`,
             amount: Math.round(costPerField),
             memo: fertMemoText,
             created_at: timestamp
