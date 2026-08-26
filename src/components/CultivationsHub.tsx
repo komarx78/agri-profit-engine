@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Sprout, 
@@ -130,6 +130,10 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   const [directAddDuration, setDirectAddDuration] = useState<string>('60');
   const [directAddMemo, setDirectAddMemo] = useState<string>('');
   const [isDirectAdding, setIsDirectAdding] = useState(false);
+
+  // 肥料検索用デバウンス＆リクエスト管理ref
+  const searchFertilizerTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const searchFertilizerReqIdRef = useRef<number>(0);
 
   // 作業者向け生産性共有設定ステート
   const [isShareSettingsOpen, setIsShareSettingsOpen] = useState(false);
@@ -643,68 +647,83 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     };
   }, [workLogs, fertAnalysisCropId, fertAnalysisFieldId]);
 
-  // 公的肥料マスター ＆ 自社マスタ統合検索（全方位あいまい検索）
-  const handleSearchFertilizers = async (q: string) => {
+  // 公的肥料マスター ＆ 自社マスタ統合検索（全方位あいまい検索・デバウンス対応・最大200件）
+  const handleSearchFertilizers = (q: string) => {
     setSearchFertQuery(q);
+
+    if (searchFertilizerTimerRef.current) {
+      clearTimeout(searchFertilizerTimerRef.current);
+    }
+
     if (!q.trim()) {
       setIsLoadingFertilizers(true);
-      const { data } = await supabase.from('m_fertilizers').select('*').order('created_at', { ascending: false }).limit(60);
-      setOfficialFertilizers(data || []);
-      setIsLoadingFertilizers(false);
+      searchFertilizerTimerRef.current = setTimeout(async () => {
+        const { data } = await supabase.from('m_fertilizers').select('*').order('created_at', { ascending: false }).limit(60);
+        setOfficialFertilizers(data || []);
+        setIsLoadingFertilizers(false);
+      }, 150);
       return;
     }
 
     setIsLoadingFertilizers(true);
-    try {
-      const keywords = generateComprehensiveSearchKeywords(q);
-      const orConditions = keywords.flatMap(k => [
-        `fertilizer_name.ilike.%${k}%`,
-        `applicant_name.ilike.%${k}%`,
-        `fertilizer_type.ilike.%${k}%`,
-        `registration_no.ilike.%${k}%`,
-        `other_ingredients.ilike.%${k}%`
-      ]).join(',');
+    const thisRequestId = ++searchFertilizerReqIdRef.current;
 
-      // 1. 公的マスター検索
-      const { data: publicData, error } = await supabase
-        .from('m_fertilizers')
-        .select('*')
-        .or(orConditions)
-        .limit(100);
+    searchFertilizerTimerRef.current = setTimeout(async () => {
+      try {
+        const keywords = generateComprehensiveSearchKeywords(q);
+        const orConditions = keywords.flatMap(k => [
+          `fertilizer_name.ilike.%${k}%`,
+          `applicant_name.ilike.%${k}%`,
+          `fertilizer_type.ilike.%${k}%`,
+          `registration_no.ilike.%${k}%`,
+          `other_ingredients.ilike.%${k}%`
+        ]).join(',');
 
-      // 2. 自農園マスタ（materials）からも全方位あいまい一致するものを抽出
-      const matchedFarmItems = farmRegisteredFertilizers.filter(rf => {
-        const targetStr = `${rf.name} ${rf.specification || ''} ${rf.fertilizer_type || ''}`;
-        return isFuzzyMatch(targetStr, q) || keywords.some(k => targetStr.toLowerCase().includes(k.toLowerCase()));
-      }).map(rf => ({
-        id: rf.id,
-        fertilizer_name: rf.name,
-        applicant_name: '自農園マスタ登録品',
-        fertilizer_type: rf.fertilizer_type || '自社登録肥料',
-        registration_no: rf.specification || '',
-        n_percent: rf.n_percent ?? rf.n_ratio ?? 0,
-        p_percent: rf.p_percent ?? rf.p_ratio ?? 0,
-        k_percent: rf.k_percent ?? rf.k_ratio ?? 0,
-        ca_percent: rf.ca_percent ?? 0,
-        mg_percent: rf.mg_percent ?? 0,
-        default_price: rf.default_price || rf.unit_price,
-        bag_weight: rf.bag_weight || rf.capacity || 20,
-        isFarmRegistered: true
-      }));
+        // 1. 公的マスター検索（全4.5万件から最大200件ヒット）
+        const { data: publicData, error } = await supabase
+          .from('m_fertilizers')
+          .select('*')
+          .or(orConditions)
+          .limit(200);
 
-      // 公的マスターデータと自社マスタデータをマージ（自社品を先頭に）
-      const publicItems = (!error && publicData) ? publicData : [];
-      const combined = [
-        ...matchedFarmItems,
-        ...publicItems.filter(p => !matchedFarmItems.some(f => f.fertilizer_name === p.fertilizer_name))
-      ];
+        if (thisRequestId !== searchFertilizerReqIdRef.current) return;
 
-      setOfficialFertilizers(combined);
-    } catch (e) {
-      console.error('Fertilizer search error:', e);
-    } finally {
-      setIsLoadingFertilizers(false);
-    }
+        // 2. 自農園マスタ（materials）からも全方位あいまい一致するものを抽出
+        const matchedFarmItems = farmRegisteredFertilizers.filter(rf => {
+          const targetStr = `${rf.name} ${rf.specification || ''} ${rf.fertilizer_type || ''}`;
+          return isFuzzyMatch(targetStr, q) || keywords.some(k => targetStr.toLowerCase().includes(k.toLowerCase()));
+        }).map(rf => ({
+          id: rf.id,
+          fertilizer_name: rf.name,
+          applicant_name: '自農園マスタ登録品',
+          fertilizer_type: rf.fertilizer_type || '自社登録肥料',
+          registration_no: rf.specification || '',
+          n_percent: rf.n_percent ?? rf.n_ratio ?? 0,
+          p_percent: rf.p_percent ?? rf.p_ratio ?? 0,
+          k_percent: rf.k_percent ?? rf.k_ratio ?? 0,
+          ca_percent: rf.ca_percent ?? 0,
+          mg_percent: rf.mg_percent ?? 0,
+          default_price: rf.default_price || rf.unit_price,
+          bag_weight: rf.bag_weight || rf.capacity || 20,
+          isFarmRegistered: true
+        }));
+
+        // 公的マスターデータと自社マスタデータをマージ（自社品を先頭に）
+        const publicItems = (!error && publicData) ? publicData : [];
+        const combined = [
+          ...matchedFarmItems,
+          ...publicItems.filter(p => !matchedFarmItems.some(f => f.fertilizer_name === p.fertilizer_name))
+        ];
+
+        setOfficialFertilizers(combined);
+      } catch (e) {
+        console.error('Fertilizer search error:', e);
+      } finally {
+        if (thisRequestId === searchFertilizerReqIdRef.current) {
+          setIsLoadingFertilizers(false);
+        }
+      }
+    }, 200);
   };
 
   // 公的肥料を自社マスタ（materials）へ即座にワンクリック登録
