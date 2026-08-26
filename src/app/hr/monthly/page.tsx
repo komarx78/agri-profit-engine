@@ -379,6 +379,150 @@ export default function MonthlyTimecardPage() {
     }
   };
 
+  // CSVエクスポート処理
+  const handleExportCsv = () => {
+    const year = currentMonth.getFullYear();
+    const month = (currentMonth.getMonth() + 1).toString().padStart(2, '0');
+    let csvRows: string[][] = [];
+    let filename = '';
+
+    if (viewMode === 'worker_details' && selectedWorkerId) {
+      // 1. 個人別タイムカードCSV
+      const worker = workers.find(w => w.id === selectedWorkerId);
+      const workerName = worker?.name || 'スタッフ';
+      filename = `タイムカード_${workerName}_${year}年${month}月.csv`;
+
+      csvRows.push([
+        '日付', '曜日', '勤務区分', '打刻出勤', '打刻退勤', '計算上出勤', '計算上退勤', '休憩時間(分)', '労働時間', '実労働分数', '管理者メモ'
+      ]);
+
+      const calendar = generateWorkerCalendar(selectedWorkerId);
+      calendar.forEach(({ date, day, log }) => {
+        const dt = new Date(date);
+        const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][dt.getDay()];
+        
+        if (!log) {
+          csvRows.push([
+            date, dayOfWeek, '未打刻', '', '', '', '', '0', '0時間0分', '0', ''
+          ]);
+          return;
+        }
+
+        const { totalMinutes, roundedIn, roundedOut, restMins } = calculateWorkHours(log);
+        const clockInStr = log.clock_in ? formatTime(new Date(log.clock_in)) : '';
+        const clockOutStr = log.clock_out ? formatTime(new Date(log.clock_out)) : '';
+        const roundedInStr = roundedIn ? formatTime(roundedIn) : '';
+        const roundedOutStr = roundedOut ? formatTime(roundedOut) : '';
+        
+        let statusLabel = '通常出勤';
+        if (log.status === 'paid_leave') statusLabel = '有給休暇';
+        else if (log.status === 'half_paid_am') statusLabel = '前半有給';
+        else if (log.status === 'half_paid_pm') statusLabel = '後半有給';
+        else if (log.status === 'absence') statusLabel = '欠勤';
+        else if (log.status === 'holiday') statusLabel = '公休・休日';
+
+        const hoursText = `${Math.floor(totalMinutes / 60)}時間${totalMinutes % 60}分`;
+
+        csvRows.push([
+          date,
+          dayOfWeek,
+          statusLabel,
+          clockInStr,
+          clockOutStr,
+          roundedInStr,
+          roundedOutStr,
+          String(restMins),
+          hoursText,
+          String(totalMinutes),
+          log.memo || ''
+        ]);
+      });
+
+    } else if (viewMode === 'summary') {
+      // 2. 月次集計CSV
+      filename = `月次勤怠集計_${year}年${month}月.csv`;
+      csvRows.push([
+        '従業員ID', '従業員名', '適用勤怠ルール', '出勤日数', '総休憩時間(時間:分)', '総休憩分数', '総労働時間(時間:分)', '総労働分数'
+      ]);
+
+      summaryArray.forEach((w: any) => {
+        const breakHoursText = `${Math.floor(w.breakMinutes / 60)}時間${w.breakMinutes % 60}分`;
+        const workHoursText = `${Math.floor(w.totalMinutes / 60)}時間${w.totalMinutes % 60}分`;
+
+        csvRows.push([
+          w.workerId,
+          w.name,
+          w.ruleName,
+          String(w.days),
+          breakHoursText,
+          String(w.breakMinutes),
+          workHoursText,
+          String(w.totalMinutes)
+        ]);
+      });
+
+    } else {
+      // 3. 全社明細CSV
+      filename = `全社勤怠明細_${year}年${month}月.csv`;
+      csvRows.push([
+        '日付', '従業員名', '適用勤怠ルール', '勤務区分', '打刻出勤', '打刻退勤', '計算上出勤', '計算上退勤', '休憩時間(分)', '労働時間', '実労働分数', '管理者メモ'
+      ]);
+
+      logs.forEach((log: any) => {
+        const worker = workers.find(w => w.id === log.worker_id) || { name: `不明 (ID: ${log.worker_id.substring(0,8)})` };
+        const matchedRule = attendanceRules.find(r => r.id === worker.attendance_rule_id);
+        const { totalMinutes, roundedIn, roundedOut, restMins } = calculateWorkHours(log);
+        const clockInStr = log.clock_in ? formatTime(new Date(log.clock_in)) : '';
+        const clockOutStr = log.clock_out ? formatTime(new Date(log.clock_out)) : '';
+        const roundedInStr = roundedIn ? formatTime(roundedIn) : '';
+        const roundedOutStr = roundedOut ? formatTime(roundedOut) : '';
+        
+        let statusLabel = '通常出勤';
+        if (log.status === 'paid_leave') statusLabel = '有給休暇';
+        else if (log.status === 'half_paid_am') statusLabel = '前半有給';
+        else if (log.status === 'half_paid_pm') statusLabel = '後半有給';
+        else if (log.status === 'absence') statusLabel = '欠勤';
+        else if (log.status === 'holiday') statusLabel = '公休・休日';
+
+        const hoursText = `${Math.floor(totalMinutes / 60)}時間${totalMinutes % 60}分`;
+        const ruleName = matchedRule?.name || (worker.standard_start_time ? `${worker.standard_start_time.substring(0,5)}〜${worker.standard_end_time?.substring(0,5)}` : '標準設定');
+
+        csvRows.push([
+          log.date,
+          worker.name,
+          ruleName,
+          statusLabel,
+          clockInStr,
+          clockOutStr,
+          roundedInStr,
+          roundedOutStr,
+          String(restMins),
+          hoursText,
+          String(totalMinutes),
+          log.memo || ''
+        ]);
+      });
+    }
+
+    // CSV文字列化（カンマ・改行・ダブルクォートのエスケープ対応）
+    const csvContent = csvRows.map(row => 
+      row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')
+    ).join('\r\n');
+
+    // BOM付きUTF-8でBlob生成＆ダウンロード
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showToast(`📄 ${filename} をダウンロードしました！`);
+  };
+
   const calculateWorkHours = (log: any) => {
     if (!log.clock_in || !log.clock_out) return { totalMinutes: 0, roundedIn: null, roundedOut: null, restMins: 0 };
 
@@ -509,8 +653,12 @@ export default function MonthlyTimecardPage() {
             </div>
           )}
 
-          <button className="flex items-center gap-2 bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-lg font-bold text-sm hover:bg-slate-50 transition-colors">
-            <Download className="w-4 h-4" /> CSV出力
+          <button 
+            type="button"
+            onClick={handleExportCsv}
+            className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 hover:text-blue-700 hover:border-blue-300 px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-50/50 shadow-2xs transition-all cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-blue-600" /> CSV出力
           </button>
         </div>
       </div>
