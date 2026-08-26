@@ -27,6 +27,7 @@ import {
   Filter, 
   ArrowRight,
   ChevronRight,
+  ChevronDown,
   Copy
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
