@@ -102,6 +102,9 @@ export default function WorkEntryPage() {
   
   // --- 出荷・納品用ステート ---
   const [b2bOrders, setB2bOrders] = useState<any[]>([]);
+  const [allB2bOrders, setAllB2bOrders] = useState<any[]>([]);
+  const [selectedDeliveryDate, setSelectedDeliveryDate] = useState<string>(() => getJSTDate());
+  const [showWeekCalendarModal, setShowWeekCalendarModal] = useState(false);
   const [loadingB2bOrders, setLoadingB2bOrders] = useState(false);
   const [salesChannels, setSalesChannels] = useState<any[]>([]);
   const [selectedSalesChannel, setSelectedSalesChannel] = useState('');
@@ -246,7 +249,8 @@ export default function WorkEntryPage() {
           const oRes = await getB2BOrders(ownerId || null);
           if (oRes && oRes.success) {
             const todayStr = getJSTDate();
-            setB2bOrders(oRes.orders.filter((o: any) => o.delivery_date === todayStr && o.status === 'pending'));
+            setAllB2bOrders(oRes.orders || []);
+            setB2bOrders((oRes.orders || []).filter((o: any) => o.delivery_date === todayStr && o.status === 'pending'));
           }
         } catch (oErr) {
           console.error(oErr);
@@ -599,10 +603,12 @@ export default function WorkEntryPage() {
     if (!window.confirm("この注文を「納品済」として記録しますか？")) return;
     try {
       await updateB2BOrderStatus(orderId, 'delivered');
-      const oRes = await getB2BOrders(null);
+      const ownerId = workerProfile?.user_id || (currentUser as any)?.user_id || null;
+      const oRes = await getB2BOrders(ownerId);
       if (oRes && oRes.success) {
         const todayStr = getJSTDate();
-        setB2bOrders(oRes.orders.filter((o: any) => o.delivery_date === todayStr && o.status === 'pending'));
+        setAllB2bOrders(oRes.orders || []);
+        setB2bOrders((oRes.orders || []).filter((o: any) => o.delivery_date === todayStr && o.status === 'pending'));
       }
       alert("納品完了として記録しました！");
     } catch (err: any) {
@@ -1486,41 +1492,276 @@ export default function WorkEntryPage() {
         {activeTab === 'sales' && (
           <div className="space-y-6 pb-20 animate-in fade-in duration-200">
             
-            {/* 上段：本日の配達予定（受注分） */}
-            <section className="bg-emerald-900/40 p-5 rounded-3xl border border-emerald-800/40 shadow-sm relative overflow-hidden">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-black text-emerald-400 flex items-center gap-2">
-                  <Calendar className="w-4 h-4" /> {t('b2bDeliveryTitle', language)}
-                </h2>
-                <span className="text-xs font-bold text-emerald-300/60">{getJSTDate()}</span>
-              </div>
+            {/* 上段：注文カレンダー ＆ 配達・収穫予定 */}
+            {(() => {
+              // 向こう7日間の日付リストを生成
+              const daysList = Array.from({ length: 7 }).map((_, idx) => {
+                const d = new Date();
+                d.setDate(d.getDate() + idx);
+                const dateStr = d.toISOString().split('T')[0];
+                const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+                const label = idx === 0 ? '今日' : idx === 1 ? '明日' : idx === 2 ? '明後日' : `${d.getMonth() + 1}/${d.getDate()}`;
+                
+                // 該当日の未納品注文字数
+                const dayPendingOrders = allB2bOrders.filter(o => o.delivery_date === dateStr && o.status === 'pending');
+                const dayAllOrders = allB2bOrders.filter(o => o.delivery_date === dateStr);
+                
+                return {
+                  dateStr,
+                  dayOfWeek,
+                  label,
+                  monthDate: `${d.getMonth() + 1}/${d.getDate()}`,
+                  pendingCount: dayPendingOrders.length,
+                  allCount: dayAllOrders.length,
+                  orders: dayAllOrders
+                };
+              });
+
+              // 現在選択中の日付の注文データ
+              const currentSelectedDay = daysList.find(d => d.dateStr === selectedDeliveryDate) || daysList[0];
+              const selectedOrders = allB2bOrders.filter(o => o.delivery_date === selectedDeliveryDate);
               
-              {b2bOrders.length === 0 ? (
-                <div className="text-center py-8 bg-emerald-950/50 rounded-2xl border border-emerald-900/50">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-500/50 mx-auto mb-2" />
-                  <div className="text-emerald-400/80 font-bold text-sm">{t('noPendingB2B', language)}</div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {b2bOrders.map(order => (
-                    <div key={order.id} className="bg-emerald-950/70 border border-emerald-800/60 p-4 rounded-2xl flex items-center justify-between shadow-sm">
-                      <div>
-                        <div className="font-black text-white text-base mb-1">{order.customer?.name}</div>
-                        <div className="text-xs font-bold text-emerald-300/80">
-                          {order.items?.map((i: any) => `${getTranslatedName(i.crops || i.crop || { name: '作物' }, language)} ${i.quantity}${getTranslatedUnit(i.unit || 'kg', language)}`).join(' / ')}
+              // 選択日の作目別合計収穫量（サマリー）を計算
+              const harvestSummary: Record<string, { name: string; quantity: number; unit: string; rawCrop: any }> = {};
+              selectedOrders.forEach(order => {
+                order.items?.forEach((item: any) => {
+                  const cropObj = item.crops || item.crop || { name: '作物' };
+                  const cropName = cropObj.name || '作物';
+                  const key = `${cropName}_${item.unit || 'kg'}`;
+                  if (!harvestSummary[key]) {
+                    harvestSummary[key] = {
+                      name: cropName,
+                      quantity: 0,
+                      unit: item.unit || 'kg',
+                      rawCrop: cropObj
+                    };
+                  }
+                  harvestSummary[key].quantity += Number(item.quantity) || 0;
+                });
+              });
+
+              return (
+                <section className="bg-emerald-900/40 p-5 rounded-3xl border border-emerald-800/40 shadow-sm relative overflow-hidden space-y-4">
+                  {/* ヘッダー */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-black text-emerald-300 flex items-center gap-2">
+                        <Calendar className="w-5 h-5 text-emerald-400" />
+                        <span>📅 配達・収穫予定（注文カレンダー）</span>
+                      </h2>
+                      <p className="text-[11px] font-bold text-emerald-300/70 mt-0.5">
+                        明日・明後日以降の注文量や収穫目標を確認できます
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowWeekCalendarModal(true)}
+                      className="px-3 py-1.5 bg-emerald-700/80 hover:bg-emerald-600 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-xs shrink-0"
+                    >
+                      <span>📊 週間まとめ</span>
+                    </button>
+                  </div>
+
+                  {/* 7日間クイック日付スライダー（横スクロール対応） */}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 no-scrollbar">
+                    {daysList.map(item => {
+                      const isSelected = selectedDeliveryDate === item.dateStr;
+                      return (
+                        <button
+                          key={item.dateStr}
+                          type="button"
+                          onClick={() => setSelectedDeliveryDate(item.dateStr)}
+                          className={`flex-1 min-w-[76px] py-2 px-2 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer relative ${
+                            isSelected
+                              ? 'bg-emerald-500 text-emerald-950 shadow-md font-black ring-2 ring-emerald-300'
+                              : 'bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-200/90 border border-emerald-800/50'
+                          }`}
+                        >
+                          <span className={`text-[10px] font-black ${isSelected ? 'text-emerald-950' : 'text-emerald-400'}`}>
+                            {item.label}
+                          </span>
+                          <span className="text-xs font-black">
+                            {item.monthDate} ({item.dayOfWeek})
+                          </span>
+                          {item.pendingCount > 0 ? (
+                            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black mt-0.5 ${
+                              isSelected ? 'bg-emerald-950 text-emerald-300' : 'bg-rose-500 text-white shadow-xs'
+                            }`}>
+                              {item.pendingCount}件
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-emerald-500/40 mt-0.5 font-bold">
+                              -
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* 🌾 選択日の総収穫量（目標）サマリーカード */}
+                  <div className="bg-emerald-950/80 p-4 rounded-2xl border border-emerald-700/50 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-black text-emerald-300 flex items-center gap-1.5">
+                        <span>🌾</span>
+                        <span>
+                          {currentSelectedDay.label}（{currentSelectedDay.monthDate} {currentSelectedDay.dayOfWeek}）の総収穫・出荷目標
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-bold text-emerald-400/80">
+                        {selectedOrders.length}件の注文
+                      </span>
+                    </div>
+
+                    {Object.keys(harvestSummary).length === 0 ? (
+                      <div className="text-center py-3 text-emerald-400/50 text-xs font-bold">
+                        この日の注文予定はありません
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {Object.values(harvestSummary).map((sum, idx) => (
+                          <div 
+                            key={idx}
+                            className="bg-emerald-900/70 border border-emerald-600/50 px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-xs"
+                          >
+                            <span className="font-black text-white text-xs">
+                              {getTranslatedName(sum.rawCrop, language)}
+                            </span>
+                            <span className="font-black text-emerald-300 text-sm bg-emerald-950 px-2 py-0.5 rounded-lg">
+                              {sum.quantity} {getTranslatedUnit(sum.unit, language)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 該当日の注文詳細リスト */}
+                  <div className="space-y-2.5">
+                    {selectedOrders.length === 0 ? (
+                      <div className="text-center py-6 bg-emerald-950/40 rounded-2xl border border-emerald-900/50">
+                        <CheckCircle2 className="w-7 h-7 text-emerald-500/40 mx-auto mb-1.5" />
+                        <div className="text-emerald-400/70 font-bold text-xs">
+                          {currentSelectedDay.label}（{currentSelectedDay.monthDate}）の配達予定はありません
                         </div>
                       </div>
-                      <button 
-                        onClick={() => handleCompleteB2BOrder(order.id)}
-                        className="bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-black text-xs py-2 px-3.5 rounded-xl transition-colors flex items-center gap-1 shadow-md"
-                      >
-                        {t('markDeliveredBtn', language)} <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
+                    ) : (
+                      selectedOrders.map(order => {
+                        const isDelivered = order.status === 'delivered' || order.status === 'invoiced';
+                        return (
+                          <div 
+                            key={order.id} 
+                            className={`p-4 rounded-2xl flex items-center justify-between gap-3 shadow-sm border transition-all ${
+                              isDelivered
+                                ? 'bg-emerald-950/30 border-emerald-900/40 opacity-70'
+                                : 'bg-emerald-950/90 border-emerald-700/70'
+                            }`}
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-black text-white text-sm">{order.customer?.name}</span>
+                                {isDelivered && (
+                                  <span className="bg-emerald-900/80 text-emerald-300 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-700">
+                                    ✅ 納品済
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs font-bold text-emerald-300/90 mt-1">
+                                {order.items?.map((i: any) => `${getTranslatedName(i.crops || i.crop || { name: '作物' }, language)} ${i.quantity}${getTranslatedUnit(i.unit || 'kg', language)}`).join(' / ')}
+                              </div>
+                            </div>
+
+                            {!isDelivered && (
+                              <button 
+                                onClick={() => handleCompleteB2BOrder(order.id)}
+                                className="bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-emerald-950 font-black text-xs py-2 px-3.5 rounded-xl transition-all flex items-center gap-1 shadow-md shrink-0"
+                              >
+                                {t('markDeliveredBtn', language)} <ArrowRight className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* 📊 週間まとめカレンダーモーダル */}
+                  {showWeekCalendarModal && (
+                    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                      <div className="bg-emerald-950 border border-emerald-700/80 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
+                        <div className="p-5 border-b border-emerald-800/80 flex items-center justify-between bg-emerald-900/50">
+                          <h3 className="text-base font-black text-white flex items-center gap-2">
+                            <span>📊</span> 週間注文・収穫カレンダー（7日間）
+                          </h3>
+                          <button
+                            onClick={() => setShowWeekCalendarModal(false)}
+                            className="text-emerald-400 hover:text-white p-1 rounded-lg hover:bg-emerald-800 transition-colors"
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        <div className="p-5 overflow-y-auto space-y-4 custom-scrollbar">
+                          {daysList.map(item => {
+                            // 日ごとの作目別合計
+                            const daySum: Record<string, { name: string; quantity: number; unit: string; rawCrop: any }> = {};
+                            item.orders.forEach(o => {
+                              o.items?.forEach((i: any) => {
+                                const cObj = i.crops || i.crop || { name: '作物' };
+                                const cName = cObj.name || '作物';
+                                const k = `${cName}_${i.unit || 'kg'}`;
+                                if (!daySum[k]) daySum[k] = { name: cName, quantity: 0, unit: i.unit || 'kg', rawCrop: cObj };
+                                daySum[k].quantity += Number(i.quantity) || 0;
+                              });
+                            });
+
+                            return (
+                              <div key={item.dateStr} className="bg-emerald-900/40 border border-emerald-800/60 rounded-2xl p-4 space-y-2">
+                                <div className="flex items-center justify-between border-b border-emerald-800/40 pb-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-black text-white text-sm">
+                                      {item.monthDate} ({item.dayOfWeek})
+                                    </span>
+                                    <span className="text-[11px] font-bold text-emerald-400">
+                                      {item.label}
+                                    </span>
+                                  </div>
+                                  <span className="text-xs font-bold text-emerald-300">
+                                    {item.orders.length}件の注文
+                                  </span>
+                                </div>
+
+                                {Object.keys(daySum).length === 0 ? (
+                                  <p className="text-xs text-emerald-500/50 font-bold py-1">予定なし</p>
+                                ) : (
+                                  <div className="flex flex-wrap gap-1.5 pt-1">
+                                    {Object.values(daySum).map((s, sIdx) => (
+                                      <span key={sIdx} className="bg-emerald-950 text-emerald-300 border border-emerald-700 px-2.5 py-1 rounded-lg text-xs font-bold">
+                                        {getTranslatedName(s.rawCrop, language)}: {s.quantity}{getTranslatedUnit(s.unit, language)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="p-4 border-t border-emerald-800/80 bg-emerald-900/30 text-right">
+                          <button
+                            onClick={() => setShowWeekCalendarModal(false)}
+                            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-colors"
+                          >
+                            閉じる
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </section>
+                  )}
+                </section>
+              );
+            })()}
 
             {/* 下段：JA等への都度出荷フォーム */}
             <section className="bg-emerald-900/40 p-5 rounded-3xl border border-emerald-800/40 shadow-sm relative overflow-hidden">
