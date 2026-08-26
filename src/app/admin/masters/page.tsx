@@ -3,11 +3,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft, Coffee, Briefcase, FlaskConical, Wheat } from 'lucide-react';
+import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft, Coffee, Briefcase, FlaskConical, Wheat, Truck } from 'lucide-react';
 import Papa from 'papaparse';
 import { autoTranslateMasterData } from '@/app/actions/translate';
 
-type MasterType = 'materials' | 'pesticides' | 'fertilizers' | 'sales_prices' | 'crops' | 'fields' | 'workers' | 'departments';
+type MasterType = 'materials' | 'pesticides' | 'fertilizers' | 'sales_prices' | 'crops' | 'fields' | 'workers' | 'departments' | 'sales_channels';
 
 const MATERIAL_CATEGORIES = [
   '諸材料費',
@@ -53,6 +53,7 @@ export default function MastersPage() {
   const fileInputRefCrops = useRef<HTMLInputElement>(null);
   const fileInputRefFields = useRef<HTMLInputElement>(null);
   const fileInputRefWorkers = useRef<HTMLInputElement>(null);
+  const fileInputRefChannels = useRef<HTMLInputElement>(null);
 
   const fetchMasters = async () => {
     try {
@@ -188,7 +189,7 @@ export default function MastersPage() {
       const table = (modalType === 'pesticides' || modalType === 'fertilizers') ? 'materials' : modalType;
       
       // Validation
-      if (['crops', 'fields', 'workers', 'materials', 'pesticides', 'fertilizers'].includes(modalType) && !formData.name) {
+      if (['crops', 'fields', 'workers', 'materials', 'pesticides', 'fertilizers', 'sales_channels'].includes(modalType) && !formData.name) {
         throw new Error('名前は必須です');
       }
       if (modalType === 'sales_prices' && (!formData.crop_name || !formData.channel_name)) {
@@ -216,7 +217,7 @@ export default function MastersPage() {
         }
       }
 
-      if (['crops', 'fields', 'materials', 'pesticides', 'fertilizers'].includes(modalType) && dataToSave.name) {
+      if (['crops', 'fields', 'materials', 'pesticides', 'fertilizers', 'sales_channels'].includes(modalType) && dataToSave.name) {
         setUploadStatus({ type: 'info', message: '多言語翻訳を生成中...' });
         const translations = await autoTranslateMasterData(dataToSave.name);
         dataToSave = { ...dataToSave, ...translations };
@@ -232,7 +233,10 @@ export default function MastersPage() {
       if (table === 'sales_prices' && dataToSave.channel_name) {
         const existsInChannels = channels.some(ch => ch.name === dataToSave.channel_name);
         if (!existsInChannels) {
-          await supabase.from('sales_channels').insert([{ name: dataToSave.channel_name }]);
+          await supabase.from('sales_channels').insert([{ 
+            name: dataToSave.channel_name,
+            user_id: session?.user?.id 
+          }]);
         }
         delete dataToSave.isCustomChannel;
       }
@@ -814,15 +818,57 @@ export default function MastersPage() {
 
           </div>
 
-          {/* 販売・価格マスタ */}
+          {/* 販売・出荷マスタ */}
           <div className="flex items-center justify-between mt-12 mb-4">
-            <h2 className="text-xl font-bold text-slate-700 border-b-2 border-slate-200 pb-1">販売価格マスタ</h2>
+            <h2 className="text-xl font-bold text-slate-700 border-b-2 border-slate-200 pb-1">販売・出荷マスタ</h2>
           </div>
           
-          <div className="grid grid-cols-1 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-            {/* 販売価格マスタ (ツリー表示対応) */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
+            {/* 1. 販路（出荷先）マスタ */}
+            <div className="lg:col-span-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[520px]">
+              <CardHeader icon={Truck} title={`🚚 販路・出荷先 (${channels.length})`} type="sales_channels" />
+              <p className="text-xs text-slate-400 mb-2 font-medium">日報の出荷記録で選択できる出荷先（JA、直売所、小売店など）です。</p>
+              
+              <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
+                {channels.length === 0 ? (
+                  <p className="text-slate-400 text-sm text-center py-8">販路データなし<br/>下のボタンから追加してください</p>
+                ) : null}
+                {channels.map(ch => (
+                  <div key={ch.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
+                    <div>
+                      <span className="font-bold text-slate-700">{ch.name}</span>
+                      {ch.description && <span className="text-[10px] text-slate-400 ml-2">{ch.description}</span>}
+                    </div>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => handleOpenModal('sales_channels', ch)} 
+                        className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer" 
+                        title="編集"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => handleDelete('sales_channels', ch.id)} 
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer" 
+                        title="削除"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button 
+                onClick={() => handleOpenModal('sales_channels')}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-colors shadow-xs cursor-pointer active:scale-98"
+              >
+                <Plus className="w-4 h-4" />新しい販路（出荷先）を追加
+              </button>
+            </div>
+
+            {/* 2. 販売価格マスタ (ツリー表示対応) */}
+            <div className="lg:col-span-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[520px]">
               <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2 text-slate-800 font-bold text-lg">
                   <Banknote className="w-5 h-5 text-emerald-600" />
@@ -860,7 +906,7 @@ export default function MastersPage() {
                 </div>
 
                 {Object.keys(groupedSalesPrices).length === 0 ? (
-                  <p className="text-slate-400 text-sm text-center pt-8">販売価格データがありません</p>
+                  <p className="text-slate-400 text-sm text-center pt-8">販売価格データがありません<br/>「新しい販売価格を追加」から単価を設定してください</p>
                 ) : (
                   Object.keys(groupedSalesPrices).map(groupKey => (
                     <div key={groupKey} className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
@@ -936,16 +982,22 @@ export default function MastersPage() {
             </div>
             
             <div className="p-6 space-y-4">
-              {/* 作目 / 圃場 / 資材 / 作業者 共通 */}
-              {['crops', 'fields', 'materials', 'workers'].includes(modalType) && (
+              {/* 作目 / 圃場 / 資材 / 作業者 / 販路 共通 */}
+              {['crops', 'fields', 'materials', 'workers', 'sales_channels'].includes(modalType) && (
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">名前 (必須)</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">
+                    {modalType === 'sales_channels' ? '販路（出荷先）名 (必須)' : '名前 (必須)'}
+                  </label>
                   <input 
                     type="text" 
                     value={formData.name || ''} 
                     onChange={e => setFormData({...formData, name: e.target.value})}
                     className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
-                    placeholder={modalType === 'crops' ? '例: カリフラワー' : '例: 伏見唐辛子'}
+                    placeholder={
+                      modalType === 'crops' ? '例: カリフラワー' : 
+                      modalType === 'sales_channels' ? '例: JA〇〇支店、〇〇スーパー、直売所' : 
+                      '例: 伏見唐辛子'
+                    }
                   />
                 </div>
               )}
