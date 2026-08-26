@@ -36,17 +36,17 @@ export default function ManualDetailPage() {
     setIsLoading(true);
     try {
       const tenantId = await getCurrentTenantId();
-      let vQuery = supabase
-        .from('video_manuals')
-        .select('*')
-        .eq('id', id);
-
-      if (tenantId) {
-        vQuery = vQuery.eq('user_id', tenantId);
+      if (!tenantId) {
+        throw new Error('テナントIDが特定できません');
       }
 
-      // 1. 動画情報の取得
-      const { data: videoData, error: videoError } = await vQuery.single();
+      // 1. 動画情報の取得 (自社テナントのみ)
+      const { data: videoData, error: videoError } = await supabase
+        .from('video_manuals')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', tenantId)
+        .single();
       
       if (videoError) throw videoError;
       setVideo(videoData);

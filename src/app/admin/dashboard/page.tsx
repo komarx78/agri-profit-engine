@@ -34,29 +34,8 @@ export default function DashboardPage() {
     async function fetchData() {
       try {
         setIsLoading(true);
-        // Supabaseから作業ログと売上ログ、およびユーザー情報を取得
-        const [workRes, salesRes, userRes] = await Promise.all([
-          supabase.from('work_logs').select(`
-            work_date,
-            duration_minutes,
-            material_quantity,
-            status,
-            crops(name),
-            workers(name, hourly_wage),
-            materials(name, default_price),
-            fields(name)
-          `),
-          supabase.from('sales_logs').select(`
-            sales_date,
-            total_sales,
-            status,
-            crops(name),
-            sales_channels(name)
-          `),
-          supabase.auth.getUser()
-        ]);
-
-        let currentOwnerId = userRes.data.user?.id || '';
+        const { data: { user } } = await supabase.auth.getUser();
+        let currentOwnerId = user?.id || '';
         if (!currentOwnerId && typeof window !== 'undefined') {
           currentOwnerId = localStorage.getItem('agri_owner_id') || '';
           if (!currentOwnerId) {
@@ -69,9 +48,34 @@ export default function DashboardPage() {
             }
           }
         }
-        if (currentOwnerId) {
-          setTenantId(currentOwnerId);
+
+        if (!currentOwnerId) {
+          setIsLoading(false);
+          return;
         }
+
+        setTenantId(currentOwnerId);
+
+        // 自社テナントのログのみを厳格に取得
+        const [workRes, salesRes] = await Promise.all([
+          supabase.from('work_logs').select(`
+            work_date,
+            duration_minutes,
+            material_quantity,
+            status,
+            crops(name),
+            workers(name, hourly_wage),
+            materials(name, default_price),
+            fields(name)
+          `).eq('user_id', currentOwnerId),
+          supabase.from('sales_logs').select(`
+            sales_date,
+            total_sales,
+            status,
+            crops(name),
+            sales_channels(name)
+          `).eq('user_id', currentOwnerId)
+        ]);
 
         const rawWorkLogs = workRes.data || [];
         const rawSalesLogs = salesRes.data || [];

@@ -340,14 +340,16 @@ function PortalContent() {
     }
 
     // 3. 掲示板最新3件 (自社テナントのみ)
-    let boardQuery = supabase.from('board_posts').select('*');
     if (targetUserId) {
-      boardQuery = boardQuery.eq('user_id', targetUserId);
+      const { data: boardData } = await supabase.from('board_posts')
+        .select('*')
+        .eq('user_id', targetUserId)
+        .order('created_at', { ascending: false })
+        .limit(3);
+      if (boardData) setBoardPosts(boardData);
+    } else {
+      setBoardPosts([]);
     }
-    const { data: boardData } = await boardQuery
-      .order('created_at', { ascending: false })
-      .limit(3);
-    if (boardData) setBoardPosts(boardData);
 
     // 4. 今日の打刻状態
     const workerId = profile ? profile.id : userId;
@@ -453,16 +455,28 @@ function PortalContent() {
   const loadVideoManuals = async () => {
     setIsLoadingManuals(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const ownerId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
+      
+      if (!ownerId) {
+        setVideoManuals([]);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('video_manuals')
         .select('*')
+        .eq('user_id', ownerId)
         .order('created_at', { ascending: false });
       
       if (!error && data) {
         setVideoManuals(data);
+      } else {
+        setVideoManuals([]);
       }
     } catch (err) {
       console.error('Error loading video manuals:', err);
+      setVideoManuals([]);
     } finally {
       setIsLoadingManuals(false);
     }
@@ -872,13 +886,23 @@ function PortalContent() {
   // 掲示板モーダル制御
   const loadFullBoardPosts = async () => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const ownerId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
+      
+      if (!ownerId) {
+        setAllBoardPosts([]);
+        return;
+      }
+
       const { data } = await supabase.from('board_posts')
         .select('*, workers(name), board_comments(*, workers(name))')
+        .eq('user_id', ownerId)
         .order('created_at', { ascending: false })
         .limit(50);
       if (data) setAllBoardPosts(data);
     } catch (err) {
       console.error(err);
+      setAllBoardPosts([]);
     }
   };
 
@@ -892,6 +916,9 @@ function PortalContent() {
     if (!newPostContent.trim()) return;
     setIsPostingBoard(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const ownerId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
+
       let translations = {};
       try {
         const res = await fetch('/api/translate', {
@@ -914,6 +941,9 @@ function PortalContent() {
         translations: translations,
         worker_id: (workerProfile && workerProfile.id) ? workerProfile.id : null
       };
+      if (ownerId) {
+        postPayload.user_id = ownerId;
+      }
 
       const { data, error } = await supabase.from('board_posts').insert([postPayload]).select('*, workers(name)').single();
       if (error) throw error;

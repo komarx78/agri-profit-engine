@@ -17,17 +17,25 @@ async function resolveAuthenticatedTenantId(passedTenantId?: string | null): Pro
 }
 
 // ---------------------------
+// ---------------------------
 // Customers
 // ---------------------------
 export async function getB2BCustomers(tenantId: string | null) {
   try {
     const adminClient = getAdminSupabase();
     const validTenantId = await resolveAuthenticatedTenantId(tenantId);
-    let query = adminClient.from('b2b_customers').select('*').order('created_at', { ascending: false });
-    if (validTenantId) {
-      query = query.eq('user_id', validTenantId);
+    
+    // テナント未特定時は絶対に他社データを取得しない（空データを返す）
+    if (!validTenantId) {
+      return { success: true, customers: [] };
     }
-    const { data, error } = await query;
+
+    const { data, error } = await adminClient
+      .from('b2b_customers')
+      .select('*')
+      .eq('user_id', validTenantId)
+      .order('created_at', { ascending: false });
+
     if (error) throw error;
     return { success: true, customers: data || [] };
   } catch (error: any) {
@@ -39,10 +47,10 @@ export async function createB2BCustomer(data: any, tenantId?: string | null) {
   try {
     const adminClient = getAdminSupabase();
     const validTenantId = await resolveAuthenticatedTenantId(tenantId);
-    const payload = { ...data };
-    if (validTenantId) {
-      payload.user_id = validTenantId;
+    if (!validTenantId) {
+      return { success: false, error: 'テナントIDが特定できません' };
     }
+    const payload = { ...data, user_id: validTenantId };
     const { error } = await adminClient.from('b2b_customers').insert([payload]);
     if (error) throw error;
     return { success: true };
@@ -149,6 +157,8 @@ export async function getB2BPortalData(tokenOrId: string) {
     let cropQuery = adminClient.from('crops').select('*');
     if (farmOwnerId) {
       cropQuery = cropQuery.eq('user_id', farmOwnerId);
+    } else {
+      cropQuery = cropQuery.eq('id', 'never-match-dummy'); // 空にする
     }
     const { data: cropsData } = await cropQuery;
 
@@ -180,20 +190,22 @@ export async function getB2BOrders(tenantId: string | null) {
   try {
     const adminClient = getAdminSupabase();
     const validTenantId = await resolveAuthenticatedTenantId(tenantId);
-    let query = adminClient
+    
+    // テナント未特定時は絶対に他社データを取得しない（空データを返す）
+    if (!validTenantId) {
+      return { success: true, orders: [] };
+    }
+
+    const { data, error } = await adminClient
       .from('b2b_orders')
       .select(`
         *,
         customer:b2b_customers(*),
         items:b2b_order_items(*, crops(*))
       `)
+      .eq('user_id', validTenantId)
       .order('delivery_date', { ascending: true });
 
-    if (validTenantId) {
-      query = query.eq('user_id', validTenantId);
-    }
-
-    const { data, error } = await query;
     if (error) throw error;
     return { success: true, orders: data || [] };
   } catch (error: any) {
@@ -218,11 +230,12 @@ export async function createB2BOrder(orderData: any, orderItems: any[], tenantId
       }
     }
 
-    // 1. Create Order
-    const payload = { ...orderData };
-    if (validTenantId) {
-      payload.user_id = validTenantId;
+    if (!validTenantId) {
+      return { success: false, error: 'テナントIDが特定できません' };
     }
+
+    // 1. Create Order
+    const payload = { ...orderData, user_id: validTenantId };
 
     const { data: newOrder, error: orderError } = await adminClient
       .from('b2b_orders')
@@ -320,16 +333,18 @@ export async function getB2BInvoices(tenantId: string | null) {
   try {
     const adminClient = getAdminSupabase();
     const validTenantId = await resolveAuthenticatedTenantId(tenantId);
-    let query = adminClient
-      .from('b2b_invoices')
-      .select('*, customer:b2b_customers(*)')
-      .order('issue_date', { ascending: false });
-
-    if (validTenantId) {
-      query = query.eq('user_id', validTenantId);
+    
+    // テナント未特定時は絶対に他社データを取得しない（空データを返す）
+    if (!validTenantId) {
+      return { success: true, invoices: [] };
     }
 
-    const { data, error } = await query;
+    const { data, error } = await adminClient
+      .from('b2b_invoices')
+      .select('*, customer:b2b_customers(*)')
+      .eq('user_id', validTenantId)
+      .order('issue_date', { ascending: false });
+
     if (error) throw error;
     return { success: true, invoices: data || [] };
   } catch (error: any) {
@@ -341,10 +356,10 @@ export async function createB2BInvoice(invoiceData: any, tenantId?: string | nul
   try {
     const adminClient = getAdminSupabase();
     const validTenantId = await resolveAuthenticatedTenantId(tenantId);
-    const payload = { ...invoiceData };
-    if (validTenantId) {
-      payload.user_id = validTenantId;
+    if (!validTenantId) {
+      return { success: false, error: 'テナントIDが特定できません' };
     }
+    const payload = { ...invoiceData, user_id: validTenantId };
     const { data, error } = await adminClient
       .from('b2b_invoices')
       .insert([payload])
@@ -375,23 +390,22 @@ export async function generateInvoicesForMonth(targetMonth: string, tenantId?: s
   try {
     const adminClient = getAdminSupabase();
     const validTenantId = await resolveAuthenticatedTenantId(tenantId);
+    if (!validTenantId) {
+      return { success: false, count: 0, message: "テナントIDが特定できません" };
+    }
     const startDate = `${targetMonth}-01`;
     const [yearStr, monthStr] = targetMonth.split('-');
     const nextMonth = new Date(Number(yearStr), Number(monthStr), 1);
     const endDate = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`;
 
-    let orderQuery = adminClient
+    const { data: deliveredOrders, error: orderErr } = await adminClient
       .from('b2b_orders')
       .select('*, customer:b2b_customers(*), items:b2b_order_items(*)')
+      .eq('user_id', validTenantId)
       .gte('delivery_date', startDate)
       .lt('delivery_date', endDate)
       .in('status', ['delivered', 'invoiced']);
 
-    if (validTenantId) {
-      orderQuery = orderQuery.eq('user_id', validTenantId);
-    }
-
-    const { data: deliveredOrders, error: orderErr } = await orderQuery;
     if (orderErr) throw orderErr;
 
     if (!deliveredOrders || deliveredOrders.length === 0) {
