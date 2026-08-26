@@ -24,7 +24,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'LINE Token is not configured' }, { status: 500 });
     }
 
-    // JSTで今日の日付を取得
+    // JSTで今日の日付と時刻を取得
     const today = new Date();
     today.setHours(today.getHours() + 9);
     const dateStr = today.toISOString().split('T')[0];
@@ -62,16 +62,21 @@ export async function GET(req: Request) {
     // 2. テナント別の会社設定を取得
     const { data: allSettings } = await supabase
       .from('company_settings')
-      .select('id, user_id, line_notification_time');
+      .select('id, user_id, line_notification_offset_minutes, line_notification_time, default_end_time');
 
-    const settingsMap: Record<string, string> = {};
+    const settingsMap: Record<string, any> = {};
     (allSettings || []).forEach((s: any) => {
-      if (s.user_id && s.line_notification_time) {
-        settingsMap[s.user_id] = s.line_notification_time.substring(0, 5);
+      if (s.user_id) {
+        settingsMap[s.user_id] = s;
       }
     });
 
-    // 3. 承認済みの残業申請を取得
+    // 3. 勤怠ルールテーブルを取得
+    const { data: allRules } = await supabase
+      .from('attendance_rules')
+      .select('*');
+
+    // 4. 承認済みの残業申請を取得
     const { data: overtimes } = await supabase
       .from('overtime_requests')
       .select('worker_id, scheduled_end_time')
@@ -79,10 +84,10 @@ export async function GET(req: Request) {
       .eq('status', 'approved')
       .in('worker_id', workerIds);
 
-    // 4. ワーカー情報を取得
+    // 5. ワーカー情報を取得
     const { data: workers, error: workersError } = await supabase
       .from('workers')
-      .select('id, name, user_id, line_user_id, is_line_notification_enabled')
+      .select('id, name, user_id, line_user_id, is_line_notification_enabled, attendance_rule_id, standard_end_time')
       .in('id', workerIds);
 
     if (workersError) {
@@ -107,27 +112,43 @@ export async function GET(req: Request) {
         continue;
       }
 
-      // そのワーカーの所属テナントの通知時間を取得（デフォルト 17:30）
       const tenantId = worker.user_id || log.user_id;
-      let targetTime = (tenantId && settingsMap[tenantId]) ? settingsMap[tenantId] : '17:30';
+      const compSetting = tenantId ? settingsMap[tenantId] : null;
+      const offsetMinutes = Number(compSetting?.line_notification_offset_minutes) || 30;
 
-      // 残業申請があれば残業時刻+30分を優先
-      const ot = overtimes?.find(o => o.worker_id === worker.id);
-      if (ot && ot.scheduled_end_time) {
-        const [hours, minutes] = ot.scheduled_end_time.split(':').map(Number);
-        const dateObj = new Date();
-        dateObj.setHours(hours);
-        dateObj.setMinutes(minutes + 30);
-        const newHours = String(dateObj.getHours()).padStart(2, '0');
-        const newMinutes = String(dateObj.getMinutes()).padStart(2, '0');
-        targetTime = `${newHours}:${newMinutes}`;
+      // ワーカーの基本退勤予定時刻を決定
+      let baseEndTime = '17:00';
+      if (worker.standard_end_time) {
+        baseEndTime = worker.standard_end_time.substring(0, 5);
+      } else if (worker.attendance_rule_id && allRules) {
+        const matchedRule = allRules.find((r: any) => String(r.id) === String(worker.attendance_rule_id) || r.name === worker.attendance_rule_id);
+        if (matchedRule && matchedRule.end_time) {
+          baseEndTime = matchedRule.end_time.substring(0, 5);
+        }
+      } else if (compSetting?.default_end_time) {
+        baseEndTime = compSetting.default_end_time.substring(0, 5);
       }
 
-      // 現在時刻が通知時刻を過ぎている（currentHourMin >= targetTime）か、forceRunの場合に送信
+      // 残業申請があれば残業予定時刻を最優先
+      const ot = overtimes?.find(o => o.worker_id === worker.id);
+      if (ot && ot.scheduled_end_time) {
+        baseEndTime = ot.scheduled_end_time.substring(0, 5);
+      }
+
+      // 退勤予定時刻 + offsetMinutes（例: 30分後）を計算
+      const [hours, minutes] = baseEndTime.split(':').map(Number);
+      const targetDateObj = new Date();
+      targetDateObj.setHours(hours);
+      targetDateObj.setMinutes(minutes + offsetMinutes);
+      const targetHour = String(targetDateObj.getHours()).padStart(2, '0');
+      const targetMin = String(targetDateObj.getMinutes()).padStart(2, '0');
+      const targetTime = `${targetHour}:${targetMin}`;
+
+      // 現在時刻が個別通知時刻を過ぎている（currentHourMin >= targetTime）か、forceRunの場合に送信
       const shouldSend = forceRun || (currentHourMin >= targetTime);
 
       if (shouldSend) {
-        const messageText = `お疲れ様です！\n本日 ${worker.name} さんの「退勤」がまだ打刻されていません。\n\n本日の作業が終了している場合は、現場ポータルより退勤打刻をお願いいたします！\nhttps://agri-profit-engine.vercel.app/portal`;
+        const messageText = `お疲れ様です！\n本日 ${worker.name} さんの「退勤」がまだ打刻されていません。\n（定時退勤予定: ${baseEndTime} / 通知設定: ${offsetMinutes}分後）\n\n本日の作業が終了している場合は、現場ポータルより退勤打刻をお願いいたします！\nhttps://agri-profit-engine.vercel.app/portal`;
 
         try {
           const response = await fetch('https://api.line.me/v2/bot/message/push', {
@@ -145,8 +166,10 @@ export async function GET(req: Request) {
           pushResults.push({
             worker_id: worker.id,
             name: worker.name,
-            status: response.status,
-            target_time: targetTime
+            scheduled_end_time: baseEndTime,
+            target_time: targetTime,
+            offset_minutes: offsetMinutes,
+            status: response.status
           });
         } catch (err: any) {
           console.error(`Push Error to ${worker.name}:`, err);
@@ -160,7 +183,7 @@ export async function GET(req: Request) {
       } else {
         skippedResults.push({
           name: worker.name,
-          reason: `通知時刻前 (予定: ${targetTime}, 現在: ${currentHourMin})`
+          reason: `通知予定前 (退勤定時: ${baseEndTime} ➔ 通知予定: ${targetTime}, 現在: ${currentHourMin})`
         });
       }
     }

@@ -19,6 +19,7 @@ interface AttendanceRuleItem {
 export default function HrSettingsPage() {
   const [settingsId, setSettingsId] = useState<string | null>(null);
   const [lineNotificationTime, setLineNotificationTime] = useState('17:30');
+  const [lineNotificationOffsetMinutes, setLineNotificationOffsetMinutes] = useState<number>(30);
   const [isTestingLine, setIsTestingLine] = useState(false);
   const [lineTestResult, setLineTestResult] = useState<any>(null);
   
@@ -51,6 +52,9 @@ export default function HrSettingsPage() {
 
         if (compData) {
           setSettingsId(compData.id);
+          if (compData.line_notification_offset_minutes !== undefined && compData.line_notification_offset_minutes !== null) {
+            setLineNotificationOffsetMinutes(Number(compData.line_notification_offset_minutes));
+          }
           if (compData.line_notification_time) {
             setLineNotificationTime(compData.line_notification_time.substring(0, 5));
           }
@@ -282,6 +286,7 @@ export default function HrSettingsPage() {
         default_end_time: defaultRule.end_time.length === 5 ? defaultRule.end_time + ':00' : defaultRule.end_time,
         default_rest_minutes: defaultRule.rest_minutes,
         auto_round_out_time: defaultRule.auto_round_out_time,
+        line_notification_offset_minutes: Number(lineNotificationOffsetMinutes) || 30,
         line_notification_time: lineNotificationTime.length === 5 ? lineNotificationTime + ':00' : lineNotificationTime,
         attendance_rules: updatedRules,
         updated_at: new Date().toISOString()
@@ -291,14 +296,16 @@ export default function HrSettingsPage() {
         if (settingsId) {
           const { error: cUpErr } = await supabase.from('company_settings').update(compPayload).eq('id', settingsId);
           if (cUpErr) {
-            // attendance_rules カラムが無い場合のフォールバック
+            // カラムが無い場合の安全フォールバック
             delete compPayload.attendance_rules;
+            delete compPayload.line_notification_offset_minutes;
             await supabase.from('company_settings').update(compPayload).eq('id', settingsId);
           }
         } else {
           const { data: newComp, error: cInErr } = await supabase.from('company_settings').insert([compPayload]).select().single();
           if (cInErr) {
             delete compPayload.attendance_rules;
+            delete compPayload.line_notification_offset_minutes;
             const { data: retryComp } = await supabase.from('company_settings').insert([compPayload]).select().single();
             if (retryComp) setSettingsId(retryComp.id);
           } else if (newComp) {
@@ -513,20 +520,79 @@ export default function HrSettingsPage() {
               </button>
             </div>
 
-            <div className="bg-emerald-50/60 p-4 rounded-xl border border-emerald-100 space-y-4">
-              <p className="text-xs font-bold text-slate-600">
-                出勤したまま退勤を忘れている従業員に対して、自動でLINE通知（アラート）を送る時間を設定します。
-                （※スタッフのLINE連携・通知ON/OFFは「従業員マスタ」から設定可能です）
+            <div className="bg-emerald-50/60 p-5 rounded-2xl border border-emerald-100 space-y-4">
+              <p className="text-xs font-bold text-slate-700 leading-relaxed">
+                出勤したまま退勤を忘れている従業員に対して、<strong>各スタッフの就業ルール（定時）または承認された残業予定時刻の◯分後</strong>に、自動でLINEアラート通知を送信します。
               </p>
               
-              <div className="max-w-xs">
-                <label className="block text-xs font-bold text-slate-500 mb-1">退勤忘れ通知の送信時間</label>
-                <input
-                  type="time"
-                  value={lineNotificationTime}
-                  onChange={(e) => setLineNotificationTime(e.target.value)}
-                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:outline-none focus:border-emerald-500"
-                />
+              <div className="bg-white p-4 rounded-xl border border-emerald-200/70 shadow-xs space-y-3">
+                <label className="block text-xs font-black text-slate-700">
+                  ⏰ LINE退勤アラートの送信タイミング
+                </label>
+                
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-xs font-bold text-slate-600">各スタッフの退勤予定時刻の</span>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min="5"
+                      max="180"
+                      step="5"
+                      value={lineNotificationOffsetMinutes}
+                      onChange={(e) => setLineNotificationOffsetMinutes(parseInt(e.target.value) || 0)}
+                      className="w-24 p-2.5 bg-emerald-50/50 border border-emerald-300 rounded-xl font-black text-center text-emerald-800 text-base focus:outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <span className="text-xs font-bold text-slate-700">分後 に送信</span>
+                  </div>
+
+                  {/* クイック選択バッジ */}
+                  <div className="flex items-center gap-1.5 pl-2">
+                    {[15, 30, 45, 60].map((min) => (
+                      <button
+                        key={min}
+                        type="button"
+                        onClick={() => setLineNotificationOffsetMinutes(min)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                          lineNotificationOffsetMinutes === min
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-emerald-100 hover:text-emerald-800'
+                        }`}
+                      >
+                        {min}分後
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 💡 連動の具体例ガイド */}
+                <div className="mt-2 p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] font-bold text-slate-600 space-y-1">
+                  <div className="text-emerald-800 font-black flex items-center gap-1">
+                    <span>💡 実際の通知タイミングの例（{lineNotificationOffsetMinutes}分後設定の場合）:</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-slate-600">
+                    <div className="bg-white p-2 rounded-lg border border-slate-200">
+                      🏃‍♂️ <strong>早番 (16:00定時)</strong><br />
+                      ➔ <span className="text-emerald-700 font-black">{(() => {
+                        const d = new Date(); d.setHours(16, lineNotificationOffsetMinutes, 0);
+                        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                      })()}</span> にLINE送信
+                    </div>
+                    <div className="bg-white p-2 rounded-lg border border-slate-200">
+                      🏢 <strong>通常 (17:00定時)</strong><br />
+                      ➔ <span className="text-emerald-700 font-black">{(() => {
+                        const d = new Date(); d.setHours(17, lineNotificationOffsetMinutes, 0);
+                        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                      })()}</span> にLINE送信
+                    </div>
+                    <div className="bg-white p-2 rounded-lg border border-slate-200">
+                      ⏰ <strong>残業 (19:00残業承認)</strong><br />
+                      ➔ <span className="text-emerald-700 font-black">{(() => {
+                        const d = new Date(); d.setHours(19, lineNotificationOffsetMinutes, 0);
+                        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                      })()}</span> に自動延長送信
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* テスト結果のリアルタイム表示 */}
