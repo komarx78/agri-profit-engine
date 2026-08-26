@@ -2918,6 +2918,35 @@ function PortalContent() {
                     {trimRangesInput.map((r, i) => `${parseFloat(r.start) || 0}s〜${r.end ? `${r.end}s` : '最後まで'}`).join(' ⏩ ')}
                   </p>
                 </div>
+
+                {/* 💾 パネル直結・保存アクションバー */}
+                <div className="pt-2 border-t border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] text-amber-300/90 bg-amber-500/10 px-3 py-1.5 rounded-xl border border-amber-500/20">
+                    <div className="flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="font-bold">設定後は下の保存ボタン（または右上の保存）で確定してください</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveStudio}
+                    disabled={isSavingStudio}
+                    className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-2xl font-black text-xs shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingStudio ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                        <span>トリミングとテロップを保存中...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 text-emerald-200" />
+                        <span>💾 カット・トリミング設定を今すぐ保存する</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
             </div>
