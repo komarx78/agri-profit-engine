@@ -105,6 +105,7 @@ export default function WorkEntryPage() {
   const [allB2bOrders, setAllB2bOrders] = useState<any[]>([]);
   const [selectedDeliveryDate, setSelectedDeliveryDate] = useState<string>(() => getJSTDate());
   const [showWeekCalendarModal, setShowWeekCalendarModal] = useState(false);
+  const [calendarWeekOffset, setCalendarWeekOffset] = useState(0); // 0=今週, 1=来週, 2=再来週, 3=3週後, 4=4週後(約1ヶ月先)
   const [loadingB2bOrders, setLoadingB2bOrders] = useState(false);
   const [salesChannels, setSalesChannels] = useState<any[]>([]);
   const [selectedSalesChannel, setSelectedSalesChannel] = useState('');
@@ -1494,8 +1495,33 @@ export default function WorkEntryPage() {
             
             {/* 上段：注文カレンダー ＆ 配達・収穫予定 */}
             {(() => {
-              // 週間フル7日間の日付リストを生成 (モーダル用)
-              const fullWeekDaysList = Array.from({ length: 7 }).map((_, idx) => {
+              // 週間フル7日間の日付リストを生成 (モーダル用、calendarWeekOffsetと連動)
+              const modalWeekDaysList = Array.from({ length: 7 }).map((_, idx) => {
+                const d = new Date();
+                d.setDate(d.getDate() + (calendarWeekOffset * 7) + idx);
+                const dateStr = d.toISOString().split('T')[0];
+                const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+                
+                // 相対日数
+                const totalDiff = (calendarWeekOffset * 7) + idx;
+                const label = totalDiff === 0 ? '今日' : totalDiff === 1 ? '明日' : totalDiff === 2 ? '明後日' : `${d.getMonth() + 1}/${d.getDate()}`;
+                
+                const dayPendingOrders = allB2bOrders.filter(o => o.delivery_date === dateStr && o.status === 'pending');
+                const dayAllOrders = allB2bOrders.filter(o => o.delivery_date === dateStr);
+                
+                return {
+                  dateStr,
+                  dayOfWeek,
+                  label,
+                  monthDate: `${d.getMonth() + 1}/${d.getDate()}`,
+                  pendingCount: dayPendingOrders.length,
+                  allCount: dayAllOrders.length,
+                  orders: dayAllOrders
+                };
+              });
+
+              // メイン画面の直近4日間ピル (スクロールなしでピタッと美しく収める)
+              const topFourDays = Array.from({ length: 4 }).map((_, idx) => {
                 const d = new Date();
                 d.setDate(d.getDate() + idx);
                 const dateStr = d.toISOString().split('T')[0];
@@ -1516,11 +1542,13 @@ export default function WorkEntryPage() {
                 };
               });
 
-              // メイン画面の直近4日間ピル (スクロールなしでピタッと美しく収める)
-              const topFourDays = fullWeekDaysList.slice(0, 4);
-
               // 現在選択中の日付の注文データ
-              const currentSelectedDay = fullWeekDaysList.find(d => d.dateStr === selectedDeliveryDate) || fullWeekDaysList[0];
+              const currentSelectedDay = topFourDays.find(d => d.dateStr === selectedDeliveryDate) || {
+                dateStr: selectedDeliveryDate,
+                label: selectedDeliveryDate,
+                monthDate: selectedDeliveryDate.substring(5),
+                dayOfWeek: ''
+              };
               const selectedOrders = allB2bOrders.filter(o => o.delivery_date === selectedDeliveryDate);
               
               // 選択日の作目別合計収穫量（サマリー）を計算
@@ -1561,7 +1589,7 @@ export default function WorkEntryPage() {
                       onClick={() => setShowWeekCalendarModal(true)}
                       className="px-3 py-2 bg-emerald-700/90 hover:bg-emerald-600 active:scale-95 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-xs shrink-0 border border-emerald-600/50"
                     >
-                      <span>📊 週間まとめ</span>
+                      <span>📊 注文カレンダー</span>
                     </button>
                   </div>
 
@@ -1688,30 +1716,84 @@ export default function WorkEntryPage() {
                     )}
                   </div>
 
-                  {/* 📊 週間まとめカレンダーモーダル（本格グリッドカレンダー形式） */}
+                  {/* 📊 1ヶ月先まで見れる 注文・収穫カレンダーモーダル */}
                   {showWeekCalendarModal && (
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-3 sm:p-6 animate-in fade-in zoom-in-95 duration-200">
-                      <div className="bg-emerald-950 border border-emerald-700/80 rounded-3xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh]">
-                        {/* ヘッダー */}
-                        <div className="p-4 sm:p-5 border-b border-emerald-800/80 flex items-center justify-between bg-emerald-900/60">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-5 h-5 text-emerald-400" />
-                            <h3 className="text-base sm:text-lg font-black text-white">
-                              週間 注文・収穫カレンダー（向こう7日間）
-                            </h3>
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-2 sm:p-5 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="bg-emerald-950 border border-emerald-700/80 rounded-3xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[92vh]">
+                        {/* モーダルヘッダー */}
+                        <div className="p-4 border-b border-emerald-800/80 bg-emerald-900/60 flex flex-col gap-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="w-5 h-5 text-emerald-400" />
+                              <h3 className="text-base sm:text-lg font-black text-white">
+                                注文・収穫カレンダー（直近1ヶ月対応）
+                              </h3>
+                            </div>
+                            <button
+                              onClick={() => setShowWeekCalendarModal(false)}
+                              className="text-emerald-400 hover:text-white p-1.5 rounded-xl hover:bg-emerald-800 transition-colors"
+                            >
+                              ✕
+                            </button>
                           </div>
-                          <button
-                            onClick={() => setShowWeekCalendarModal(false)}
-                            className="text-emerald-400 hover:text-white p-1.5 rounded-xl hover:bg-emerald-800 transition-colors"
-                          >
-                            ✕
-                          </button>
+
+                          {/* 🗓️ 1ヶ月ナビゲーションバー（週切り替え ＆ クイックピル） */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-emerald-950/90 p-2 rounded-2xl border border-emerald-800/70">
+                            {/* 前週 / 翌週ボタン ＆ 期間 */}
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setCalendarWeekOffset(prev => Math.max(0, prev - 1))}
+                                disabled={calendarWeekOffset === 0}
+                                className="px-3 py-1.5 bg-emerald-900/80 hover:bg-emerald-800 text-emerald-200 rounded-xl text-xs font-black transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                              >
+                                ◀ 前の週
+                              </button>
+                              
+                              <span className="text-xs font-black text-emerald-300 px-1">
+                                {modalWeekDaysList[0].monthDate} ({modalWeekDaysList[0].dayOfWeek}) 〜 {modalWeekDaysList[6].monthDate} ({modalWeekDaysList[6].dayOfWeek})
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={() => setCalendarWeekOffset(prev => Math.min(4, prev + 1))}
+                                disabled={calendarWeekOffset >= 4}
+                                className="px-3 py-1.5 bg-emerald-900/80 hover:bg-emerald-800 text-emerald-200 rounded-xl text-xs font-black transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                              >
+                                次の週 ▶
+                              </button>
+                            </div>
+
+                            {/* 1ヶ月クイック週選択ピル */}
+                            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+                              {[
+                                { offset: 0, label: '今週' },
+                                { offset: 1, label: '来週 (+1)' },
+                                { offset: 2, label: '再来週 (+2)' },
+                                { offset: 3, label: '3週後 (+3)' },
+                                { offset: 4, label: '4週後 (+4)' }
+                              ].map(pill => (
+                                <button
+                                  key={pill.offset}
+                                  type="button"
+                                  onClick={() => setCalendarWeekOffset(pill.offset)}
+                                  className={`px-2.5 py-1 rounded-xl text-xs font-black transition-all shrink-0 ${
+                                    calendarWeekOffset === pill.offset
+                                      ? 'bg-emerald-500 text-emerald-950 shadow-xs'
+                                      : 'bg-emerald-900/50 text-emerald-300/80 hover:bg-emerald-800'
+                                  }`}
+                                >
+                                  {pill.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         </div>
 
                         {/* カレンダー本体（7列グリッド / モバイル横スクロール） */}
                         <div className="p-3 sm:p-5 overflow-y-auto overflow-x-auto flex-1 custom-scrollbar">
                           <div className="min-w-[720px] grid grid-cols-7 gap-2.5">
-                            {fullWeekDaysList.map((item, idx) => {
+                            {modalWeekDaysList.map((item, idx) => {
                               // 日ごとの作目別合計
                               const daySum: Record<string, { name: string; quantity: number; unit: string; rawCrop: any }> = {};
                               item.orders.forEach(o => {
@@ -1724,8 +1806,8 @@ export default function WorkEntryPage() {
                                 });
                               });
 
-                              const isToday = idx === 0;
-                              const isTomorrow = idx === 1;
+                              const isToday = calendarWeekOffset === 0 && idx === 0;
+                              const isTomorrow = calendarWeekOffset === 0 && idx === 1;
                               const isSelected = selectedDeliveryDate === item.dateStr;
 
                               return (
@@ -1842,7 +1924,7 @@ export default function WorkEntryPage() {
                         {/* モーダルフッター */}
                         <div className="p-4 border-t border-emerald-800/80 bg-emerald-900/40 flex items-center justify-between">
                           <p className="text-xs font-bold text-emerald-300/70 hidden sm:block">
-                            💡 各日の「この日を開く」ボタンを押すと、その日の配達・納品詳細へ直接切り替わります。
+                            💡 各週を切り替えて直近1ヶ月先までの注文を確認でき、「この日を開く」で詳細へジャンプできます。
                           </p>
                           <button
                             onClick={() => setShowWeekCalendarModal(false)}
@@ -1854,6 +1936,92 @@ export default function WorkEntryPage() {
                       </div>
                     </div>
                   )}
+
+                  {/* 🌾 選択日の総収穫量（目標）サマリーカード */}
+                  <div className="bg-emerald-950/80 p-4 rounded-2xl border border-emerald-700/50 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-black text-emerald-300 flex items-center gap-1.5">
+                        <span>🌾</span>
+                        <span>
+                          {currentSelectedDay.label}（{currentSelectedDay.monthDate} {currentSelectedDay.dayOfWeek}）の総収穫・出荷目標
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-bold text-emerald-400/80">
+                        {selectedOrders.length}件の注文
+                      </span>
+                    </div>
+
+                    {Object.keys(harvestSummary).length === 0 ? (
+                      <div className="text-center py-3 text-emerald-400/50 text-xs font-bold">
+                        この日の注文予定はありません
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {Object.values(harvestSummary).map((sum, idx) => (
+                          <div 
+                            key={idx}
+                            className="bg-emerald-900/70 border border-emerald-600/50 px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-xs"
+                          >
+                            <span className="font-black text-white text-xs">
+                              {getTranslatedName(sum.rawCrop, language)}
+                            </span>
+                            <span className="font-black text-emerald-300 text-sm bg-emerald-950 px-2 py-0.5 rounded-lg">
+                              {sum.quantity} {getTranslatedUnit(sum.unit, language)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 該当日の注文詳細リスト */}
+                  <div className="space-y-2.5">
+                    {selectedOrders.length === 0 ? (
+                      <div className="text-center py-6 bg-emerald-950/40 rounded-2xl border border-emerald-900/50">
+                        <CheckCircle2 className="w-7 h-7 text-emerald-500/40 mx-auto mb-1.5" />
+                        <div className="text-emerald-400/70 font-bold text-xs">
+                          {currentSelectedDay.label}（{currentSelectedDay.monthDate}）の配達予定はありません
+                        </div>
+                      </div>
+                    ) : (
+                      selectedOrders.map(order => {
+                        const isDelivered = order.status === 'delivered' || order.status === 'invoiced';
+                        return (
+                          <div 
+                            key={order.id} 
+                            className={`p-4 rounded-2xl flex items-center justify-between gap-3 shadow-sm border transition-all ${
+                              isDelivered
+                                ? 'bg-emerald-950/30 border-emerald-900/40 opacity-70'
+                                : 'bg-emerald-950/90 border-emerald-700/70'
+                            }`}
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-black text-white text-sm">{order.customer?.name}</span>
+                                {isDelivered && (
+                                  <span className="bg-emerald-900/80 text-emerald-300 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-700">
+                                    ✅ 納品済
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs font-bold text-emerald-300/90 mt-1">
+                                {order.items?.map((i: any) => `${getTranslatedName(i.crops || i.crop || { name: '作物' }, language)} ${i.quantity}${getTranslatedUnit(i.unit || 'kg', language)}`).join(' / ')}
+                              </div>
+                            </div>
+
+                            {!isDelivered && (
+                              <button 
+                                onClick={() => handleCompleteB2BOrder(order.id)}
+                                className="bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-emerald-950 font-black text-xs py-2 px-3.5 rounded-xl transition-all flex items-center gap-1 shadow-md shrink-0"
+                              >
+                                {t('markDeliveredBtn', language)} <ArrowRight className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </section>
               );
             })()}
