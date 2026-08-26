@@ -17,8 +17,8 @@ export default function NewOrderPage() {
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [deliveryDate, setDeliveryDate] = useState(() => {
     const d = new Date();
-    d.setDate(d.getDate() + 1); // デフォルトは明日
-    return d.toISOString().split('T')[0];
+    d.setHours(d.getHours() + 9);
+    return d.toISOString().split('T')[0]; // デフォルトは今日
   });
   
   const [items, setItems] = useState<any[]>([
@@ -102,13 +102,15 @@ export default function NewOrderPage() {
 
     setIsSubmitting(true);
     
+    const tenantId = await getCurrentTenantId();
     const total_amount = calculateTotal();
     const orderData = {
       customer_id: selectedCustomerId,
       order_date: new Date().toISOString().split('T')[0],
       delivery_date: deliveryDate,
       status: 'pending',
-      total_amount
+      total_amount,
+      user_id: tenantId
     };
     
     const formattedItems = items.map(i => ({
@@ -119,7 +121,7 @@ export default function NewOrderPage() {
       total_price: Number(i.quantity) * Number(i.unit_price)
     }));
 
-    const res = await createB2BOrder(orderData, formattedItems);
+    const res = await createB2BOrder(orderData, formattedItems, tenantId);
     if (res.success) {
       alert("新規受注を登録しました。");
       router.push('/sales-management/orders');

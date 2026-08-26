@@ -152,7 +152,20 @@ export async function getB2BOrders(tenantId: string | null) {
 export async function createB2BOrder(orderData: any, orderItems: any[], tenantId?: string | null) {
   try {
     const adminClient = getAdminSupabase();
-    const validTenantId = await resolveAuthenticatedTenantId(tenantId);
+    let validTenantId = await resolveAuthenticatedTenantId(tenantId || orderData?.user_id);
+    
+    // もしtenantIdが未特定の場合、customer_idからテナントのuser_idを逆引き
+    if (!validTenantId && orderData?.customer_id) {
+      const { data: cust } = await adminClient
+        .from('b2b_customers')
+        .select('user_id')
+        .eq('id', orderData.customer_id)
+        .maybeSingle();
+      if (cust && cust.user_id) {
+        validTenantId = cust.user_id;
+      }
+    }
+
     // 1. Create Order
     const payload = { ...orderData };
     if (validTenantId) {
