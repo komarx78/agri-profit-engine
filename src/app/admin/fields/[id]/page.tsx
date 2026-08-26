@@ -40,15 +40,15 @@ export default function FieldDetailPage() {
     diagnosis_date: new Date().toISOString().split('T')[0],
     agency_name: '',
     soil_type: '壌土',
-    ph: '6.2',
-    ec: '0.35',
-    cec: '18.0',
-    humus_percent: '3.5',
-    available_p_mg: '20.0',
-    exchangeable_k_mg: '22.0',
-    exchangeable_ca_mg: '280.0',
-    exchangeable_mg_mg: '45.0',
-    inorganic_n_mg: '2.5',
+    ph: '',
+    ec: '',
+    cec: '',
+    humus_percent: '',
+    available_p_mg: '',
+    exchangeable_k_mg: '',
+    exchangeable_ca_mg: '',
+    exchangeable_mg_mg: '',
+    inorganic_n_mg: '',
     diagnosis_summary: '',
     improvement_recommendations: '',
   });
@@ -1075,11 +1075,10 @@ export default function FieldDetailPage() {
                 <span className="text-xs font-black text-amber-900 block">🌱 基本物性・酸度・保肥力</span>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">酸度 pH(H2O) *</label>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">酸度 pH(H2O)</label>
                     <input
                       type="number"
                       step="0.01"
-                      required
                       placeholder="6.2"
                       value={soilFormData.ph}
                       onChange={(e) => setSoilFormData({...soilFormData, ph: e.target.value})}

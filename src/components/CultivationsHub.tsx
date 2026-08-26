@@ -101,6 +101,8 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   const [searchFertQuery, setSearchFertQuery] = useState('');
   const [fertCategoryTab, setFertCategoryTab] = useState<string>('all');
   const [isLoadingFertilizers, setIsLoadingFertilizers] = useState(false);
+  const [fertAnalysisCropId, setFertAnalysisCropId] = useState<string>('all');
+  const [fertAnalysisFieldId, setFertAnalysisFieldId] = useState<string>('all');
 
   // --- タブ4: 履歴ステート ---
   const [workLogs, setWorkLogs] = useState<any[]>([]);
@@ -488,6 +490,93 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
       return true;
     });
   }, [officialFertilizers, farmRegisteredFertilizers, fertCategoryTab]);
+
+  // 施肥ログのパースとN-P-K累計集計 (作目・圃場別)
+  const fertilizerAnalytics = useMemo(() => {
+    const fertLogs = workLogs.filter(log => {
+      const isFert = log.work_type?.includes('施肥') || log.work_type?.includes('肥料') || log.memo?.includes('[施肥') || log.memo?.includes('合計N:');
+      const isCompleted = log.status !== 'planned';
+      const matchCrop = fertAnalysisCropId === 'all' || log.crop_id === fertAnalysisCropId;
+      const matchField = fertAnalysisFieldId === 'all' || log.field_id === fertAnalysisFieldId;
+      return isFert && isCompleted && matchCrop && matchField;
+    });
+
+    let totalN = 0;
+    let totalP = 0;
+    let totalK = 0;
+    let totalCost = 0;
+    let totalKg = 0;
+
+    let basalN = 0;
+    let basalP = 0;
+    let basalK = 0;
+    let topdressN = 0;
+    let topdressP = 0;
+    let topdressK = 0;
+
+    const parsedLogs = fertLogs.map(log => {
+      const memo = log.memo || '';
+      
+      // 合計N:3.1kg P:2.2kg K:0.5kg/10a のパース
+      const nMatch = memo.match(/合計N:([\d.]+)kg/i) || memo.match(/N:([\d.]+)kg/i);
+      const pMatch = memo.match(/P:([\d.]+)kg/i);
+      const kMatch = memo.match(/K:([\d.]+)kg/i);
+      const costMatch = memo.match(/総費用:¥([\d,]+)/i) || memo.match(/¥([\d,]+)/i);
+      const kgMatch = memo.match(/(\d+(\.\d+)?)\s*kg/i);
+
+      const nVal = nMatch ? parseFloat(nMatch[1]) : 0;
+      const pVal = pMatch ? parseFloat(pMatch[1]) : 0;
+      const kVal = kMatch ? parseFloat(kMatch[1]) : 0;
+      const costVal = costMatch ? parseInt(costMatch[1].replace(/,/g, ''), 10) : 0;
+      const kgVal = kgMatch ? parseFloat(kgMatch[1]) : 0;
+
+      const isBasal = log.work_type?.includes('元肥') || memo.includes('元肥');
+      const isTopdress = log.work_type?.includes('追肥') || memo.includes('追肥') || log.work_type?.includes('葉面');
+
+      totalN += nVal;
+      totalP += pVal;
+      totalK += kVal;
+      totalCost += costVal;
+      totalKg += kgVal;
+
+      if (isBasal) {
+        basalN += nVal;
+        basalP += pVal;
+        basalK += kVal;
+      }
+      if (isTopdress) {
+        topdressN += nVal;
+        topdressP += pVal;
+        topdressK += kVal;
+      }
+
+      return {
+        ...log,
+        nVal,
+        pVal,
+        kVal,
+        costVal,
+        kgVal,
+        isBasal,
+        isTopdress
+      };
+    });
+
+    return {
+      totalN: Math.round(totalN * 10) / 10,
+      totalP: Math.round(totalP * 10) / 10,
+      totalK: Math.round(totalK * 10) / 10,
+      totalCost,
+      totalKg: Math.round(totalKg * 10) / 10,
+      basalN: Math.round(basalN * 10) / 10,
+      basalP: Math.round(basalP * 10) / 10,
+      basalK: Math.round(basalK * 10) / 10,
+      topdressN: Math.round(topdressN * 10) / 10,
+      topdressP: Math.round(topdressP * 10) / 10,
+      topdressK: Math.round(topdressK * 10) / 10,
+      parsedLogs
+    };
+  }, [workLogs, fertAnalysisCropId, fertAnalysisFieldId]);
 
   // 公的肥料マスター検索
   const handleSearchFertilizers = async (q: string) => {
@@ -1016,9 +1105,154 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
             </div>
           )}
 
-          {/* TAB 3: 肥料管理 (成分・公的マスタ検索) */}
+          {/* TAB 3: 肥料管理 (成分・公的マスタ検索 ＆ N-P-K累計カルテ) */}
           {activeMainTab === 'fertilizers' && (
-            <div className="space-y-4">
+            <div className="space-y-6">
+              
+              {/* 🌾 施肥純成分 (N-P-K) 累計カルテ ＆ 進捗ダッシュボード */}
+              <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-5 sm:p-6 rounded-3xl shadow-md border border-slate-700/50 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-700/60 pb-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center text-teal-400">
+                        <Sparkles className="w-4 h-4" />
+                      </div>
+                      <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
+                        作物・圃場別 施肥純成分 (N-P-K) 累計カルテ
+                      </h3>
+                    </div>
+                    <p className="text-xs text-slate-400 font-bold">
+                      元肥および追肥の記録から10aあたりの純成分投入量を自動集計しています。
+                    </p>
+                  </div>
+
+                  {/* 絞り込みセレクター */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="relative">
+                      <select
+                        value={fertAnalysisCropId}
+                        onChange={e => setFertAnalysisCropId(e.target.value)}
+                        className="pl-3 pr-8 py-2 bg-slate-800 border border-slate-600 rounded-xl text-xs font-bold text-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-400 appearance-none cursor-pointer"
+                      >
+                        <option value="all">すべての作目</option>
+                        {crops.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+
+                    <div className="relative">
+                      <select
+                        value={fertAnalysisFieldId}
+                        onChange={e => setFertAnalysisFieldId(e.target.value)}
+                        className="pl-3 pr-8 py-2 bg-slate-800 border border-slate-600 rounded-xl text-xs font-bold text-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-400 appearance-none cursor-pointer"
+                      >
+                        <option value="all">すべての圃場</option>
+                        {fields.map(f => (
+                          <option key={f.id} value={f.id}>{f.name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3大成分メーターカード (青・橙・紫) */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* 🔵 N (窒素) */}
+                  <div className="bg-slate-800/90 border border-blue-500/30 rounded-2xl p-4 flex flex-col justify-between relative overflow-hidden shadow-inner">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-black text-blue-300 uppercase tracking-wider">🔵 N (窒素) 累計</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-200 border border-blue-400/30">kg/10a</span>
+                    </div>
+                    <div>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalN}</span>
+                        <span className="text-xs font-bold text-slate-400">kg / 10a</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-700/50 text-[11px] text-slate-300 font-bold">
+                        <span>元肥: <strong className="text-blue-400">{fertilizerAnalytics.basalN}kg</strong></span>
+                        <span>•</span>
+                        <span>追肥: <strong className="text-cyan-400">{fertilizerAnalytics.topdressN}kg</strong></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 🟠 P (リン酸) */}
+                  <div className="bg-slate-800/90 border border-amber-500/30 rounded-2xl p-4 flex flex-col justify-between relative overflow-hidden shadow-inner">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-black text-amber-300 uppercase tracking-wider">🟠 P (リン酸) 累計</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-200 border border-amber-400/30">kg/10a</span>
+                    </div>
+                    <div>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalP}</span>
+                        <span className="text-xs font-bold text-slate-400">kg / 10a</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-700/50 text-[11px] text-slate-300 font-bold">
+                        <span>元肥: <strong className="text-amber-400">{fertilizerAnalytics.basalP}kg</strong></span>
+                        <span>•</span>
+                        <span>追肥: <strong className="text-yellow-400">{fertilizerAnalytics.topdressP}kg</strong></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 🟣 K (カリ) */}
+                  <div className="bg-slate-800/90 border border-purple-500/30 rounded-2xl p-4 flex flex-col justify-between relative overflow-hidden shadow-inner">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-black text-purple-300 uppercase tracking-wider">🟣 K (カリ) 累計</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-200 border border-purple-400/30">kg/10a</span>
+                    </div>
+                    <div>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalK}</span>
+                        <span className="text-xs font-bold text-slate-400">kg / 10a</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-700/50 text-[11px] text-slate-300 font-bold">
+                        <span>元肥: <strong className="text-purple-400">{fertilizerAnalytics.basalK}kg</strong></span>
+                        <span>•</span>
+                        <span>追肥: <strong className="text-pink-400">{fertilizerAnalytics.topdressK}kg</strong></span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 施肥実績タイムライン（直近の施肥履歴） */}
+                {fertilizerAnalytics.parsedLogs.length > 0 && (
+                  <div className="pt-2 border-t border-slate-700/60">
+                    <h4 className="text-xs font-black text-slate-300 mb-2.5 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-teal-400" />
+                      <span>施肥履歴内訳タイムライン ({fertilizerAnalytics.parsedLogs.length}件)</span>
+                    </h4>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {fertilizerAnalytics.parsedLogs.map((log: any) => (
+                        <div key={log.id} className="p-3 bg-slate-800/70 border border-slate-700 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                          <div className="space-y-1 min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-teal-300 font-black">{log.work_date}</span>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                                log.isBasal ? 'bg-blue-900/60 text-blue-300 border border-blue-700' : 'bg-emerald-900/60 text-emerald-300 border border-emerald-700'
+                              }`}>
+                                {log.work_type}
+                              </span>
+                              <span className="text-slate-300 font-bold">{log.fields?.name || '圃場未指定'}</span>
+                              <span className="text-emerald-400 font-bold">{log.crops?.name}</span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 truncate">{log.memo}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {log.nVal > 0 && <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px] font-bold">N:{log.nVal}kg</span>}
+                            {log.pVal > 0 && <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px] font-bold">P:{log.pVal}kg</span>}
+                            {log.kVal > 0 && <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded text-[10px] font-bold">K:{log.kVal}kg</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* 検索 ＆ カテゴリフィルターバー */}
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
