@@ -44,7 +44,6 @@ export default function SalesHistoryPage() {
             unit,
             total_sales,
             unit_price,
-            notes,
             channel_id,
             crop_id
           `)
@@ -301,7 +300,6 @@ export default function SalesHistoryPage() {
                     <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-4">
                         <div className="font-bold text-slate-700">{log.sales_date}</div>
-                        {log.notes && <div className="text-xs text-slate-400 mt-0.5">{log.notes}</div>}
                       </td>
                       <td className="p-4">
                         <div className="font-bold text-slate-800 flex items-center gap-2">

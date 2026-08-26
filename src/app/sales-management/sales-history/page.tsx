@@ -36,7 +36,7 @@ export default function SalesHistoryPage() {
       const [logsRes, channelsRes, cropsRes] = await Promise.all([
         supabase
           .from('sales_logs')
-          .select('id, sales_date, quantity, unit, total_sales, channel_id, crop_id, unit_price, notes')
+          .select('id, sales_date, quantity, unit, total_sales, channel_id, crop_id, unit_price')
           .eq('user_id', tenantId)
           .or('status.neq.planned,status.is.null')
           .order('sales_date', { ascending: false })
@@ -284,7 +284,6 @@ export default function SalesHistoryPage() {
                     <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="p-3.5">
                         <div className="font-bold text-slate-700">{log.sales_date}</div>
-                        {log.notes && <div className="text-[10px] text-slate-400">{log.notes}</div>}
                       </td>
                       <td className="p-3.5">
                         <div className="font-bold text-slate-800 flex items-center gap-1.5">

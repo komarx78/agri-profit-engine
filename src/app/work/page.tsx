@@ -380,8 +380,8 @@ export default function WorkEntryPage() {
                 ? supabase.from('work_logs').select('duration_minutes, work_type, memo, material_quantity').eq('work_date', todayStr).eq('user_id', ownerId)
                 : supabase.from('work_logs').select('duration_minutes, work_type, memo, material_quantity').eq('work_date', todayStr),
               ownerId 
-                ? supabase.from('sales_logs').select('amount, total_amount, quantity').eq('sale_date', todayStr).eq('user_id', ownerId)
-                : supabase.from('sales_logs').select('amount, total_amount, quantity').eq('sale_date', todayStr)
+                ? supabase.from('sales_logs').select('total_sales, quantity').eq('sales_date', todayStr).eq('user_id', ownerId)
+                : supabase.from('sales_logs').select('total_sales, quantity').eq('sales_date', todayStr)
             ]);
 
             let totalMinutes = 0;
@@ -404,7 +404,7 @@ export default function WorkEntryPage() {
 
             if (todaySalesRes.data) {
               todaySalesRes.data.forEach((s: any) => {
-                totalRevenue += (s.total_amount || s.amount || 0);
+                totalRevenue += (s.total_sales || 0);
                 totalHarvestKg += (s.quantity || 0);
               });
             }
@@ -646,8 +646,7 @@ export default function WorkEntryPage() {
         sales_date: getJSTDate(),
         quantity: qty,
         unit: salesUnit,
-        status: 'completed',
-        notes: currentUser?.name ? `出荷者: ${currentUser.name}` : null
+        status: 'completed'
       };
 
       if (unitPrice !== null) {
