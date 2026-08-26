@@ -243,17 +243,46 @@ export default function MastersPage() {
 
       let query;
       let insertedId = editingItem?.id;
+      let savedData: any = null;
       
       if (editingItem) {
-        query = supabase.from(table).update(dataToSave).eq('id', editingItem.id).select();
+        const { data, error } = await supabase.from(table).update(dataToSave).eq('id', editingItem.id).select();
+        if (error) {
+          console.warn('Update failed with multilang, retrying with fallback:', error);
+          // 多言語カラムを除去してリトライ
+          const fallbackData = { ...dataToSave };
+          delete fallbackData.name_en;
+          delete fallbackData.name_vi;
+          delete fallbackData.name_id;
+          delete fallbackData.name_zh;
+          delete fallbackData.name_si;
+          delete fallbackData.name_km;
+          const { data: retryData, error: retryErr } = await supabase.from(table).update(fallbackData).eq('id', editingItem.id).select();
+          if (retryErr) throw retryErr;
+          savedData = retryData;
+        } else {
+          savedData = data;
+        }
       } else {
         const { id, created_at, ...insertData } = dataToSave;
-        query = supabase.from(table).insert([insertData]).select();
+        const { data, error } = await supabase.from(table).insert([insertData]).select();
+        if (error) {
+          console.warn('Insert failed with multilang, retrying with fallback:', error);
+          // 多言語カラムを除去してリトライ
+          const fallbackInsert = { ...insertData };
+          delete fallbackInsert.name_en;
+          delete fallbackInsert.name_vi;
+          delete fallbackInsert.name_id;
+          delete fallbackInsert.name_zh;
+          delete fallbackInsert.name_si;
+          delete fallbackInsert.name_km;
+          const { data: retryData, error: retryErr } = await supabase.from(table).insert([fallbackInsert]).select();
+          if (retryErr) throw retryErr;
+          savedData = retryData;
+        } else {
+          savedData = data;
+        }
       }
-
-      const { data: savedData, error } = await query;
-      if (error) throw error;
-      if (error) throw error;
       
       if (!insertedId && savedData && savedData.length > 0) {
         insertedId = savedData[0].id;

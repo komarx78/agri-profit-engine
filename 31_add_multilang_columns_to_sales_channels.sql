@@ -1,0 +1,17 @@
+-- 販路マスタ (sales_channels) に多言語カラムを追加
+ALTER TABLE sales_channels 
+ADD COLUMN IF NOT EXISTS name_en TEXT,
+ADD COLUMN IF NOT EXISTS name_vi TEXT,
+ADD COLUMN IF NOT EXISTS name_id TEXT,
+ADD COLUMN IF NOT EXISTS name_zh TEXT,
+ADD COLUMN IF NOT EXISTS name_si TEXT,
+ADD COLUMN IF NOT EXISTS name_km TEXT;
+
+-- 部門マスタ (departments) に多言語カラムを追加
+ALTER TABLE departments 
+ADD COLUMN IF NOT EXISTS name_en TEXT,
+ADD COLUMN IF NOT EXISTS name_vi TEXT,
+ADD COLUMN IF NOT EXISTS name_id TEXT,
+ADD COLUMN IF NOT EXISTS name_zh TEXT,
+ADD COLUMN IF NOT EXISTS name_si TEXT,
+ADD COLUMN IF NOT EXISTS name_km TEXT;
