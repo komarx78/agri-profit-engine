@@ -61,6 +61,10 @@ export default function VideoPlayerWithSubtitles({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [hasError, setHasError] = useState<boolean>(false);
 
+  const lastPlayTriggerRef = useRef<number>(0);
+  const lastSeekTimeRef = useRef<number | null>(null);
+  const isJumpingRef = useRef<boolean>(false);
+
   // 初期言語の同期
   useEffect(() => {
     if (initialLanguage) {
@@ -75,6 +79,9 @@ export default function VideoPlayerWithSubtitles({
       setHasError(false);
       setIsPlaying(false);
       setCurrentSubtitle('');
+      lastPlayTriggerRef.current = 0;
+      lastSeekTimeRef.current = null;
+      isJumpingRef.current = false;
     }
   }, [videoUrl]);
 
@@ -94,30 +101,36 @@ export default function VideoPlayerWithSubtitles({
     return [];
   };
 
-  // 指定秒数への動的シーク
+  // 指定秒数への動的シーク（seekToTime が変化した時のみ実行）
   useEffect(() => {
     if (seekToTime !== undefined && seekToTime !== null && videoRef.current) {
-      const targetTime = Math.max(0, seekToTime);
-      videoRef.current.currentTime = targetTime;
+      if (lastSeekTimeRef.current !== seekToTime) {
+        lastSeekTimeRef.current = seekToTime;
+        const targetTime = Math.max(0, seekToTime);
+        videoRef.current.currentTime = targetTime;
+      }
     }
   }, [seekToTime]);
 
-  // テスト再生トリガー（第1区間のstartから自動連続再生開始）
+  // テスト再生トリガー（playTrigger タイムスタンプが新しく更新された時のみ1回実行）
   useEffect(() => {
     if (playTrigger !== undefined && playTrigger > 0 && videoRef.current) {
-      const ranges = getNormalizedRanges();
-      const firstStart = ranges.length > 0 ? ranges[0].start : (trimStart || 0);
-      videoRef.current.currentTime = Math.max(0, firstStart);
-      setIsLoading(true);
-      videoRef.current.play().then(() => {
-        setIsPlaying(true);
-        setIsLoading(false);
-      }).catch((err) => {
-        console.error('Play trigger failed:', err);
-        setIsLoading(false);
-      });
+      if (lastPlayTriggerRef.current !== playTrigger) {
+        lastPlayTriggerRef.current = playTrigger;
+        const ranges = getNormalizedRanges();
+        const firstStart = ranges.length > 0 ? ranges[0].start : (trimStart || 0);
+        videoRef.current.currentTime = Math.max(0, firstStart);
+        setIsLoading(true);
+        videoRef.current.play().then(() => {
+          setIsPlaying(true);
+          setIsLoading(false);
+        }).catch((err) => {
+          console.error('Play trigger failed:', err);
+          setIsLoading(false);
+        });
+      }
     }
-  }, [playTrigger, trimRanges, trimStart]);
+  }, [playTrigger]);
 
   // メタデータロード完了時の処理
   const handleLoadedMetadata = () => {
@@ -170,26 +183,29 @@ export default function VideoPlayerWithSubtitles({
 
     // ✂️ 複数区間（マルチセグメント）ジャンプカット制御
     const ranges = getNormalizedRanges();
-    if (ranges.length > 0) {
+    if (ranges.length > 0 && !isJumpingRef.current) {
       // 現在時刻がどの区間に属しているかを判定
-      const currentRangeIdx = ranges.findIndex(r => {
+      const currentRange = ranges.find(r => {
         const end = r.end && r.end > 0 ? r.end : Infinity;
         return time >= r.start - 0.05 && time < end;
       });
 
-      if (currentRangeIdx === -1) {
+      if (!currentRange) {
         // 現在時刻がどの再生区間にも属していない（スキップ区間に突入）
         if (time < ranges[0].start) {
           // 第1区間の開始秒より前なら第1区間へシーク
+          isJumpingRef.current = true;
           videoRef.current.currentTime = ranges[0].start;
         } else {
           // 次の再生区間を探す
           const nextRange = ranges.find(r => r.start > time);
           if (nextRange) {
             // ⏩ 次の有効区間の開始秒へ瞬時にジャンプカット！
+            isJumpingRef.current = true;
             videoRef.current.currentTime = nextRange.start;
           } else {
             // 最後の区間の終了秒を超えた場合 -> 一時停止して先頭に戻す
+            isJumpingRef.current = true;
             videoRef.current.currentTime = ranges[0].start;
             videoRef.current.pause();
             setIsPlaying(false);
@@ -267,6 +283,9 @@ export default function VideoPlayerWithSubtitles({
           setHasError(false);
         }}
         onWaiting={() => setIsLoading(true)}
+        onSeeked={() => {
+          isJumpingRef.current = false;
+        }}
         onPlay={() => {
           if (videoRef.current) {
             const ranges = getNormalizedRanges();

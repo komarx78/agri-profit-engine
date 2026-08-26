@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { 
@@ -120,6 +120,14 @@ function PortalContent() {
   const [playingTrimRanges, setPlayingTrimRanges] = useState<TrimRange[]>([]);
   const [playingTrimStart, setPlayingTrimStart] = useState<number>(0);
   const [playingTrimEnd, setPlayingTrimEnd] = useState<number | undefined>(undefined);
+
+  // スタジオ用トリミング区間のメモ化
+  const normalizedStudioTrimRanges = useMemo(() => {
+    return trimRangesInput.map(r => ({
+      start: Math.max(0, parseFloat(r.start) || 0),
+      end: r.end && r.end.trim() !== '' && !isNaN(parseFloat(r.end)) ? parseFloat(r.end) : undefined
+    }));
+  }, [trimRangesInput]);
 
   // 自由入力タスクタイトルのリアルタイム自動翻訳
   useEffect(() => {
@@ -2712,10 +2720,7 @@ function PortalContent() {
                     videoUrl={editingVideoUrl}
                     narrations={editingNarrations}
                     language={language}
-                    trimRanges={trimRangesInput.map(r => ({
-                      start: parseFloat(r.start) || 0,
-                      end: r.end && r.end.trim() !== '' && !isNaN(parseFloat(r.end)) ? parseFloat(r.end) : undefined
-                    }))}
+                    trimRanges={normalizedStudioTrimRanges}
                     seekToTime={studioSeekTime}
                     playTrigger={studioPlayTrigger}
                     onTimeUpdate={(t) => setStudioPlaybackTime(t)}
