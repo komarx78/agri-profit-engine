@@ -100,6 +100,8 @@ function PortalContent() {
   const [studioPlaybackTime, setStudioPlaybackTime] = useState<number>(0);
   const [trimStartInput, setTrimStartInput] = useState<string>('0');
   const [trimEndInput, setTrimEndInput] = useState<string>('');
+  const [studioSeekTime, setStudioSeekTime] = useState<number | null>(null);
+  const [studioPlayTrigger, setStudioPlayTrigger] = useState<number>(0);
   
   // テロップ作成フォーム
   const [telopStartSec, setTelopStartSec] = useState<string>('0');
@@ -511,6 +513,8 @@ function PortalContent() {
     setEditingManual(manual);
     setTrimStartInput(manual.trim_start ? String(manual.trim_start) : '0');
     setTrimEndInput(manual.trim_end ? String(manual.trim_end) : '');
+    setStudioSeekTime(manual.trim_start ? Number(manual.trim_start) : 0);
+    setStudioPlayTrigger(0);
     setTelopStartSec('0');
     setTelopEndSec('3');
     setTelopJa('');
@@ -2645,6 +2649,8 @@ function PortalContent() {
                     language={language}
                     trimStart={parseFloat(trimStartInput) || 0}
                     trimEnd={trimEndInput ? parseFloat(trimEndInput) : undefined}
+                    seekToTime={studioSeekTime}
+                    playTrigger={studioPlayTrigger}
                     onTimeUpdate={(t) => setStudioPlaybackTime(t)}
                   />
                 ) : (
@@ -2671,14 +2677,24 @@ function PortalContent() {
 
               {/* ✂️ カット・トリミング設定パネル */}
               <div className="bg-slate-900 rounded-3xl p-5 border border-slate-800 shadow-xl space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <h2 className="text-sm font-black text-white flex items-center gap-2">
                     <Scissors className="w-4 h-4 text-amber-400" />
                     動画のカット・トリミング設定
                   </h2>
-                  <span className="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-                    余分な前後をスキップ再生
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const start = parseFloat(trimStartInput) || 0;
+                      setStudioSeekTime(start);
+                      setStudioPlayTrigger(Date.now());
+                    }}
+                    className="text-xs font-bold text-amber-300 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 px-3 py-1 rounded-xl transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer"
+                    title="設定したトリミング範囲（先頭カット〜末尾カット）でテスト再生します"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-amber-300" />
+                    <span>余分な前後をスキップ再生（テスト）</span>
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2693,13 +2709,21 @@ function PortalContent() {
                         step="0.1"
                         min="0"
                         value={trimStartInput}
-                        onChange={e => setTrimStartInput(e.target.value)}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setTrimStartInput(val);
+                          const num = parseFloat(val);
+                          if (!isNaN(num)) setStudioSeekTime(num);
+                        }}
                         className="w-24 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs font-black text-white focus:outline-none focus:border-amber-400 font-mono"
                       />
                       <span className="text-xs text-slate-400">秒</span>
                       <button
                         type="button"
-                        onClick={() => setTrimStartInput(studioPlaybackTime.toFixed(1))}
+                        onClick={() => {
+                          setTrimStartInput(studioPlaybackTime.toFixed(1));
+                          setStudioSeekTime(studioPlaybackTime);
+                        }}
                         className="ml-auto px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded-lg transition-colors"
                       >
                         現在秒をセット
@@ -2719,19 +2743,34 @@ function PortalContent() {
                         min="0"
                         placeholder="最後まで"
                         value={trimEndInput}
-                        onChange={e => setTrimEndInput(e.target.value)}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setTrimEndInput(val);
+                          const num = parseFloat(val);
+                          if (!isNaN(num)) setStudioSeekTime(num);
+                        }}
                         className="w-24 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs font-black text-white focus:outline-none focus:border-amber-400 font-mono"
                       />
                       <span className="text-xs text-slate-400">秒</span>
                       <button
                         type="button"
-                        onClick={() => setTrimEndInput(studioPlaybackTime.toFixed(1))}
+                        onClick={() => {
+                          setTrimEndInput(studioPlaybackTime.toFixed(1));
+                          setStudioSeekTime(studioPlaybackTime);
+                        }}
                         className="ml-auto px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded-lg transition-colors"
                       >
                         現在秒をセット
                       </button>
                     </div>
                   </div>
+                </div>
+
+                <div className="text-[11px] text-slate-400 bg-slate-950/60 px-3 py-2 rounded-xl border border-slate-800 flex items-center justify-between">
+                  <span>💡 トリミング状態:</span>
+                  <span className="font-mono text-amber-300 font-bold">
+                    {parseFloat(trimStartInput) > 0 ? `${trimStartInput}秒から` : '先頭から'} 〜 {trimEndInput ? `${trimEndInput}秒まで` : '最後まで'} を再生
+                  </span>
                 </div>
               </div>
 

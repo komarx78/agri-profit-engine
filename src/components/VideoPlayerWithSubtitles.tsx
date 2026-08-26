@@ -24,6 +24,8 @@ interface VideoPlayerProps {
   language?: LanguageCode | string;
   trimStart?: number;
   trimEnd?: number;
+  seekToTime?: number | null;
+  playTrigger?: number;
   onTimeUpdate?: (time: number) => void;
   className?: string;
   autoPlay?: boolean;
@@ -36,6 +38,8 @@ export default function VideoPlayerWithSubtitles({
   language: initialLanguage = 'ja', 
   trimStart = 0,
   trimEnd,
+  seekToTime,
+  playTrigger,
   onTimeUpdate,
   className = '',
   autoPlay = false,
@@ -66,6 +70,30 @@ export default function VideoPlayerWithSubtitles({
       setCurrentSubtitle('');
     }
   }, [videoUrl]);
+
+  // 指定秒数への動的シーク
+  useEffect(() => {
+    if (seekToTime !== undefined && seekToTime !== null && videoRef.current) {
+      const targetTime = Math.max(0, seekToTime);
+      videoRef.current.currentTime = targetTime;
+    }
+  }, [seekToTime]);
+
+  // テスト再生トリガー（trimStartから自動再生開始）
+  useEffect(() => {
+    if (playTrigger !== undefined && playTrigger > 0 && videoRef.current) {
+      const start = Math.max(0, trimStart || 0);
+      videoRef.current.currentTime = start;
+      setIsLoading(true);
+      videoRef.current.play().then(() => {
+        setIsPlaying(true);
+        setIsLoading(false);
+      }).catch((err) => {
+        console.error('Play trigger failed:', err);
+        setIsLoading(false);
+      });
+    }
+  }, [playTrigger, trimStart]);
 
   // メタデータロード完了時の処理
   const handleLoadedMetadata = () => {
@@ -184,6 +212,18 @@ export default function VideoPlayerWithSubtitles({
           setHasError(false);
         }}
         onWaiting={() => setIsLoading(true)}
+        onPlay={() => {
+          if (videoRef.current) {
+            if (trimStart > 0 && videoRef.current.currentTime < trimStart - 0.25) {
+              videoRef.current.currentTime = trimStart;
+            }
+            if (trimEnd && trimEnd > 0 && videoRef.current.currentTime >= trimEnd) {
+              videoRef.current.currentTime = trimStart || 0;
+            }
+          }
+          setIsLoading(false);
+          setIsPlaying(true);
+        }}
         onPlaying={() => {
           setIsLoading(false);
           setIsPlaying(true);
