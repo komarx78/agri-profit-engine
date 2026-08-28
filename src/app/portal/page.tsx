@@ -655,22 +655,44 @@ function PortalContent() {
         })
       });
       const data = await res.json();
-      if (data && data.translations) {
+      if (data && data.translations && Object.keys(data.translations).length > 0) {
         setTelopTranslations(data.translations);
       } else {
-        // フォールバック
-        setTelopTranslations({
-          en: telopJa,
-          vi: telopJa,
-          id: telopJa,
-          zh: telopJa,
-          si: telopJa,
-          km: telopJa
-        });
+        throw new Error('API returned empty translations');
       }
     } catch (e) {
-      console.error('Telop translation error:', e);
-      alert('AI翻訳中にエラーが発生しました。');
+      console.warn('Primary translate failed, trying client fallback:', e);
+      try {
+        // クライアント側緊急フォールバック (Google Translate Free API)
+        const targetLangs = [
+          { code: 'en', tl: 'en' },
+          { code: 'vi', tl: 'vi' },
+          { code: 'id', tl: 'id' },
+          { code: 'zh', tl: 'zh-CN' },
+          { code: 'si', tl: 'si' },
+          { code: 'km', tl: 'km' }
+        ];
+
+        const results: Record<string, string> = {};
+        await Promise.all(
+          targetLangs.map(async l => {
+            try {
+              const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=${l.tl}&dt=t&q=${encodeURIComponent(telopJa)}`;
+              const cRes = await fetch(url);
+              const cData = await cRes.json();
+              if (Array.isArray(cData) && Array.isArray(cData[0])) {
+                results[l.code] = cData[0].map((item: any) => item[0]).filter(Boolean).join('');
+              }
+            } catch (err) {
+              results[l.code] = telopJa;
+            }
+          })
+        );
+        setTelopTranslations(results);
+      } catch (fallbackErr) {
+        console.error('All translation options failed:', fallbackErr);
+        alert('AI翻訳に失敗しました。時間をおいて再試行してください。');
+      }
     } finally {
       setIsTranslatingTelop(false);
     }

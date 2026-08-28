@@ -47,36 +47,59 @@ export async function translateSingleText(text: string, targetLang: string): Pro
   }
 
   // 3. Gemini API によるインテリジェント多言語翻訳
-  if (genAI) {
-    try {
-      const langNames: Record<string, string> = {
-        en: 'English',
-        vi: 'Vietnamese',
-        id: 'Indonesian',
-        zh: 'Simplified Chinese',
-        si: 'Sinhala',
-        km: 'Khmer'
-      };
-      const langName = langNames[targetLang] || targetLang;
+  const effectiveApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+  if (effectiveApiKey) {
+    const aiClient = new GoogleGenerativeAI(effectiveApiKey);
+    const langNames: Record<string, string> = {
+      en: 'English',
+      vi: 'Vietnamese',
+      id: 'Indonesian',
+      zh: 'Simplified Chinese',
+      si: 'Sinhala',
+      km: 'Khmer'
+    };
+    const langName = langNames[targetLang] || targetLang;
 
-      const prompt = `Translate the following Japanese agricultural work task title into ${langName}.
+    const prompt = `Translate the following Japanese agricultural work task title into ${langName}.
 Return ONLY the translated short title without quotes, explanations, or punctuation.
 
 Japanese: "${trimmed}"`;
 
-      let model;
+    const modelsToTry = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash-latest"];
+    for (const modelName of modelsToTry) {
       try {
-        model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-      } catch (e) {
-        model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = aiClient.getGenerativeModel({ model: modelName });
+        const res = await model.generateContent(prompt);
+        const translated = res.response.text().trim();
+        if (translated) return translated;
+      } catch (err) {
+        console.warn(`Gemini translate error with ${modelName}:`, err);
       }
-
-      const res = await model.generateContent(prompt);
-      const translated = res.response.text().trim();
-      if (translated) return translated;
-    } catch (err) {
-      console.warn('Gemini translate error in server action:', err);
     }
+  }
+
+  // 4. Google Translate Free API フォールバック
+  try {
+    const langMap: Record<string, string> = {
+      en: 'en',
+      vi: 'vi',
+      id: 'id',
+      zh: 'zh-CN',
+      si: 'si',
+      km: 'km'
+    };
+    const tl = langMap[targetLang] || targetLang;
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=${tl}&dt=t&q=${encodeURIComponent(trimmed)}`;
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && Array.isArray(data[0])) {
+        const translated = data[0].map((item: any) => item[0]).filter(Boolean).join('');
+        if (translated) return translated;
+      }
+    }
+  } catch (fbErr) {
+    console.warn('Google translate fallback error:', fbErr);
   }
 
   return text;
