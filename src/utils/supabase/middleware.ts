@@ -33,7 +33,7 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
 
-  // 公開ルート（現場作業員・PIN管理者・未認証アクセス許可ルート）の判定
+  // 公開ルート（現場作業員・PIN管理者・未認証アクセス許可ルート・PWAマニフェスト）の判定
   const isPublicRoute =
     pathname.startsWith('/login') ||
     pathname.startsWith('/portal') ||
@@ -47,6 +47,9 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/farm') ||
     pathname.startsWith('/manuals') ||
     pathname.startsWith('/pesticides') ||
+    pathname.startsWith('/manifest') ||
+    pathname.startsWith('/icon') ||
+    pathname.startsWith('/apple-icon') ||
     pathname === '/'
 
   // 1. 未ログイン状態で保護ルートにアクセスした場合は /login にリダイレクト
