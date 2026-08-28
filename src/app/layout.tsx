@@ -15,7 +15,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "アグリプロフィット - 農業収益エンジン",
   description: "農業現場の作業記録・勤怠打刻・出荷管理・収益分析システム",
-  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
