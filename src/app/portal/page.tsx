@@ -21,6 +21,7 @@ import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode } 
 import { WorkerGate } from '@/components/WorkerGate';
 import { getPortalTasks } from '@/app/actions/farm';
 import { translateSingleText } from '@/app/actions/translate';
+import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import Link from 'next/link';
 
 const CalendarWrapper = dynamic(() => import('@/components/CalendarWrapper'), { 
@@ -1246,6 +1247,9 @@ function PortalContent() {
                 ))}
               </select>
             </div>
+
+            {/* 📱 PWAホーム画面追加ガイドボタン */}
+            <PwaInstallPrompt />
 
             {/* ログアウト */}
             <button 

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669"/>
+      <stop offset="100%" stop-color="#064e3b"/>
+    </linearGradient>
+    <linearGradient id="sproutGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Background Rounded Square -->
+  <rect width="512" height="512" rx="115" fill="url(#bgGrad)"/>
+  
+  <!-- Subtle Border Inner Glow -->
+  <rect x="8" y="8" width="496" height="496" rx="107" fill="none" stroke="#6ee7b7" stroke-width="4" stroke-opacity="0.3"/>
+
+  <!-- Sun / Gold Circle in Background -->
+  <circle cx="340" cy="180" r="60" fill="url(#goldGrad)" opacity="0.85" filter="url(#shadow)"/>
+
+  <!-- Soil / Earth Arc -->
+  <path d="M 80 400 C 180 340, 332 340, 432 400 L 432 420 C 332 360, 180 360, 80 420 Z" fill="#047857" opacity="0.6"/>
+
+  <!-- Sprout Stem & Leaves (Main Icon) -->
+  <g filter="url(#shadow)">
+    <!-- Main Center Sprout -->
+    <path d="M 256 380 C 256 260, 256 200, 256 160 C 256 110, 220 80, 160 90 C 140 150, 180 220, 250 250" fill="url(#sproutGrad)"/>
+    <path d="M 256 380 C 256 280, 260 230, 260 190 C 260 140, 290 100, 360 100 C 380 160, 340 230, 260 270" fill="#6ee7b7"/>
+    <!-- Stem Base -->
+    <path d="M 248 240 Q 256 320 256 390 Q 264 320 264 240 Z" fill="#a7f3d0"/>
+  </g>
+
+  <!-- Growth Sparkle / Profit Accent -->
+  <polygon points="380,80 388,100 408,108 388,116 380,136 372,116 352,108 372,100" fill="#fbbf24"/>
+  <polygon points="130,190 135,205 150,210 135,215 130,230 125,215 110,210 125,205" fill="#fef08a"/>
+</svg>

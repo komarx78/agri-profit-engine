@@ -14,6 +14,7 @@ import { getB2BOrders, updateB2BOrderStatus } from '@/app/actions/b2b';
 import { getWorkerShareSettings } from '@/app/actions/farm';
 import { WorkerGate } from '@/components/WorkerGate';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode, UNITS, getTranslatedUnit } from '@/lib/i18n';
 import { useCompany } from '@/hooks/useCompany';
 import imageCompression from 'browser-image-compression';
@@ -954,6 +955,7 @@ export default function WorkEntryPage() {
                 <option key={l.code} value={l.code}>{l.flag} {l.code.toUpperCase()}</option>
               ))}
             </select>
+            <PwaInstallPrompt />
             <button onClick={handleLogout} className="p-1 bg-emerald-900/80 text-emerald-400 rounded-lg hover:bg-emerald-800 transition-colors" title="ログアウト">
               <LogOut className="w-3.5 h-3.5" />
             </button>
