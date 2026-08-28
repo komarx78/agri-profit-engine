@@ -1,21 +1,27 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Smartphone, Share, PlusSquare, X, Download, CheckCircle2, Sparkles, ChevronRight } from 'lucide-react';
+import { Smartphone, Share, PlusSquare, X, Download, CheckCircle2, Sparkles, ExternalLink, AlertTriangle } from 'lucide-react';
 
 export function PwaInstallPrompt() {
   const [isOpen, setIsOpen] = useState(false);
   const [isIos, setIsIos] = useState(false);
+  const [isLine, setIsLine] = useState(false);
   const [showTopBanner, setShowTopBanner] = useState(true);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // iOSデバイスの判定
     const userAgent = window.navigator.userAgent.toLowerCase();
+    
+    // iOS判定
     const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
     setIsIos(isIosDevice);
+
+    // LINEアプリ内ブラウザ判定
+    const isLineApp = /line\//.test(userAgent) || /line/.test(userAgent);
+    setIsLine(isLineApp);
 
     // Android Chrome 等の beforeinstallprompt イベント
     const handleBeforeInstallPrompt = (e: any) => {
@@ -57,8 +63,24 @@ export function PwaInstallPrompt() {
         <span className="whitespace-nowrap">📱 アプリ化</span>
       </button>
 
-      {/* ② 画面上部の常設目立つバナー（閉じることも可能） */}
-      {showTopBanner && (
+      {/* ② LINE内ブラウザ用 緊急警告バー */}
+      {isLine && (
+        <div className="fixed top-0 left-0 right-0 z-[250] bg-amber-500 text-slate-950 px-3 py-2 text-xs font-black flex items-center justify-between shadow-lg">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-slate-950" />
+            <span className="truncate">LINE内ブラウザです。右下の「︙」から「Safariで開く」を押すと快適に使えます</span>
+          </div>
+          <a
+            href={typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?openExternalBrowser=1` : '#'}
+            className="px-2 py-1 bg-slate-950 text-white rounded text-[11px] font-bold shrink-0 ml-2 shadow"
+          >
+            Safariで開く
+          </a>
+        </div>
+      )}
+
+      {/* ③ 画面下部の常設目立つバナー（閉じることも可能） */}
+      {showTopBanner && !isLine && (
         <div className="fixed bottom-3 left-3 right-3 sm:left-auto sm:right-4 sm:bottom-4 z-[100] max-w-sm">
           <div className="bg-slate-900/95 backdrop-blur-md border-2 border-emerald-500/80 rounded-2xl p-3 shadow-2xl shadow-emerald-950/60 flex items-center justify-between gap-3 text-slate-100 animate-bounce-short">
             <div 
@@ -100,7 +122,7 @@ export function PwaInstallPrompt() {
         </div>
       )}
 
-      {/* ③ インストール手順モーダル（全端末対応・図解） */}
+      {/* ④ インストール手順モーダル（全端末対応・図解） */}
       {isOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-5 text-slate-100 relative max-h-[90vh] overflow-y-auto">
@@ -127,6 +149,16 @@ export function PwaInstallPrompt() {
                 </p>
               </div>
             </div>
+
+            {/* LINE注意 */}
+            {isLine && (
+              <div className="p-3 bg-amber-500/20 border border-amber-500/40 rounded-2xl text-xs space-y-1 text-amber-200">
+                <p className="font-black text-amber-300">⚠️ 現在LINEアプリ内で開かれています</p>
+                <p className="leading-relaxed text-[11px]">
+                  LINE内ではホーム画面追加が制限されるため、右下の「︙」または共有アイコンから<strong>「Safariで開く（ブラウザで開く）」</strong>を選択してください。
+                </p>
+              </div>
+            )}
 
             {/* メリット */}
             <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700 space-y-2 text-xs">
