@@ -139,30 +139,56 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     
     const init = async () => {
       try {
-        const infoRes = await getFarmInfo(tenantId);
-        if (!infoRes.success || !infoRes.data) {
-          setErrorMsg(infoRes.error || '農園が見つかりません');
-          setIsLoading(false);
-          return;
-        }
-        setFarmInfo(infoRes.data);
-
+        let loadedFarmInfo: TenantInfo | null = null;
         let loadedWorkers: any[] = [];
-        const workersRes = await getFarmWorkers(tenantId);
-        if (workersRes.success && workersRes.data && workersRes.data.length > 0) {
-          loadedWorkers = workersRes.data;
-        } else {
-          // フォールバック: /api/workers を直接フェッチ
-          try {
-            const apiRes = await fetch(`/api/workers?ownerId=${encodeURIComponent(tenantId)}`);
-            const apiJson = await apiRes.json();
-            if (apiJson.workers && apiJson.workers.length > 0) {
-              loadedWorkers = apiJson.workers;
+
+        // 1. 最速・確実な /api/farm-init を5秒タイムアウトでフェッチ
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          
+          const apiRes = await fetch(`/api/farm-init?tenantId=${encodeURIComponent(tenantId)}`, {
+            signal: controller.signal,
+            cache: 'no-store'
+          });
+          clearTimeout(timeoutId);
+
+          if (apiRes.ok) {
+            const apiData = await apiRes.json();
+            if (apiData.success) {
+              loadedFarmInfo = apiData.farmInfo;
+              loadedWorkers = apiData.workers || [];
             }
-          } catch (e) {
-            console.error(e);
+          }
+        } catch (apiErr) {
+          console.warn('Fast API init failed, using Server Action fallback:', apiErr);
+        }
+
+        // 2. APIで取得できなかった場合は Server Action でフォールバック
+        if (!loadedFarmInfo) {
+          const infoRes = await getFarmInfo(tenantId);
+          if (infoRes.success && infoRes.data) {
+            loadedFarmInfo = infoRes.data;
           }
         }
+
+        if (loadedWorkers.length === 0) {
+          const workersRes = await getFarmWorkers(tenantId);
+          if (workersRes.success && workersRes.data) {
+            loadedWorkers = workersRes.data;
+          }
+        }
+
+        // 3. 最悪の場合でも初期画面を必ず表示（くるくる停止を完全防止）
+        if (!loadedFarmInfo) {
+          loadedFarmInfo = {
+            id: tenantId,
+            company_name: '農業システムポータル',
+            plan_type: 'standard'
+          };
+        }
+
+        setFarmInfo(loadedFarmInfo);
         setWorkers(loadedWorkers);
 
         let savedLang = safeStorage.get(`agri_lang_${tenantId}`) as LanguageCode;
@@ -175,11 +201,13 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
 
         const savedSession = safeStorage.get(`agri_worker_${tenantId}`);
         if (savedSession) {
-          const parsed = JSON.parse(savedSession);
-          setCurrentUser(parsed);
-          setWorkerProfile(parsed);
-          fetchMasters();
-          restoreActiveTimer(parsed.id);
+          try {
+            const parsed = JSON.parse(savedSession);
+            setCurrentUser(parsed);
+            setWorkerProfile(parsed);
+            fetchMasters();
+            restoreActiveTimer(parsed.id);
+          } catch (e) {}
         }
       } catch (err: any) {
         console.error('Init error:', err);

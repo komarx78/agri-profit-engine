@@ -82,13 +82,13 @@ export default function AdminHub({ onSwitchToHome, initialNav = 'cultivations' }
 
   const handleCopyUrl = async () => {
     const url = tenantId 
-      ? `${window.location.origin}/portal?farm=${tenantId}`
-      : `${window.location.origin}/portal`;
+      ? `${window.location.origin}/farm/${tenantId}`
+      : `${window.location.origin}/login`;
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-      alert('【貴農園専用URL】をコピーしました！\n\n' + url + '\n\n現場タブレットや従業員のスマホでこのURLを開くだけで、貴農園のスタッフ選択・打刻画面が即座に表示されます。');
+      alert('【現場・従業員専用URL】をコピーしました！\n\n' + url + '\n\n現場タブレットや従業員のスマホでこのURLを開くだけで、スタッフ選択・打刻画面が即座に表示されます。');
     } catch (err) {
       console.error('Failed to copy', err);
     }

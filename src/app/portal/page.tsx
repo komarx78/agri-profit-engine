@@ -220,7 +220,8 @@ function PortalContent() {
           const farmParam = urlParams.get('farm') || urlParams.get('tenant');
           if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
             localStorage.setItem('agri_owner_id', farmParam);
-            ownerId = farmParam;
+            router.replace(`/farm/${farmParam}`);
+            return;
           }
         }
 
