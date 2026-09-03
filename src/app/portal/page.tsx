@@ -422,9 +422,11 @@ function PortalContent() {
       const dayOfWeek = d.getDay();
       const log = logMap.get(dateStr);
 
-      // 休暇申請（leaveRequests）との照合
+      // 休暇申請（leaveRequests）との照合（他人の申請は絶対に照合しない）
+      const targetWorkerId = workerProfile?.id || currentUser?.id;
       const matchedLeave = leaveRequests.find(req => {
         if (!req.start_date) return false;
+        if (targetWorkerId && req.worker_id && req.worker_id !== targetWorkerId) return false;
         const start = req.start_date;
         const end = req.end_date || req.start_date;
         return dateStr >= start && dateStr <= end;
@@ -580,45 +582,93 @@ function PortalContent() {
       if (wList) {
         setAllWorkers(wList);
         
-        // ログイン中のワーカーを探す
+        // ログイン中のワーカーを探す（他人のデータを勝手に割り当てない）
         let targetWorker = null;
         if (profile && profile.id) {
-          targetWorker = wList.find(w => w.id === profile.id);
-        } else if (wList.length > 0) {
-          targetWorker = wList[0]; // 管理者でワーカー紐付けがない場合は自農園の最初のスタッフを参考表示
+          targetWorker = wList.find(w => w.id === profile.id) || null;
+        } else if (currentRole === 'admin') {
+          // 管理者の場合、管理者自身のワーカーレコードがあればそれを探す
+          targetWorker = wList.find(w => w.role === 'admin' || w.name === '管理者') || null;
         }
 
         if (targetWorker) {
           const wType = targetWorker.type || targetWorker.employment_type;
+          setWorkerProfile(targetWorker);
           if (wType) {
-            setWorkerProfile((prev: any) => ({ ...prev, type: wType, employment_type: wType }));
-            setCurrentUser((prev: any) => ({ ...prev, type: wType, employment_type: wType }));
+            setWorkerProfile((prev: any) => ({ ...prev, ...targetWorker, type: wType, employment_type: wType }));
+            setCurrentUser((prev: any) => ({ ...prev, ...targetWorker, type: wType, employment_type: wType }));
           }
 
           const c = Number(targetWorker.paid_leave_carryover) || 0;
           const b = Number(targetWorker.paid_leave_balance) || 0;
           setLeaveBalance({ carryover: c, balance: b, total: c + b });
           setLeaveForm(prev => ({ ...prev, worker_id: targetWorker.id }));
+        } else {
+          // 本人ワーカーが紐付いていない場合は他人の有給を誤表示しない
+          setLeaveBalance(null);
+          setWorkerProfile(null);
         }
       }
 
-      // 直近の休暇申請履歴
-      let reqQuery = supabase
-        .from('leave_requests')
-        .select('*, workers!inner(name, user_id)')
-        .eq('workers.user_id', targetUserId)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (profile && profile.id) {
-        reqQuery = reqQuery.eq('worker_id', profile.id);
+      // 直近の休暇申請履歴（本人以外の他人の申請データを100%混入させない）
+      const activeWorkerId = targetWorker?.id || (profile && profile.id);
+      if (activeWorkerId) {
+        const { data: reqData } = await supabase
+          .from('leave_requests')
+          .select('*, workers!inner(name, user_id)')
+          .eq('workers.user_id', targetUserId)
+          .eq('worker_id', activeWorkerId)
+          .order('created_at', { ascending: false })
+          .limit(50);
+        if (reqData) setLeaveRequests(reqData);
+      } else {
+        setLeaveRequests([]);
       }
-
-      const { data: reqData } = await reqQuery;
-      if (reqData) setLeaveRequests(reqData);
     } catch (err) {
       console.error('Error loading leave data:', err);
     }
+  };
+
+  // 管理者による特定スタッフのポータル・タイムカード表示切替
+  const handleSelectWorkerForAdmin = async (selectedWorkerId: string) => {
+    if (!selectedWorkerId) {
+      setWorkerProfile(null);
+      setLeaveBalance(null);
+      setLeaveRequests([]);
+      setAttendance(null);
+      return;
+    }
+    const targetWorker = allWorkers.find(w => w.id === selectedWorkerId);
+    if (!targetWorker) return;
+
+    const wType = targetWorker.type || targetWorker.employment_type;
+    setWorkerProfile({ ...targetWorker, type: wType, employment_type: wType });
+
+    const c = Number(targetWorker.paid_leave_carryover) || 0;
+    const b = Number(targetWorker.paid_leave_balance) || 0;
+    setLeaveBalance({ carryover: c, balance: b, total: c + b });
+    setLeaveForm(prev => ({ ...prev, worker_id: targetWorker.id }));
+
+    // そのスタッフの打刻状態取得
+    const today = getJSTDate();
+    const { data: aLog } = await supabase.from('attendance_logs')
+      .select('*')
+      .eq('worker_id', targetWorker.id)
+      .eq('date', today)
+      .maybeSingle();
+    setAttendance(aLog || null);
+
+    // そのスタッフのタイムカード・月次集計取得
+    fetchWorkerMonthlyAttendance(targetWorker.id, timecardMonth);
+
+    // そのスタッフ本人の有給申請履歴取得
+    const { data: reqData } = await supabase
+      .from('leave_requests')
+      .select('*, workers!inner(name, user_id)')
+      .eq('worker_id', targetWorker.id)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    setLeaveRequests(reqData || []);
   };
 
   // 有給休暇の申請送信
@@ -1519,19 +1569,41 @@ function PortalContent() {
 
               {/* ログインユーザー ウェルカムバナー */}
               {currentUser && (
-                <div className="mb-4 bg-emerald-50/80 border border-emerald-200/80 p-3 rounded-2xl flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black text-xs shadow-xs">
-                      {currentUser.name ? currentUser.name.charAt(0) : 'ユ'}
+                <div className="mb-4 bg-emerald-50/80 border border-emerald-200/80 p-3 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black text-xs shadow-xs">
+                        {workerProfile?.name ? workerProfile.name.charAt(0) : (currentUser.name ? currentUser.name.charAt(0) : 'ユ')}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-emerald-700">{t('currentWorkerLabel', language)}</p>
+                        <p className="text-sm font-black text-slate-800">
+                          {workerProfile ? getTranslatedName(workerProfile, language) : getTranslatedName(currentUser, language)}
+                          {t('workerHonorific', language)}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-emerald-700">{t('currentWorkerLabel', language)}</p>
-                      <p className="text-sm font-black text-slate-800">{getTranslatedName(currentUser, language)}{t('workerHonorific', language)}</p>
-                    </div>
+                    <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg">
+                      {role === 'admin' ? t('adminMode', language) : t('workerMode', language)}
+                    </span>
                   </div>
-                  <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg">
-                    {role === 'admin' ? t('adminMode', language) : t('workerMode', language)}
-                  </span>
+
+                  {/* 管理者モード時のみ、確認対象スタッフを明示的に切り替え可能 */}
+                  {role === 'admin' && allWorkers.length > 0 && (
+                    <div className="pt-2 border-t border-emerald-200/60 flex items-center justify-between gap-2 text-xs">
+                      <span className="text-[10px] font-bold text-slate-500 whitespace-nowrap">👁️ 表示スタッフ:</span>
+                      <select
+                        value={workerProfile?.id || ''}
+                        onChange={(e) => handleSelectWorkerForAdmin(e.target.value)}
+                        className="bg-white border border-emerald-300 text-slate-800 text-xs font-bold rounded-lg px-2 py-1 outline-none shadow-xs w-full max-w-[200px] cursor-pointer"
+                      >
+                        <option value="">（選択してください）</option>
+                        {allWorkers.map((w: any) => (
+                          <option key={w.id} value={w.id}>{w.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2147,30 +2219,16 @@ function PortalContent() {
 
             {/* 申請フォーム */}
             <form onSubmit={handleSubmitLeaveRequest} className="space-y-4">
-              {/* 従業員選択（管理者の場合、またはスタッフ名表示） */}
-              {role === 'admin' ? (
-                <div>
-                  <label className="block text-xs font-black text-slate-700 mb-1.5">
-                    {t('leave_selectWorker', language)} <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={leaveForm.worker_id}
-                    onChange={e => setLeaveForm({ ...leaveForm, worker_id: e.target.value })}
-                    required
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500 focus:bg-white"
-                  >
-                    <option value="">{t('leave_selectWorkerPrompt', language)}</option>
-                    {allWorkers.map(w => (
-                      <option key={w.id} value={w.id}>{w.name}（{t('leave_remainingDaysLabel', language)}{Number(w.paid_leave_carryover || 0) + Number(w.paid_leave_balance || 0)}{t('daysUnit', language)}）</option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 flex items-center justify-between">
-                  <span>{t('leave_applicant', language)}</span>
-                  <span className="font-black text-slate-800">{currentUser ? getTranslatedName(currentUser, language) : '現場スタッフ'}</span>
-                </div>
-              )}
+              {/* 申請者表示（個人ポータルなので他人は選択させず本人に完全固定） */}
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-xs font-bold text-slate-600 flex items-center justify-between">
+                <span>{t('leave_applicant', language)}</span>
+                <span className="font-black text-slate-800 text-sm">
+                  {(() => {
+                    const currentWorker = allWorkers.find(w => w.id === leaveForm.worker_id) || workerProfile || currentUser;
+                    return currentWorker ? getTranslatedName(currentWorker, language) : '現場スタッフ';
+                  })()}
+                </span>
+              </div>
 
               {/* 休暇種別 */}
               <div>
@@ -2249,7 +2307,7 @@ function PortalContent() {
                   className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-95 disabled:bg-slate-200 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
                 >
                   {isSubmittingLeave ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  <span>{role === 'admin' ? t('leave_registerBtn', language) : t('leave_submitBtn', language)}</span>
+                  <span>{t('leave_submitBtn', language)}</span>
                 </button>
               </div>
             </form>

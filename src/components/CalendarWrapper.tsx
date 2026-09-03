@@ -20,7 +20,7 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
     return d;
   });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [filterMode, setFilterMode] = useState<'all' | 'mine'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'mine'>(() => currentWorkerName ? 'mine' : 'all');
   const [selectedTargetWorker, setSelectedTargetWorker] = useState<string>(currentWorkerName || '');
   
   // ログイン中の名前が変わったら更新
@@ -144,28 +144,30 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
           </button>
         </div>
 
-        {/* 担当者指定セレクター */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
-            <UserCheck className="w-3.5 h-3.5 text-amber-500" />
-            <span>{t('cal_targetWorker', language)}</span>
-          </span>
-          <select
-            value={selectedTargetWorker}
-            onChange={(e) => setSelectedTargetWorker(e.target.value)}
-            className="px-3 py-1.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs font-black text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer shadow-xs"
-          >
-            <option value="">{t('cal_allStaffOption', language)}</option>
-            {allWorkers.map((w: any) => (
-              <option key={w.id} value={w.name}>{w.name}</option>
-            ))}
-          </select>
-          {selectedTargetWorker && (
-            <span className="text-[11px] font-bold text-amber-600 hidden sm:inline-block">
-              🟡「{selectedTargetWorker}」{t('cal_highlighting', language)}
+        {/* 担当者指定セレクター（個人ログイン時は他人は選ばせない） */}
+        {currentWorkerName ? (
+          <div className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50/80 px-3 py-1.5 rounded-xl border border-amber-200 shadow-xs">
+            <UserCheck className="w-3.5 h-3.5 text-amber-600" />
+            <span>{currentWorkerName}</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
+              <UserCheck className="w-3.5 h-3.5 text-amber-500" />
+              <span>{t('cal_targetWorker', language)}</span>
             </span>
-          )}
-        </div>
+            <select
+              value={selectedTargetWorker}
+              onChange={(e) => setSelectedTargetWorker(e.target.value)}
+              className="px-3 py-1.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs font-black text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer shadow-xs"
+            >
+              <option value="">{t('cal_allStaffOption', language)}</option>
+              {allWorkers.map((w: any) => (
+                <option key={w.id} value={w.name}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* 水平スクロール可能なカレンダーマトリックスUI */}
