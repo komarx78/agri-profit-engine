@@ -119,6 +119,20 @@ function PortalContent() {
     }));
   }, [trimRangesInput]);
 
+  // 🕒 個人用・月次タイムカード用ステート
+  const [showTimecardModal, setShowTimecardModal] = useState(false);
+  const [timecardMonth, setTimecardMonth] = useState<string>(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [monthlyLogs, setMonthlyLogs] = useState<any[]>([]);
+  const [isLoadingMonthly, setIsLoadingMonthly] = useState(false);
+  const [currentMonthSummary, setCurrentMonthSummary] = useState<{
+    workDays: number;
+    totalMinutes: number;
+    overtimeMinutes: number;
+  }>({ workDays: 0, totalMinutes: 0, overtimeMinutes: 0 });
+
   // 言語切り替えハンドラー
   const handleLanguageChange = (newLang: LanguageCode) => {
     setLanguage(newLang);
@@ -301,6 +315,175 @@ function PortalContent() {
     init();
   }, [router]);
 
+  // 🕒 個人タイムカード：対象月の勤怠データ取得
+  const fetchWorkerMonthlyAttendance = async (workerId: string, monthStr: string) => {
+    if (!workerId || !monthStr) return;
+    setIsLoadingMonthly(true);
+    try {
+      const [y, m] = monthStr.split('-').map(Number);
+      const lastDay = new Date(y, m, 0).getDate();
+      const startDate = `${monthStr}-01`;
+      const endDate = `${monthStr}-${String(lastDay).padStart(2, '0')}`;
+
+      const { data, error } = await supabase
+        .from('attendance_logs')
+        .select('*')
+        .eq('worker_id', workerId)
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date', { ascending: true });
+
+      if (error) {
+        console.error('Failed to fetch monthly attendance:', error);
+        return;
+      }
+
+      const logs = data || [];
+      setMonthlyLogs(logs);
+
+      // 当月サマリーの計算
+      let days = 0;
+      let totalMins = 0;
+      let overMins = 0;
+
+      logs.forEach(log => {
+        if (log.clock_in) {
+          days += 1;
+        }
+        if (log.clock_in && log.clock_out) {
+          try {
+            const inParts = log.clock_in.split(':').map(Number);
+            const outParts = log.clock_out.split(':').map(Number);
+            const inTotal = inParts[0] * 60 + inParts[1];
+            const outTotal = outParts[0] * 60 + outParts[1];
+            if (outTotal > inTotal) {
+              const breakTime = Number(log.break_minutes) || Number(log.actual_rest_minutes) || 0;
+              const workMins = Math.max(0, outTotal - inTotal - breakTime);
+              totalMins += workMins;
+              if (workMins > 480) {
+                overMins += (workMins - 480);
+              }
+            }
+          } catch (e) {}
+        }
+      });
+
+      const todayMonth = new Date().toISOString().substring(0, 7);
+      if (monthStr === todayMonth) {
+        setCurrentMonthSummary({
+          workDays: days,
+          totalMinutes: totalMins,
+          overtimeMinutes: overMins
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoadingMonthly(false);
+    }
+  };
+
+  const handlePrevMonth = () => {
+    const [y, m] = timecardMonth.split('-').map(Number);
+    const prevDate = new Date(y, m - 2, 1);
+    const newMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+    setTimecardMonth(newMonth);
+    const targetWorkerId = workerProfile?.id || currentUser?.id;
+    if (targetWorkerId) {
+      fetchWorkerMonthlyAttendance(targetWorkerId, newMonth);
+    }
+  };
+
+  const handleNextMonth = () => {
+    const [y, m] = timecardMonth.split('-').map(Number);
+    const nextDate = new Date(y, m, 1);
+    const newMonth = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
+    setTimecardMonth(newMonth);
+    const targetWorkerId = workerProfile?.id || currentUser?.id;
+    if (targetWorkerId) {
+      fetchWorkerMonthlyAttendance(targetWorkerId, newMonth);
+    }
+  };
+
+  // 当月のカレンダー日数（1日〜末日）を生成し、ログとマッピング
+  const timecardDaysList = useMemo(() => {
+    const [y, m] = timecardMonth.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const list = [];
+
+    const logMap = new Map<string, any>();
+    monthlyLogs.forEach(log => {
+      if (log.date) logMap.set(log.date, log);
+    });
+
+    for (let day = 1; day <= lastDay; day++) {
+      const dateStr = `${timecardMonth}-${String(day).padStart(2, '0')}`;
+      const d = new Date(y, m - 1, day);
+      const dayOfWeek = d.getDay();
+      const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+      const log = logMap.get(dateStr);
+
+      let workMinutes = 0;
+      let breakMins = 0;
+      let isOvertime = false;
+
+      if (log && log.clock_in && log.clock_out) {
+        try {
+          const inP = log.clock_in.split(':').map(Number);
+          const outP = log.clock_out.split(':').map(Number);
+          const inTot = inP[0] * 60 + inP[1];
+          const outTot = outP[0] * 60 + outP[1];
+          if (outTot > inTot) {
+            breakMins = Number(log.break_minutes) || Number(log.actual_rest_minutes) || 0;
+            workMinutes = Math.max(0, outTot - inTot - breakMins);
+            if (workMinutes > 480) isOvertime = true;
+          }
+        } catch (e) {}
+      }
+
+      list.push({
+        day,
+        dateStr,
+        dayOfWeek,
+        dayOfWeekName: dayNames[dayOfWeek],
+        log: log || null,
+        workMinutes,
+        breakMins,
+        isOvertime
+      });
+    }
+
+    return list;
+  }, [timecardMonth, monthlyLogs]);
+
+  // 選択中の月の統計サマリー
+  const selectedMonthStats = useMemo(() => {
+    let days = 0;
+    let totalMins = 0;
+    let overMins = 0;
+    let totalBreak = 0;
+
+    timecardDaysList.forEach(item => {
+      if (item.log && item.log.clock_in) {
+        days += 1;
+        totalMins += item.workMinutes;
+        totalBreak += item.breakMins;
+        if (item.workMinutes > 480) {
+          overMins += (item.workMinutes - 480);
+        }
+      }
+    });
+
+    return {
+      workDays: days,
+      totalHours: Math.floor(totalMins / 60),
+      totalMinsRemainder: totalMins % 60,
+      overtimeHours: Math.floor(overMins / 60),
+      overtimeMinsRemainder: overMins % 60,
+      totalBreakMins: totalBreak
+    };
+  }, [timecardDaysList]);
+
   const fetchPortalData = async (userId: string, currentRole: string, profile: any) => {
     const today = getJSTDate();
 
@@ -362,6 +545,8 @@ function PortalContent() {
         if (unclosed && unclosed.length > 0) matchedLog = unclosed[0];
       }
       if (matchedLog) setAttendance(matchedLog);
+      // 当月の個人勤怠集計データを取得
+      fetchWorkerMonthlyAttendance(workerId, timecardMonth);
     }
 
     // 5. 有給休暇・残高と申請履歴の取得 (自農園のワーカーのみ厳格に取得)
@@ -1125,6 +1310,11 @@ function PortalContent() {
         const { data, error } = await supabase.from('attendance_logs').insert([payload]).select().single();
         if (error) throw error;
         setAttendance(data);
+
+        // 出勤打刻成功時に当月の個人勤怠集計を即時再計算
+        if (workerId) {
+          fetchWorkerMonthlyAttendance(workerId, timecardMonth);
+        }
       } else {
         let targetAtt = attendance;
         if (!targetAtt) {
@@ -1149,6 +1339,12 @@ function PortalContent() {
         const { data, error } = await supabase.from('attendance_logs').update(updatePayload).eq('id', targetAtt.id).select().single();
         if (error) throw error;
         setAttendance(data);
+
+        // 打刻成功時に当月の個人勤怠集計を即時再計算
+        const targetWorkerId = workerProfile?.id || currentUser?.id;
+        if (targetWorkerId) {
+          fetchWorkerMonthlyAttendance(targetWorkerId, timecardMonth);
+        }
       }
     } catch (err: any) {
       console.error('打刻エラー詳細:', err);
@@ -1350,6 +1546,53 @@ function PortalContent() {
                   <span>{t('portal_clockOut', language)}</span>
                   {hasClockedOut && <span className="text-[10px] bg-slate-200 px-2 py-0.5 rounded mt-1 font-bold">{formatDisplayTime(attendance.clock_out)}</span>}
                 </button>
+              </div>
+
+              {/* 🕒 今月の勤務実績サマリー ＆ タイムカード明細ボタン */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 mb-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-black text-slate-600 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-blue-600" />
+                    今月の勤務実績（当月累計）
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const todayMonth = new Date().toISOString().substring(0, 7);
+                      setTimecardMonth(todayMonth);
+                      const targetWorkerId = workerProfile?.id || currentUser?.id;
+                      if (targetWorkerId) {
+                        fetchWorkerMonthlyAttendance(targetWorkerId, todayMonth);
+                      }
+                      setShowTimecardModal(true);
+                    }}
+                    className="text-[11px] font-black text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 shadow-xs"
+                  >
+                    <span>タイムカード明細</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-xs">
+                    <span className="text-[10px] font-bold text-slate-400 block">出勤日数</span>
+                    <div className="flex items-baseline gap-1 mt-0.5">
+                      <span className="text-lg font-black text-slate-800">{currentMonthSummary.workDays}</span>
+                      <span className="text-[10px] font-bold text-slate-500">日</span>
+                    </div>
+                  </div>
+                  <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-xs">
+                    <span className="text-[10px] font-bold text-slate-400 block">総実働時間</span>
+                    <div className="flex items-baseline gap-1 mt-0.5">
+                      <span className="text-lg font-black text-blue-600">
+                        {Math.floor(currentMonthSummary.totalMinutes / 60)}
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-500">
+                        時間{currentMonthSummary.totalMinutes % 60}分
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* 現場ポータル遷移ボタン */}
@@ -3399,6 +3642,234 @@ function PortalContent() {
         <div className="fixed bottom-6 right-6 z-[140] bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-2xl font-black text-xs flex items-center gap-2 animate-in slide-in-from-bottom">
           <Check className="w-4 h-4 text-emerald-200" />
           <span>{studioToast}</span>
+        </div>
+      )}
+
+      {/* 🕒 個人用・月次タイムカードモーダル */}
+      {showTimecardModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[120] flex flex-col animate-in fade-in duration-200 text-slate-800">
+          
+          {/* モーダル上部ヘッダー */}
+          <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-8 shadow-sm flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h1 className="font-black text-slate-900 text-sm sm:text-base leading-none flex items-center gap-2">
+                  <span>月次タイムカード明細</span>
+                  <span className="text-xs bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-lg border border-slate-200">
+                    {workerProfile?.name || currentUser?.name || '作業者'}
+                  </span>
+                </h1>
+                <p className="text-[10px] text-slate-400 mt-1 font-bold">日々の出退勤打刻と労働時間の集計実績です</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const targetWorkerId = workerProfile?.id || currentUser?.id;
+                  if (targetWorkerId) {
+                    fetchWorkerMonthlyAttendance(targetWorkerId, timecardMonth);
+                  }
+                }}
+                disabled={isLoadingMonthly}
+                className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer"
+                title="最新情報に更新"
+              >
+                <RefreshCw className={`w-5 h-5 ${isLoadingMonthly ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={() => setShowTimecardModal(false)}
+                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+          </header>
+
+          {/* モーダルメインコンテンツエリア */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100">
+            <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6">
+              
+              {/* 月選択コントローラー ＆ サマリーカード */}
+              <div className="bg-white rounded-3xl p-4 sm:p-6 border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={handlePrevMonth}
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black rounded-xl transition-colors flex items-center gap-1 active:scale-95 cursor-pointer"
+                  >
+                    <span>◀ 前月</span>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <CalendarIcon className="w-4 h-4 text-blue-600" />
+                    <span className="text-base sm:text-lg font-black text-slate-900 tracking-tight font-mono">
+                      {timecardMonth.split('-')[0]}年 {timecardMonth.split('-')[1]}月
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={handleNextMonth}
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black rounded-xl transition-colors flex items-center gap-1 active:scale-95 cursor-pointer"
+                  >
+                    <span>翌月 ▶</span>
+                  </button>
+                </div>
+
+                {/* 4連統計指標カード */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 pt-1">
+                  <div className="bg-blue-50/70 border border-blue-100 p-3 sm:p-4 rounded-2xl">
+                    <span className="text-[10px] sm:text-xs font-black text-blue-700 block mb-1">🏃‍♂️ 出勤日数</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xl sm:text-2xl font-black text-blue-900">{selectedMonthStats.workDays}</span>
+                      <span className="text-xs font-bold text-blue-700">日</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-emerald-50/70 border border-emerald-100 p-3 sm:p-4 rounded-2xl">
+                    <span className="text-[10px] sm:text-xs font-black text-emerald-700 block mb-1">⏱️ 総実働時間</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xl sm:text-2xl font-black text-emerald-900">{selectedMonthStats.totalHours}</span>
+                      <span className="text-xs font-bold text-emerald-700">時間{selectedMonthStats.totalMinsRemainder}分</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-50/70 border border-amber-100 p-3 sm:p-4 rounded-2xl">
+                    <span className="text-[10px] sm:text-xs font-black text-amber-700 block mb-1">🔥 残業時間(8h超)</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xl sm:text-2xl font-black text-amber-900">{selectedMonthStats.overtimeHours}</span>
+                      <span className="text-xs font-bold text-amber-700">時間{selectedMonthStats.overtimeMinsRemainder}分</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-purple-50/70 border border-purple-100 p-3 sm:p-4 rounded-2xl">
+                    <span className="text-[10px] sm:text-xs font-black text-purple-700 block mb-1">☕ 合計休憩時間</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xl sm:text-2xl font-black text-purple-900">{Math.floor(selectedMonthStats.totalBreakMins / 60)}</span>
+                      <span className="text-xs font-bold text-purple-700">時間{selectedMonthStats.totalBreakMins % 60}分</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 日別タイムカード明細テーブル */}
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-4 sm:px-6 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="font-black text-slate-800 text-xs sm:text-sm flex items-center gap-2">
+                    <span>日別打刻明細</span>
+                    <span className="text-[10px] font-bold text-slate-400">（1日〜末日）</span>
+                  </h3>
+                  {isLoadingMonthly && (
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-blue-600">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>集計中...</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-black text-[11px] uppercase tracking-wider">
+                        <th className="py-3 px-3 sm:px-4">日付</th>
+                        <th className="py-3 px-2 sm:px-3 text-center">出勤</th>
+                        <th className="py-3 px-2 sm:px-3 text-center">退勤</th>
+                        <th className="py-3 px-2 sm:px-3 text-center">休憩</th>
+                        <th className="py-3 px-2 sm:px-4 text-right">実労働時間</th>
+                        <th className="py-3 px-3 sm:px-4 text-center">状態</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {timecardDaysList.map((item) => {
+                        const hasIn = item.log && !!item.log.clock_in;
+                        const hasOut = item.log && !!item.log.clock_out;
+                        const isSunday = item.dayOfWeek === 0;
+                        const isSaturday = item.dayOfWeek === 6;
+
+                        return (
+                          <tr 
+                            key={item.day}
+                            className={`hover:bg-slate-50/80 transition-colors ${
+                              hasIn ? 'bg-white' : (isSunday ? 'bg-rose-50/20' : isSaturday ? 'bg-blue-50/20' : '')
+                            }`}
+                          >
+                            <td className="py-2.5 sm:py-3 px-3 sm:px-4 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-black text-slate-900 text-xs sm:text-sm">
+                                  {item.day}日
+                                </span>
+                                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
+                                  isSunday 
+                                    ? 'bg-rose-100 text-rose-700' 
+                                    : isSaturday 
+                                    ? 'bg-blue-100 text-blue-700' 
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                  ({item.dayOfWeekName})
+                                </span>
+                              </div>
+                            </td>
+
+                            <td className="py-2.5 sm:py-3 px-2 sm:px-3 text-center font-mono font-bold text-xs sm:text-sm text-slate-800 whitespace-nowrap">
+                              {hasIn ? formatDisplayTime(item.log.clock_in) : <span className="text-slate-300">-</span>}
+                            </td>
+
+                            <td className="py-2.5 sm:py-3 px-2 sm:px-3 text-center font-mono font-bold text-xs sm:text-sm text-slate-800 whitespace-nowrap">
+                              {hasOut ? (
+                                formatDisplayTime(item.log.clock_out)
+                              ) : hasIn ? (
+                                <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 animate-pulse">
+                                  勤務中
+                                </span>
+                              ) : (
+                                <span className="text-slate-300">-</span>
+                              )}
+                            </td>
+
+                            <td className="py-2.5 sm:py-3 px-2 sm:px-3 text-center font-mono text-xs text-slate-500 whitespace-nowrap">
+                              {hasIn && item.breakMins > 0 ? `${item.breakMins}分` : <span className="text-slate-300">-</span>}
+                            </td>
+
+                            <td className="py-2.5 sm:py-3 px-2 sm:px-4 text-right whitespace-nowrap">
+                              {item.workMinutes > 0 ? (
+                                <span className={`font-mono font-black text-xs sm:text-sm ${
+                                  item.isOvertime ? 'text-amber-600 font-black' : 'text-slate-900'
+                                }`}>
+                                  {Math.floor(item.workMinutes / 60)}時間 {item.workMinutes % 60}分
+                                </span>
+                              ) : (
+                                <span className="text-slate-300 font-mono">-</span>
+                              )}
+                            </td>
+
+                            <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center whitespace-nowrap">
+                              {hasOut ? (
+                                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  完了
+                                </span>
+                              ) : hasIn ? (
+                                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                  勤務中
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-medium text-slate-300">
+                                  -
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
         </div>
       )}
 
