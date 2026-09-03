@@ -456,8 +456,51 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   tc_hours: { ja: '時間', en: 'h ', vi: 'h ', id: 'j ', zh: '小时', si: 'පැය ', km: 'ម៉ោង ' },
   tc_minutes: { ja: '分', en: 'm', vi: 'p', id: 'm', zh: '分', si: 'මිනිත්තු', km: 'នាទី' },
   tc_currentMonthSummary: { ja: '今月の勤務実績（当月累計）', en: 'Current Month Summary', vi: 'Tổng kết tháng này', id: 'Ringkasan Bulan Ini', zh: '本月出勤汇总', si: 'මෙම මාසයේ සාරාංශය', km: 'សង្ខេបខែនេះ' },
-  tc_openDetails: { ja: 'タイムカード明細', en: 'Timecard Details', vi: 'Chi tiết bảng công', id: 'Rincian Kartu Jam', zh: '打卡明细', si: 'වාර්තා විස්තර', km: 'ព័ត៌មានលម្អិត' }
+  tc_openDetails: { ja: 'タイムカード明細', en: 'Timecard Details', vi: 'Chi tiết bảng công', id: 'Rincian Kartu Jam', zh: '打卡明细', si: 'වාර්තා විස්තර', km: 'ព័ត៌មានលម្អិត' },
+  tc_colApply: { ja: '申請', en: 'Apply', vi: 'Yêu cầu', id: 'Ajukan', zh: '申请', si: 'අයදුම්', km: 'ពាក្យស្នើសុំ' },
+  tc_applyLeave: { ja: '+ 休暇申請', en: '+ Leave', vi: '+ Xin nghỉ', id: '+ Cuti', zh: '+ 请假', si: '+ නිවාඩු', km: '+ ស្នើសុំឈប់' },
+  tc_requestLeaveBtnShort: { ja: '有給申請', en: 'Leave', vi: 'Xin nghỉ', id: 'Cuti', zh: '请假', si: 'නිවාඩු', km: 'សុំឈប់' },
+  tc_refresh: { ja: '最新情報に更新', en: 'Refresh data', vi: 'Làm mới dữ liệu', id: 'Perbarui data', zh: '刷新数据', si: 'යාවත්කාලීන කරන්න', km: 'ធ្វើបច្ចុប្បន្នភាព' },
+  tc_applyForDate: { ja: 'の休暇を申請', en: ' - Request leave', vi: ' - Xin nghỉ phép', id: ' - Ajukan cuti', zh: ' 的休假申请', si: ' නිවාඩු ඉල්ලීම', km: ' - ស្នើសុំឈប់សម្រាក' },
+
+  // 有給・休暇申請モーダル用
+  leave_modalTitle: { ja: '有給・休暇の申請', en: 'Request Paid Leave / Day Off', vi: 'Đăng ký nghỉ phép / nghỉ ngày', id: 'Pengajuan Cuti / Libur', zh: '申请带薪假/休假', si: 'වැටුප් සහිත නිවාඩු ඉල්ලීම', km: 'ពាក្យស្នើសុំឈប់សម្រាក' },
+  leave_modalSub: { ja: '希望日と理由を入力して送信してください', en: 'Please enter desired date and reason to submit', vi: 'Vui lòng nhập ngày mong muốn và lý do để gửi', id: 'Silakan masukkan tanggal yang diinginkan dan alasan', zh: '请输入期望日期和理由并提交', si: 'කරුණාකර දිනය සහ හේතුව ඇතුළත් කරන්න', km: 'សូមបញ្ចូលកាលបរិច្ឆេទ និងមូលហេតុដែលចង់បាន' },
+  leave_applicant: { ja: '申請者:', en: 'Applicant:', vi: 'Người nộp đơn:', id: 'Pemohon:', zh: '申请人:', si: 'අයදුම්කරු:', km: 'អ្នកស្នើសុំ:' },
+  leave_selectWorker: { ja: '申請する従業員', en: 'Select Employee', vi: 'Chọn nhân viên', id: 'Pilih Karyawan', zh: '选择员工', si: 'සේවකයා තෝරන්න', km: 'ជ្រើសរើសបុគ្គលិក' },
+  leave_selectWorkerPrompt: { ja: '従業員を選択してください', en: 'Please select an employee', vi: 'Vui lòng chọn nhân viên', id: 'Silakan pilih karyawan', zh: '请选择员工', si: 'කරුණාකර සේවකයෙකු තෝරන්න', km: 'សូមជ្រើសរើសបុគ្គលិកម្នាក់' },
+  leave_remainingDaysLabel: { ja: '残: ', en: 'Rem: ', vi: 'Còn: ', id: 'Sisa: ', zh: '余: ', si: 'ඉතිරි: ', km: 'នៅសល់: ' },
+  leave_daysRemaining: { ja: '残り {days}日', en: '{days} days remaining', vi: 'Còn lại {days} ngày', id: 'Tersisa {days} hari', zh: '剩余 {days} 天', si: 'දින {days}ක් ඉතිරියි', km: 'នៅសល់ {days} ថ្ងៃ' },
+  leave_leaveType: { ja: '休暇の種類', en: 'Leave Type', vi: 'Loại nghỉ phép', id: 'Jenis Cuti', zh: '假期种类', si: 'නිවාඩු වර්ගය', km: 'ប្រភេទនៃការឈប់សម្រាក' },
+  leave_typeFull: { ja: '有給休暇（全休・1日）', en: 'Paid Leave (Full Day)', vi: 'Nghỉ phép có lương (Cả ngày)', id: 'Cuti Berbayar (Seharian)', zh: '带薪休假（全天）', si: 'වැටුප් සහිත නිවාඩු (දවසම)', km: 'ឈប់សម្រាកមានប្រាក់ខែ (ពេញមួយថ្ងៃ)' },
+  leave_typeAm: { ja: '午前半休（0.5日）', en: 'Morning Half-day (0.5 day)', vi: 'Nghỉ nửa ngày sáng (0.5 ngày)', id: 'Setengah Hari Pagi (0.5 hari)', zh: '上午半天假（0.5天）', si: 'උදෑසන අර්ධ නිවාඩු (දින 0.5)', km: 'ឈប់សម្រាកពេលព្រឹក (០.៥ ថ្ងៃ)' },
+  leave_typePm: { ja: '午後半休（0.5日）', en: 'Afternoon Half-day (0.5 day)', vi: 'Nghỉ nửa ngày chiều (0.5 ngày)', id: 'Setengah Hari Siang (0.5 hari)', zh: '下午半天假（0.5天）', si: 'සවස අර්ධ නිවාඩු (දින 0.5)', km: 'ឈប់សម្រាកពេលរសៀល (០.៥ ថ្ងៃ)' },
+  leave_typeSpecial: { ja: '特別休暇（慶弔・リフレッシュ等）', en: 'Special Leave', vi: 'Nghỉ phép đặc biệt', id: 'Cuti Khusus', zh: '特别休假', si: 'විශේෂ නිවාඩු', km: 'ការឈប់សម្រាកពិសេស' },
+  leave_typeAbsence: { ja: '欠勤', en: 'Absence', vi: 'Nghỉ không lương / Vắng mặt', id: 'Izin / Tidak Masuk', zh: '缺勤', si: 'වැඩට නොපැමිණීම', km: 'អវត្តមាន' },
+  leave_startDate: { ja: '開始日', en: 'Start Date', vi: 'Ngày bắt đầu', id: 'Tanggal Mulai', zh: '开始日期', si: 'ආරම්භක දිනය', km: 'កាលបរិច្ឆេទចាប់ផ្តើម' },
+  leave_endDate: { ja: '終了日', en: 'End Date', vi: 'Ngày kết thúc', id: 'Tanggal Selesai', zh: '结束日期', si: 'අවසන් දිනය', km: 'កាលបរិច្ឆេទបញ្ចប់' },
+  leave_reasonLabel: { ja: '申請理由・備考', en: 'Reason / Remarks', vi: 'Lý do / Ghi chú', id: 'Alasan / Keterangan', zh: '申请理由/备注', si: 'හේතුව / සටහන්', km: 'មូលហេតុ / កំណត់ចំណាំ' },
+  leave_optional: { ja: '(任意)', en: '(Optional)', vi: '(Tùy chọn)', id: '(Opsional)', zh: '(选填)', si: '(විකල්ප)', km: '(ជាជម្រើស)' },
+  leave_reasonPlaceholder: { ja: '例: 私用のため、通院のため、家庭の事情など', en: 'e.g. Personal reasons, hospital visit, family matter', vi: 'vd: Việc cá nhân, đi khám bệnh, việc gia đình', id: 'cth: Keperluan pribadi, ke dokter, urusan keluarga', zh: '例: 私事、就医、家庭原因等', si: 'උදා: පෞද්ගලික හේතු, රෝහල් ගතවීම', km: 'ឧ. មូលហេតុផ្ទាល់ខ្លួន ទៅពេទ្យ រឿងគ្រួសារ' },
+  leave_cancel: { ja: 'キャンセル', en: 'Cancel', vi: 'Hủy', id: 'Batal', zh: '取消', si: 'අවලංගු කරන්න', km: 'បោះបង់' },
+  leave_submitBtn: { ja: '申請を送信する', en: 'Submit Request', vi: 'Gửi đơn xin phép', id: 'Kirim Pengajuan', zh: '提交申请', si: 'ඉල්ලීම යවන්න', km: 'បញ្ជូនពាក្យស្នើសុំ' },
+  leave_registerBtn: { ja: '有給を登録する', en: 'Register Leave', vi: 'Đăng ký nghỉ phép', id: 'Daftarkan Cuti', zh: '登记休假', si: 'නිවාඩු ලියාපදිංචි කරන්න', km: 'ចុះឈ្មោះឈប់សម្រាក' }
 };
+
+export const WEEKDAY_NAMES: Record<LanguageCode, string[]> = {
+  ja: ['日', '月', '火', '水', '木', '金', '土'],
+  en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+  vi: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'],
+  id: ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'],
+  zh: ['日', '一', '二', '三', '四', '五', '六'],
+  si: ['ඉරි', 'සඳු', 'අඟ', 'බදා', 'බ්‍රහ', 'සිකු', 'සෙන'],
+  km: ['អា', 'ច', 'អ', 'ព', 'ព្រ', 'សុ', 'ស'],
+};
+
+export function getWeekdayName(dayIndex: number, lang: LanguageCode = 'ja'): string {
+  const list = WEEKDAY_NAMES[lang] || WEEKDAY_NAMES['ja'];
+  return list[dayIndex % 7] || '';
+}
 
 export function t(key: string, lang: LanguageCode = 'ja'): string {
   if (!TRANSLATIONS[key]) {

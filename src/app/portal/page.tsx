@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import VideoPlayerWithSubtitles, { Narration, TrimRange } from '@/components/VideoPlayerWithSubtitles';
-import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode } from '@/lib/i18n';
+import { t, getTranslatedName, getTranslatedWorkType, getWeekdayName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
 import { getPortalTasks } from '@/app/actions/farm';
 import { translateSingleText } from '@/app/actions/translate';
@@ -420,7 +420,6 @@ function PortalContent() {
       const dateStr = `${timecardMonth}-${String(day).padStart(2, '0')}`;
       const d = new Date(y, m - 1, day);
       const dayOfWeek = d.getDay();
-      const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
       const log = logMap.get(dateStr);
 
       // 休暇申請（leaveRequests）との照合
@@ -453,7 +452,7 @@ function PortalContent() {
         day,
         dateStr,
         dayOfWeek,
-        dayOfWeekName: dayNames[dayOfWeek],
+        dayOfWeekName: getWeekdayName(dayOfWeek, language),
         log: log || null,
         workMinutes,
         breakMins,
@@ -463,7 +462,7 @@ function PortalContent() {
     }
 
     return list;
-  }, [timecardMonth, monthlyLogs, leaveRequests]);
+  }, [timecardMonth, monthlyLogs, leaveRequests, language]);
 
   // タイムカードの日付から直接有給申請を開くハンドラー
   const handleOpenLeaveModalForDate = (dateStr: string) => {
@@ -2125,8 +2124,8 @@ function PortalContent() {
                   <Coffee className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-slate-800">有給・休暇の申請</h3>
-                  <p className="text-[10px] text-slate-400 font-bold">希望日と理由を入力して送信してください</p>
+                  <h3 className="text-base font-black text-slate-800">{t('leave_modalTitle', language)}</h3>
+                  <p className="text-[10px] text-slate-400 font-bold">{t('leave_modalSub', language)}</p>
                 </div>
               </div>
               <button
@@ -2141,8 +2140,8 @@ function PortalContent() {
             {/* 有給残日数サマリー */}
             {leaveBalance && (
               <div className="bg-amber-50/80 border border-amber-200 p-3 rounded-2xl flex items-center justify-between text-xs">
-                <span className="font-bold text-amber-800">現在の利用可能残日数:</span>
-                <span className="font-black text-amber-700 text-sm">残り {leaveBalance.total}日</span>
+                <span className="font-bold text-amber-800">{t('leave_availableDays', language)}:</span>
+                <span className="font-black text-amber-700 text-sm">{t('leave_daysRemaining', language).replace('{days}', String(leaveBalance.total))}</span>
               </div>
             )}
 
@@ -2152,7 +2151,7 @@ function PortalContent() {
               {role === 'admin' ? (
                 <div>
                   <label className="block text-xs font-black text-slate-700 mb-1.5">
-                    申請する従業員 <span className="text-rose-500">*</span>
+                    {t('leave_selectWorker', language)} <span className="text-rose-500">*</span>
                   </label>
                   <select
                     value={leaveForm.worker_id}
@@ -2160,15 +2159,15 @@ function PortalContent() {
                     required
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500 focus:bg-white"
                   >
-                    <option value="">従業員を選択してください</option>
+                    <option value="">{t('leave_selectWorkerPrompt', language)}</option>
                     {allWorkers.map(w => (
-                      <option key={w.id} value={w.id}>{w.name}（残: {Number(w.paid_leave_carryover || 0) + Number(w.paid_leave_balance || 0)}日）</option>
+                      <option key={w.id} value={w.id}>{w.name}（{t('leave_remainingDaysLabel', language)}{Number(w.paid_leave_carryover || 0) + Number(w.paid_leave_balance || 0)}{t('daysUnit', language)}）</option>
                     ))}
                   </select>
                 </div>
               ) : (
                 <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 flex items-center justify-between">
-                  <span>申請者:</span>
+                  <span>{t('leave_applicant', language)}</span>
                   <span className="font-black text-slate-800">{currentUser ? getTranslatedName(currentUser, language) : '現場スタッフ'}</span>
                 </div>
               )}
@@ -2176,7 +2175,7 @@ function PortalContent() {
               {/* 休暇種別 */}
               <div>
                 <label className="block text-xs font-black text-slate-700 mb-1.5">
-                  休暇の種類 <span className="text-rose-500">*</span>
+                  {t('leave_leaveType', language)} <span className="text-rose-500">*</span>
                 </label>
                 <select
                   value={leaveForm.type}
@@ -2184,11 +2183,11 @@ function PortalContent() {
                   required
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500 focus:bg-white"
                 >
-                  <option value="有給休暇">有給休暇（全休・1日）</option>
-                  <option value="午前半休">午前半休（0.5日）</option>
-                  <option value="午後半休">午後半休（0.5日）</option>
-                  <option value="特別休暇">特別休暇（慶弔・リフレッシュ等）</option>
-                  <option value="欠勤">欠勤</option>
+                  <option value="有給休暇">{t('leave_typeFull', language)}</option>
+                  <option value="午前半休">{t('leave_typeAm', language)}</option>
+                  <option value="午後半休">{t('leave_typePm', language)}</option>
+                  <option value="特別休暇">{t('leave_typeSpecial', language)}</option>
+                  <option value="欠勤">{t('leave_typeAbsence', language)}</option>
                 </select>
               </div>
 
@@ -2196,7 +2195,7 @@ function PortalContent() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-black text-slate-700 mb-1.5">
-                    開始日 <span className="text-rose-500">*</span>
+                    {t('leave_startDate', language)} <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="date"
@@ -2208,7 +2207,7 @@ function PortalContent() {
                 </div>
                 <div>
                   <label className="block text-xs font-black text-slate-700 mb-1.5">
-                    終了日 <span className="text-rose-500">*</span>
+                    {t('leave_endDate', language)} <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="date"
@@ -2224,13 +2223,13 @@ function PortalContent() {
               {/* 申請理由 */}
               <div>
                 <label className="block text-xs font-black text-slate-700 mb-1.5">
-                  申請理由・備考 <span className="text-slate-400 font-normal">(任意)</span>
+                  {t('leave_reasonLabel', language)} <span className="text-slate-400 font-normal">{t('leave_optional', language)}</span>
                 </label>
                 <textarea
                   rows={2}
                   value={leaveForm.reason}
                   onChange={e => setLeaveForm({ ...leaveForm, reason: e.target.value })}
-                  placeholder="例: 私用のため、通院のため、家庭の事情など"
+                  placeholder={t('leave_reasonPlaceholder', language)}
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
                 />
               </div>
@@ -2242,7 +2241,7 @@ function PortalContent() {
                   onClick={() => setShowLeaveModal(false)}
                   className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
                 >
-                  キャンセル
+                  {t('leave_cancel', language)}
                 </button>
                 <button
                   type="submit"
@@ -2250,7 +2249,7 @@ function PortalContent() {
                   className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-95 disabled:bg-slate-200 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
                 >
                   {isSubmittingLeave ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  <span>{role === 'admin' ? '有給を登録する' : '申請を送信する'}</span>
+                  <span>{role === 'admin' ? t('leave_registerBtn', language) : t('leave_submitBtn', language)}</span>
                 </button>
               </div>
             </form>
@@ -3737,7 +3736,7 @@ function PortalContent() {
                   >
                     <Coffee className="w-3.5 h-3.5" />
                     <span className="hidden md:inline">{t('tc_requestLeaveBtn', language)}</span>
-                    <span className="md:hidden">有給申請</span>
+                    <span className="md:hidden">{t('tc_requestLeaveBtnShort', language)}</span>
                   </button>
                 );
               })()}
@@ -3751,7 +3750,7 @@ function PortalContent() {
                 }}
                 disabled={isLoadingMonthly}
                 className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer"
-                title="最新情報に更新"
+                title={t('tc_refresh', language)}
               >
                 <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${isLoadingMonthly ? 'animate-spin' : ''}`} />
               </button>
@@ -3853,7 +3852,7 @@ function PortalContent() {
                         <th className="py-3 px-2 sm:px-3 text-center">{t('tc_break', language)}</th>
                         <th className="py-3 px-2 sm:px-4 text-right">{t('tc_workHours', language)}</th>
                         <th className="py-3 px-3 sm:px-4 text-center">{t('tc_status', language)}</th>
-                        <th className="py-3 px-2 sm:px-3 text-center">申請</th>
+                        <th className="py-3 px-2 sm:px-3 text-center">{t('tc_colApply', language)}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -3956,9 +3955,9 @@ function PortalContent() {
                                   type="button"
                                   onClick={() => handleOpenLeaveModalForDate(item.dateStr)}
                                   className="text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/60 px-2 py-0.5 rounded-lg transition-all cursor-pointer active:scale-95"
-                                  title={`${item.dateStr}の休暇を申請`}
+                                  title={`${item.dateStr}${t('tc_applyForDate', language)}`}
                                 >
-                                  + 休暇申請
+                                  {t('tc_applyLeave', language)}
                                 </button>
                               )}
                             </td>
