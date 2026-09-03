@@ -45,35 +45,39 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
 
         setDebugOwnerId(ownerId || '未設定');
 
-        if (!ownerId || ownerId === 'null' || ownerId === 'undefined') {
-          setErrorMsg('農園IDが指定されていません。管理者から共有された農園専用URL（?farm=...）からアクセスしてください。');
-          setIsLoading(false);
-          return;
-        }
-
         let workerList: any[] = [];
 
         // 1. まずクライアントSDKで直接取得
-        try {
-          const { data, error } = await supabase
-            .from('workers')
-            .select('*')
-            .eq('user_id', ownerId)
-            .order('name');
-          if (!error && data && data.length > 0) {
-            workerList = data;
+        if (ownerId && ownerId !== 'null' && ownerId !== 'undefined') {
+          try {
+            const { data, error } = await supabase
+              .from('workers')
+              .select('*')
+              .eq('user_id', ownerId)
+              .order('name');
+            if (!error && data && data.length > 0) {
+              workerList = data;
+            }
+          } catch (e) {
+            console.warn('Client SDK fetch failed, trying API:', e);
           }
-        } catch (e) {
-          console.warn('Client SDK fetch failed, trying API:', e);
         }
 
-        // 2. クライアントで取れなかった場合はAPI経由で取得
+        // 2. クライアントで取れなかった場合はAPI経由で取得（ownerIdが空でも自動補正）
         if (workerList.length === 0) {
           try {
-            const res = await fetch(`/api/workers?ownerId=${encodeURIComponent(ownerId)}`);
+            const queryUrl = (ownerId && ownerId !== 'null' && ownerId !== 'undefined')
+              ? `/api/workers?ownerId=${encodeURIComponent(ownerId)}` 
+              : '/api/workers';
+            const res = await fetch(queryUrl);
             const json = await res.json();
             if (json.workers && json.workers.length > 0) {
               workerList = json.workers;
+              if (json.ownerId && (!ownerId || ownerId === 'null' || ownerId === 'undefined')) {
+                ownerId = json.ownerId;
+                localStorage.setItem('agri_owner_id', ownerId);
+                setDebugOwnerId(ownerId);
+              }
             }
           } catch (e) {
             console.error('API fetch failed:', e);
@@ -84,7 +88,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           setErrorMsg('');
           setWorkers(workerList);
         } else {
-          setErrorMsg('この農園に登録された作業者が見つかりません。管理者画面（スタッフマスタ）から作業者を登録してください。');
+          setErrorMsg('作業者が見つかりません。管理者画面（スタッフマスタ）から作業者を登録してください。');
         }
       } catch (err: any) {
         console.error(err);

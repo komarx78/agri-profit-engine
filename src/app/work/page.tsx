@@ -272,14 +272,27 @@ export default function WorkEntryPage() {
         if (!cRes.error) setIsConnected(true);
 
         if (!cRes.error && currentUser) {
-          // 今日の打刻状態を取得
+          // 今日の打刻状態を取得（未退勤ログのフォールバック付き）
+          let activeAttLog = null;
           const { data: aLog } = await supabase
             .from('attendance_logs')
             .select('*')
             .eq('worker_id', currentUser.id)
             .eq('date', getJSTDate())
             .maybeSingle();
-          if (aLog) setAttendanceLog(aLog);
+          if (aLog) {
+            activeAttLog = aLog;
+          } else {
+            const { data: unclosed } = await supabase
+              .from('attendance_logs')
+              .select('*')
+              .eq('worker_id', currentUser.id)
+              .is('clock_out', null)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            if (unclosed && unclosed.length > 0) activeAttLog = unclosed[0];
+          }
+          if (activeAttLog) setAttendanceLog(activeAttLog);
 
           // 今日の残業申請を取得
           const { data: oReq } = await supabase
@@ -335,8 +348,9 @@ export default function WorkEntryPage() {
             setCustomWorkTypes(cTypes);
           }
 
-          // 本日の勤怠ログ取得
+          // 本日の勤怠ログ取得（当日のログを優先、なければ未退勤ログ）
           const today = getJSTDate();
+          let matchedAttLog = null;
           const { data: attLogs } = await supabase
             .from('attendance_logs')
             .select('*')
@@ -346,7 +360,19 @@ export default function WorkEntryPage() {
             .limit(1);
           
           if (attLogs && attLogs.length > 0) {
-            setAttendanceLog(attLogs[0]);
+            matchedAttLog = attLogs[0];
+          } else {
+            const { data: unclosed } = await supabase
+              .from('attendance_logs')
+              .select('*')
+              .eq('worker_id', currentUser.id)
+              .is('clock_out', null)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            if (unclosed && unclosed.length > 0) matchedAttLog = unclosed[0];
+          }
+          if (matchedAttLog) {
+            setAttendanceLog(matchedAttLog);
           }
 
           // 掲示板データ取得
@@ -720,24 +746,40 @@ export default function WorkEntryPage() {
         const { data, error } = await supabase.from('attendance_logs').insert([payload]).select();
         if (error) throw error;
         setAttendanceLog(data[0]);
-      } else if (attendanceLog) {
-        const updates: any = {};
-        if (ownerId && !attendanceLog.user_id) updates.user_id = ownerId;
-        if (action === 'break_start') updates.break_start_time = now;
-        if (action === 'break_end') {
-          updates.break_end_time = now;
-          if (attendanceLog.break_start_time) {
-            const bStart = new Date(attendanceLog.break_start_time).getTime();
-            const bEnd = new Date(now).getTime();
-            const diffMins = Math.floor((bEnd - bStart) / 1000 / 60);
-            updates.total_break_minutes = (attendanceLog.total_break_minutes || 0) + diffMins;
-          }
+      } else {
+        // attendanceLogが空の場合でも、未退勤ログを検索して退勤・休憩を可能にする
+        let targetLog = attendanceLog;
+        if (!targetLog) {
+          const { data: unclosed } = await supabase.from('attendance_logs')
+            .select('*')
+            .eq('worker_id', currentUser.id)
+            .is('clock_out', null)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (unclosed && unclosed.length > 0) targetLog = unclosed[0];
         }
-        if (action === 'clock_out') updates.clock_out = now;
 
-        const { data, error } = await supabase.from('attendance_logs').update(updates).eq('id', attendanceLog.id).select();
-        if (error) throw error;
-        setAttendanceLog(data[0]);
+        if (targetLog) {
+          const updates: any = {};
+          if (ownerId && !targetLog.user_id) updates.user_id = ownerId;
+          if (action === 'break_start') updates.break_start_time = now;
+          if (action === 'break_end') {
+            updates.break_end_time = now;
+            if (targetLog.break_start_time) {
+              const bStart = new Date(targetLog.break_start_time).getTime();
+              const bEnd = new Date(now).getTime();
+              const diffMins = Math.floor((bEnd - bStart) / 1000 / 60);
+              updates.total_break_minutes = (targetLog.total_break_minutes || 0) + diffMins;
+            }
+          }
+          if (action === 'clock_out') updates.clock_out = now;
+
+          const { data, error } = await supabase.from('attendance_logs').update(updates).eq('id', targetLog.id).select();
+          if (error) throw error;
+          setAttendanceLog(data[0]);
+        } else {
+          alert('出勤記録が見つかりませんでした。出勤打刻を行ってください。');
+        }
       }
       setIsSubmitting(false);
     } catch(err: any) {

@@ -209,8 +209,7 @@ function PortalContent() {
           const farmParam = urlParams.get('farm') || urlParams.get('tenant');
           if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
             localStorage.setItem('agri_owner_id', farmParam);
-            router.replace(`/farm/${farmParam}`);
-            return;
+            ownerId = farmParam;
           }
         }
 
@@ -342,15 +341,27 @@ function PortalContent() {
       setBoardPosts([]);
     }
 
-    // 4. 今日の打刻状態
+    // 4. 今日の打刻状態（当日の打刻、なければ未退勤ログ）
     const workerId = profile ? profile.id : userId;
     if (workerId) {
+      let matchedLog = null;
       const { data: aLog } = await supabase.from('attendance_logs')
         .select('*')
         .eq('worker_id', workerId)
         .eq('date', today)
         .maybeSingle();
-      if (aLog) setAttendance(aLog);
+      if (aLog) {
+        matchedLog = aLog;
+      } else {
+        const { data: unclosed } = await supabase.from('attendance_logs')
+          .select('*')
+          .eq('worker_id', workerId)
+          .is('clock_out', null)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (unclosed && unclosed.length > 0) matchedLog = unclosed[0];
+      }
+      if (matchedLog) setAttendance(matchedLog);
     }
 
     // 5. 有給休暇・残高と申請履歴の取得 (自農園のワーカーのみ厳格に取得)
@@ -1115,14 +1126,27 @@ function PortalContent() {
         if (error) throw error;
         setAttendance(data);
       } else {
-        if (!attendance) return;
+        let targetAtt = attendance;
+        if (!targetAtt) {
+          const { data: unclosed } = await supabase.from('attendance_logs')
+            .select('*')
+            .eq('worker_id', workerId)
+            .is('clock_out', null)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (unclosed && unclosed.length > 0) targetAtt = unclosed[0];
+        }
+        if (!targetAtt) {
+          alert('出勤記録が見つかりませんでした。出勤打刻を行ってください。');
+          return;
+        }
         const updatePayload: any = {
           clock_out: nowIso
         };
-        if (tenantUserId && !attendance.user_id) {
+        if (tenantUserId && !targetAtt.user_id) {
           updatePayload.user_id = tenantUserId;
         }
-        const { data, error } = await supabase.from('attendance_logs').update(updatePayload).eq('id', attendance.id).select().single();
+        const { data, error } = await supabase.from('attendance_logs').update(updatePayload).eq('id', targetAtt.id).select().single();
         if (error) throw error;
         setAttendance(data);
       }
