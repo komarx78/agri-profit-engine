@@ -28,77 +28,96 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
     setLanguage(loadedLang);
   }, []);
 
-  useEffect(() => {
-    async function fetchWorkers() {
-      try {
-        let ownerId = localStorage.getItem('agri_owner_id') || '';
+  const [showManualSetup, setShowManualSetup] = useState(false);
+  const [inputFarmId, setInputFarmId] = useState('');
 
-        // URLクエリパラメータ（?farm=xxx または ?tenant=xxx）を最優先で取得・保存
-        if (typeof window !== 'undefined') {
-          const params = new URLSearchParams(window.location.search);
-          const paramFarmId = params.get('farm') || params.get('tenant');
-          if (paramFarmId && paramFarmId !== 'null' && paramFarmId !== 'undefined') {
-            ownerId = paramFarmId;
-            localStorage.setItem('agri_owner_id', paramFarmId);
-          }
-        }
-
-        setDebugOwnerId(ownerId || '未設定');
-
-        let workerList: any[] = [];
-
-        // 1. まずクライアントSDKで直接取得
-        if (ownerId && ownerId !== 'null' && ownerId !== 'undefined') {
-          try {
-            const { data, error } = await supabase
-              .from('workers')
-              .select('*')
-              .eq('user_id', ownerId)
-              .order('name');
-            if (!error && data && data.length > 0) {
-              workerList = data;
-            }
-          } catch (e) {
-            console.warn('Client SDK fetch failed, trying API:', e);
-          }
-        }
-
-        // 2. クライアントで取れなかった場合はAPI経由で取得（ownerIdが空でも自動補正）
-        if (workerList.length === 0) {
-          try {
-            const queryUrl = (ownerId && ownerId !== 'null' && ownerId !== 'undefined')
-              ? `/api/workers?ownerId=${encodeURIComponent(ownerId)}` 
-              : '/api/workers';
-            const res = await fetch(queryUrl);
-            const json = await res.json();
-            if (json.workers && json.workers.length > 0) {
-              workerList = json.workers;
-              if (json.ownerId && (!ownerId || ownerId === 'null' || ownerId === 'undefined')) {
-                ownerId = json.ownerId;
-                localStorage.setItem('agri_owner_id', ownerId);
-                setDebugOwnerId(ownerId);
-              }
-            }
-          } catch (e) {
-            console.error('API fetch failed:', e);
-          }
-        }
-
-        if (workerList.length > 0) {
-          setErrorMsg('');
-          setWorkers(workerList);
-        } else {
-          setErrorMsg('作業者が見つかりません。管理者画面（スタッフマスタ）から作業者を登録してください。');
-        }
-      } catch (err: any) {
-        console.error(err);
-        setErrorMsg('データ取得エラー: ' + (err.message || 'Unknown error'));
-      } finally {
+  const loadWorkersForOwner = async (targetOwnerId: string) => {
+    setIsLoading(true);
+    setErrorMsg('');
+    try {
+      if (!targetOwnerId || targetOwnerId === 'null' || targetOwnerId === 'undefined') {
+        setErrorMsg('所属農園が未設定です。管理者から案内された専用URLまたはQRコードからアクセスしてください。');
         setIsLoading(false);
+        return;
+      }
+
+      let workerList: any[] = [];
+
+      // 1. まずクライアントSDKで直接取得
+      try {
+        const { data, error } = await supabase
+          .from('workers')
+          .select('*')
+          .eq('user_id', targetOwnerId)
+          .order('name');
+        if (!error && data && data.length > 0) {
+          workerList = data;
+        }
+      } catch (e) {
+        console.warn('Client SDK fetch failed, trying API:', e);
+      }
+
+      // 2. クライアントで取れなかった場合はAPI経由で取得
+      if (workerList.length === 0) {
+        try {
+          const res = await fetch(`/api/workers?ownerId=${encodeURIComponent(targetOwnerId)}`);
+          const json = await res.json();
+          if (json.workers && json.workers.length > 0) {
+            workerList = json.workers;
+          } else if (json.error) {
+            setErrorMsg(json.error);
+          }
+        } catch (e) {
+          console.error('API fetch failed:', e);
+        }
+      }
+
+      if (workerList.length > 0) {
+        setErrorMsg('');
+        setWorkers(workerList);
+        localStorage.setItem('agri_owner_id', targetOwnerId);
+        setDebugOwnerId(targetOwnerId);
+      } else {
+        setErrorMsg('この農園に登録された作業者が見つかりません。管理者画面（スタッフマスタ）から作業者を登録してください。');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg('データ取得エラー: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let ownerId = localStorage.getItem('agri_owner_id') || '';
+
+    // URLクエリパラメータ（?farm=xxx または ?tenant=xxx）を最優先で取得・保存
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const paramFarmId = params.get('farm') || params.get('tenant');
+      if (paramFarmId && paramFarmId !== 'null' && paramFarmId !== 'undefined') {
+        ownerId = paramFarmId;
+        localStorage.setItem('agri_owner_id', paramFarmId);
       }
     }
-    fetchWorkers();
+
+    setDebugOwnerId(ownerId || '未設定');
+
+    if (!ownerId || ownerId === 'null' || ownerId === 'undefined') {
+      setIsLoading(false);
+      setErrorMsg('所属農園が未設定です。管理者から案内された専用URLまたはQRコードからアクセスしてください。');
+      return;
+    }
+
+    loadWorkersForOwner(ownerId);
   }, []);
+
+  const handleManualSetupSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputFarmId.trim()) return;
+    const cleanId = inputFarmId.trim();
+    loadWorkersForOwner(cleanId);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -234,14 +253,46 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           </button>
         </form>
 
-        <div className="mt-6 pt-6 border-t border-slate-800 text-center">
-          <a
-            href="/login"
-            className="text-xs font-bold text-slate-400 hover:text-emerald-400 transition-colors inline-flex items-center gap-1"
-          >
-            <span>👨‍💼 管理者アカウントでログインする</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </a>
+        <div className="mt-6 pt-6 border-t border-slate-800 text-center space-y-3">
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowManualSetup(!showManualSetup)}
+              className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              {showManualSetup ? '▲ 農園コード入力を閉じる' : '⚙️ 所属農園コードを手動で入力する'}
+            </button>
+            {showManualSetup && (
+              <form onSubmit={handleManualSetupSubmit} className="mt-3 p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                <p className="text-[11px] text-slate-400 text-left">
+                  管理者から共有された農園ID（UUID）を入力してください
+                </p>
+                <input
+                  type="text"
+                  value={inputFarmId}
+                  onChange={(e) => setInputFarmId(e.target.value)}
+                  placeholder="例: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg py-1.5 px-3 text-xs text-white outline-none focus:border-emerald-500 font-mono"
+                />
+                <button
+                  type="submit"
+                  disabled={!inputFarmId.trim()}
+                  className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors"
+                >
+                  農園を設定して読み込む
+                </button>
+              </form>
+            )}
+          </div>
+          <div>
+            <a
+              href="/login"
+              className="text-xs font-bold text-slate-400 hover:text-emerald-400 transition-colors inline-flex items-center gap-1"
+            >
+              <span>👨‍💼 管理者アカウントでログインする</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </a>
+          </div>
         </div>
       </div>
     </div>

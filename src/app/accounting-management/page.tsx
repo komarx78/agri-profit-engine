@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { Receipt, Search, Image as ImageIcon, Camera, DollarSign, Store, Plus, AlertCircle, Check, History } from 'lucide-react';
+import { Receipt, Search, Image as ImageIcon, Camera, DollarSign, Store, Plus, AlertCircle, Check, History, Loader2 } from 'lucide-react';
 
 export default function AccountingPurchasesPage() {
   const [purchases, setPurchases] = useState<any[]>([]);
@@ -11,6 +12,7 @@ export default function AccountingPurchasesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [ocrError, setOcrError] = useState('');
@@ -50,12 +52,25 @@ export default function AccountingPurchasesPage() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const { data: matData } = await supabase.from('materials').select('*').order('name');
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
+      // 1. 自社テナントの資材マスタ取得
+      const { data: matData } = await supabase
+        .from('materials')
+        .select('*')
+        .eq('user_id', tenantId)
+        .order('name');
       if (matData) setMaterials(matData);
 
+      // 2. 自社テナントの仕入実績一覧取得
       const { data: purData, error } = await supabase
         .from('material_purchases')
         .select('*, materials (name, unit)')
+        .eq('user_id', tenantId)
         .order('purchase_date', { ascending: false });
 
       if (error) {
@@ -76,11 +91,11 @@ export default function AccountingPurchasesPage() {
     setSubmitSuccess(false);
 
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const currentUserId = authData?.user?.id || null;
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error('テナントIDが特定できません');
 
       const { error } = await supabase.from('material_purchases').insert([{
-        user_id: currentUserId,
+        user_id: tenantId,
         purchase_date: formData.purchase_date,
         material_id: formData.material_id || null,
         supplier: formData.supplier,
@@ -119,7 +134,15 @@ export default function AccountingPurchasesPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('この購入記録を削除しますか？')) return;
     try {
-      const { error } = await supabase.from('material_purchases').delete().eq('id', id);
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) return;
+
+      const { error } = await supabase
+        .from('material_purchases')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', tenantId);
+
       if (error) throw error;
       fetchData();
     } catch (error) {
@@ -405,18 +428,36 @@ export default function AccountingPurchasesPage() {
             <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
               <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
                 <History className="w-4 h-4 text-slate-500" />
-                購入履歴
+                購入履歴一覧 ({purchases.filter(p => {
+                  if (!searchQuery.trim()) return true;
+                  const q = searchQuery.toLowerCase();
+                  return p.supplier?.toLowerCase().includes(q) || p.materials?.name?.toLowerCase().includes(q) || p.notes?.toLowerCase().includes(q);
+                }).length}件)
               </h2>
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                <input 
+                  type="text" 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="資材名や購入先を検索..." 
+                  className="bg-white border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs outline-none focus:border-emerald-500 w-48 sm:w-60 shadow-xs"
+                />
+              </div>
             </div>
 
             {isLoading ? (
               <div className="flex-1 flex justify-center items-center">
-                <div className="animate-spin w-8 h-8 border-4 border-slate-200 border-t-emerald-600 rounded-full"></div>
+                <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
               </div>
-            ) : purchases.length === 0 ? (
+            ) : purchases.filter(p => {
+              if (!searchQuery.trim()) return true;
+              const q = searchQuery.toLowerCase();
+              return p.supplier?.toLowerCase().includes(q) || p.materials?.name?.toLowerCase().includes(q) || p.notes?.toLowerCase().includes(q);
+            }).length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-8 text-center space-y-2">
                 <Receipt className="w-8 h-8 text-slate-300 mx-auto" />
-                <p className="font-bold text-xs text-slate-500">まだ購入履歴がありません</p>
+                <p className="font-bold text-xs text-slate-500">購入履歴がありません</p>
                 <p className="text-[11px]">左のフォームから日々の経費を記録しましょう</p>
               </div>
             ) : (
@@ -432,7 +473,11 @@ export default function AccountingPurchasesPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {purchases.map((purchase) => (
+                    {purchases.filter(p => {
+                      if (!searchQuery.trim()) return true;
+                      const q = searchQuery.toLowerCase();
+                      return p.supplier?.toLowerCase().includes(q) || p.materials?.name?.toLowerCase().includes(q) || p.notes?.toLowerCase().includes(q);
+                    }).map((purchase) => (
                       <tr key={purchase.id} className="hover:bg-slate-50/50 transition-colors group">
                         <td className="px-4 py-3 whitespace-nowrap text-slate-600 font-medium">
                           {purchase.purchase_date}

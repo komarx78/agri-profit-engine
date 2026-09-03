@@ -316,7 +316,14 @@ export async function submitAttendance(tenantId: string, workerId: string, actio
     const supabase = createAdminClient();
     
     if (action === 'clock_in') {
+      let resolvedUserId = tenantId;
+      if (!resolvedUserId || resolvedUserId === 'null' || resolvedUserId === 'undefined') {
+        const { data: w } = await supabase.from('workers').select('user_id').eq('id', workerId).maybeSingle();
+        if (w?.user_id) resolvedUserId = w.user_id;
+      }
+
       const { data, error } = await supabase.from('attendance_logs').insert([{
+        user_id: resolvedUserId || null,
         worker_id: workerId,
         date: date,
         clock_in: now,
