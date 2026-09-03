@@ -423,6 +423,14 @@ function PortalContent() {
       const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
       const log = logMap.get(dateStr);
 
+      // 休暇申請（leaveRequests）との照合
+      const matchedLeave = leaveRequests.find(req => {
+        if (!req.start_date) return false;
+        const start = req.start_date;
+        const end = req.end_date || req.start_date;
+        return dateStr >= start && dateStr <= end;
+      });
+
       let workMinutes = 0;
       let breakMins = 0;
       let isOvertime = false;
@@ -449,12 +457,25 @@ function PortalContent() {
         log: log || null,
         workMinutes,
         breakMins,
-        isOvertime
+        isOvertime,
+        matchedLeave
       });
     }
 
     return list;
-  }, [timecardMonth, monthlyLogs]);
+  }, [timecardMonth, monthlyLogs, leaveRequests]);
+
+  // タイムカードの日付から直接有給申請を開くハンドラー
+  const handleOpenLeaveModalForDate = (dateStr: string) => {
+    const targetId = workerProfile?.id || currentUser?.id;
+    setLeaveForm(prev => ({
+      ...prev,
+      start_date: dateStr,
+      end_date: dateStr,
+      worker_id: targetId || prev.worker_id
+    }));
+    setShowLeaveModal(true);
+  };
 
   // 選択中の月の統計サマリー
   const selectedMonthStats = useMemo(() => {
@@ -1553,7 +1574,7 @@ function PortalContent() {
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-black text-slate-600 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-blue-600" />
-                    今月の勤務実績（当月累計）
+                    {t('tc_currentMonthSummary', language)}
                   </span>
                   <button
                     type="button"
@@ -1566,29 +1587,29 @@ function PortalContent() {
                       }
                       setShowTimecardModal(true);
                     }}
-                    className="text-[11px] font-black text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 shadow-xs"
+                    className="text-[11px] font-black text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 shadow-xs cursor-pointer"
                   >
-                    <span>タイムカード明細</span>
+                    <span>{t('tc_openDetails', language)}</span>
                     <ArrowRight className="w-3 h-3" />
                   </button>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-xs">
-                    <span className="text-[10px] font-bold text-slate-400 block">出勤日数</span>
+                    <span className="text-[10px] font-bold text-slate-400 block">{t('tc_workDays', language)}</span>
                     <div className="flex items-baseline gap-1 mt-0.5">
                       <span className="text-lg font-black text-slate-800">{currentMonthSummary.workDays}</span>
-                      <span className="text-[10px] font-bold text-slate-500">日</span>
+                      <span className="text-[10px] font-bold text-slate-500">{t('daysUnit', language)}</span>
                     </div>
                   </div>
                   <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-xs">
-                    <span className="text-[10px] font-bold text-slate-400 block">総実働時間</span>
+                    <span className="text-[10px] font-bold text-slate-400 block">{t('tc_totalWorkTime', language)}</span>
                     <div className="flex items-baseline gap-1 mt-0.5">
                       <span className="text-lg font-black text-blue-600">
                         {Math.floor(currentMonthSummary.totalMinutes / 60)}
                       </span>
                       <span className="text-[10px] font-bold text-slate-500">
-                        時間{currentMonthSummary.totalMinutes % 60}分
+                        {t('tc_hours', language)}{currentMonthSummary.totalMinutes % 60}{t('tc_minutes', language)}
                       </span>
                     </div>
                   </div>
@@ -3645,28 +3666,82 @@ function PortalContent() {
         </div>
       )}
 
-      {/* 🕒 個人用・月次タイムカードモーダル */}
+      {/* 🕒 個人用・月次タイムカードモーダル（多言語翻訳 ＆ 有給申請連動対応） */}
       {showTimecardModal && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[120] flex flex-col animate-in fade-in duration-200 text-slate-800">
           
           {/* モーダル上部ヘッダー */}
-          <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-8 shadow-sm flex-shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100">
+          <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3 sm:px-8 shadow-sm flex-shrink-0">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100 shrink-0">
                 <Clock className="w-5 h-5" />
               </div>
-              <div>
-                <h1 className="font-black text-slate-900 text-sm sm:text-base leading-none flex items-center gap-2">
-                  <span>月次タイムカード明細</span>
-                  <span className="text-xs bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-lg border border-slate-200">
+              <div className="min-w-0">
+                <h1 className="font-black text-slate-900 text-xs sm:text-base leading-none flex items-center gap-2 truncate">
+                  <span>{t('tc_title', language)}</span>
+                  <span className="text-[11px] sm:text-xs bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-lg border border-slate-200 shrink-0">
                     {workerProfile?.name || currentUser?.name || '作業者'}
                   </span>
                 </h1>
-                <p className="text-[10px] text-slate-400 mt-1 font-bold">日々の出退勤打刻と労働時間の集計実績です</p>
+                <p className="text-[10px] text-slate-400 mt-1 font-bold hidden sm:block">
+                  {t('tc_subtitle', language)}
+                </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {/* 言語切り替えセレクター */}
+              <div className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-xl border border-slate-200">
+                <Languages className="w-3.5 h-3.5 text-slate-500" />
+                <select
+                  value={language}
+                  onChange={(e) => handleLanguageChange(e.target.value as LanguageCode)}
+                  className="bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                >
+                  {LANGUAGES.map(l => (
+                    <option key={l.code} value={l.code}>{l.flag} {l.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 有給休暇申請ボタン（派遣スタッフ以外） */}
+              {(() => {
+                const targetId = workerProfile?.id || currentUser?.id;
+                const currentFromList = allWorkers.find(w => w.id === targetId);
+                const isDispatch = (
+                  currentUser?.type === '派遣' || 
+                  currentUser?.employment_type === '派遣' || 
+                  workerProfile?.type === '派遣' || 
+                  workerProfile?.employment_type === '派遣' ||
+                  currentFromList?.type === '派遣' ||
+                  currentFromList?.employment_type === '派遣' ||
+                  currentUser?.name?.includes('派遣') ||
+                  workerProfile?.name?.includes('派遣')
+                );
+
+                if (isDispatch) return null;
+
+                return (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetId = workerProfile?.id || currentUser?.id;
+                      setLeaveForm(prev => ({
+                        ...prev,
+                        worker_id: targetId || prev.worker_id
+                      }));
+                      setShowLeaveModal(true);
+                    }}
+                    className="px-2.5 sm:px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-black rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer shrink-0"
+                    title={t('tc_requestLeaveBtn', language)}
+                  >
+                    <Coffee className="w-3.5 h-3.5" />
+                    <span className="hidden md:inline">{t('tc_requestLeaveBtn', language)}</span>
+                    <span className="md:hidden">有給申請</span>
+                  </button>
+                );
+              })()}
+
               <button
                 onClick={() => {
                   const targetWorkerId = workerProfile?.id || currentUser?.id;
@@ -3678,19 +3753,19 @@ function PortalContent() {
                 className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer"
                 title="最新情報に更新"
               >
-                <RefreshCw className={`w-5 h-5 ${isLoadingMonthly ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${isLoadingMonthly ? 'animate-spin' : ''}`} />
               </button>
               <button
                 onClick={() => setShowTimecardModal(false)}
                 className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               >
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
             </div>
           </header>
 
           {/* モーダルメインコンテンツエリア */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-100">
             <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6">
               
               {/* 月選択コントローラー ＆ サマリーカード */}
@@ -3698,57 +3773,57 @@ function PortalContent() {
                 <div className="flex items-center justify-between">
                   <button
                     onClick={handlePrevMonth}
-                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black rounded-xl transition-colors flex items-center gap-1 active:scale-95 cursor-pointer"
+                    className="px-3 sm:px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black rounded-xl transition-colors flex items-center gap-1 active:scale-95 cursor-pointer"
                   >
-                    <span>◀ 前月</span>
+                    <span>{t('tc_prevMonth', language)}</span>
                   </button>
 
                   <div className="flex items-center gap-2">
                     <CalendarIcon className="w-4 h-4 text-blue-600" />
                     <span className="text-base sm:text-lg font-black text-slate-900 tracking-tight font-mono">
-                      {timecardMonth.split('-')[0]}年 {timecardMonth.split('-')[1]}月
+                      {timecardMonth.split('-')[0]} / {timecardMonth.split('-')[1]}
                     </span>
                   </div>
 
                   <button
                     onClick={handleNextMonth}
-                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black rounded-xl transition-colors flex items-center gap-1 active:scale-95 cursor-pointer"
+                    className="px-3 sm:px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black rounded-xl transition-colors flex items-center gap-1 active:scale-95 cursor-pointer"
                   >
-                    <span>翌月 ▶</span>
+                    <span>{t('tc_nextMonth', language)}</span>
                   </button>
                 </div>
 
                 {/* 4連統計指標カード */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 pt-1">
                   <div className="bg-blue-50/70 border border-blue-100 p-3 sm:p-4 rounded-2xl">
-                    <span className="text-[10px] sm:text-xs font-black text-blue-700 block mb-1">🏃‍♂️ 出勤日数</span>
+                    <span className="text-[10px] sm:text-xs font-black text-blue-700 block mb-1">🏃‍♂️ {t('tc_workDays', language)}</span>
                     <div className="flex items-baseline gap-1">
                       <span className="text-xl sm:text-2xl font-black text-blue-900">{selectedMonthStats.workDays}</span>
-                      <span className="text-xs font-bold text-blue-700">日</span>
+                      <span className="text-xs font-bold text-blue-700">{t('daysUnit', language)}</span>
                     </div>
                   </div>
 
                   <div className="bg-emerald-50/70 border border-emerald-100 p-3 sm:p-4 rounded-2xl">
-                    <span className="text-[10px] sm:text-xs font-black text-emerald-700 block mb-1">⏱️ 総実働時間</span>
+                    <span className="text-[10px] sm:text-xs font-black text-emerald-700 block mb-1">⏱️ {t('tc_totalWorkTime', language)}</span>
                     <div className="flex items-baseline gap-1">
                       <span className="text-xl sm:text-2xl font-black text-emerald-900">{selectedMonthStats.totalHours}</span>
-                      <span className="text-xs font-bold text-emerald-700">時間{selectedMonthStats.totalMinsRemainder}分</span>
+                      <span className="text-xs font-bold text-emerald-700">{t('tc_hours', language)}{selectedMonthStats.totalMinsRemainder}{t('tc_minutes', language)}</span>
                     </div>
                   </div>
 
                   <div className="bg-amber-50/70 border border-amber-100 p-3 sm:p-4 rounded-2xl">
-                    <span className="text-[10px] sm:text-xs font-black text-amber-700 block mb-1">🔥 残業時間(8h超)</span>
+                    <span className="text-[10px] sm:text-xs font-black text-amber-700 block mb-1">🔥 {t('tc_overtime', language)}</span>
                     <div className="flex items-baseline gap-1">
                       <span className="text-xl sm:text-2xl font-black text-amber-900">{selectedMonthStats.overtimeHours}</span>
-                      <span className="text-xs font-bold text-amber-700">時間{selectedMonthStats.overtimeMinsRemainder}分</span>
+                      <span className="text-xs font-bold text-amber-700">{t('tc_hours', language)}{selectedMonthStats.overtimeMinsRemainder}{t('tc_minutes', language)}</span>
                     </div>
                   </div>
 
                   <div className="bg-purple-50/70 border border-purple-100 p-3 sm:p-4 rounded-2xl">
-                    <span className="text-[10px] sm:text-xs font-black text-purple-700 block mb-1">☕ 合計休憩時間</span>
+                    <span className="text-[10px] sm:text-xs font-black text-purple-700 block mb-1">☕ {t('tc_totalBreak', language)}</span>
                     <div className="flex items-baseline gap-1">
                       <span className="text-xl sm:text-2xl font-black text-purple-900">{Math.floor(selectedMonthStats.totalBreakMins / 60)}</span>
-                      <span className="text-xs font-bold text-purple-700">時間{selectedMonthStats.totalBreakMins % 60}分</span>
+                      <span className="text-xs font-bold text-purple-700">{t('tc_hours', language)}{selectedMonthStats.totalBreakMins % 60}{t('tc_minutes', language)}</span>
                     </div>
                   </div>
                 </div>
@@ -3758,13 +3833,12 @@ function PortalContent() {
               <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="p-4 sm:px-6 border-b border-slate-100 flex items-center justify-between">
                   <h3 className="font-black text-slate-800 text-xs sm:text-sm flex items-center gap-2">
-                    <span>日別打刻明細</span>
-                    <span className="text-[10px] font-bold text-slate-400">（1日〜末日）</span>
+                    <span>{t('tc_dailyDetails', language)}</span>
                   </h3>
                   {isLoadingMonthly && (
                     <div className="flex items-center gap-1.5 text-xs font-bold text-blue-600">
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>集計中...</span>
+                      <span>Loading...</span>
                     </div>
                   )}
                 </div>
@@ -3773,12 +3847,13 @@ function PortalContent() {
                   <table className="w-full text-left border-collapse text-xs sm:text-sm">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-black text-[11px] uppercase tracking-wider">
-                        <th className="py-3 px-3 sm:px-4">日付</th>
-                        <th className="py-3 px-2 sm:px-3 text-center">出勤</th>
-                        <th className="py-3 px-2 sm:px-3 text-center">退勤</th>
-                        <th className="py-3 px-2 sm:px-3 text-center">休憩</th>
-                        <th className="py-3 px-2 sm:px-4 text-right">実労働時間</th>
-                        <th className="py-3 px-3 sm:px-4 text-center">状態</th>
+                        <th className="py-3 px-3 sm:px-4">{t('tc_date', language)}</th>
+                        <th className="py-3 px-2 sm:px-3 text-center">{t('tc_clockIn', language)}</th>
+                        <th className="py-3 px-2 sm:px-3 text-center">{t('tc_clockOut', language)}</th>
+                        <th className="py-3 px-2 sm:px-3 text-center">{t('tc_break', language)}</th>
+                        <th className="py-3 px-2 sm:px-4 text-right">{t('tc_workHours', language)}</th>
+                        <th className="py-3 px-3 sm:px-4 text-center">{t('tc_status', language)}</th>
+                        <th className="py-3 px-2 sm:px-3 text-center">申請</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -3787,18 +3862,24 @@ function PortalContent() {
                         const hasOut = item.log && !!item.log.clock_out;
                         const isSunday = item.dayOfWeek === 0;
                         const isSaturday = item.dayOfWeek === 6;
+                        const isLeave = !!item.matchedLeave;
+                        const isLeaveApproved = isLeave && item.matchedLeave.status === '承認';
 
                         return (
                           <tr 
                             key={item.day}
                             className={`hover:bg-slate-50/80 transition-colors ${
-                              hasIn ? 'bg-white' : (isSunday ? 'bg-rose-50/20' : isSaturday ? 'bg-blue-50/20' : '')
+                              isLeaveApproved
+                                ? 'bg-amber-50/40'
+                                : hasIn 
+                                ? 'bg-white' 
+                                : (isSunday ? 'bg-rose-50/20' : isSaturday ? 'bg-blue-50/20' : '')
                             }`}
                           >
                             <td className="py-2.5 sm:py-3 px-3 sm:px-4 whitespace-nowrap">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1.5 sm:gap-2">
                                 <span className="font-mono font-black text-slate-900 text-xs sm:text-sm">
-                                  {item.day}日
+                                  {item.day}
                                 </span>
                                 <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
                                   isSunday 
@@ -3821,7 +3902,7 @@ function PortalContent() {
                                 formatDisplayTime(item.log.clock_out)
                               ) : hasIn ? (
                                 <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 animate-pulse">
-                                  勤務中
+                                  {t('tc_working', language)}
                                 </span>
                               ) : (
                                 <span className="text-slate-300">-</span>
@@ -3829,7 +3910,7 @@ function PortalContent() {
                             </td>
 
                             <td className="py-2.5 sm:py-3 px-2 sm:px-3 text-center font-mono text-xs text-slate-500 whitespace-nowrap">
-                              {hasIn && item.breakMins > 0 ? `${item.breakMins}分` : <span className="text-slate-300">-</span>}
+                              {hasIn && item.breakMins > 0 ? `${item.breakMins}${t('tc_minutes', language)}` : <span className="text-slate-300">-</span>}
                             </td>
 
                             <td className="py-2.5 sm:py-3 px-2 sm:px-4 text-right whitespace-nowrap">
@@ -3837,7 +3918,7 @@ function PortalContent() {
                                 <span className={`font-mono font-black text-xs sm:text-sm ${
                                   item.isOvertime ? 'text-amber-600 font-black' : 'text-slate-900'
                                 }`}>
-                                  {Math.floor(item.workMinutes / 60)}時間 {item.workMinutes % 60}分
+                                  {Math.floor(item.workMinutes / 60)}{t('tc_hours', language)}{item.workMinutes % 60}{t('tc_minutes', language)}
                                 </span>
                               ) : (
                                 <span className="text-slate-300 font-mono">-</span>
@@ -3845,18 +3926,40 @@ function PortalContent() {
                             </td>
 
                             <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center whitespace-nowrap">
-                              {hasOut ? (
+                              {isLeave ? (
+                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                                  isLeaveApproved 
+                                    ? 'bg-amber-100 text-amber-800 border-amber-300' 
+                                    : 'bg-amber-50 text-amber-600 border-amber-200'
+                                }`}>
+                                  {isLeaveApproved ? t('tc_leaveApproved', language) : t('tc_leavePending', language)}
+                                </span>
+                              ) : hasOut ? (
                                 <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                  完了
+                                  {t('tc_completed', language)}
                                 </span>
                               ) : hasIn ? (
                                 <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                                  勤務中
+                                  {t('tc_working', language)}
                                 </span>
                               ) : (
                                 <span className="text-[10px] font-medium text-slate-300">
                                   -
                                 </span>
+                              )}
+                            </td>
+
+                            {/* 日付指定の休暇申請アクション */}
+                            <td className="py-2.5 sm:py-3 px-2 sm:px-3 text-center whitespace-nowrap">
+                              {!isLeave && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenLeaveModalForDate(item.dateStr)}
+                                  className="text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/60 px-2 py-0.5 rounded-lg transition-all cursor-pointer active:scale-95"
+                                  title={`${item.dateStr}の休暇を申請`}
+                                >
+                                  + 休暇申請
+                                </button>
                               )}
                             </td>
                           </tr>

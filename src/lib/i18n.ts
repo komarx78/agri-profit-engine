@@ -430,7 +430,33 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   boardFilterGeneral: { ja: 'その他', en: 'Other', vi: 'Khác', id: 'Lainnya', zh: '其他', si: 'වෙනත්', km: 'ផ្សេងៗ' },
   boardSend: { ja: '送信', en: 'Send', vi: 'Gửi', id: 'Kirim', zh: '发送', si: 'යවන්න', km: 'បញ្ជូន' },
   boardDelete: { ja: '削除', en: 'Delete', vi: 'Xóa', id: 'Hapus', zh: '删除', si: 'මකන්න', km: 'លុប' },
-  boardNoPosts: { ja: '表示する投稿がありません', en: 'No posts to display', vi: 'Không có bài đăng nào để hiển thị', id: 'Tidak ada postingan untuk ditampilkan', zh: '没有要显示的帖子', si: 'පෙන්වීමට පළ කිරීම් නොමැත', km: 'មិនមានការបង្ហោះដើម្បីបង្ហាញទេ' }
+  boardNoPosts: { ja: '表示する投稿がありません', en: 'No posts to display', vi: 'Không có bài đăng nào để hiển thị', id: 'Tidak ada postingan untuk ditampilkan', zh: '没有要显示的帖子', si: 'පෙන්වීමට පළ කිරීම් නොමැත', km: 'មិនមានការបង្ហោះដើម្បីបង្ហាញទេ' },
+  
+  // タイムカード関連
+  tc_title: { ja: '月次タイムカード明細', en: 'Monthly Timecard', vi: 'Bảng chấm công hàng tháng', id: 'Kartu Jam Kerja Bulanan', zh: '月度打卡考勤明细', si: 'මාසික පැමිණීම් වාර්තාව', km: 'កំណត់ត្រាវត្តមានប្រចាំខែ' },
+  tc_subtitle: { ja: '日々の出退勤打刻と労働時間の集計実績です', en: 'Daily attendance logs & work hour summary', vi: 'Nhật ký chấm công và tổng hợp giờ làm việc hàng ngày', id: 'Log kehadiran harian & ringkasan jam kerja', zh: '每日考勤打卡与工作时间汇总记录', si: 'දෛනික පැමිණීම් සහ වැඩ කරන පැය සාරාංශය', km: 'កំណត់ត្រាវត្តមាន និង សង្ខេបម៉ោងធ្វើការប្រចាំថ្ងៃ' },
+  tc_workDays: { ja: '出勤日数', en: 'Work Days', vi: 'Số ngày làm việc', id: 'Hari Kerja', zh: '出勤天数', si: 'වැඩ කළ දින', km: 'ចំនួនថ្ងៃធ្វើការ' },
+  tc_totalWorkTime: { ja: '総実働時間', en: 'Total Work Time', vi: 'Tổng thời gian làm việc', id: 'Total Jam Kerja', zh: '总实际工时', si: 'සමස්ත වැඩ කරන කාලය', km: 'ម៉ោងធ្វើការសរុប' },
+  tc_overtime: { ja: '残業時間(8h超)', en: 'Overtime (>8h)', vi: 'Tăng ca (>8h)', id: 'Lembur (>8j)', zh: '加班时间(超8小时)', si: 'අතිකාල (>පැය 8)', km: 'ថែមម៉ោង (>8ម៉ោង)' },
+  tc_totalBreak: { ja: '合計休憩時間', en: 'Total Break', vi: 'Tổng giờ nghỉ', id: 'Total Istirahat', zh: '合计休息时间', si: 'විවේක කාලය', km: 'ម៉ោងសម្រាកសរុប' },
+  tc_dailyDetails: { ja: '日別打刻明細', en: 'Daily Records', vi: 'Chi tiết theo ngày', id: 'Rincian Harian', zh: '每日打卡明细', si: 'දෛනික වාර්තාව', km: 'ព័ត៌មានលម្អិតប្រចាំថ្ងៃ' },
+  tc_date: { ja: '日付', en: 'Date', vi: 'Ngày', id: 'Tanggal', zh: '日期', si: 'දිනය', km: 'កាលបរិច្ឆេទ' },
+  tc_clockIn: { ja: '出勤', en: 'In', vi: 'Vào', id: 'Masuk', zh: '上班', si: 'පැමිණීම', km: 'ចូល' },
+  tc_clockOut: { ja: '退勤', en: 'Out', vi: 'Ra', id: 'Pulang', zh: '下班', si: 'පිටවීම', km: 'ចេញ' },
+  tc_break: { ja: '休憩', en: 'Break', vi: 'Nghỉ', id: 'Istirahat', zh: '休息', si: 'විවේකය', km: 'សម្រាក' },
+  tc_workHours: { ja: '実労働時間', en: 'Work Hours', vi: 'Giờ làm', id: 'Jam Kerja', zh: '实际工时', si: 'වැඩ කළ පැය', km: 'ម៉ោងធ្វើការ' },
+  tc_status: { ja: '状態', en: 'Status', vi: 'Trạng thái', id: 'Status', zh: '状态', si: 'තත්ත්වය', km: 'ស្ថានភាព' },
+  tc_completed: { ja: '完了', en: 'Done', vi: 'Hoàn thành', id: 'Selesai', zh: '完成', si: 'අවසන්', km: 'រួចរាល់' },
+  tc_working: { ja: '勤務中', en: 'Working', vi: 'Đang làm', id: 'Bekerja', zh: '上班中', si: 'වැඩ කරමින්', km: 'កំពុងធ្វើការ' },
+  tc_requestLeaveBtn: { ja: '🏖️ 有給・休暇を申請する', en: '🏖️ Request Leave', vi: '🏖️ Xin nghỉ phép', id: '🏖️ Ajukan Cuti', zh: '🏖️ 申请休假', si: '🏖️ නිවාඩු ඉල්ලන්න', km: '🏖️ ស្នើសុំឈប់សម្រាក' },
+  tc_leaveApproved: { ja: '有給(承認)', en: 'Leave (Approved)', vi: 'Nghỉ phép (Đã duyệt)', id: 'Cuti (Disetujui)', zh: '带薪假(已批准)', si: 'නිවාඩු (අනුමතයි)', km: 'ឈប់សម្រាក (អនុម័ត)' },
+  tc_leavePending: { ja: '有給(申請中)', en: 'Leave (Pending)', vi: 'Nghỉ phép (Chờ duyệt)', id: 'Cuti (Menunggu)', zh: '带薪假(申请中)', si: 'නිවාඩු (අනුමැතිය සඳහා)', km: 'ឈប់សម្រាក (កំពុងរង់ចាំ)' },
+  tc_prevMonth: { ja: '◀ 前月', en: '◀ Prev', vi: '◀ Tháng trước', id: '◀ Bln Lalu', zh: '◀ 上个月', si: '◀ පෙර මාසය', km: '◀ ខែមុន' },
+  tc_nextMonth: { ja: '翌月 ▶', en: 'Next ▶', vi: 'Tháng sau ▶', id: 'Bln Depan ▶', zh: '下个月 ▶', si: 'මීළඟ මාසය ▶', km: 'ខែបន្ទាប់ ▶' },
+  tc_hours: { ja: '時間', en: 'h ', vi: 'h ', id: 'j ', zh: '小时', si: 'පැය ', km: 'ម៉ោង ' },
+  tc_minutes: { ja: '分', en: 'm', vi: 'p', id: 'm', zh: '分', si: 'මිනිත්තු', km: 'នាទី' },
+  tc_currentMonthSummary: { ja: '今月の勤務実績（当月累計）', en: 'Current Month Summary', vi: 'Tổng kết tháng này', id: 'Ringkasan Bulan Ini', zh: '本月出勤汇总', si: 'මෙම මාසයේ සාරාංශය', km: 'សង្ខេបខែនេះ' },
+  tc_openDetails: { ja: 'タイムカード明細', en: 'Timecard Details', vi: 'Chi tiết bảng công', id: 'Rincian Kartu Jam', zh: '打卡明细', si: 'වාර්තා විස්තර', km: 'ព័ត៌មានលម្អិត' }
 };
 
 export function t(key: string, lang: LanguageCode = 'ja'): string {
