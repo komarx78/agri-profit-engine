@@ -97,7 +97,7 @@ export async function verifyWorkerPin(tenantId: string, workerId: string, pinCod
 
     const { data, error } = await supabase
       .from('workers')
-      .select('id, name, pin_code, role, user_id')
+      .select('id, name, pin_code, role, user_id, line_user_id, is_line_notification_enabled')
       .eq('id', workerId)
       .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`)
       .single();
@@ -106,18 +106,58 @@ export async function verifyWorkerPin(tenantId: string, workerId: string, pinCod
       return { success: false, error: '指定の農園に登録された作業者が見つかりません。' };
     }
 
-    const expectedPin = data.pin_code || '0000';
-    if (expectedPin !== pinCode) {
+    const expectedPin = String(data.pin_code || '0000').trim();
+    const cleanInputPin = String(pinCode || '').trim();
+    if (expectedPin !== cleanInputPin) {
       return { success: false, error: '暗証番号が間違っています。' };
     }
 
-    // パスワード等は除外して返す
+    // パスワード等は除外してプロフィール情報ごと返す
     return { 
       success: true, 
-      data: { id: data.id, name: data.name, role: data.role || 'staff', user_id: data.user_id } 
+      data: { 
+        id: data.id, 
+        name: data.name, 
+        role: data.role || 'staff', 
+        user_id: data.user_id,
+        line_user_id: data.line_user_id || null,
+        is_line_notification_enabled: !!data.is_line_notification_enabled
+      } 
     };
   } catch (error: any) {
-    return { success: false, error: '認証エラーが発生しました。' };
+    console.error('verifyWorkerPin Error:', error);
+    return { success: false, error: '認証エラーが発生しました。通信環境をご確認ください。' };
+  }
+}
+
+// 従業員のプロフィール（LINE連携状態など）の取得
+export async function getWorkerProfile(workerId: string) {
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from('workers')
+      .select('id, name, role, user_id, line_user_id, is_line_notification_enabled')
+      .eq('id', workerId)
+      .single();
+    if (error) throw error;
+    return { success: true, data };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
+// 従業員のLINE通知設定の更新
+export async function toggleWorkerLineNotification(workerId: string, enabled: boolean) {
+  try {
+    const supabase = createAdminClient();
+    const { error } = await supabase
+      .from('workers')
+      .update({ is_line_notification_enabled: enabled })
+      .eq('id', workerId);
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e.message };
   }
 }
 

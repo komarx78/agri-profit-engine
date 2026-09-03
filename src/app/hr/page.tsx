@@ -6,6 +6,7 @@ import { getCurrentTenantId, getTenantWorkerIds } from '@/lib/tenant';
 import { Clock, Users, Calendar as CalendarIcon, Coffee, Sun, CloudRain, ShieldCheck, ArrowRight, Save, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
+import { getJSTDate, formatDisplayTime } from '@/lib/dateUtils';
 
 export default function HrDashboardPage() {
   const [attendanceLogs, setAttendanceLogs] = useState<any[]>([]);
@@ -31,9 +32,7 @@ export default function HrDashboardPage() {
           return;
         }
 
-        const today = new Date();
-        today.setHours(today.getHours() + 9);
-        const dateStr = today.toISOString().split('T')[0];
+        const dateStr = getJSTDate();
 
         // 1. 自社テナントの従業員一覧を取得
         const { data: wData } = await supabase
@@ -130,9 +129,12 @@ export default function HrDashboardPage() {
     }
   };
 
-  const calculateTotalMinutes = (start?: string, end?: string) => {
+  const calculateTotalMinutes = (start?: string, end?: string, date?: string) => {
     if (!start || !end) return 0;
-    const diff = new Date(end).getTime() - new Date(start).getTime();
+    const startStr = start.includes('T') ? start : `${date || ''}T${start}`;
+    const endStr = end.includes('T') ? end : `${date || ''}T${end}`;
+    const diff = new Date(endStr).getTime() - new Date(startStr).getTime();
+    if (isNaN(diff)) return 0;
     return Math.floor(diff / 1000 / 60);
   };
 
@@ -248,7 +250,7 @@ export default function HrDashboardPage() {
                       const wLogs = workLogs.filter(w => w.worker_id === log.worker_id);
                       const reportMinutes = wLogs.reduce((sum, w) => sum + (Number(w.duration_minutes) || 0), 0);
 
-                      const clockTotalMinutes = calculateTotalMinutes(log.clock_in ? `${log.date}T${log.clock_in}` : undefined, log.clock_out ? `${log.date}T${log.clock_out}` : undefined);
+                      const clockTotalMinutes = calculateTotalMinutes(log.clock_in, log.clock_out, log.date);
                       const breakMins = log.total_break_minutes || 0;
                       const actualWorkMinutes = Math.max(0, clockTotalMinutes - breakMins);
                       const diff = Math.abs(actualWorkMinutes - reportMinutes);
@@ -274,7 +276,7 @@ export default function HrDashboardPage() {
                             </div>
                           </td>
                           <td className="px-6 py-4 text-xs font-bold text-slate-600">
-                            {log.clock_in ? log.clock_in.substring(0, 5) : '--:--'} 〜 {log.clock_out ? log.clock_out.substring(0, 5) : <span className="text-emerald-500">勤務中</span>}
+                            {log.clock_in ? formatDisplayTime(log.clock_in) : '--:--'} 〜 {log.clock_out ? formatDisplayTime(log.clock_out) : <span className="text-emerald-500">勤務中</span>}
                           </td>
                           <td className="px-6 py-4 text-xs font-bold text-slate-600">
                             {clockTotalMinutes > 0 ? `${Math.floor(clockTotalMinutes / 60)}h ${clockTotalMinutes % 60}m` : '--'}

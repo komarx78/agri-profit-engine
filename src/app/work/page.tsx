@@ -18,6 +18,7 @@ import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode, UNITS, getTranslatedUnit } from '@/lib/i18n';
 import { useCompany } from '@/hooks/useCompany';
 import imageCompression from 'browser-image-compression';
+import { getJSTDate, getJSTDateWithOffset, formatDisplayTime } from '@/lib/dateUtils';
 
 interface MasterItem {
   id: string;
@@ -68,11 +69,7 @@ function isPointInPolygon(point: {lat: number, lng: number}, vs: {lat: number, l
   return inside;
 }
 
-const getJSTDate = () => {
-  const d = new Date();
-  d.setHours(d.getHours() + 9);
-  return d.toISOString().split('T')[0];
-};
+
 
 export default function WorkEntryPage() {
   const router = useRouter();
@@ -701,18 +698,31 @@ export default function WorkEntryPage() {
       const now = new Date().toISOString();
       const today = getJSTDate();
 
+      // 所属農園のテナントID（user_id）を多重取得・フォールバック
+      let ownerId = workerProfile?.user_id || (currentUser as any)?.user_id || workerTenantId || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : null);
+      if (!ownerId && currentUser?.id) {
+        const { data: wRec } = await supabase.from('workers').select('user_id').eq('id', currentUser.id).maybeSingle();
+        if (wRec?.user_id) {
+          ownerId = wRec.user_id;
+        }
+      }
+
       if (action === 'clock_in') {
-        const { data, error } = await supabase.from('attendance_logs').insert([{
+        const payload: any = {
           worker_id: currentUser.id,
           date: today,
           clock_in: now,
           weather: weatherText,
           temperature: temp
-        }]).select();
+        };
+        if (ownerId) payload.user_id = ownerId;
+
+        const { data, error } = await supabase.from('attendance_logs').insert([payload]).select();
         if (error) throw error;
         setAttendanceLog(data[0]);
       } else if (attendanceLog) {
         const updates: any = {};
+        if (ownerId && !attendanceLog.user_id) updates.user_id = ownerId;
         if (action === 'break_start') updates.break_start_time = now;
         if (action === 'break_end') {
           updates.break_end_time = now;
@@ -730,9 +740,9 @@ export default function WorkEntryPage() {
         setAttendanceLog(data[0]);
       }
       setIsSubmitting(false);
-    } catch(err) {
+    } catch(err: any) {
       console.error(err);
-      alert('打刻エラーが発生しました');
+      alert('打刻エラー: ' + (err.message || '通信エラーが発生しました'));
       setIsSubmitting(false);
     }
   };
@@ -1499,14 +1509,12 @@ export default function WorkEntryPage() {
             {(() => {
               // 週間フル7日間の日付リストを生成 (モーダル用、calendarWeekOffsetと連動)
               const modalWeekDaysList = Array.from({ length: 7 }).map((_, idx) => {
-                const d = new Date();
-                d.setDate(d.getDate() + (calendarWeekOffset * 7) + idx);
-                const dateStr = d.toISOString().split('T')[0];
-                const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+                const { dateStr, dateObj } = getJSTDateWithOffset((calendarWeekOffset * 7) + idx);
+                const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
                 
                 // 相対日数
                 const totalDiff = (calendarWeekOffset * 7) + idx;
-                const label = totalDiff === 0 ? '今日' : totalDiff === 1 ? '明日' : totalDiff === 2 ? '明後日' : `${d.getMonth() + 1}/${d.getDate()}`;
+                const label = totalDiff === 0 ? '今日' : totalDiff === 1 ? '明日' : totalDiff === 2 ? '明後日' : `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
                 
                 const dayPendingOrders = allB2bOrders.filter(o => o.delivery_date === dateStr && o.status === 'pending');
                 const dayAllOrders = allB2bOrders.filter(o => o.delivery_date === dateStr);
@@ -1515,7 +1523,7 @@ export default function WorkEntryPage() {
                   dateStr,
                   dayOfWeek,
                   label,
-                  monthDate: `${d.getMonth() + 1}/${d.getDate()}`,
+                  monthDate: `${dateObj.getMonth() + 1}/${dateObj.getDate()}`,
                   pendingCount: dayPendingOrders.length,
                   allCount: dayAllOrders.length,
                   orders: dayAllOrders
@@ -1524,11 +1532,9 @@ export default function WorkEntryPage() {
 
               // メイン画面の直近4日間ピル (スクロールなしでピタッと美しく収める)
               const topFourDays = Array.from({ length: 4 }).map((_, idx) => {
-                const d = new Date();
-                d.setDate(d.getDate() + idx);
-                const dateStr = d.toISOString().split('T')[0];
-                const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
-                const label = idx === 0 ? '今日' : idx === 1 ? '明日' : idx === 2 ? '明後日' : `${d.getMonth() + 1}/${d.getDate()}`;
+                const { dateStr, dateObj } = getJSTDateWithOffset(idx);
+                const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
+                const label = idx === 0 ? '今日' : idx === 1 ? '明日' : idx === 2 ? '明後日' : `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
                 
                 const dayPendingOrders = allB2bOrders.filter(o => o.delivery_date === dateStr && o.status === 'pending');
                 const dayAllOrders = allB2bOrders.filter(o => o.delivery_date === dateStr);
@@ -1537,7 +1543,7 @@ export default function WorkEntryPage() {
                   dateStr,
                   dayOfWeek,
                   label,
-                  monthDate: `${d.getMonth() + 1}/${d.getDate()}`,
+                  monthDate: `${dateObj.getMonth() + 1}/${dateObj.getDate()}`,
                   pendingCount: dayPendingOrders.length,
                   allCount: dayAllOrders.length,
                   orders: dayAllOrders

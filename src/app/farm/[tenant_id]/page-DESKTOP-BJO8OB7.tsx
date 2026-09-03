@@ -1,37 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, use } from 'react';
-import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle, Building2, Video, Lock, X, FileText, Image as ImageIcon, LogIn, Plus, Coffee } from 'lucide-react';
-import { getFarmInfo, getFarmWorkers, verifyWorkerPin, getFarmMasters, getCustomWorkTypes, submitWorkLog, getTodayAttendance, submitAttendance, toggleWorkerLineNotification, TenantInfo } from '@/app/actions/farm';
+import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, History, LogOut, Loader2, AlertCircle, Building2, Video, Lock, X, FileText, Image as ImageIcon, LogIn } from 'lucide-react';
+import { getFarmInfo, getFarmWorkers, verifyWorkerPin, getFarmMasters, submitWorkLog, getTodayAttendance, submitAttendance, TenantInfo } from '@/app/actions/farm';
 import { supabase } from '@/lib/supabase';
 import imageCompression from 'browser-image-compression';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
-
-// プライベートブラウズ等の例外で落ちない安全なStorageラッパー
-const safeStorage = {
-  get: (key: string): string | null => {
-    try {
-      if (typeof window !== 'undefined') return localStorage.getItem(key);
-    } catch (e) {
-      console.warn('Storage get failed:', e);
-    }
-    return null;
-  },
-  set: (key: string, value: string): void => {
-    try {
-      if (typeof window !== 'undefined') localStorage.setItem(key, value);
-    } catch (e) {
-      console.warn('Storage set failed:', e);
-    }
-  },
-  remove: (key: string): void => {
-    try {
-      if (typeof window !== 'undefined') localStorage.removeItem(key);
-    } catch (e) {
-      console.warn('Storage remove failed:', e);
-    }
-  }
-};
 
 interface MasterItem {
   id: string;
@@ -52,7 +26,6 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   const [farmInfo, setFarmInfo] = useState<TenantInfo | null>(null);
   const [workers, setWorkers] = useState<{id: string, name: string}[]>([]);
   const [currentUser, setCurrentUser] = useState<{id: string, name: string, role: string} | null>(null);
-  const [workerProfile, setWorkerProfile] = useState<any>(null);
   
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -67,9 +40,6 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   const [fields, setFields] = useState<MasterItem[]>([]);
   const [materials, setMaterials] = useState<MasterItem[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
-  const [customWorkTypes, setCustomWorkTypes] = useState<string[]>([]);
-  const [isAddingWorkType, setIsAddingWorkType] = useState(false);
-  const [newWorkType, setNewWorkType] = useState('');
 
   const [selectedTaskTarget, setSelectedTaskTarget] = useState(''); // 'plan_UUID' or 'crop_UUID'
   const [selectedField, setSelectedField] = useState('');
@@ -88,7 +58,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'attendance' | 'work'>('attendance');
   const [attendanceLog, setAttendanceLog] = useState<any>(null);
-  const [currentAddress, setCurrentAddress] = useState<string>('現場打刻モード');
+  const [currentAddress, setCurrentAddress] = useState<string>('現在地を取得中...');
 
   const [manuals, setManuals] = useState<any[]>([]);
   const [playingVideo, setPlayingVideo] = useState<string | null>(null);
@@ -106,149 +76,62 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     { ja: '片付け・その他', en: 'Cleanup/Other', vi: 'Dọn dẹp/Khác', id: 'Pembersihan/Lainnya', zh: '清理/其他' },
   ];
 
-  // タイマー保存キーの生成
-  const getTimerStorageKey = (userId?: string) => {
-    const uid = userId || currentUser?.id || 'guest';
-    return `agri_active_timer_${tenantId}_${uid}`;
-  };
-
-  // タイマーの復元処理
-  const restoreActiveTimer = (userId?: string) => {
-    try {
-      const savedTimerStr = safeStorage.get(getTimerStorageKey(userId));
-      if (savedTimerStr) {
-        const savedTimer = JSON.parse(savedTimerStr);
-        if (savedTimer && savedTimer.startTime) {
-          setActiveWorkStartTime(savedTimer.startTime);
-          if (savedTimer.selectedField) setSelectedField(savedTimer.selectedField);
-          if (savedTimer.selectedTaskTarget) setSelectedTaskTarget(savedTimer.selectedTaskTarget);
-          if (savedTimer.workType) setWorkType(savedTimer.workType);
-          if (savedTimer.selectedMaterial) setSelectedMaterial(savedTimer.selectedMaterial);
-          if (savedTimer.materialQuantity) setMaterialQuantity(savedTimer.materialQuantity);
-          if (savedTimer.memo) setMemo(savedTimer.memo);
-          setInputMode('timer');
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to restore active timer:', e);
-    }
-  };
-
   useEffect(() => {
     setIsMounted(true);
     
     const init = async () => {
-      try {
-        let loadedFarmInfo: TenantInfo | null = null;
-        let loadedWorkers: any[] = [];
-
-        // 1. 最速・確実な /api/farm-init を5秒タイムアウトでフェッチ
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
-          
-          const apiRes = await fetch(`/api/farm-init?tenantId=${encodeURIComponent(tenantId)}`, {
-            signal: controller.signal,
-            cache: 'no-store'
-          });
-          clearTimeout(timeoutId);
-
-          if (apiRes.ok) {
-            const apiData = await apiRes.json();
-            if (apiData.success) {
-              loadedFarmInfo = apiData.farmInfo;
-              loadedWorkers = apiData.workers || [];
-            }
-          }
-        } catch (apiErr) {
-          console.warn('Fast API init failed, using Server Action fallback:', apiErr);
-        }
-
-        // 2. APIで取得できなかった場合は Server Action でフォールバック
-        if (!loadedFarmInfo) {
-          const infoRes = await getFarmInfo(tenantId);
-          if (infoRes.success && infoRes.data) {
-            loadedFarmInfo = infoRes.data;
-          }
-        }
-
-        if (loadedWorkers.length === 0) {
-          const workersRes = await getFarmWorkers(tenantId);
-          if (workersRes.success && workersRes.data) {
-            loadedWorkers = workersRes.data;
-          }
-        }
-
-        // 3. 最悪の場合でも初期画面を必ず表示（くるくる停止を完全防止）
-        if (!loadedFarmInfo) {
-          loadedFarmInfo = {
-            id: tenantId,
-            company_name: '農業システムポータル',
-            plan_type: 'standard'
-          };
-        }
-
-        setFarmInfo(loadedFarmInfo);
-        setWorkers(loadedWorkers);
-
-        let savedLang = safeStorage.get(`agri_lang_${tenantId}`) as LanguageCode;
-        if (!savedLang) {
-          savedLang = safeStorage.get('agri_lang_sales') as LanguageCode;
-        }
-        if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
-          setLanguage(savedLang);
-        }
-
-        const savedSession = safeStorage.get(`agri_worker_${tenantId}`);
-        if (savedSession) {
-          try {
-            const parsed = JSON.parse(savedSession);
-            setCurrentUser(parsed);
-            setWorkerProfile(parsed);
-            fetchMasters();
-            restoreActiveTimer(parsed.id);
-          } catch (e) {}
-        }
-      } catch (err: any) {
-        console.error('Init error:', err);
-      } finally {
+      const infoRes = await getFarmInfo(tenantId);
+      if (!infoRes.success || !infoRes.data) {
+        setErrorMsg(infoRes.error || '農園が見つかりません');
         setIsLoading(false);
+        return;
       }
+      setFarmInfo(infoRes.data);
+
+      const workersRes = await getFarmWorkers(tenantId);
+      if (workersRes.success && workersRes.data) {
+        setWorkers(workersRes.data);
+      }
+
+      let savedLang = localStorage.getItem(`agri_lang_${tenantId}`) as LanguageCode;
+      if (!savedLang) {
+          savedLang = localStorage.getItem('agri_lang_sales') as LanguageCode;
+      }
+      if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
+        setLanguage(savedLang);
+      }
+
+      const savedSession = localStorage.getItem(`agri_worker_${tenantId}`);
+      if (savedSession) {
+        const parsed = JSON.parse(savedSession);
+        setCurrentUser(parsed);
+        fetchMasters();
+      }
+      
+      setIsLoading(false);
     };
 
     init();
   }, [tenantId]);
 
   const fetchMasters = async () => {
-    try {
-      const res = await getFarmMasters(tenantId);
-      if (res.success && res.data) {
-        setCrops(res.data.crops || []);
-        setFields(res.data.fields || []);
-        setMaterials(res.data.materials || []);
-        setPlans(res.data.plans || []);
-      }
-      const customRes = await getCustomWorkTypes(tenantId);
-      if (customRes.success && customRes.data) {
-        setCustomWorkTypes(customRes.data);
-      }
-    } catch (e) {
-      console.error('fetchMasters error:', e);
+    const res = await getFarmMasters(tenantId);
+    if (res.success && res.data) {
+      setCrops(res.data.crops);
+      setFields(res.data.fields);
+      setMaterials(res.data.materials);
+      setPlans(res.data.plans || []);
     }
   };
 
   const fetchManuals = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('video_manuals')
-        .select('*')
-        .eq('user_id', tenantId)
-        .order('created_at', { ascending: false });
-          
-      if (!error && data) setManuals(data);
-    } catch (e) {
-      console.error('fetchManuals error:', e);
-    }
+    const { data, error } = await supabase
+      .from('video_manuals')
+      .select('*')
+      .eq('user_id', tenantId)
+      .order('created_at', { ascending: false });
+        
+    if (!error && data) setManuals(data);
   };
 
   useEffect(() => {
@@ -261,7 +144,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
       const calcElapsed = () => {
         const start = new Date(activeWorkStartTime).getTime();
         const now = new Date().getTime();
-        const diffSecs = Math.max(0, Math.floor((now - start) / 1000));
+        const diffSecs = Math.floor((now - start) / 1000);
         setElapsedMinutes(Math.floor(diffSecs / 60));
         setElapsedSeconds(diffSecs % 60);
       };
@@ -274,14 +157,10 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   useEffect(() => {
     if (currentUser) {
       const fetchAttendance = async () => {
-        try {
-          const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }); // YYYY-MM-DD
-          const res = await getTodayAttendance(tenantId, currentUser.id, today);
-          if (res.success && res.data) {
-            setAttendanceLog(res.data);
-          }
-        } catch (e) {
-          console.error('fetchAttendance error:', e);
+        const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }); // YYYY-MM-DD
+        const res = await getTodayAttendance(tenantId, currentUser.id, today);
+        if (res.success && res.data) {
+          setAttendanceLog(res.data);
         }
       };
       fetchAttendance();
@@ -298,14 +177,10 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
       if (res.success && res.data) {
         setAttendanceLog(res.data);
       } else {
-        alert(res.error || '打刻エラーが発生しました。');
+        alert(res.error || '打刻エラー');
       }
-    } catch(e) { 
-      console.error(e);
-      alert('通信エラーが発生しました。');
-    } finally {
-      setIsSubmitting(false);
-    }
+    } catch(e) { console.error(e); }
+    setIsSubmitting(false);
   };
 
   const resetForm = () => {
@@ -321,21 +196,16 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     setPhotoPreview(null);
     setVideoFile(null);
     setErrorMsg('');
-    setIsAddingWorkType(false);
-    setNewWorkType('');
-    safeStorage.remove(getTimerStorageKey());
   };
 
   const handleLanguageChange = (code: LanguageCode) => {
     setLanguage(code);
-    safeStorage.set(`agri_lang_${tenantId}`, code);
-    safeStorage.set('agri_lang_sales', code);
-    safeStorage.set('agri_lang', code);
+    localStorage.setItem(`agri_lang_${tenantId}`, code);
+    localStorage.setItem('agri_lang_sales', code); // 共通キーにも保存
     
-    try {
-      const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang'));
-      langKeys.forEach(key => safeStorage.set(key, code));
-    } catch (e) {}
+    // 出荷記録など他のページとも同期するため、存在するすべてのキーを更新
+    const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang_'));
+    langKeys.forEach(key => localStorage.setItem(key, code));
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -345,43 +215,26 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     setIsLoggingIn(true);
     setErrorMsg('');
     
-    try {
-      // 8秒のタイムアウト保護を設定（グルグル回りっぱなしを防ぐ）
-      const timeoutPromise = new Promise<{ success: boolean; error: string }>((_, reject) =>
-        setTimeout(() => reject(new Error('通信がタイムアウトしました。電波の良い場所でお試しください。')), 8000)
-      );
-
-      const loginPromise = verifyWorkerPin(tenantId, selectedWorkerId, pinCode);
-      const res: any = await Promise.race([loginPromise, timeoutPromise]);
-
-      if (res.success && res.data) {
-        setCurrentUser(res.data);
-        setWorkerProfile(res.data);
-        safeStorage.set(`agri_worker_${tenantId}`, JSON.stringify(res.data));
-        window.dispatchEvent(new Event('workerLoginStateChanged'));
-        fetchMasters();
-        restoreActiveTimer(res.data.id);
-      } else {
-        setErrorMsg(res.error || (t('login', language) + 'に失敗しました'));
-      }
-    } catch (err: any) {
-      console.error('Login error:', err);
-      setErrorMsg(err.message || '通信エラーが発生しました。電波環境をご確認ください。');
-    } finally {
-      setIsLoggingIn(false);
+    const res = await verifyWorkerPin(tenantId, selectedWorkerId, pinCode);
+    if (res.success && res.data) {
+      setCurrentUser(res.data);
+      localStorage.setItem(`agri_worker_${tenantId}`, JSON.stringify(res.data));
+      window.dispatchEvent(new Event('workerLoginStateChanged'));
+      fetchMasters();
+    } else {
+      setErrorMsg(t('login', language) + 'に失敗しました');
     }
+    
+    setIsLoggingIn(false);
   };
 
   const handleLogout = () => {
     if(confirm('ログアウトしますか？')) {
-      safeStorage.remove(`agri_worker_${tenantId}`);
-      safeStorage.remove(getTimerStorageKey());
+      localStorage.removeItem(`agri_worker_${tenantId}`);
       window.dispatchEvent(new Event('workerLoginStateChanged'));
       setCurrentUser(null);
-      setWorkerProfile(null);
       setPinCode('');
       setSelectedWorkerId('');
-      setActiveWorkStartTime(null);
       resetForm();
     }
   };
@@ -458,7 +311,6 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
         throw new Error(res.error);
       }
       
-      safeStorage.remove(getTimerStorageKey());
       setActiveWorkStartTime(null);
       setIsSubmitting(false);
       setIsSuccess(true);
@@ -606,31 +458,14 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
             </select>
             <input
               type="password"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              autoComplete="one-time-code"
               placeholder="••••"
               value={pinCode}
-              onChange={(e) => {
-                const normalized = e.target.value.normalize('NFKC').replace(/[^0-9]/g, '');
-                setPinCode(normalized);
-              }}
+              onChange={(e) => setPinCode(e.target.value.replace(/[^0-9]/g, ''))}
               maxLength={4}
-              className="w-full bg-slate-950 border-2 border-slate-800 text-white rounded-xl px-4 py-3.5 text-center text-xl tracking-[1em] focus:border-emerald-500 focus:outline-none"
+              className="w-full bg-slate-950 border-2 border-slate-800 text-white rounded-xl px-4 py-3.5 text-center text-xl tracking-[1em]"
             />
-            <button 
-              type="submit" 
-              disabled={isLoggingIn || !selectedWorkerId || !pinCode}
-              className="w-full py-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-slate-950 text-base shadow-lg transition-all flex items-center justify-center gap-2"
-            >
-              {isLoggingIn ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>認証中...</span>
-                </>
-              ) : (
-                t('login', language)
-              )}
+            <button type="submit" className="w-full py-4 rounded-xl bg-emerald-500 font-bold">
+              {isLoggingIn ? '...' : t('login', language)}
             </button>
           </form>
         </div>
@@ -735,81 +570,6 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                 <LogOut className="w-8 h-8" />
                 <span className="font-black">退勤</span>
               </button>
-
-              <button 
-                onClick={() => handleAttendance('break_start')}
-                disabled={!attendanceLog || !!attendanceLog.clock_out || (attendanceLog.break_start_time && !attendanceLog.break_end_time) || isSubmitting}
-                className="col-span-2 py-6 bg-emerald-800 disabled:opacity-50 disabled:grayscale border-2 border-emerald-600 rounded-3xl shadow-lg flex items-center justify-center gap-3 text-white transition-all active:scale-95"
-              >
-                <Coffee className="w-6 h-6" />
-                <span className="font-bold text-lg">休憩開始</span>
-              </button>
-
-              {(attendanceLog?.break_start_time && !attendanceLog?.break_end_time) && (
-                <button 
-                  onClick={() => handleAttendance('break_end')}
-                  disabled={isSubmitting}
-                  className="col-span-2 py-6 bg-amber-500 rounded-3xl shadow-lg flex items-center justify-center gap-3 text-amber-950 transition-all active:scale-95 animate-pulse"
-                >
-                  <Coffee className="w-6 h-6" />
-                  <span className="font-black text-lg">休憩終了</span>
-                </button>
-              )}
-            </div>
-
-            {/* LINE連携・通知設定エリア */}
-            <div className="mt-12 bg-slate-800/50 border border-slate-700 p-6 rounded-3xl shadow-inner">
-              <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                <svg viewBox="0 0 24 24" className="w-6 h-6 fill-[#06C755]"><path d="M22.2 10.3c0-4.4-4.5-8-10.1-8s-10.1 3.6-10.1 8c0 4 3.7 7.4 8.6 7.9.4 0 .9.1 1 .5.1.3.1.5-.1 1-.1.4-.4 1.3-.4 1.3s-.1.4.1.5c.2.1.5 0 .5 0 2.9-1.8 5.7-4 7.6-6 1.8-1.7 2.9-3.4 2.9-5.2zm-12.7 3c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h2.3c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3h-1.4v.9h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3h-1.4v.9h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3zM7.3 13.3c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v4.2c0 .2-.1.3-.3.3h-.8zm-3 0c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v3h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3.3h-2.8zm13.1-.3c0 .2-.1.3-.3.3h-.8c-.2 0-.3-.1-.3-.3v-3l-1.9 3c-.1.1-.2.2-.3.2h-.8c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v3l1.9-3c.1-.1.2-.2.3-.2h.8c.2 0 .3.1.3.3v4.2z"/></svg>
-                {t('lineAlertTitle', language)}
-              </h3>
-              
-              {!workerProfile?.line_user_id ? (
-                <div className="bg-slate-900/80 p-4 rounded-2xl border border-slate-700">
-                  <p className="text-sm text-slate-300 font-bold mb-4">
-                    {t('lineAlertDesc1', language)}<br/>
-                    {t('lineAlertDesc2', language)}<br/>
-                    {t('lineAlertDesc3', language)}
-                  </p>
-                  <div className="flex flex-col items-center gap-3">
-                    <button 
-                      type="button"
-                      onClick={() => {
-                        if(workerProfile?.id) {
-                          navigator.clipboard.writeText(workerProfile.id);
-                        }
-                        window.open("https://lin.ee/RD1vp8c", "_blank");
-                      }}
-                      className="w-full py-4 bg-[#06C755] hover:bg-[#05b34c] text-white font-black rounded-xl text-center flex items-center justify-center gap-2 mt-2"
-                    >
-                      {t('lineConnectBtn', language)}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between bg-slate-900/80 p-4 rounded-2xl border border-emerald-900/50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500">
-                      <CheckCircle2 className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <div className="text-emerald-400 font-bold text-sm">{t('lineLinked', language)}</div>
-                      <div className="text-xs text-slate-400 mt-1">{t('lineNotifyDesc', language)}</div>
-                    </div>
-                  </div>
-                  <button 
-                    type="button"
-                    onClick={async () => {
-                      const newVal = !workerProfile.is_line_notification_enabled;
-                      setWorkerProfile({...workerProfile, is_line_notification_enabled: newVal});
-                      await toggleWorkerLineNotification(workerProfile.id, newVal);
-                    }}
-                    className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${workerProfile.is_line_notification_enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
-                  >
-                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${workerProfile.is_line_notification_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -835,14 +595,12 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
               </div>
             ) : inputMode !== 'manuals' ? (
               <form onSubmit={inputMode === 'timer' ? handleStartWork : handleManualSubmit} className="space-y-6">
-            <div>
             {errorMsg && (
-              <div className="mb-6 p-4 bg-red-950/50 border border-red-500/50 rounded-xl flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                <p className="text-sm font-bold text-red-200">{errorMsg}</p>
+              <div className="p-4 bg-rose-500/20 border border-rose-500/50 text-rose-400 rounded-xl text-sm font-bold flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <span>{errorMsg}</span>
               </div>
             )}
-          </div>
 
             <div className={`space-y-6 transition-all duration-300 ${activeWorkStartTime ? 'opacity-60 pointer-events-none grayscale-[30%]' : ''}`}>
               
@@ -907,7 +665,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                 <div className="grid grid-cols-2 gap-2">
                   {workTypes.map(tData => (
                     <button
-                      key={`default-${tData.ja}`}
+                      key={tData.ja}
                       type="button"
                       onClick={() => setWorkType(tData.ja)}
                       className={`py-2 px-2 rounded-xl font-bold text-xs transition-all border text-center ${
@@ -919,83 +677,6 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                       {(tData as any)[language] || tData.ja}
                     </button>
                   ))}
-                  {customWorkTypes.map(cw => (
-                    <div key={`custom-${cw}`} className="relative flex group">
-                      <button
-                        type="button"
-                        onClick={() => setWorkType(cw)}
-                        className={`flex-1 py-2 px-2 rounded-xl font-bold text-xs transition-all border text-center flex items-center justify-center gap-1 ${
-                          workType === cw
-                            ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 border-amber-200'
-                            : 'bg-emerald-900/20 text-emerald-200 border-emerald-700/50'
-                        }`}
-                      >
-                        <Sparkles className="w-3 h-3 text-amber-500/70" /> {cw}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          if (confirm(`独自作業「${cw}」をリストから削除しますか？\n※この作業で保存された過去の記録は『片付け・その他』に名称統合されます。`)) {
-                            setIsSubmitting(true);
-                            try {
-                              await supabase.from('work_logs').update({ work_type: '片付け・その他' }).eq('user_id', farmInfo?.id).eq('work_type', cw);
-                              setCustomWorkTypes(customWorkTypes.filter(t => t !== cw));
-                              if (workType === cw) setWorkType('');
-                            } catch(err) {
-                              alert('削除に失敗しました');
-                            } finally {
-                              setIsSubmitting(false);
-                            }
-                          }
-                        }}
-                        className="absolute right-1 top-1/2 -translate-y-1/2 p-2 text-emerald-500 hover:text-red-400 hover:bg-red-500/10 rounded-full transition-colors opacity-70 hover:opacity-100"
-                        title="この独自作業を削除"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    key="add-new-btn"
-                    type="button"
-                    onClick={() => setIsAddingWorkType(!isAddingWorkType)}
-                    className="py-2 px-2 rounded-xl font-bold text-xs transition-all border text-center border-dashed border-emerald-500/50 text-emerald-400 hover:bg-emerald-900/40 flex items-center justify-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" /> 新規追加
-                  </button>
-                </div>
-
-                <div>
-                  {isAddingWorkType && (
-                    <div className="mt-3 flex gap-2 animate-in slide-in-from-top-2">
-                      <input
-                        type="text"
-                        value={newWorkType}
-                        onChange={(e) => setNewWorkType(e.target.value)}
-                        placeholder="新しい作業内容を入力"
-                        className="flex-1 bg-emerald-950/60 border border-emerald-800/60 text-white rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:border-emerald-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const val = newWorkType.trim();
-                          if (val) {
-                            setWorkType(val);
-                            const isDefault = workTypes.some(t => t.ja === val);
-                            if (!customWorkTypes.includes(val) && !isDefault) {
-                              setCustomWorkTypes([...customWorkTypes, val]);
-                            }
-                            setNewWorkType('');
-                            setIsAddingWorkType(false);
-                          }
-                        }}
-                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl px-4 py-2 text-sm transition-colors"
-                      >
-                        決定
-                      </button>
-                    </div>
-                  )}
                 </div>
               </section>
 
@@ -1032,10 +713,9 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                     <ImageIcon className="w-4 h-4" />{t('photo', language)}
                   </h2>
                   {!photoPreview ? (
-                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-700 border-dashed rounded-xl cursor-pointer bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-700 border-dashed rounded-xl cursor-pointer bg-slate-800/50">
                       <span className="text-3xl mb-2">📷</span>
-                      <span className="text-xs text-slate-400 font-bold">撮影 または ファイルを選択</span>
-                      <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoChange} />
                     </label>
                   ) : (
                     <div className="relative w-full rounded-xl overflow-hidden border-2 border-emerald-500/50">
@@ -1151,8 +831,10 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
             )}
           </div>
         )}
+        </div>
+      )}
       </div>
-    )}
+
         {/* マニュアル再生モーダル */}
         {playingVideo && (
           <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black">
@@ -1164,7 +846,6 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
             <video src={playingVideo} controls autoPlay playsInline className="w-full max-h-[80vh] object-contain" />
           </div>
         )}
-      </div>
     </main>
   );
 }

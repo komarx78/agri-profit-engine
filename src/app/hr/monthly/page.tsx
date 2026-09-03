@@ -68,7 +68,8 @@ export default function MonthlyTimecardPage() {
       const year = currentMonth.getFullYear();
       const month = currentMonth.getMonth() + 1;
       const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
-      const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
+      const lastDay = new Date(year, month, 0).getDate();
+      const endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDay.toString().padStart(2, '0')}`;
 
       // 1. 自社テナントの設定を取得
       const { data: cData } = await supabase
@@ -184,10 +185,14 @@ export default function MonthlyTimecardPage() {
     setIsSaving(true);
     try {
       const val = editingRestMinutes[logId];
-      const { error } = await supabase.from('attendance_logs').update({ actual_rest_minutes: val }).eq('id', logId);
+      let { error } = await supabase.from('attendance_logs').update({ actual_rest_minutes: val, total_break_minutes: val }).eq('id', logId);
+      if (error && (error.message?.includes('actual_rest_minutes') || (error as any).code === 'PGRST204')) {
+        const retry = await supabase.from('attendance_logs').update({ total_break_minutes: val }).eq('id', logId);
+        error = retry.error;
+      }
       if (error) throw error;
       
-      setLogs(prev => prev.map(l => l.id === logId ? { ...l, actual_rest_minutes: val } : l));
+      setLogs(prev => prev.map(l => l.id === logId ? { ...l, actual_rest_minutes: val, total_break_minutes: val } : l));
       showToast('休憩時間を保存しました');
     } catch (err: any) {
       alert('保存エラー: ' + err.message);
@@ -304,8 +309,9 @@ export default function MonthlyTimecardPage() {
           .update(payload)
           .eq('id', editModal.logId);
 
-        // もし memo や status カラムがDBに未追加の場合のフォールバック
-        if (error && (error.message?.includes('memo') || error.message?.includes('status') || (error as any).code === 'PGRST204')) {
+        // もし actual_rest_minutes, memo や status カラムがDBに未追加の場合のフォールバック
+        if (error && (error.message?.includes('actual_rest_minutes') || error.message?.includes('memo') || error.message?.includes('status') || (error as any).code === 'PGRST204')) {
+          delete payload.actual_rest_minutes;
           delete payload.memo;
           delete payload.status;
           const retryRes = await supabase
@@ -328,8 +334,9 @@ export default function MonthlyTimecardPage() {
           .insert([payload])
           .select();
 
-        // もし memo や status カラムがDBに未追加の場合のフォールバック
-        if (insertRes.error && (insertRes.error.message?.includes('memo') || insertRes.error.message?.includes('status') || (insertRes.error as any).code === 'PGRST204')) {
+        // もし actual_rest_minutes, memo や status カラムがDBに未追加の場合のフォールバック
+        if (insertRes.error && (insertRes.error.message?.includes('actual_rest_minutes') || insertRes.error.message?.includes('memo') || insertRes.error.message?.includes('status') || (insertRes.error as any).code === 'PGRST204')) {
+          delete payload.actual_rest_minutes;
           delete payload.memo;
           delete payload.status;
           insertRes = await supabase

@@ -23,23 +23,12 @@ import { getPortalTasks } from '@/app/actions/farm';
 import { translateSingleText } from '@/app/actions/translate';
 import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import Link from 'next/link';
+import { getJSTDate, getJSTTime } from '@/lib/dateUtils';
 
 const CalendarWrapper = dynamic(() => import('@/components/CalendarWrapper'), { 
   ssr: false, 
   loading: () => <div className="h-[600px] flex items-center justify-center"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div> 
 });
-
-// 日本時間のYYYY-MM-DDを取得
-const getJSTDate = () => {
-  const d = new Date();
-  d.setHours(d.getHours() + 9);
-  return d.toISOString().split('T')[0];
-};
-const getJSTTime = () => {
-  const d = new Date();
-  d.setHours(d.getHours() + 9);
-  return d.toISOString().split('T')[1].substring(0, 5);
-};
 
 export default function PortalPage() {
   return (
@@ -220,7 +209,8 @@ function PortalContent() {
           const farmParam = urlParams.get('farm') || urlParams.get('tenant');
           if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
             localStorage.setItem('agri_owner_id', farmParam);
-            ownerId = farmParam;
+            router.replace(`/farm/${farmParam}`);
+            return;
           }
         }
 
@@ -1104,8 +1094,13 @@ function PortalContent() {
       alert('打刻エラー: あなたのアカウントは現場スタッフとして「スタッフマスタ」に登録されていません。\n管理画面からご自身をスタッフ登録してください。');
       return;
     }
-    const workerId = workerProfile.id;
-    const tenantUserId = workerProfile.user_id || (currentUser as any)?.user_id || localStorage.getItem('agri_owner_id') || null;
+    let tenantUserId = workerProfile.user_id || (currentUser as any)?.user_id || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : null);
+    if (!tenantUserId && workerId) {
+      const { data: wRec } = await supabase.from('workers').select('user_id').eq('id', workerId).maybeSingle();
+      if (wRec?.user_id) {
+        tenantUserId = wRec.user_id;
+      }
+    }
 
     try {
       if (type === 'in') {
@@ -1121,9 +1116,13 @@ function PortalContent() {
         setAttendance(data);
       } else {
         if (!attendance) return;
-        const { data, error } = await supabase.from('attendance_logs').update({
+        const updatePayload: any = {
           clock_out: nowIso
-        }).eq('id', attendance.id).select().single();
+        };
+        if (tenantUserId && !attendance.user_id) {
+          updatePayload.user_id = tenantUserId;
+        }
+        const { data, error } = await supabase.from('attendance_logs').update(updatePayload).eq('id', attendance.id).select().single();
         if (error) throw error;
         setAttendance(data);
       }

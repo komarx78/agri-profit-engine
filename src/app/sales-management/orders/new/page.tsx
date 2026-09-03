@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { getB2BCustomers, getB2BOrders, createB2BOrder } from '@/app/actions/b2b';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getJSTDate } from '@/lib/dateUtils';
 
 export default function NewOrderPage() {
   const router = useRouter();
@@ -15,11 +16,7 @@ export default function NewOrderPage() {
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
-  const [deliveryDate, setDeliveryDate] = useState(() => {
-    const d = new Date();
-    d.setHours(d.getHours() + 9);
-    return d.toISOString().split('T')[0]; // デフォルトは今日
-  });
+  const [deliveryDate, setDeliveryDate] = useState(() => getJSTDate());
   
   const [items, setItems] = useState<any[]>([
     { crop_id: '', quantity: 1, unit: 'kg', unit_price: 0 }
@@ -106,7 +103,7 @@ export default function NewOrderPage() {
     const total_amount = calculateTotal();
     const orderData = {
       customer_id: selectedCustomerId,
-      order_date: new Date().toISOString().split('T')[0],
+      order_date: getJSTDate(),
       delivery_date: deliveryDate,
       status: 'pending',
       total_amount,
