@@ -2,80 +2,69 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { getCurrentTenantId, getTenantWorkerIds } from '@/lib/tenant';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { Clock, Users, Calendar as CalendarIcon, Coffee, Sun, CloudRain, ShieldCheck, ArrowRight, Save, Loader2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
-import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 import { getJSTDate, formatDisplayTime } from '@/lib/dateUtils';
+import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 
 export default function HrDashboardPage() {
   const [attendanceLogs, setAttendanceLogs] = useState<any[]>([]);
   const [workLogs, setWorkLogs] = useState<any[]>([]);
   const [workers, setWorkers] = useState<any[]>([]);
-  const [attendanceRules, setAttendanceRules] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // 休憩時間編集用
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [editBreakMinutes, setEditBreakMinutes] = useState<number>(0);
   const [isSaving, setIsSaving] = useState(false);
-
-  // 一括編集用
-  const [bulkBreakMinutes, setBulkBreakMinutes] = useState<number>(60);
-  const [isBulkSaving, setIsBulkSaving] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
       try {
         const tenantId = await getCurrentTenantId();
-        if (!tenantId) {
-          setIsLoading(false);
-          return;
-        }
-
         const dateStr = getJSTDate();
 
         // 1. 自社テナントの従業員一覧を取得
-        const { data: wData } = await supabase
-          .from('workers')
-          .select('*')
-          .eq('user_id', tenantId);
-
-        const currentWorkers = wData || [];
-        setWorkers(currentWorkers);
-        const workerIds = currentWorkers.map(w => w.id);
-
-        // 2. 勤怠ルール一覧を取得
-        try {
-          const { data: rData } = await supabase
-            .from('attendance_rules')
+        let wList: any[] = [];
+        if (tenantId) {
+          const { data: wData } = await supabase
+            .from('workers')
             .select('*')
             .eq('user_id', tenantId);
-          if (rData) setAttendanceRules(rData);
-        } catch (e) {
-          console.warn('attendance_rules fetch error:', e);
+          if (wData) wList = wData;
         }
+        setWorkers(wList);
+        const workerIds = wList.map(w => w.id);
 
-        // 3. 自社従業員の勤怠ログのみを取得
+        // 2. 勤怠ログの取得（テナント絞り込み対応）
+        let attQuery = supabase
+          .from('attendance_logs')
+          .select('*')
+          .eq('date', dateStr)
+          .order('clock_in', { ascending: false });
+
         if (workerIds.length > 0) {
-          const { data: attData } = await supabase
-            .from('attendance_logs')
-            .select('*')
-            .in('worker_id', workerIds)
-            .eq('date', dateStr)
-            .order('clock_in', { ascending: false });
-
-          if (attData) setAttendanceLogs(attData);
-        } else {
-          setAttendanceLogs([]);
+          attQuery = attQuery.in('worker_id', workerIds);
+        } else if (tenantId) {
+          attQuery = attQuery.eq('user_id', tenantId);
         }
 
-        // 3. 自社テナントの日報ログのみを取得
-        const { data: workData } = await supabase
+        const { data: attData } = await attQuery;
+
+        // 3. 作業日報ログの取得
+        let workQuery = supabase
           .from('work_logs')
           .select('*, crops(name), fields(name)')
-          .eq('user_id', tenantId)
           .eq('work_date', dateStr);
 
+        if (tenantId) {
+          workQuery = workQuery.eq('user_id', tenantId);
+        }
+
+        const { data: workData } = await workQuery;
+
+        if (attData) setAttendanceLogs(attData);
         if (workData) setWorkLogs(workData);
       } catch (err) {
         console.error(err);
@@ -91,41 +80,16 @@ export default function HrDashboardPage() {
     try {
       const { error } = await supabase
         .from('attendance_logs')
-        .update({ total_break_minutes: editBreakMinutes })
+        .update({ total_break_minutes: editBreakMinutes, actual_rest_minutes: editBreakMinutes })
         .eq('id', id);
       if (error) throw error;
       
-      setAttendanceLogs(prev => prev.map(log => log.id === id ? { ...log, total_break_minutes: editBreakMinutes } : log));
+      setAttendanceLogs(prev => prev.map(log => log.id === id ? { ...log, total_break_minutes: editBreakMinutes, actual_rest_minutes: editBreakMinutes } : log));
       setEditingLogId(null);
     } catch(err) {
       alert('保存に失敗しました');
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleBulkSaveBreak = async () => {
-    if (attendanceLogs.length === 0) return;
-    if (!confirm(`本日の出勤者全員の休憩時間を一括で ${bulkBreakMinutes} 分に変更します。よろしいですか？`)) return;
-
-    setIsBulkSaving(true);
-    try {
-      const ids = attendanceLogs.map(l => l.id);
-      
-      const { error } = await supabase
-        .from('attendance_logs')
-        .update({ total_break_minutes: bulkBreakMinutes })
-        .in('id', ids);
-
-      if (error) throw error;
-      
-      setAttendanceLogs(prev => prev.map(log => ({ ...log, total_break_minutes: bulkBreakMinutes })));
-      alert('全員の休憩時間を一括変更しました。');
-    } catch(err) {
-      console.error(err);
-      alert('一括保存に失敗しました');
-    } finally {
-      setIsBulkSaving(false);
     }
   };
 
@@ -143,188 +107,137 @@ export default function HrDashboardPage() {
   return (
     <AdminOnlyGuard>
       <div className="min-h-screen bg-slate-50">
-        {/* ヘッダー */}
-        <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-          <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+        <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
+          <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="bg-rose-500 p-2 rounded-xl text-white shadow-xs">
-                <Users className="w-5 h-5" />
-              </div>
-              <div>
-                <h1 className="text-lg font-black text-slate-800">人事・勤怠ダッシュボード</h1>
-                <p className="text-xs text-slate-400 font-bold">現場作業員の出退勤・日報労働時間の突合・休憩管理</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Link href="/portal" className="text-xs font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-xl transition-colors">
-                ポータルへ戻る
+              <Link href="/portal" className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 hover:text-slate-700" title="ポータルへ戻る">
+                <ArrowRight className="w-5 h-5 rotate-180" />
               </Link>
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                <Users className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-black text-xl text-slate-800">勤怠・日報突合ダッシュボード</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-bold text-slate-500">本日: {getJSTDate()}</div>
             </div>
           </div>
         </header>
 
-        <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
-          {/* サマリーカード */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
-              <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-black">
-                <Clock className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-slate-400">本日の打刻出勤者</div>
-                <div className="text-2xl font-black text-slate-800">{attendanceLogs.length} <span className="text-sm font-bold text-slate-500">名</span></div>
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
-              <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center font-black">
-                <ShieldCheck className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-slate-400">日報提出者</div>
-                <div className="text-2xl font-black text-slate-800">{new Set(workLogs.map(w => w.worker_id)).size} <span className="text-sm font-bold text-slate-500">名</span></div>
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
-              <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center font-black">
-                <Coffee className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-slate-400">休憩時間 一括更新</div>
-                <div className="flex items-center gap-2 mt-1">
-                  <select 
-                    value={bulkBreakMinutes} 
-                    onChange={e => setBulkBreakMinutes(Number(e.target.value))}
-                    className="bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold px-2 py-1"
-                  >
-                    <option value={45}>45分</option>
-                    <option value={60}>60分 (標準)</option>
-                    <option value={75}>75分</option>
-                    <option value={90}>90分</option>
-                  </select>
-                  <button 
-                    onClick={handleBulkSaveBreak}
-                    disabled={isBulkSaving}
-                    className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-bold text-xs shadow-xs"
-                  >
-                    {isBulkSaving ? '処理中...' : '全員適用'}
-                  </button>
-                </div>
-              </div>
+        <main className="max-w-6xl mx-auto px-4 py-8">
+          
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
+              <CalendarIcon className="w-6 h-6 text-blue-500" /> 本日の出退勤状況
+            </h1>
+            <div className="text-xs font-bold text-slate-400">
+              打刻時間と現場作業日報の自動突合
             </div>
           </div>
 
-          {/* 勤怠突合テーブル */}
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-black text-slate-800">本日の勤怠・作業突合リスト</h2>
-                <p className="text-xs text-slate-400 font-medium">打刻時間（出退勤）と日報時間のズレを自動検知します</p>
-              </div>
-            </div>
-
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-slate-500 text-xs font-bold border-b border-slate-200">
-                  <tr>
-                    <th className="px-6 py-4">スタッフ</th>
-                    <th className="px-6 py-4">出勤 / 退勤</th>
-                    <th className="px-6 py-4">打刻拘束</th>
-                    <th className="px-6 py-4">休憩時間</th>
-                    <th className="px-6 py-4">日報作業時間</th>
-                    <th className="px-6 py-4">突合判定</th>
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-sm font-bold text-slate-500">
+                    <th className="p-4">スタッフ</th>
+                    <th className="p-4">出勤 / 退勤</th>
+                    <th className="p-4">天気・気温</th>
+                    <th className="p-4">休憩時間</th>
+                    <th className="p-4">総労働 / 登録作業</th>
+                    <th className="p-4 text-center">作業差分</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {attendanceLogs.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-slate-400 text-xs font-bold">
-                        本日の出勤打刻データはありません
+                      <td colSpan={6} className="p-8 text-center text-slate-400 font-bold">
+                        本日の出勤記録はまだありません
                       </td>
                     </tr>
                   ) : (
-                    attendanceLogs.map((log) => {
+                    attendanceLogs.map(log => {
                       const worker = workers.find(w => w.id === log.worker_id);
-                      const wLogs = workLogs.filter(w => w.worker_id === log.worker_id);
-                      const reportMinutes = wLogs.reduce((sum, w) => sum + (Number(w.duration_minutes) || 0), 0);
+                      const workerName = worker?.name || (log.worker_id ? `${log.worker_id.substring(0, 8)}...` : '不明スタッフ');
 
-                      const clockTotalMinutes = calculateTotalMinutes(log.clock_in, log.clock_out, log.date);
+                      // 総労働時間の計算（出勤〜退勤 - 休憩）
+                      const totalMins = calculateTotalMinutes(log.clock_in, log.clock_out, log.date);
                       const breakMins = log.total_break_minutes || 0;
-                      const actualWorkMinutes = Math.max(0, clockTotalMinutes - breakMins);
-                      const diff = Math.abs(actualWorkMinutes - reportMinutes);
+                      const netWorkMins = Math.max(0, totalMins - breakMins);
+
+                      // 作業記録の合計時間の計算
+                      const myWorkLogs = workLogs.filter(w => w.worker_id === log.worker_id);
+                      const totalWorkLogMins = myWorkLogs.reduce((acc, curr) => acc + (curr.duration_minutes || 0), 0);
+                      
+                      // 差分（入力漏れの可能性）
+                      const diffMins = Math.abs(netWorkMins - totalWorkLogMins);
 
                       return (
-                        <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-4 font-bold text-slate-800">
+                        <tr key={log.id} className="hover:bg-slate-50 transition-colors group">
+                          <td className="p-4">
                             <div className="flex items-center gap-2">
                               <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-xs font-black">
                                 {worker?.name ? worker.name.charAt(0) : '員'}
                               </div>
-                              <div>
-                                <span>{worker?.name || '不明スタッフ'}</span>
-                                {(() => {
-                                  const matchedRule = attendanceRules.find(r => r.id === worker?.attendance_rule_id);
-                                  return (
-                                    <span className="block text-[10px] text-indigo-600 font-bold">
-                                      {matchedRule?.name || (worker?.standard_start_time ? `${worker.standard_start_time.substring(0,5)}〜${worker.standard_end_time?.substring(0,5)}` : '標準定時')}
-                                    </span>
-                                  );
-                                })()}
+                              <div className="font-bold text-slate-700 text-sm">
+                                {workerName}
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-xs font-bold text-slate-600">
-                            {log.clock_in ? formatDisplayTime(log.clock_in) : '--:--'} 〜 {log.clock_out ? formatDisplayTime(log.clock_out) : <span className="text-emerald-500">勤務中</span>}
+                          <td className="p-4">
+                            <div className="font-bold text-slate-800 text-sm">
+                              {log.clock_in ? formatDisplayTime(log.clock_in) : '--:--'}
+                              <span className="text-slate-400 font-normal mx-2">〜</span>
+                              {log.clock_out ? formatDisplayTime(log.clock_out) : <span className="text-emerald-500 font-bold">勤務中</span>}
+                            </div>
                           </td>
-                          <td className="px-6 py-4 text-xs font-bold text-slate-600">
-                            {clockTotalMinutes > 0 ? `${Math.floor(clockTotalMinutes / 60)}h ${clockTotalMinutes % 60}m` : '--'}
+                          <td className="p-4">
+                            {log.weather ? (
+                              <div className="flex items-center gap-1.5 text-sm font-bold text-slate-600">
+                                {log.weather === '晴れ' ? <Sun className="w-4 h-4 text-amber-500" /> : <CloudRain className="w-4 h-4 text-blue-500" />}
+                                {log.weather} ({log.temperature}℃)
+                              </div>
+                            ) : <span className="text-slate-300">-</span>}
                           </td>
-                          <td className="px-6 py-4 text-xs font-bold text-slate-600">
+                          <td className="p-4">
                             {editingLogId === log.id ? (
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-2">
                                 <input 
                                   type="number" 
-                                  value={editBreakMinutes} 
+                                  value={editBreakMinutes}
                                   onChange={e => setEditBreakMinutes(Number(e.target.value))}
-                                  className="w-16 px-2 py-1 bg-slate-50 border border-slate-300 rounded font-bold text-xs"
+                                  className="w-20 px-2 py-1 border border-blue-500 rounded text-right font-bold text-sm"
                                 />
-                                <button 
-                                  onClick={() => handleSaveBreak(log.id)}
-                                  disabled={isSaving}
-                                  className="p-1 bg-emerald-600 text-white rounded hover:bg-emerald-700"
-                                >
-                                  <Save className="w-3.5 h-3.5" />
-                                </button>
+                                <span className="text-sm font-bold text-slate-500">分</span>
+                                <button onClick={() => handleSaveBreak(log.id)} disabled={isSaving} className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600"><Save className="w-4 h-4" /></button>
                               </div>
                             ) : (
                               <div 
-                                onClick={() => {
-                                  setEditingLogId(log.id);
-                                  setEditBreakMinutes(breakMins);
-                                }}
-                                className="cursor-pointer hover:text-blue-600 underline decoration-dashed flex items-center gap-1"
-                                title="クリックして休憩時間を手動修正"
+                                className="font-bold text-blue-600 cursor-pointer hover:bg-blue-50 inline-flex items-center gap-1 px-2 py-1 rounded text-sm"
+                                onClick={() => { setEditingLogId(log.id); setEditBreakMinutes(breakMins); }}
+                                title="クリックして休憩時間を変更"
                               >
-                                <span>{breakMins} 分</span>
+                                <Coffee className="w-4 h-4" /> {breakMins} 分
                               </div>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-xs font-bold text-slate-800">
-                            {reportMinutes > 0 ? `${Math.floor(reportMinutes / 60)}h ${reportMinutes % 60}m` : <span className="text-slate-400">未提出</span>}
+                          <td className="p-4">
+                            <div className="text-sm">
+                              <span className="font-black text-slate-700">{Math.floor(netWorkMins/60)}h {netWorkMins%60}m</span>
+                              <span className="text-slate-400 mx-2">/</span>
+                              <span className="font-bold text-emerald-600">{Math.floor(totalWorkLogMins/60)}h {totalWorkLogMins%60}m</span>
+                            </div>
                           </td>
-                          <td className="px-6 py-4">
-                            {log.clock_out && reportMinutes > 0 ? (
-                              diff > 30 ? (
-                                <div className="inline-flex items-center gap-1 px-2 py-1 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold">
-                                  <AlertCircle className="w-3 h-3" /> ズレ {diff}分
-                                </div>
-                              ) : (
-                                <div className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-bold">
-                                  <ShieldCheck className="w-3 h-3" /> 一致
-                                </div>
-                              )
+                          <td className="p-4 text-center">
+                            {log.clock_out && diffMins > 30 ? (
+                              <div className="inline-flex items-center gap-1 bg-rose-50 text-rose-600 px-2 py-1 rounded-lg text-xs font-bold border border-rose-100" title="作業記録の入力漏れの可能性があります">
+                                <AlertCircle className="w-3 h-3" />
+                                {diffMins} 分の乖離
+                              </div>
+                            ) : log.clock_out ? (
+                              <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2 py-1 rounded-lg text-xs font-bold border border-emerald-100">
+                                <ShieldCheck className="w-3 h-3" /> 一致
+                              </div>
                             ) : (
                               <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">記録中</span>
                             )}
