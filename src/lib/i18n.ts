@@ -484,7 +484,8 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   leave_reasonPlaceholder: { ja: '例: 私用のため、通院のため、家庭の事情など', en: 'e.g. Personal reasons, hospital visit, family matter', vi: 'vd: Việc cá nhân, đi khám bệnh, việc gia đình', id: 'cth: Keperluan pribadi, ke dokter, urusan keluarga', zh: '例: 私事、就医、家庭原因等', si: 'උදා: පෞද්ගලික හේතු, රෝහල් ගතවීම', km: 'ឧ. មូលហេតុផ្ទាល់ខ្លួន ទៅពេទ្យ រឿងគ្រួសារ' },
   leave_cancel: { ja: 'キャンセル', en: 'Cancel', vi: 'Hủy', id: 'Batal', zh: '取消', si: 'අවලංගු කරන්න', km: 'បោះបង់' },
   leave_submitBtn: { ja: '申請を送信する', en: 'Submit Request', vi: 'Gửi đơn xin phép', id: 'Kirim Pengajuan', zh: '提交申请', si: 'ඉල්ලීම යවන්න', km: 'បញ្ជូនពាក្យស្នើសុំ' },
-  leave_registerBtn: { ja: '有給を登録する', en: 'Register Leave', vi: 'Đăng ký nghỉ phép', id: 'Daftarkan Cuti', zh: '登记休假', si: 'නිවාඩු ලියාපදිංචි කරන්න', km: 'ចុះឈ្មោះឈប់សម្រាក' }
+  leave_registerBtn: { ja: '有給を登録する', en: 'Register Leave', vi: 'Đăng ký nghỉ phép', id: 'Daftarkan Cuti', zh: '登记休假', si: 'නිවාඩු ලියාපදිංචි කරන්න', km: 'ចុះឈ្មោះឈប់សម្រាក' },
+  leave_submittedToast: { ja: '有給休暇の申請を送信しました！', en: 'Leave request submitted successfully!', vi: 'Đã gửi đơn xin nghỉ phép thành công!', id: 'Pengajuan cuti berhasil dikirim!', zh: '请假申请已提交！', si: 'නිවාඩු ඉල්ලීම සාර්ථකව යවන ලදී!', km: 'ពាក្យស្នើសុំឈប់សម្រាកត្រូវបានបញ្ជូនដោយជោគជ័យ!' }
 };
 
 export const WEEKDAY_NAMES: Record<LanguageCode, string[]> = {

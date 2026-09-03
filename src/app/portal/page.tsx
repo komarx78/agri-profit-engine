@@ -466,7 +466,7 @@ function PortalContent() {
 
   // タイムカードの日付から直接有給申請を開くハンドラー
   const handleOpenLeaveModalForDate = (dateStr: string) => {
-    const targetId = workerProfile?.id || currentUser?.id;
+    const targetId = workerProfile?.id || currentUser?.id || (allWorkers && allWorkers[0]?.id) || '';
     setLeaveForm(prev => ({
       ...prev,
       start_date: dateStr,
@@ -608,7 +608,7 @@ function PortalContent() {
         .select('*, workers!inner(name, user_id)')
         .eq('workers.user_id', targetUserId)
         .order('created_at', { ascending: false })
-        .limit(5);
+        .limit(50);
 
       if (profile && profile.id) {
         reqQuery = reqQuery.eq('worker_id', profile.id);
@@ -625,7 +625,7 @@ function PortalContent() {
   const handleSubmitLeaveRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!leaveForm.worker_id) {
-      alert('従業員を選択してください');
+      alert(t('leave_selectWorkerPrompt', language));
       return;
     }
     setIsSubmittingLeave(true);
@@ -643,7 +643,7 @@ function PortalContent() {
       if (error) throw error;
 
       setShowLeaveModal(false);
-      setLeaveToast(`有給休暇の申請（${leaveForm.start_date}）を送信しました！`);
+      setLeaveToast(t('leave_submittedToast', language));
       setTimeout(() => setLeaveToast(null), 4000);
 
       // データ再取得
@@ -2114,7 +2114,7 @@ function PortalContent() {
 
       {/* 🏖️ 有給申請モーダル */}
       {showLeaveModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in">
+        <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-5 animate-in zoom-in-95">
             
             {/* ヘッダー */}
@@ -2260,7 +2260,7 @@ function PortalContent() {
 
       {/* トースト通知 */}
       {leaveToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-emerald-700 text-white px-5 py-3 rounded-2xl shadow-xl font-black text-xs flex items-center gap-2 animate-in slide-in-from-bottom">
+        <div className="fixed bottom-6 right-6 z-[160] bg-emerald-700 text-white px-5 py-3 rounded-2xl shadow-xl font-black text-xs flex items-center gap-2 animate-in slide-in-from-bottom">
           <CheckCircle className="w-4 h-4 text-emerald-300" />
           <span>{leaveToast}</span>
         </div>
