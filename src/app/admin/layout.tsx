@@ -49,25 +49,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     async function checkAuth() {
+      // 1. Supabase Auth による正規管理者セッションのチェック
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
+      if (session && session.user) {
         setTenantId(session.user.id);
         return;
       }
 
-      // 現場PINログインまたは農園オーナーIDの認証チェック
+      // 2. 現場スタッフ（PIN認証）の場合、明示的に管理者ロール (role === 'admin') を持つ場合のみ許可
       const savedWorker = localStorage.getItem('agri_current_worker');
-      const savedOwnerId = localStorage.getItem('agri_owner_id');
-
-      if (savedOwnerId) {
-        setTenantId(savedOwnerId);
-        return;
-      }
-
       if (savedWorker) {
         try {
           const workerData = JSON.parse(savedWorker);
-          if (workerData.user_id) {
+          if (workerData.role === 'admin' && workerData.user_id) {
             setTenantId(workerData.user_id);
             return;
           }
@@ -76,6 +70,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         }
       }
 
+      // 未認証、または一般作業員アカウントの場合はログインへ誘導
       router.push('/login');
     }
     checkAuth();

@@ -13,7 +13,22 @@ async function resolveAuthenticatedTenantId(passedTenantId?: string | null): Pro
       return user.id;
     }
   } catch (e) {}
-  return passedTenantId || null;
+
+  // 認証セッションがない場合、指定されたtenantIdが実在する登録農園か厳格に照合
+  if (passedTenantId) {
+    try {
+      const adminClient = getAdminSupabase();
+      const { data } = await adminClient
+        .from('company_settings')
+        .select('user_id')
+        .eq('user_id', passedTenantId)
+        .maybeSingle();
+      if (data?.user_id) {
+        return data.user_id;
+      }
+    } catch (e) {}
+  }
+  return null;
 }
 
 // ---------------------------
