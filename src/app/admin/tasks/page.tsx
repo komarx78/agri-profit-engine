@@ -7,6 +7,7 @@ import { Calendar, CheckCircle2, Clock, MapPin, Sprout, Loader2, Plus, Trash2, E
 import { autoTranslateMasterData } from '@/app/actions/translate';
 
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getJSTDate } from '@/lib/dateUtils';
 import { savePlannedTask, deletePlannedTask } from '@/app/actions/farm';
 
 export default function TasksPage() {
@@ -22,7 +23,7 @@ export default function TasksPage() {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState<any>({
-    work_date: new Date().toISOString().split('T')[0],
+    work_date: getJSTDate(),
     task_title: '',
     crop_id: '',
     department_id: '',
@@ -160,7 +161,7 @@ export default function TasksPage() {
             time_slot: assignment.time_slot || null,
             ...transPayload
           };
-          const { error: cErr } = await supabase.from('work_logs').update(updatePayload).eq('id', editingTaskId);
+          const { error: cErr } = await supabase.from('work_logs').update(updatePayload).eq('id', editingTaskId).eq('user_id', activeTenantId);
           if (cErr) throw cErr;
         } else {
           const insertData: any[] = [];
@@ -221,7 +222,7 @@ export default function TasksPage() {
       setIsModalOpen(false);
       setEditingTaskId(null);
       setFormData({
-        work_date: new Date().toISOString().split('T')[0],
+        work_date: getJSTDate(),
         task_title: '',
         crop_id: '',
         department_id: '',
@@ -255,9 +256,9 @@ export default function TasksPage() {
     }));
 
     try {
-      await supabase.from('work_logs').update({ step_order: newOrderForCurrent }).eq('id', task.id);
-      await supabase.from('work_logs').update({ step_order: newOrderForTarget }).eq('id', targetTask.id);
       const activeTenantId = tenantId || await getCurrentTenantId();
+      await supabase.from('work_logs').update({ step_order: newOrderForCurrent }).eq('id', task.id).eq('user_id', activeTenantId);
+      await supabase.from('work_logs').update({ step_order: newOrderForTarget }).eq('id', targetTask.id).eq('user_id', activeTenantId);
       if (activeTenantId) {
         await fetchTasksData(activeTenantId);
       }
@@ -269,17 +270,21 @@ export default function TasksPage() {
   const handleDelete = async (id: string) => {
     if (!window.confirm('本当に削除しますか？')) return;
     try {
+      const activeTenantId = tenantId || await getCurrentTenantId();
       let delSuccess = false;
       try {
-        const res = await deletePlannedTask(id);
+        const res = await deletePlannedTask(id, activeTenantId);
         if (res && res.success) delSuccess = true;
       } catch (e) {}
 
       if (!delSuccess) {
-        await supabase.from('work_logs').delete().eq('id', id);
+        let q = supabase.from('work_logs').delete().eq('id', id);
+        if (activeTenantId) {
+          q = q.eq('user_id', activeTenantId);
+        }
+        await q;
       }
 
-      const activeTenantId = tenantId || await getCurrentTenantId();
       if (activeTenantId) {
         await fetchTasksData(activeTenantId);
       } else {
@@ -293,7 +298,7 @@ export default function TasksPage() {
   const handleOpenModal = (dateStr?: string, workerId?: string, fieldId?: string, cropId?: string) => {
     setEditingTaskId(null);
     setFormData({
-      work_date: dateStr || new Date().toISOString().split('T')[0],
+      work_date: dateStr || getJSTDate(),
       task_title: '',
       crop_id: cropId || '',
       department_id: '',
@@ -560,7 +565,7 @@ export default function TasksPage() {
                       {groupMode === 'worker' ? '作業者' : groupMode === 'crop' ? '作目' : '圃場'}
                     </th>
                     {dates.map((d, i) => {
-                      const isToday = d.toDateString() === new Date().toDateString();
+                      const isToday = getJSTDate(d) === getJSTDate();
                       return (
                         <th key={i} className={`p-2.5 font-black text-center border-r border-slate-200 min-w-[150px] ${isToday ? 'bg-emerald-50 text-emerald-800' : ''}`}>
                           <div>{d.getMonth() + 1}/{d.getDate()} ({['日','月','火','水','木','金','土'][d.getDay()]})</div>
@@ -584,7 +589,7 @@ export default function TasksPage() {
                         </div>
                       </td>
                       {dates.map((d, i) => {
-                        const dateStr = d.toISOString().split('T')[0];
+                        const dateStr = getJSTDate(d);
                         const cellTasks = tasks
                           .filter(t => {
                             if (t.work_date !== dateStr) return false;

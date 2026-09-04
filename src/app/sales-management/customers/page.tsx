@@ -76,9 +76,10 @@ export default function CustomersPage() {
 
     setIsSubmitting(true);
     try {
+      const tenantId = await getCurrentTenantId();
       if (editingCustomer) {
         // 更新処理
-        const res = await updateB2BCustomer(editingCustomer.id, formData);
+        const res = await updateB2BCustomer(editingCustomer.id, formData, tenantId);
         if (res.success) {
           setShowModal(false);
           await loadCustomers();
@@ -87,7 +88,6 @@ export default function CustomersPage() {
         }
       } else {
         // 新規登録処理
-        const tenantId = await getCurrentTenantId();
         const token = Math.random().toString(36).substring(2, 11);
         const res = await createB2BCustomer({
           ...formData,
@@ -115,7 +115,8 @@ export default function CustomersPage() {
 
     setDeletingId(c.id);
     try {
-      const res = await deleteB2BCustomer(c.id);
+      const tenantId = await getCurrentTenantId();
+      const res = await deleteB2BCustomer(c.id, tenantId);
       if (res.success) {
         await loadCustomers();
       } else {

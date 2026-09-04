@@ -6,6 +6,7 @@ import { getFarmInfo, getFarmWorkers, verifyWorkerPin, getFarmMasters, getCustom
 import { supabase } from '@/lib/supabase';
 import imageCompression from 'browser-image-compression';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
+import { getJSTDate } from '@/lib/dateUtils';
 
 // プライベートブラウズ等の例外で落ちない安全なStorageラッパー
 const safeStorage = {
@@ -75,7 +76,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
   const [selectedField, setSelectedField] = useState('');
   const [workType, setWorkType] = useState('');
   const [duration, setDuration] = useState('');
-  const [manualDate, setManualDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [manualDate, setManualDate] = useState<string>(() => getJSTDate());
   const [memo, setMemo] = useState('');
   const [selectedMaterial, setSelectedMaterial] = useState('');
   const [materialQuantity, setMaterialQuantity] = useState('');
@@ -275,7 +276,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     if (currentUser) {
       const fetchAttendance = async () => {
         try {
-          const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }); // YYYY-MM-DD
+          const today = getJSTDate(); // YYYY-MM-DD
           const res = await getTodayAttendance(tenantId, currentUser.id, today);
           if (res.success && res.data) {
             setAttendanceLog(res.data);
@@ -292,7 +293,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     if (!currentUser) return;
     setIsSubmitting(true);
     try {
-      const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+      const today = getJSTDate();
       const now = new Date().toISOString();
       const res = await submitAttendance(tenantId, currentUser.id, action, attendanceLog?.id || null, today, now, null, null);
       if (res.success && res.data) {
@@ -313,7 +314,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
     setSelectedField('');
     setWorkType('');
     setDuration('');
-    setManualDate(new Date().toISOString().split('T')[0]);
+    setManualDate(getJSTDate());
     setMemo('');
     setSelectedMaterial('');
     setMaterialQuantity('');
@@ -443,7 +444,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
         start_time: startTime.toISOString(),
         end_time: endTime.toISOString(),
         status: 'completed',
-        work_date: startTime.toISOString().split('T')[0],
+        work_date: getJSTDate(startTime),
         duration_minutes: diffMins,
         material_id: matId || null,
         material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,

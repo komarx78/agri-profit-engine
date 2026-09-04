@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getJSTDate } from '@/lib/dateUtils';
 import { Calendar, Sprout, Store, Calculator, CheckCircle2, Clock, Truck, MapPin, Loader2, Target, ChevronLeft, ChevronRight, Plus, X, User, FileText, Image as ImageIcon, ChevronDown, ChevronUp, PieChart as PieChartIcon } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -295,7 +296,7 @@ export default function PlansPage() {
     let curr = new Date(start);
     const last = new Date(end);
     while (curr <= last) {
-      dates.push(curr.toISOString().split('T')[0]);
+      dates.push(getJSTDate(curr));
       curr.setDate(curr.getDate() + 1);
     }
     return dates;
@@ -815,9 +816,9 @@ export default function PlansPage() {
                   
                   {/* 日付セル */}
                   {daysInMonth.map((d, i) => {
-                    const dateStr = d.toISOString().split('T')[0];
+                    const dateStr = getJSTDate(d);
                     const { plannedWorks, actualWorks, plannedSales, actualSales } = getCellData(item.id, dateStr);
-                    const isToday = dateStr === new Date().toISOString().split('T')[0];
+                    const isToday = dateStr === getJSTDate();
                     
                     return (
                       <div 

@@ -6,6 +6,7 @@ import { ArrowLeft, Printer, FileText, Edit2, Save, CheckCircle2 } from 'lucide-
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { updateInvoiceAmounts } from '@/app/actions/b2b';
+import { getCurrentTenantId } from '@/lib/tenant';
 
 export default function InvoicePrintPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -29,11 +30,17 @@ export default function InvoicePrintPage({ params }: { params: Promise<{ id: str
     async function loadData() {
       if (!invoiceId) return;
       try {
-        const { data: inv, error: invErr } = await supabase
+        const tenantId = await getCurrentTenantId();
+        let invQuery = supabase
           .from('b2b_invoices')
           .select('*, customer:b2b_customers(*)')
-          .eq('id', invoiceId)
-          .single();
+          .eq('id', invoiceId);
+
+        if (tenantId) {
+          invQuery = invQuery.eq('user_id', tenantId);
+        }
+
+        const { data: inv, error: invErr } = await invQuery.single();
         if (invErr || !inv) throw new Error("請求書が見つかりません");
         setInvoice(inv);
 
@@ -109,7 +116,8 @@ export default function InvoicePrintPage({ params }: { params: Promise<{ id: str
       const subtotal = orders.reduce((sum, o) => sum + Number(o.total_amount), 0);
       const tax = Math.floor(subtotal * 0.08);
       const total = subtotal + tax;
-      const res = await updateInvoiceAmounts(invoiceId, subtotal, tax, total);
+      const tenantId = await getCurrentTenantId();
+      const res = await updateInvoiceAmounts(invoiceId, subtotal, tax, total, tenantId);
 
       if (res.success) {
         setInvoice((prev: any) => prev ? { ...prev, subtotal, tax, total_amount: total } : prev);

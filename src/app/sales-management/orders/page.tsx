@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ShoppingCart, Plus, Search, Calendar, CheckCircle2, Clock, Truck } from 'lucide-react';
 import { getB2BOrders, updateB2BOrderStatus } from '@/app/actions/b2b';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getJSTDate } from '@/lib/dateUtils';
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<any[]>([]);
@@ -26,7 +27,8 @@ export default function OrdersPage() {
 
   const handleStatusChange = async (orderId: string, newStatus: string) => {
     if (!window.confirm(`ステータスを「${newStatus === 'delivered' ? '納品済' : newStatus === 'invoiced' ? '請求済' : '未納品'}」に変更しますか？`)) return;
-    const res = await updateB2BOrderStatus(orderId, newStatus);
+    const tenantId = await getCurrentTenantId();
+    const res = await updateB2BOrderStatus(orderId, newStatus, tenantId);
     if (res.success) {
       loadOrders();
     } else {
@@ -169,7 +171,7 @@ export default function OrdersPage() {
               const day = i + 1;
               const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
               const dayOrders = filteredOrders.filter(o => o.delivery_date === dateStr);
-              const isToday = new Date().toISOString().split('T')[0] === dateStr;
+              const isToday = getJSTDate() === dateStr;
               
               return (
                 <div key={day} className={`bg-white p-1.5 sm:p-2 min-h-[100px] sm:min-h-[120px] flex flex-col gap-1 transition-colors hover:bg-slate-50`}>
@@ -207,10 +209,10 @@ export default function OrdersPage() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {weekDays.map(date => {
-              const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+              const dateStr = getJSTDate(date);
               const dayOrders = filteredOrders.filter(o => o.delivery_date === dateStr);
               const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
-              const isToday = date.toDateString() === new Date().toDateString();
+              const isToday = getJSTDate(date) === getJSTDate();
               
               return (
                 <div key={dateStr} className={`bg-white rounded-2xl border ${isToday ? 'border-indigo-400 shadow-md ring-1 ring-indigo-400' : 'border-slate-200 shadow-sm'} overflow-hidden flex flex-col h-[300px]`}>

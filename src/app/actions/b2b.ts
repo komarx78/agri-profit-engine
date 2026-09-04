@@ -75,9 +75,10 @@ export async function createB2BCustomer(data: any, tenantId?: string | null) {
   }
 }
 
-export async function updateB2BCustomer(customerId: string, data: any) {
+export async function updateB2BCustomer(customerId: string, data: any, tenantId?: string | null) {
   try {
     const adminClient = getAdminSupabase();
+    const validTenantId = await resolveAuthenticatedTenantId(tenantId);
     const payload = {
       name: data.name,
       type: data.type,
@@ -86,10 +87,14 @@ export async function updateB2BCustomer(customerId: string, data: any) {
       payment_day: data.payment_day,
       updated_at: new Date().toISOString()
     };
-    const { error } = await adminClient
+    let query = adminClient
       .from('b2b_customers')
       .update(payload)
       .eq('id', customerId);
+    if (validTenantId) {
+      query = query.eq('user_id', validTenantId);
+    }
+    const { error } = await query;
     if (error) throw error;
     return { success: true };
   } catch (error: any) {
@@ -97,16 +102,21 @@ export async function updateB2BCustomer(customerId: string, data: any) {
   }
 }
 
-export async function deleteB2BCustomer(customerId: string) {
+export async function deleteB2BCustomer(customerId: string, tenantId?: string | null) {
   try {
     const adminClient = getAdminSupabase();
+    const validTenantId = await resolveAuthenticatedTenantId(tenantId);
     
     // 関連する注文データの存在確認
-    const { data: relatedOrders } = await adminClient
+    let orderCheckQuery = adminClient
       .from('b2b_orders')
       .select('id')
       .eq('customer_id', customerId)
       .limit(1);
+    if (validTenantId) {
+      orderCheckQuery = orderCheckQuery.eq('user_id', validTenantId);
+    }
+    const { data: relatedOrders } = await orderCheckQuery;
 
     if (relatedOrders && relatedOrders.length > 0) {
       return { 
@@ -115,10 +125,15 @@ export async function deleteB2BCustomer(customerId: string) {
       };
     }
 
-    const { error } = await adminClient
+    let delQuery = adminClient
       .from('b2b_customers')
       .delete()
       .eq('id', customerId);
+    if (validTenantId) {
+      delQuery = delQuery.eq('user_id', validTenantId);
+    }
+
+    const { error } = await delQuery;
 
     if (error) throw error;
     return { success: true };
@@ -280,13 +295,18 @@ export async function createB2BOrder(orderData: any, orderItems: any[], tenantId
   }
 }
 
-export async function updateB2BOrderStatus(orderId: string, status: string) {
+export async function updateB2BOrderStatus(orderId: string, status: string, tenantId?: string | null) {
   try {
     const adminClient = getAdminSupabase();
-    const { error } = await adminClient
+    const validTenantId = await resolveAuthenticatedTenantId(tenantId);
+    let query = adminClient
       .from('b2b_orders')
       .update({ status })
       .eq('id', orderId);
+    if (validTenantId) {
+      query = query.eq('user_id', validTenantId);
+    }
+    const { error } = await query;
     if (error) throw error;
     return { success: true };
   } catch (error: any) {
@@ -294,14 +314,20 @@ export async function updateB2BOrderStatus(orderId: string, status: string) {
   }
 }
 
-export async function updateB2BOrderDetails(orderId: string, orderData: any, orderItems: any[]) {
+export async function updateB2BOrderDetails(orderId: string, orderData: any, orderItems: any[], tenantId?: string | null) {
   try {
     const adminClient = getAdminSupabase();
+    const validTenantId = await resolveAuthenticatedTenantId(tenantId);
+    
     // 1. Update Order main info
-    const { error: orderError } = await adminClient
+    let orderUpdateQuery = adminClient
       .from('b2b_orders')
       .update(orderData)
       .eq('id', orderId);
+    if (validTenantId) {
+      orderUpdateQuery = orderUpdateQuery.eq('user_id', validTenantId);
+    }
+    const { error: orderError } = await orderUpdateQuery;
     if (orderError) throw orderError;
 
     // 2. Delete existing items
@@ -328,13 +354,18 @@ export async function updateB2BOrderDetails(orderId: string, orderData: any, ord
   }
 }
 
-export async function deleteB2BOrder(orderId: string) {
+export async function deleteB2BOrder(orderId: string, tenantId?: string | null) {
   try {
     const adminClient = getAdminSupabase();
-    const { error } = await adminClient
+    const validTenantId = await resolveAuthenticatedTenantId(tenantId);
+    let query = adminClient
       .from('b2b_orders')
       .delete()
       .eq('id', orderId);
+    if (validTenantId) {
+      query = query.eq('user_id', validTenantId);
+    }
+    const { error } = await query;
     if (error) throw error;
     return { success: true };
   } catch (error: any) {
@@ -388,13 +419,18 @@ export async function createB2BInvoice(invoiceData: any, tenantId?: string | nul
   }
 }
 
-export async function updateB2BInvoiceStatus(invoiceId: string, status: string) {
+export async function updateB2BInvoiceStatus(invoiceId: string, status: string, tenantId?: string | null) {
   try {
     const adminClient = getAdminSupabase();
-    const { error } = await adminClient
+    const validTenantId = await resolveAuthenticatedTenantId(tenantId);
+    let query = adminClient
       .from('b2b_invoices')
       .update({ status })
       .eq('id', invoiceId);
+    if (validTenantId) {
+      query = query.eq('user_id', validTenantId);
+    }
+    const { error } = await query;
     if (error) throw error;
     return { success: true };
   } catch (error: any) {
@@ -474,12 +510,16 @@ export async function generateInvoicesForMonth(targetMonth: string, tenantId?: s
 
       if (!invErr && invData) {
         generatedCount++;
-        // 該当オーダーのステータスを invoiced に更新
+        // 該当オーダーのステータスを invoiced に更新（テナントIDも厳格に照合）
         const orderIds = ordersList.map(o => o.id);
-        await adminClient
+        let updateOrderQuery = adminClient
           .from('b2b_orders')
           .update({ status: 'invoiced' })
           .in('id', orderIds);
+        if (validTenantId) {
+          updateOrderQuery = updateOrderQuery.eq('user_id', validTenantId);
+        }
+        await updateOrderQuery;
       }
     }
 
@@ -489,10 +529,11 @@ export async function generateInvoicesForMonth(targetMonth: string, tenantId?: s
   }
 }
 
-export async function updateInvoiceAmounts(invoiceId: string, subtotal: number, tax: number, total: number) {
+export async function updateInvoiceAmounts(invoiceId: string, subtotal: number, tax: number, total: number, tenantId?: string | null) {
   try {
     const adminClient = getAdminSupabase();
-    const { error } = await adminClient
+    const validTenantId = await resolveAuthenticatedTenantId(tenantId);
+    let query = adminClient
       .from('b2b_invoices')
       .update({
         subtotal,
@@ -500,6 +541,10 @@ export async function updateInvoiceAmounts(invoiceId: string, subtotal: number, 
         total_amount: total
       })
       .eq('id', invoiceId);
+    if (validTenantId) {
+      query = query.eq('user_id', validTenantId);
+    }
+    const { error } = await query;
     if (error) throw error;
     return { success: true };
   } catch (error: any) {

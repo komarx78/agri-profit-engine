@@ -34,7 +34,8 @@ export default function InvoicesPage() {
     if (!window.confirm(`${targetMonth}月分の納品済データから請求書を一括生成しますか？`)) return;
     setIsGenerating(true);
     
-    const res = await generateInvoicesForMonth(targetMonth);
+    const tenantId = await getCurrentTenantId();
+    const res = await generateInvoicesForMonth(targetMonth, tenantId);
     
     setIsGenerating(false);
     

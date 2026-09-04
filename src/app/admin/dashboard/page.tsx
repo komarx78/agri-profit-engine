@@ -8,6 +8,7 @@ import {
   ComposedChart, Line, Area, AreaChart
 } from 'recharts';
 import { supabase } from '@/lib/supabase';
+import { getCurrentTenantId } from '@/lib/tenant';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Activity, Clock, Sprout, TrendingUp, Banknote, UserCheck, CalendarDays, MapPin, Calculator, Settings2 } from 'lucide-react';
 
@@ -34,20 +35,7 @@ export default function DashboardPage() {
     async function fetchData() {
       try {
         setIsLoading(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        let currentOwnerId = user?.id || '';
-        if (!currentOwnerId && typeof window !== 'undefined') {
-          currentOwnerId = localStorage.getItem('agri_owner_id') || '';
-          if (!currentOwnerId) {
-            const savedWorker = localStorage.getItem('agri_current_worker');
-            if (savedWorker) {
-              try {
-                const wObj = JSON.parse(savedWorker);
-                currentOwnerId = wObj.user_id || '';
-              } catch (e) {}
-            }
-          }
-        }
+        const currentOwnerId = await getCurrentTenantId();
 
         if (!currentOwnerId) {
           setIsLoading(false);

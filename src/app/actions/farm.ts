@@ -215,6 +215,9 @@ export async function getFarmMasters(tenantId: string) {
 export async function submitWorkLog(tenantId: string, workerId: string, logData: any) {
   try {
     const supabase = createAdminClient();
+    if (!tenantId || tenantId === 'null' || tenantId === 'undefined') {
+      return { success: false, error: '農園IDが不正です。' };
+    }
     
     // 強制的に tenant_id と worker_id をセットして保存
     const insertData = {
@@ -704,10 +707,14 @@ export async function savePlannedTask(
 }
 
 // 9. タスクの削除
-export async function deletePlannedTask(taskId: string) {
+export async function deletePlannedTask(taskId: string, tenantId?: string | null) {
   try {
     const supabase = createAdminClient();
-    const { error } = await supabase.from('work_logs').delete().eq('id', taskId);
+    let query = supabase.from('work_logs').delete().eq('id', taskId);
+    if (tenantId && tenantId !== 'null' && tenantId !== 'undefined') {
+      query = query.eq('user_id', tenantId);
+    }
+    const { error } = await query;
     if (error) throw error;
     return { success: true };
   } catch (err: any) {
