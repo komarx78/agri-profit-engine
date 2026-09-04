@@ -66,9 +66,11 @@ export default function MonthlyTimecardPage() {
       }
 
       const year = currentMonth.getFullYear();
-      const month = currentMonth.getMonth() + 1;
-      const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
-      const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
+      const monthNum = currentMonth.getMonth() + 1;
+      const monthStr = monthNum.toString().padStart(2, '0');
+      const lastDay = new Date(year, monthNum, 0).getDate();
+      const startDate = `${year}-${monthStr}-01`;
+      const endDate = `${year}-${monthStr}-${String(lastDay).padStart(2, '0')}`;
 
       // 1. 自社テナントの設定を取得
       const { data: cData } = await supabase
