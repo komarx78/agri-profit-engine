@@ -291,7 +291,7 @@ export async function submitSalesLog(tenantId: string, logData: any) {
     return { success: false, error: '出荷記録の保存に失敗しました。' };
   }
 }
-// 当日の勤怠データの取得
+// 当日の勤怠データの取得（未退勤ログのフォールバック付き）
 export async function getTodayAttendance(tenantId: string, workerId: string, date: string) {
   try {
     const supabase = createAdminClient();
@@ -301,9 +301,22 @@ export async function getTodayAttendance(tenantId: string, workerId: string, dat
       .eq('date', date)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single();
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "not found"
-    return { success: true, data: data || null };
+      .maybeSingle();
+
+    if (data) {
+      return { success: true, data };
+    }
+
+    // 当日の打刻がない場合、未退勤ログ（直近の未退勤打刻）を検索
+    const { data: unclosed } = await supabase.from('attendance_logs')
+      .select('*')
+      .eq('worker_id', workerId)
+      .is('clock_out', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    return { success: true, data: unclosed || null };
   } catch (err: any) {
     console.error('getTodayAttendance error:', err);
     return { success: false, data: null };
@@ -334,7 +347,13 @@ export async function submitAttendance(tenantId: string, workerId: string, actio
       return { success: true, data };
     } else if (logId) {
       const updates: any = {};
-      if (action === 'break_start') updates.break_start_time = now;
+      if (tenantId && tenantId !== 'null' && tenantId !== 'undefined') {
+        updates.user_id = tenantId;
+      }
+      if (action === 'break_start') {
+        updates.break_start_time = now;
+        updates.break_end_time = null;
+      }
       if (action === 'break_end') {
         updates.break_end_time = now;
         // 休憩時間の計算
@@ -342,11 +361,22 @@ export async function submitAttendance(tenantId: string, workerId: string, actio
         if (currentLog?.break_start_time) {
           const bStart = new Date(currentLog.break_start_time).getTime();
           const bEnd = new Date(now).getTime();
-          const diffMins = Math.floor((bEnd - bStart) / 1000 / 60);
+          const diffMins = Math.max(0, Math.floor((bEnd - bStart) / 1000 / 60));
           updates.total_break_minutes = (currentLog.total_break_minutes || 0) + diffMins;
         }
       }
-      if (action === 'clock_out') updates.clock_out = now;
+      if (action === 'clock_out') {
+        updates.clock_out = now;
+        // もし休憩終了を押さずに退勤した場合、休憩も自動精算
+        const { data: currentLog } = await supabase.from('attendance_logs').select('break_start_time, break_end_time, total_break_minutes').eq('id', logId).single();
+        if (currentLog?.break_start_time && !currentLog.break_end_time) {
+          updates.break_end_time = now;
+          const bStart = new Date(currentLog.break_start_time).getTime();
+          const bEnd = new Date(now).getTime();
+          const diffMins = Math.max(0, Math.floor((bEnd - bStart) / 1000 / 60));
+          updates.total_break_minutes = (currentLog.total_break_minutes || 0) + diffMins;
+        }
+      }
       
       const { data, error } = await supabase.from('attendance_logs').update(updates).eq('id', logId).select().single();
       if (error) throw error;

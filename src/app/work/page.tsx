@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getB2BOrders, updateB2BOrderStatus } from '@/app/actions/b2b';
-import { getWorkerShareSettings } from '@/app/actions/farm';
+import { getWorkerShareSettings, submitAttendance } from '@/app/actions/farm';
 import { WorkerGate } from '@/components/WorkerGate';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
@@ -734,18 +734,12 @@ export default function WorkEntryPage() {
       }
 
       if (action === 'clock_in') {
-        const payload: any = {
-          worker_id: currentUser.id,
-          date: today,
-          clock_in: now,
-          weather: weatherText,
-          temperature: temp
-        };
-        if (ownerId) payload.user_id = ownerId;
-
-        const { data, error } = await supabase.from('attendance_logs').insert([payload]).select();
-        if (error) throw error;
-        setAttendanceLog(data[0]);
+        const res = await submitAttendance(ownerId || '', currentUser.id, 'clock_in', null, today, now, weatherText, temp);
+        if (res.success && res.data) {
+          setAttendanceLog(res.data);
+        } else {
+          alert('打刻エラー: ' + (res.error || '通信エラーが発生しました'));
+        }
       } else {
         // attendanceLogが空の場合でも、未退勤ログを検索して退勤・休憩を可能にする
         let targetLog = attendanceLog;
@@ -760,23 +754,12 @@ export default function WorkEntryPage() {
         }
 
         if (targetLog) {
-          const updates: any = {};
-          if (ownerId && !targetLog.user_id) updates.user_id = ownerId;
-          if (action === 'break_start') updates.break_start_time = now;
-          if (action === 'break_end') {
-            updates.break_end_time = now;
-            if (targetLog.break_start_time) {
-              const bStart = new Date(targetLog.break_start_time).getTime();
-              const bEnd = new Date(now).getTime();
-              const diffMins = Math.floor((bEnd - bStart) / 1000 / 60);
-              updates.total_break_minutes = (targetLog.total_break_minutes || 0) + diffMins;
-            }
+          const res = await submitAttendance(ownerId || '', currentUser.id, action, targetLog.id, today, now, weatherText, temp);
+          if (res.success && res.data) {
+            setAttendanceLog(res.data);
+          } else {
+            alert('打刻エラー: ' + (res.error || '通信エラーが発生しました'));
           }
-          if (action === 'clock_out') updates.clock_out = now;
-
-          const { data, error } = await supabase.from('attendance_logs').update(updates).eq('id', targetLog.id).select();
-          if (error) throw error;
-          setAttendanceLog(data[0]);
         } else {
           alert('出勤記録が見つかりませんでした。出勤打刻を行ってください。');
         }

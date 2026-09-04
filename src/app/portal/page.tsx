@@ -19,11 +19,11 @@ import dynamic from 'next/dynamic';
 import VideoPlayerWithSubtitles, { Narration, TrimRange } from '@/components/VideoPlayerWithSubtitles';
 import { t, getTranslatedName, getTranslatedWorkType, getWeekdayName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
-import { getPortalTasks } from '@/app/actions/farm';
+import { getPortalTasks, submitAttendance } from '@/app/actions/farm';
 import { translateSingleText } from '@/app/actions/translate';
 import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import Link from 'next/link';
-import { getJSTDate, getJSTTime } from '@/lib/dateUtils';
+import { getJSTDate, getJSTTime, formatDisplayTime, parseTimeToMinutes } from '@/lib/dateUtils';
 
 const CalendarWrapper = dynamic(() => import('@/components/CalendarWrapper'), { 
   ssr: false, 
@@ -352,13 +352,12 @@ function PortalContent() {
         }
         if (log.clock_in && log.clock_out) {
           try {
-            const inParts = log.clock_in.split(':').map(Number);
-            const outParts = log.clock_out.split(':').map(Number);
-            const inTotal = inParts[0] * 60 + inParts[1];
-            const outTotal = outParts[0] * 60 + outParts[1];
-            if (outTotal > inTotal) {
-              const breakTime = Number(log.break_minutes) || Number(log.actual_rest_minutes) || 0;
-              const workMins = Math.max(0, outTotal - inTotal - breakTime);
+            const inTotal = parseTimeToMinutes(log.clock_in);
+            const outTotal = parseTimeToMinutes(log.clock_out);
+            if (inTotal !== null && outTotal !== null) {
+              let diff = outTotal >= inTotal ? (outTotal - inTotal) : (outTotal + 1440 - inTotal);
+              const breakTime = Number(log.total_break_minutes) || Number(log.break_minutes) || Number(log.actual_rest_minutes) || 0;
+              const workMins = Math.max(0, diff - breakTime);
               totalMins += workMins;
               if (workMins > 480) {
                 overMins += (workMins - 480);
@@ -438,13 +437,12 @@ function PortalContent() {
 
       if (log && log.clock_in && log.clock_out) {
         try {
-          const inP = log.clock_in.split(':').map(Number);
-          const outP = log.clock_out.split(':').map(Number);
-          const inTot = inP[0] * 60 + inP[1];
-          const outTot = outP[0] * 60 + outP[1];
-          if (outTot > inTot) {
-            breakMins = Number(log.break_minutes) || Number(log.actual_rest_minutes) || 0;
-            workMinutes = Math.max(0, outTot - inTot - breakMins);
+          const inTot = parseTimeToMinutes(log.clock_in);
+          const outTot = parseTimeToMinutes(log.clock_out);
+          if (inTot !== null && outTot !== null) {
+            let diff = outTot >= inTot ? (outTot - inTot) : (outTot + 1440 - inTot);
+            breakMins = Number(log.total_break_minutes) || Number(log.break_minutes) || Number(log.actual_rest_minutes) || 0;
+            workMinutes = Math.max(0, diff - breakMins);
             if (workMinutes > 480) isOvertime = true;
           }
         } catch (e) {}
@@ -1360,6 +1358,8 @@ function PortalContent() {
       alert('打刻エラー: あなたのアカウントは現場スタッフとして「スタッフマスタ」に登録されていません。\n管理画面からご自身をスタッフ登録してください。');
       return;
     }
+    const workerId = workerProfile.id;
+
     let tenantUserId = workerProfile.user_id || (currentUser as any)?.user_id || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : null);
     if (!tenantUserId && workerId) {
       const { data: wRec } = await supabase.from('workers').select('user_id').eq('id', workerId).maybeSingle();
@@ -1370,20 +1370,12 @@ function PortalContent() {
 
     try {
       if (type === 'in') {
-        const payload: any = {
-          worker_id: workerId,
-          date: today,
-          clock_in: nowIso
-        };
-        if (tenantUserId) payload.user_id = tenantUserId;
-
-        const { data, error } = await supabase.from('attendance_logs').insert([payload]).select().single();
-        if (error) throw error;
-        setAttendance(data);
-
-        // 出勤打刻成功時に当月の個人勤怠集計を即時再計算
-        if (workerId) {
+        const res = await submitAttendance(tenantUserId || '', workerId, 'clock_in', null, today, nowIso, null, null);
+        if (res.success && res.data) {
+          setAttendance(res.data);
           fetchWorkerMonthlyAttendance(workerId, timecardMonth);
+        } else {
+          alert('打刻に失敗しました: ' + (res.error || '通信エラー'));
         }
       } else {
         let targetAtt = attendance;
@@ -1400,20 +1392,13 @@ function PortalContent() {
           alert('出勤記録が見つかりませんでした。出勤打刻を行ってください。');
           return;
         }
-        const updatePayload: any = {
-          clock_out: nowIso
-        };
-        if (tenantUserId && !targetAtt.user_id) {
-          updatePayload.user_id = tenantUserId;
-        }
-        const { data, error } = await supabase.from('attendance_logs').update(updatePayload).eq('id', targetAtt.id).select().single();
-        if (error) throw error;
-        setAttendance(data);
 
-        // 打刻成功時に当月の個人勤怠集計を即時再計算
-        const targetWorkerId = workerProfile?.id || currentUser?.id;
-        if (targetWorkerId) {
-          fetchWorkerMonthlyAttendance(targetWorkerId, timecardMonth);
+        const res = await submitAttendance(tenantUserId || '', workerId, 'clock_out', targetAtt.id, today, nowIso, null, null);
+        if (res.success && res.data) {
+          setAttendance(res.data);
+          fetchWorkerMonthlyAttendance(workerId, timecardMonth);
+        } else {
+          alert('打刻に失敗しました: ' + (res.error || '通信エラー'));
         }
       }
     } catch (err: any) {
