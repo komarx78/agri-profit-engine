@@ -52,6 +52,10 @@ export default function WorkLedgerPage() {
 
           if (compData && compData.attendance_closing_day !== undefined && compData.attendance_closing_day !== null) {
             resolvedDay = Number(compData.attendance_closing_day);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(`agri_attendance_closing_day_${tenantId}`, String(resolvedDay));
+              localStorage.setItem('agri_attendance_closing_day', String(resolvedDay));
+            }
           }
         }
 

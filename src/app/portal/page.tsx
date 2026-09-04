@@ -305,12 +305,18 @@ function PortalContent() {
               }
               if (companyData.attendance_closing_day !== undefined && companyData.attendance_closing_day !== null) {
                 const dbClosing = Number(companyData.attendance_closing_day);
-                if (dbClosing > 0 || resolvedClosing === 0) {
-                  resolvedClosing = dbClosing;
+                resolvedClosing = dbClosing;
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem(`agri_attendance_closing_day_${ownerId}`, String(dbClosing));
+                  localStorage.setItem('agri_attendance_closing_day', String(dbClosing));
                 }
               }
               if (companyData.payment_day_rule) {
                 resolvedPayment = companyData.payment_day_rule;
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem(`agri_payment_day_rule_${ownerId}`, companyData.payment_day_rule);
+                  localStorage.setItem('agri_payment_day_rule', companyData.payment_day_rule);
+                }
               }
             }
           } catch (compErr) {
@@ -1670,10 +1676,17 @@ function PortalContent() {
               {/* 🕒 今月の勤務実績サマリー ＆ タイムカード明細ボタン */}
               <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 mb-3.5 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-black text-slate-600 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-blue-600" />
-                    {t('tc_currentMonthSummary', language)}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] font-black text-slate-600 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-blue-600" />
+                      {t('tc_currentMonthSummary', language)}
+                    </span>
+                    {closingDay > 0 && (
+                      <span className="text-[10px] font-black text-blue-700 bg-blue-100/70 border border-blue-200 px-1.5 py-0.5 rounded-md">
+                        {closingDay}日締め
+                      </span>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={() => {

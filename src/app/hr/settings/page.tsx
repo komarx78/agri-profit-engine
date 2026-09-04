@@ -93,15 +93,21 @@ export default function HrSettingsPage() {
 
         if (compData) {
           setSettingsId(compData.id);
-          // DBに0以外の値が入っていればDB優先、DBが0でローカルに有効値(20等)があればローカル維持
+          // DBの値をSSOTとして最優先反映し、LocalStorageも最新化
           if (compData.attendance_closing_day !== undefined && compData.attendance_closing_day !== null) {
             const dbVal = Number(compData.attendance_closing_day);
-            if (dbVal > 0 || localClosingVal === null) {
-              setClosingDay(dbVal);
+            setClosingDay(dbVal);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(`agri_attendance_closing_day_${tenantId}`, String(dbVal));
+              localStorage.setItem('agri_attendance_closing_day', String(dbVal));
             }
           }
           if (compData.payment_day_rule) {
             setPaymentDayRule(compData.payment_day_rule);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(`agri_payment_day_rule_${tenantId}`, compData.payment_day_rule);
+              localStorage.setItem('agri_payment_day_rule', compData.payment_day_rule);
+            }
           }
           if (compData.line_notification_offset_minutes !== undefined && compData.line_notification_offset_minutes !== null) {
             setLineNotificationOffsetMinutes(Number(compData.line_notification_offset_minutes));

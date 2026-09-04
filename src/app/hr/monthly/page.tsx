@@ -80,7 +80,7 @@ export default function MonthlyTimecardPage() {
 
       if (cData) setCompanySettings(cData);
 
-      // 勤怠締日の解決（LocalStorage最優先 ➔ DB ➔ デフォルト末日:0）
+      // 勤怠締日の解決（DB優先 ➔ LocalStorage ➔ デフォルト末日:0）
       let resolvedClosingDay = 0;
       if (typeof window !== 'undefined') {
         const localClosing = (tenantId ? localStorage.getItem(`agri_attendance_closing_day_${tenantId}`) : null) || localStorage.getItem('agri_attendance_closing_day');
@@ -89,8 +89,12 @@ export default function MonthlyTimecardPage() {
         }
       }
 
-      if (resolvedClosingDay === 0 && cData && cData.attendance_closing_day !== undefined && cData.attendance_closing_day !== null) {
+      if (cData && cData.attendance_closing_day !== undefined && cData.attendance_closing_day !== null) {
         resolvedClosingDay = Number(cData.attendance_closing_day);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`agri_attendance_closing_day_${tenantId}`, String(resolvedClosingDay));
+          localStorage.setItem('agri_attendance_closing_day', String(resolvedClosingDay));
+        }
       }
       setClosingDay(resolvedClosingDay);
 
@@ -832,7 +836,7 @@ export default function MonthlyTimecardPage() {
                       return (
                         <tr key={date} className={`hover:bg-blue-50/20 ${isWeekend ? 'bg-slate-50/50' : ''}`}>
                           <td className={`p-4 font-bold ${dt.getDay() === 0 ? 'text-rose-500' : dt.getDay() === 6 ? 'text-blue-500' : 'text-slate-700'}`}>
-                            {day}日 ({['日','月','火','水','木','金','土'][dt.getDay()]})
+                            {closingDay > 0 ? `${dt.getMonth() + 1}/${day}` : `${day}日`} ({['日','月','火','水','木','金','土'][dt.getDay()]})
                           </td>
                           <td className="p-4 text-center text-slate-300">-</td>
                           <td className="p-4 text-center text-slate-300">-</td>
@@ -867,7 +871,7 @@ export default function MonthlyTimecardPage() {
                     return (
                       <tr key={log.id} className="hover:bg-blue-50/30 group">
                         <td className={`p-4 font-bold ${dt.getDay() === 0 ? 'text-rose-500' : dt.getDay() === 6 ? 'text-blue-500' : 'text-slate-700'}`}>
-                          {day}日 ({['日','月','火','水','木','金','土'][dt.getDay()]})
+                          {closingDay > 0 ? `${dt.getMonth() + 1}/${day}` : `${day}日`} ({['日','月','火','水','木','金','土'][dt.getDay()]})
                         </td>
                         <td className="p-4 text-center">
                           {getWorkTypeBadge(log.status)}
