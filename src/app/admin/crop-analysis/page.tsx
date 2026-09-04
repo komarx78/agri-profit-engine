@@ -270,14 +270,14 @@ export default function CropAnalysisPage() {
                           outerRadius={90}
                           paddingAngle={2}
                           dataKey="value"
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
                           labelLine={true}
                         >
                           {workPieData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                           ))}
                         </Pie>
-                        <RechartsTooltip formatter={(value: number) => [`${value} 時間`, '稼働時間']} />
+                        <RechartsTooltip formatter={(value: any) => [`${value} 時間`, '稼働時間']} />
                         <Legend verticalAlign="bottom" height={36} iconType="circle" />
                       </PieChart>
                     </ResponsiveContainer>
@@ -304,14 +304,14 @@ export default function CropAnalysisPage() {
                           outerRadius={90}
                           paddingAngle={2}
                           dataKey="value"
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
                           labelLine={true}
                         >
                           {workerPieData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={WORKER_COLORS[index % WORKER_COLORS.length]} />
                           ))}
                         </Pie>
-                        <RechartsTooltip formatter={(value: number) => [`${value} 時間`, '稼働時間']} />
+                        <RechartsTooltip formatter={(value: any) => [`${value} 時間`, '稼働時間']} />
                         <Legend verticalAlign="bottom" height={36} iconType="circle" />
                       </PieChart>
                     </ResponsiveContainer>

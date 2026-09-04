@@ -23,6 +23,7 @@ import { getJSTDate, getJSTDateWithOffset, formatDisplayTime } from '@/lib/dateU
 interface MasterItem {
   id: string;
   name: string;
+  unit?: string;
   polygon_coordinates?: any;
 }
 
@@ -210,6 +211,7 @@ export default function WorkEntryPage() {
 
   useEffect(() => {
     if (!currentUser) return;
+    const targetWorkerId = currentUser.id;
 
     async function fetchData() {
       try {
@@ -217,10 +219,10 @@ export default function WorkEntryPage() {
         const { data: wProfile } = await supabase
           .from('workers')
           .select('*')
-          .eq('id', currentUser.id)
+          .eq('id', targetWorkerId)
           .single();
 
-        const ownerId = wProfile?.user_id || (currentUser as any).user_id;
+        const ownerId = wProfile?.user_id || (currentUser as any)?.user_id;
         if (ownerId) {
           setWorkerTenantId(ownerId);
         }
@@ -260,7 +262,7 @@ export default function WorkEntryPage() {
           .select('*, crops(name), fields(name), workers(name)')
           .eq('status', 'planned')
           .eq('work_date', getJSTDate())
-          .eq('worker_id', currentUser.id);
+          .eq('worker_id', targetWorkerId);
         
         if (tData) {
           setTasks(tData);

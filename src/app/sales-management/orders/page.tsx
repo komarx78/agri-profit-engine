@@ -19,7 +19,7 @@ export default function OrdersPage() {
     const tenantId = await getCurrentTenantId();
     const res = await getB2BOrders(tenantId);
     if (res.success) {
-      setOrders(res.orders);
+      setOrders(res.orders || []);
     }
     setLoading(false);
   }

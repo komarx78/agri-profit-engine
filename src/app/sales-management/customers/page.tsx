@@ -33,7 +33,7 @@ export default function CustomersPage() {
     const tenantId = await getCurrentTenantId();
     const res = await getB2BCustomers(tenantId);
     if (res.success) {
-      setCustomers(res.customers);
+      setCustomers(res.customers || []);
     }
     setLoading(false);
   }

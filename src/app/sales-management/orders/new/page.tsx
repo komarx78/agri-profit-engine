@@ -34,9 +34,9 @@ export default function NewOrderPage() {
         supabase.from('crops').select('*').eq('user_id', tenantId),
         getB2BOrders(tenantId)
       ]);
-      if (custRes.success) setCustomers(custRes.customers);
+      if (custRes.success) setCustomers(custRes.customers || []);
       if (cropRes.data) setCrops(cropRes.data);
-      if (ordRes.success) setRecentOrders(ordRes.orders);
+      if (ordRes.success) setRecentOrders(ordRes.orders || []);
     }
     load();
   }, []);

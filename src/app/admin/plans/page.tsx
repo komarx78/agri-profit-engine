@@ -692,7 +692,7 @@ export default function PlansPage() {
                         ))}
                       </Pie>
                       <Tooltip 
-                        formatter={(value: number) => [`${value.toFixed(1)} 時間`, '稼働時間']}
+                        formatter={(value: any) => [`${Number(value || 0).toFixed(1)} 時間`, '稼働時間']}
                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                       />
                       <Legend verticalAlign="bottom" height={36} iconType="circle" />

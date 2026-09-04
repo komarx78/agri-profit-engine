@@ -28,7 +28,14 @@ export default function HrLayout({ children }: { children: React.ReactNode }) {
   // 将来的にはSupabaseのテナント情報から取得する。
   const isPremiumUser = true; 
 
-  const navItems = [
+  interface NavItem {
+    name: string;
+    path: string;
+    icon: any;
+    isExternal?: boolean;
+  }
+
+  const navItems: NavItem[] = [
     { name: '本日の打刻状況', path: '/hr', icon: Users },
     { name: '月次タイムカード', path: '/hr/monthly', icon: Calendar },
     { name: '有給・休暇管理', path: '/hr/paid-leave', icon: Coffee },

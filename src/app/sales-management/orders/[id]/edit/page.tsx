@@ -48,7 +48,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       if (cropData) setCrops(cropData);
 
       const custRes = await getB2BCustomers(tenantId);
-      if (custRes.success) setCustomers(custRes.customers);
+      if (custRes.success) setCustomers(custRes.customers || []);
       
       // Load existing order
       let orderQuery = supabase

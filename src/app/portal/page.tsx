@@ -571,9 +571,10 @@ function PortalContent() {
 
     // 5. 有給休暇・残高と申請履歴の取得 (自農園のワーカーのみ厳格に取得)
     try {
+      let targetWorker: any = null;
       const { data: wList } = await supabase
         .from('workers')
-        .select('id, name, type, employment_type, paid_leave_carryover, paid_leave_balance')
+        .select('id, name, role, type, employment_type, paid_leave_carryover, paid_leave_balance')
         .eq('user_id', targetUserId)
         .order('name');
 
@@ -581,7 +582,6 @@ function PortalContent() {
         setAllWorkers(wList);
         
         // ログイン中のワーカーを探す（他人のデータを勝手に割り当てない）
-        let targetWorker = null;
         if (profile && profile.id) {
           targetWorker = wList.find(w => w.id === profile.id) || null;
         } else if (currentRole === 'admin') {

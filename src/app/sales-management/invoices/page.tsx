@@ -25,7 +25,7 @@ export default function InvoicesPage() {
     const tenantId = await getCurrentTenantId();
     const res = await getB2BInvoices(tenantId);
     if (res.success) {
-      setInvoices(res.invoices);
+      setInvoices(res.invoices || []);
     }
     setLoading(false);
   }

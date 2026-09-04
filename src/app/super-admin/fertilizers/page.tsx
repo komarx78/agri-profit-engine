@@ -164,7 +164,7 @@ export default function AdminFertilizersPage() {
           let rows = results.data;
           
           // ヘッダー文字化けチェック（UTF-8リトライ判定）
-          const firstRowKeys = rows.length > 0 ? Object.keys(rows[0]).join('') : '';
+          const firstRowKeys = rows.length > 0 && rows[0] ? Object.keys(rows[0] as object).join('') : '';
           if (firstRowKeys.includes('')) {
             const utf8Results: any = await new Promise((resolve) => {
               Papa.parse(file, {
