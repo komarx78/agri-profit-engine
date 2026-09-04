@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
-import { Clock, Save, CheckCircle2, Loader2, Plus, Trash2, ShieldCheck, Sparkles, Check } from 'lucide-react';
+import { Clock, Save, CheckCircle2, Loader2, Plus, Trash2, ShieldCheck, Sparkles, Check, Calendar, Banknote } from 'lucide-react';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
+import { getAttendancePeriod } from '@/lib/dateUtils';
 
 interface AttendanceRuleItem {
   id?: string;
@@ -23,6 +24,10 @@ export default function HrSettingsPage() {
   const [isTestingLine, setIsTestingLine] = useState(false);
   const [lineTestResult, setLineTestResult] = useState<any>(null);
   
+  // 勤怠締日（0=末日、20=20日、15=15日等）＆給与支払日
+  const [closingDay, setClosingDay] = useState<number>(0);
+  const [paymentDayRule, setPaymentDayRule] = useState<string>('翌月25日払い');
+
   // 複数勤怠ルール
   const [rules, setRules] = useState<AttendanceRuleItem[]>([]);
   const [deletedRuleIds, setDeletedRuleIds] = useState<string[]>([]);
@@ -52,6 +57,12 @@ export default function HrSettingsPage() {
 
         if (compData) {
           setSettingsId(compData.id);
+          if (compData.attendance_closing_day !== undefined && compData.attendance_closing_day !== null) {
+            setClosingDay(Number(compData.attendance_closing_day));
+          }
+          if (compData.payment_day_rule) {
+            setPaymentDayRule(compData.payment_day_rule);
+          }
           if (compData.line_notification_offset_minutes !== undefined && compData.line_notification_offset_minutes !== null) {
             setLineNotificationOffsetMinutes(Number(compData.line_notification_offset_minutes));
           }
@@ -60,6 +71,18 @@ export default function HrSettingsPage() {
           }
           if (compData.attendance_rules && Array.isArray(compData.attendance_rules) && compData.attendance_rules.length > 0) {
             compRules = compData.attendance_rules;
+          }
+        }
+
+        // LocalStorage から締日フォールバック復元
+        if (typeof window !== 'undefined') {
+          const localClosing = localStorage.getItem(`agri_attendance_closing_day_${tenantId}`);
+          if (localClosing !== null && localClosing !== undefined && (!compData || compData.attendance_closing_day === undefined)) {
+            setClosingDay(Number(localClosing));
+          }
+          const localPayment = localStorage.getItem(`agri_payment_day_rule_${tenantId}`);
+          if (localPayment && (!compData || !compData.payment_day_rule)) {
+            setPaymentDayRule(localPayment);
           }
         }
 
@@ -287,6 +310,8 @@ export default function HrSettingsPage() {
         default_end_time: defaultRule.end_time.length === 5 ? defaultRule.end_time + ':00' : defaultRule.end_time,
         default_rest_minutes: defaultRule.rest_minutes,
         auto_round_out_time: defaultRule.auto_round_out_time,
+        attendance_closing_day: Number(closingDay) || 0,
+        payment_day_rule: paymentDayRule || '翌月25日払い',
         line_notification_offset_minutes: Number(lineNotificationOffsetMinutes) || 30,
         line_notification_time: lineNotificationTime.length === 5 ? lineNotificationTime + ':00' : lineNotificationTime,
         attendance_rules: updatedRules,
@@ -300,6 +325,8 @@ export default function HrSettingsPage() {
             // カラムが無い場合の安全フォールバック
             delete compPayload.attendance_rules;
             delete compPayload.line_notification_offset_minutes;
+            delete compPayload.attendance_closing_day;
+            delete compPayload.payment_day_rule;
             await supabase.from('company_settings').update(compPayload).eq('id', settingsId).eq('user_id', tenantId);
           }
         } else {
@@ -307,6 +334,8 @@ export default function HrSettingsPage() {
           if (cInErr) {
             delete compPayload.attendance_rules;
             delete compPayload.line_notification_offset_minutes;
+            delete compPayload.attendance_closing_day;
+            delete compPayload.payment_day_rule;
             const { data: retryComp } = await supabase.from('company_settings').insert([compPayload]).select().single();
             if (retryComp) setSettingsId(retryComp.id);
           } else if (newComp) {
@@ -320,6 +349,8 @@ export default function HrSettingsPage() {
       // 4. LocalStorage にもキャッシュ保存
       if (typeof window !== 'undefined') {
         localStorage.setItem(`agri_attendance_rules_${tenantId}`, JSON.stringify(updatedRules));
+        localStorage.setItem(`agri_attendance_closing_day_${tenantId}`, String(closingDay));
+        localStorage.setItem(`agri_payment_day_rule_${tenantId}`, paymentDayRule);
       }
 
       setRules(updatedRules);
@@ -359,6 +390,154 @@ export default function HrSettingsPage() {
         </div>
 
         <form onSubmit={handleSave} className="space-y-6">
+
+          {/* 📅 全社勤怠締日（賃金締切日）＆ 給与支払日セクション */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 space-y-6">
+            <div className="border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-slate-800">
+                    全社勤怠締日（賃金締切日）＆ 給与支払日
+                  </h2>
+                  <p className="text-xs font-bold text-slate-500 mt-0.5">
+                    月次勤怠集計（タイムカード・給与計算）の期間サイクルを設定します。農園の給与規定に合わせて自由に選択・変更できます。
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* 締日選択 */}
+              <div className="space-y-3">
+                <label className="block text-xs font-black text-slate-700">
+                  🗓️ 勤怠締日（賃金締切日）
+                </label>
+
+                {/* プリセットボタングループ */}
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { label: '末日締め', day: 0, sub: '1日〜末日' },
+                    { label: '20日締め', day: 20, sub: '前月21日〜20日' },
+                    { label: '15日締め', day: 15, sub: '前月16日〜15日' },
+                    { label: '25日締め', day: 25, sub: '前月26日〜25日' },
+                    { label: '10日締め', day: 10, sub: '前月11日〜10日' },
+                    { label: '5日締め', day: 5, sub: '前月6日〜5日' },
+                  ].map((p) => (
+                    <button
+                      key={p.day}
+                      type="button"
+                      onClick={() => setClosingDay(p.day)}
+                      className={`p-2.5 rounded-xl border text-left transition-all ${
+                        closingDay === p.day
+                          ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 shadow-xs ring-2 ring-indigo-500/20'
+                          : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100/80 text-slate-700'
+                      }`}
+                    >
+                      <div className="font-black text-xs sm:text-sm flex items-center justify-between">
+                        <span>{p.label}</span>
+                        {closingDay === p.day && <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-bold mt-0.5">{p.sub}</div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* 任意指定 */}
+                <div className="flex items-center gap-3 pt-1">
+                  <span className="text-xs font-bold text-slate-500 shrink-0">任意指定:</span>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min="1"
+                      max="28"
+                      value={closingDay > 0 && ![5, 10, 15, 20, 25].includes(closingDay) ? closingDay : ''}
+                      placeholder="1〜28"
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        if (!isNaN(val) && val >= 1 && val <= 28) {
+                          setClosingDay(val);
+                        } else if (e.target.value === '') {
+                          setClosingDay(0);
+                        }
+                      }}
+                      className="w-20 p-2 bg-slate-50 border border-slate-200 rounded-xl font-black text-center text-slate-800 text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <span className="text-xs font-bold text-slate-600">日締め</span>
+                  </div>
+                  <span className="text-[11px] font-bold text-slate-400">（1〜28日の範囲で指定可能）</span>
+                </div>
+
+                {/* プレビューバッジ */}
+                <div className="p-3.5 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-100/80 text-xs">
+                  <div className="font-black text-indigo-900 flex items-center gap-1.5">
+                    <span>📌 集計期間プレビュー（当月度）:</span>
+                  </div>
+                  <div className="mt-1 text-sm font-black text-indigo-700">
+                    {(() => {
+                      const now = new Date();
+                      const p = getAttendancePeriod(now.getFullYear(), now.getMonth() + 1, closingDay);
+                      return p.label;
+                    })()}
+                  </div>
+                  <div className="mt-1 text-[11px] font-medium text-slate-500">
+                    ※月次勤怠集計（/hr/monthly）や個人別タイムカード・CSV出力がこの期間で自動集計されます。
+                  </div>
+                </div>
+              </div>
+
+              {/* 給与支払日ルール */}
+              <div className="space-y-3">
+                <label className="block text-xs font-black text-slate-700 flex items-center gap-1.5">
+                  <Banknote className="w-4 h-4 text-emerald-600" />
+                  <span>給与支払日（支給日）ルール</span>
+                </label>
+
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    '当月末払い',
+                    '翌月10日払い',
+                    '翌月15日払い',
+                    '翌月20日払い',
+                    '翌月25日払い',
+                    '翌月末払い'
+                  ].map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPaymentDayRule(p)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                        paymentDayRule === p
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="pt-2">
+                  <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                    表記の自由カスタマイズ（明細書や労務書類に印字）:
+                  </label>
+                  <input
+                    type="text"
+                    value={paymentDayRule}
+                    onChange={(e) => setPaymentDayRule(e.target.value)}
+                    placeholder="例: 翌月25日払い (土日祝は前営業日)"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:bg-white"
+                  />
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 text-[11px] font-bold text-slate-500 leading-relaxed">
+                  💡 <strong>実務の連携</strong>: 設定された締日と支払日ルールは、月次勤怠集計画面や有給管理台帳、将来の給与明細発行時に自動連動します。
+                </div>
+              </div>
+            </div>
+          </div>
           
           {/* 勤怠ルール一覧セクション */}
           <div className="space-y-4">

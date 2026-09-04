@@ -5,9 +5,13 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { Calendar, Download, ChevronLeft, ChevronRight, Clock, Users, Loader2, Save, FileText, Settings, ArrowLeft, Edit3, Plus, Trash2, X, Check, AlertCircle, Zap } from 'lucide-react';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
+import Link from 'next/link';
+import { getAttendancePeriod, getDateListBetween } from '@/lib/dateUtils';
 
 export default function MonthlyTimecardPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [closingDay, setClosingDay] = useState<number>(0);
+  const [periodInfo, setPeriodInfo] = useState<{ startDate: string; endDate: string; label: string }>({ startDate: '', endDate: '', label: '' });
   const [logs, setLogs] = useState<any[]>([]);
   const [workers, setWorkers] = useState<any[]>([]);
   const [attendanceRules, setAttendanceRules] = useState<any[]>([]);
@@ -65,13 +69,6 @@ export default function MonthlyTimecardPage() {
         return;
       }
 
-      const year = currentMonth.getFullYear();
-      const monthNum = currentMonth.getMonth() + 1;
-      const monthStr = monthNum.toString().padStart(2, '0');
-      const lastDay = new Date(year, monthNum, 0).getDate();
-      const startDate = `${year}-${monthStr}-01`;
-      const endDate = `${year}-${monthStr}-${String(lastDay).padStart(2, '0')}`;
-
       // 1. 自社テナントの設定を取得
       const { data: cData } = await supabase
         .from('company_settings')
@@ -82,6 +79,26 @@ export default function MonthlyTimecardPage() {
         .maybeSingle();
 
       if (cData) setCompanySettings(cData);
+
+      // 勤怠締日の解決（DB ➔ LocalStorage ➔ デフォルト末日:0）
+      let resolvedClosingDay = 0;
+      if (cData && cData.attendance_closing_day !== undefined && cData.attendance_closing_day !== null) {
+        resolvedClosingDay = Number(cData.attendance_closing_day);
+      } else if (typeof window !== 'undefined') {
+        const localClosing = localStorage.getItem(`agri_attendance_closing_day_${tenantId}`);
+        if (localClosing !== null && localClosing !== undefined) {
+          resolvedClosingDay = Number(localClosing);
+        }
+      }
+      setClosingDay(resolvedClosingDay);
+
+      // 締日に基づく正確な集計期間（開始日・終了日）を算出
+      const year = currentMonth.getFullYear();
+      const monthNum = currentMonth.getMonth() + 1;
+      const period = getAttendancePeriod(year, monthNum, resolvedClosingDay);
+      setPeriodInfo(period);
+      const startDate = period.startDate;
+      const endDate = period.endDate;
 
       // 2. 勤怠ルール一覧を取得 (3重フォールバック)
       let rules: any[] = [];
@@ -401,7 +418,8 @@ export default function MonthlyTimecardPage() {
       // 1. 個人別タイムカードCSV
       const worker = workers.find(w => w.id === selectedWorkerId);
       const workerName = worker?.name || 'スタッフ';
-      filename = `タイムカード_${workerName}_${year}年${month}月.csv`;
+      const closingLabel = closingDay === 0 ? '末日締め' : `${closingDay}日締め`;
+      filename = `タイムカード_${workerName}_${year}年${month}月度_${closingLabel}.csv`;
 
       csvRows.push([
         '日付', '曜日', '勤務区分', '打刻出勤', '打刻退勤', '計算上出勤', '計算上退勤', '休憩時間(分)', '労働時間', '実労働分数', '管理者メモ'
@@ -451,7 +469,8 @@ export default function MonthlyTimecardPage() {
 
     } else if (viewMode === 'summary') {
       // 2. 月次集計CSV
-      filename = `月次勤怠集計_${year}年${month}月.csv`;
+      const closingLabel = closingDay === 0 ? '末日締め' : `${closingDay}日締め`;
+      filename = `月次勤怠集計_${year}年${month}月度_${closingLabel}.csv`;
       csvRows.push([
         '従業員ID', '従業員名', '適用勤怠ルール', '出勤日数', '総休憩時間(時間:分)', '総休憩分数', '総労働時間(時間:分)', '総労働分数'
       ]);
@@ -474,7 +493,8 @@ export default function MonthlyTimecardPage() {
 
     } else {
       // 3. 全社明細CSV
-      filename = `全社勤怠明細_${year}年${month}月.csv`;
+      const closingLabel = closingDay === 0 ? '末日締め' : `${closingDay}日締め`;
+      filename = `全社勤怠明細_${year}年${month}月度_${closingLabel}.csv`;
       csvRows.push([
         '日付', '従業員名', '適用勤怠ルール', '勤務区分', '打刻出勤', '打刻退勤', '計算上出勤', '計算上退勤', '休憩時間(分)', '労働時間', '実労働分数', '管理者メモ'
       ]);
@@ -606,15 +626,29 @@ export default function MonthlyTimecardPage() {
 
   // カレンダー形式の個人別タイムカード生成
   const generateWorkerCalendar = (workerId: string) => {
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
     const calendar = [];
-
     const workerLogs = logs.filter(l => l.worker_id === workerId);
 
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
+    // 締日に応じた連続日付リスト（例: 8/21〜9/20 または 9/1〜9/30）を取得
+    const dates = (periodInfo.startDate && periodInfo.endDate)
+      ? getDateListBetween(periodInfo.startDate, periodInfo.endDate)
+      : [];
+
+    if (dates.length === 0) {
+      const year = currentMonth.getFullYear();
+      const month = currentMonth.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
+        const log = workerLogs.find(l => l.date === dateStr);
+        calendar.push({ date: dateStr, day: d, log: log || null });
+      }
+      return calendar;
+    }
+
+    for (const dateStr of dates) {
+      const parts = dateStr.split('-');
+      const d = parseInt(parts[2], 10);
       const log = workerLogs.find(l => l.date === dateStr);
       calendar.push({
         date: dateStr,
@@ -637,6 +671,19 @@ export default function MonthlyTimecardPage() {
           <p className="text-sm font-bold text-slate-500 mt-1">
             各スタッフの勤怠ルール（定時丸め・休憩時間補正）に基づいた労働時間の集計です。
           </p>
+          <div className="flex flex-wrap items-center gap-2 mt-2.5">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-xl text-xs font-black shadow-xs">
+              <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span>集計期間: {periodInfo.label || '算出中...'}</span>
+            </span>
+            <Link
+              href="/hr/settings"
+              className="inline-flex items-center gap-1 text-xs font-bold text-slate-400 hover:text-indigo-600 hover:underline transition-colors ml-1"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>締日設定を変更</span>
+            </Link>
+          </div>
         </div>
         
         <div className="flex items-center gap-2">

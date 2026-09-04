@@ -89,3 +89,76 @@ export function parseTimeToMinutes(val: string | null | undefined): number | nul
   return null;
 }
 
+/**
+ * 勤怠締日（0=末日、20=20日、15=15日等）に基づき、
+ * 指定された年月（例: 2026年9月度）の集計開始日と終了日を算出
+ */
+export function getAttendancePeriod(
+  year: number,
+  month: number, // 1〜12
+  closingDay: number = 0
+): { startDate: string; endDate: string; label: string } {
+  const cleanClosingDay = Number(closingDay) || 0;
+
+  if (cleanClosingDay === 0 || cleanClosingDay >= 29) {
+    // 末日締め（当月1日〜当月末日）
+    const monthStr = String(month).padStart(2, '0');
+    const lastDay = new Date(year, month, 0).getDate();
+    const startDate = `${year}-${monthStr}-01`;
+    const endDate = `${year}-${monthStr}-${String(lastDay).padStart(2, '0')}`;
+    return {
+      startDate,
+      endDate,
+      label: `${year}/${monthStr}/01 〜 ${year}/${monthStr}/${String(lastDay).padStart(2, '0')} (末日締め)`
+    };
+  }
+
+  // 1〜28日締め（例: 20日締めなら 前月21日 〜 当月20日）
+  // 前月の年月を算出
+  let prevYear = year;
+  let prevMonth = month - 1;
+  if (prevMonth === 0) {
+    prevMonth = 12;
+    prevYear = year - 1;
+  }
+
+  const prevMonthStr = String(prevMonth).padStart(2, '0');
+  const targetMonthStr = String(month).padStart(2, '0');
+
+  // 開始日: 前月の (締日 + 1) 日
+  const startDayNum = cleanClosingDay + 1;
+  const startDayStr = String(startDayNum).padStart(2, '0');
+  const startDate = `${prevYear}-${prevMonthStr}-${startDayStr}`;
+
+  // 終了日: 当月の 締日
+  const endDayStr = String(cleanClosingDay).padStart(2, '0');
+  const endDate = `${year}-${targetMonthStr}-${endDayStr}`;
+
+  return {
+    startDate,
+    endDate,
+    label: `${prevYear}/${prevMonthStr}/${startDayStr} 〜 ${year}/${targetMonthStr}/${endDayStr} (${cleanClosingDay}日締め)`
+  };
+}
+
+/**
+ * 開始日 (YYYY-MM-DD) から 終了日 (YYYY-MM-DD) までの連続した日付文字列の配列を返す
+ */
+export function getDateListBetween(startDateStr: string, endDateStr: string): string[] {
+  const dates: string[] = [];
+  const start = new Date(startDateStr);
+  const end = new Date(endDateStr);
+
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
+    return [startDateStr];
+  }
+
+  let curr = new Date(start);
+  while (curr <= end) {
+    dates.push(getJSTDate(curr));
+    curr.setDate(curr.getDate() + 1);
+  }
+
+  return dates;
+}
+
