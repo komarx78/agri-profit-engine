@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getJSTDate, getJSTTime } from '@/lib/dateUtils';
 
 // Supabase client (管理者権限)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -24,11 +25,9 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'LINE Token is not configured' }, { status: 500 });
     }
 
-    // JSTで今日の日付と時刻を取得
-    const today = new Date();
-    today.setHours(today.getHours() + 9);
-    const dateStr = today.toISOString().split('T')[0];
-    const currentHourMin = today.toISOString().split('T')[1].substring(0, 5); // "17:30"
+    // JSTで今日の日付と時刻を安全に取得
+    const dateStr = getJSTDate();
+    const currentHourMin = getJSTTime(); // "17:30"
 
     // 1. 今日の未退勤ログを取得
     let logQuery = supabase

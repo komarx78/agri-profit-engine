@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getJSTDate } from '@/lib/dateUtils';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Calendar, Save, Loader2, ChevronLeft, ChevronRight, Plus, Trash2, X, BarChart2, User, ChevronDown, ChevronUp, PieChart as PieChartIcon, Sprout } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
@@ -35,8 +36,8 @@ export default function CultivationSchedulePage() {
   const [isPanelLoading, setIsPanelLoading] = useState(false);
   
   // 新規入力用ステート
-  const [newWork, setNewWork] = useState({ date: new Date().toISOString().split('T')[0], type: '播種', duration: '', note: '' });
-  const [newSales, setNewSales] = useState({ date: new Date().toISOString().split('T')[0], quantity: '', price: '', channel: '直売所' });
+  const [newWork, setNewWork] = useState({ date: getJSTDate(), type: '播種', duration: '', note: '' });
+  const [newSales, setNewSales] = useState({ date: getJSTDate(), quantity: '', price: '', channel: '直売所' });
 
   // 8月〜7月の月配列
   const months = [8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7];

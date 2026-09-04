@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getJSTDate } from '@/lib/dateUtils';
 import { Users, Plus, Edit2, Trash2, X, Loader2, Save, Building, ShieldCheck, Clock } from 'lucide-react';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 
@@ -20,7 +21,7 @@ export default function HrEmployeesPage() {
     role: 'worker',
     hourly_wage: 1000,
     type: 'パート',
-    join_date: new Date().toISOString().split('T')[0],
+    join_date: getJSTDate(),
     weekly_days: 3,
     attendance_rule_id: '',
     standard_start_time: '08:00',
@@ -202,7 +203,7 @@ export default function HrEmployeesPage() {
         role: worker.role || 'worker',
         hourly_wage: worker.hourly_wage || 0,
         type: worker.type || 'パート',
-        join_date: worker.join_date || new Date().toISOString().split('T')[0],
+        join_date: worker.join_date || getJSTDate(),
         weekly_days: worker.weekly_days || 3,
         attendance_rule_id: ruleId,
         standard_start_time: finalStart,
@@ -221,7 +222,7 @@ export default function HrEmployeesPage() {
         role: 'worker',
         hourly_wage: 1000,
         type: 'パート',
-        join_date: new Date().toISOString().split('T')[0],
+        join_date: getJSTDate(),
         weekly_days: 3,
         attendance_rule_id: defaultRule ? defaultRule.id : '',
         standard_start_time: defaultRule?.start_time ? defaultRule.start_time.substring(0, 5) : (companySettings?.default_start_time ? companySettings.default_start_time.substring(0, 5) : '08:00'),
