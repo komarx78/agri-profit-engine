@@ -44,18 +44,27 @@ export default function WorkLedgerPage() {
         if (tenantId) {
           const { data: compData } = await supabase
             .from('company_settings')
-            .select('attendance_closing_day')
+            .select('attendance_closing_day, attendance_rules')
             .eq('user_id', tenantId)
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
 
           if (compData && compData.attendance_closing_day !== undefined && compData.attendance_closing_day !== null) {
-            resolvedDay = Number(compData.attendance_closing_day);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem(`agri_attendance_closing_day_${tenantId}`, String(resolvedDay));
-              localStorage.setItem('agri_attendance_closing_day', String(resolvedDay));
+            const dbVal = Number(compData.attendance_closing_day);
+            if (dbVal > 0) {
+              resolvedDay = dbVal;
             }
+          }
+          if (resolvedDay === 0 && compData?.attendance_rules && Array.isArray(compData.attendance_rules)) {
+            const meta = compData.attendance_rules.find((r: any) => r.__metadata);
+            if (meta?.closing_day) {
+              resolvedDay = Number(meta.closing_day);
+            }
+          }
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`agri_attendance_closing_day_${tenantId}`, String(resolvedDay));
+            localStorage.setItem('agri_attendance_closing_day', String(resolvedDay));
           }
         }
 

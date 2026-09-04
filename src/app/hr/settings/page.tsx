@@ -36,25 +36,48 @@ export default function HrSettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // 締日の即時変更＆LocalStorage同期
-  const handleSelectClosingDay = (day: number) => {
+  // 締日の即時変更＆LocalStorage同期＆バックグラウンドDB保存
+  const handleSelectClosingDay = async (day: number) => {
     setClosingDay(day);
     if (typeof window !== 'undefined') {
       localStorage.setItem('agri_attendance_closing_day', String(day));
-      getCurrentTenantId().then(tId => {
-        if (tId) localStorage.setItem(`agri_attendance_closing_day_${tId}`, String(day));
-      });
+      const tId = await getCurrentTenantId();
+      if (tId) {
+        localStorage.setItem(`agri_attendance_closing_day_${tId}`, String(day));
+        // バックグラウンドでDBにも即時保存
+        try {
+          if (settingsId) {
+            await supabase.from('company_settings').update({
+              attendance_closing_day: day,
+              updated_at: new Date().toISOString()
+            }).eq('id', settingsId).eq('user_id', tId);
+          }
+        } catch (e) {
+          console.warn('Background closing day save warning:', e);
+        }
+      }
     }
   };
 
-  // 支払日の即時変更＆LocalStorage同期
-  const handleSelectPaymentDayRule = (rule: string) => {
+  // 支払日の即時変更＆LocalStorage同期＆バックグラウンドDB保存
+  const handleSelectPaymentDayRule = async (rule: string) => {
     setPaymentDayRule(rule);
     if (typeof window !== 'undefined') {
       localStorage.setItem('agri_payment_day_rule', rule);
-      getCurrentTenantId().then(tId => {
-        if (tId) localStorage.setItem(`agri_payment_day_rule_${tId}`, rule);
-      });
+      const tId = await getCurrentTenantId();
+      if (tId) {
+        localStorage.setItem(`agri_payment_day_rule_${tId}`, rule);
+        try {
+          if (settingsId) {
+            await supabase.from('company_settings').update({
+              payment_day_rule: rule,
+              updated_at: new Date().toISOString()
+            }).eq('id', settingsId).eq('user_id', tId);
+          }
+        } catch (e) {
+          console.warn('Background payment rule save warning:', e);
+        }
+      }
     }
   };
 
@@ -81,7 +104,7 @@ export default function HrSettingsPage() {
           }
         }
 
-        // 2. company_settings の取得（DBにデータがあれば優先同期）
+        // 2. company_settings の取得
         let compRules: any[] = [];
         const { data: compData } = await supabase
           .from('company_settings')
@@ -93,15 +116,37 @@ export default function HrSettingsPage() {
 
         if (compData) {
           setSettingsId(compData.id);
-          // DBの値をSSOTとして最優先反映し、LocalStorageも最新化
+          
+          // 締日の解決:
+          // DBに明示的な値 (1〜28) が入っていればDB優先
+          // DBが0(または未定義)で、ローカルに有効値(20等)があればローカル維持
+          let resolvedClosing = localClosingVal ?? 0;
           if (compData.attendance_closing_day !== undefined && compData.attendance_closing_day !== null) {
             const dbVal = Number(compData.attendance_closing_day);
-            setClosingDay(dbVal);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem(`agri_attendance_closing_day_${tenantId}`, String(dbVal));
-              localStorage.setItem('agri_attendance_closing_day', String(dbVal));
+            if (dbVal > 0) {
+              resolvedClosing = dbVal;
+            } else if (localClosingVal !== null && localClosingVal > 0) {
+              resolvedClosing = localClosingVal;
+            } else {
+              resolvedClosing = 0;
             }
           }
+
+          // JSONBバックアップからも念のため確認
+          if (resolvedClosing === 0 && compData.attendance_rules && Array.isArray(compData.attendance_rules)) {
+            const meta = compData.attendance_rules.find((r: any) => r.__metadata);
+            if (meta?.closing_day) {
+              resolvedClosing = Number(meta.closing_day);
+            }
+          }
+
+          setClosingDay(resolvedClosing);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`agri_attendance_closing_day_${tenantId}`, String(resolvedClosing));
+            localStorage.setItem('agri_attendance_closing_day', String(resolvedClosing));
+          }
+
+          // 支払日ルールの解決
           if (compData.payment_day_rule) {
             setPaymentDayRule(compData.payment_day_rule);
             if (typeof window !== 'undefined') {
@@ -116,7 +161,7 @@ export default function HrSettingsPage() {
             setLineNotificationTime(compData.line_notification_time.substring(0, 5));
           }
           if (compData.attendance_rules && Array.isArray(compData.attendance_rules) && compData.attendance_rules.length > 0) {
-            compRules = compData.attendance_rules;
+            compRules = compData.attendance_rules.filter((r: any) => !r.__metadata);
           }
         }
 
@@ -337,7 +382,23 @@ export default function HrSettingsPage() {
         }
       }
 
-      // 3. company_settings を更新 (attendance_rules JSONB も一緒に保存して完全バックアップ)
+      // 3. company_settings を更新 (attendance_rules JSONB にも締日・支払日をメタデータとして含めて完全バックアップ)
+      const rulesToSave = [
+        ...updatedRules,
+        {
+          id: '__metadata__',
+          name: '__metadata__',
+          start_time: '00:00',
+          end_time: '00:00',
+          rest_minutes: 0,
+          auto_round_out_time: false,
+          is_default: false,
+          __metadata: true,
+          closing_day: Number(closingDay) || 0,
+          payment_day_rule: paymentDayRule || '翌月25日払い'
+        } as any
+      ];
+
       const compPayload: any = {
         user_id: tenantId,
         default_start_time: defaultRule.start_time.length === 5 ? defaultRule.start_time + ':00' : defaultRule.start_time,
@@ -348,7 +409,7 @@ export default function HrSettingsPage() {
         payment_day_rule: paymentDayRule || '翌月25日払い',
         line_notification_offset_minutes: Number(lineNotificationOffsetMinutes) || 30,
         line_notification_time: lineNotificationTime.length === 5 ? lineNotificationTime + ':00' : lineNotificationTime,
-        attendance_rules: updatedRules,
+        attendance_rules: rulesToSave,
         updated_at: new Date().toISOString()
       };
 

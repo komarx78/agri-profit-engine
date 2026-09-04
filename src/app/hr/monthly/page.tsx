@@ -80,23 +80,40 @@ export default function MonthlyTimecardPage() {
 
       if (cData) setCompanySettings(cData);
 
-      // 勤怠締日の解決（DB優先 ➔ LocalStorage ➔ デフォルト末日:0）
-      let resolvedClosingDay = 0;
+      // 勤怠締日の解決（DB有効値 ➔ LocalStorage有効値 ➔ JSONBメタデータ ➔ デフォルト末日:0）
+      let localClosingVal: number | null = null;
       if (typeof window !== 'undefined') {
         const localClosing = (tenantId ? localStorage.getItem(`agri_attendance_closing_day_${tenantId}`) : null) || localStorage.getItem('agri_attendance_closing_day');
         if (localClosing !== null && localClosing !== undefined && localClosing !== '') {
-          resolvedClosingDay = Number(localClosing);
+          localClosingVal = Number(localClosing);
         }
       }
 
+      let resolvedClosingDay = localClosingVal ?? 0;
       if (cData && cData.attendance_closing_day !== undefined && cData.attendance_closing_day !== null) {
-        resolvedClosingDay = Number(cData.attendance_closing_day);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(`agri_attendance_closing_day_${tenantId}`, String(resolvedClosingDay));
-          localStorage.setItem('agri_attendance_closing_day', String(resolvedClosingDay));
+        const dbVal = Number(cData.attendance_closing_day);
+        if (dbVal > 0) {
+          resolvedClosingDay = dbVal;
+        } else if (localClosingVal !== null && localClosingVal > 0) {
+          resolvedClosingDay = localClosingVal;
+        } else {
+          resolvedClosingDay = 0;
         }
       }
+
+      // JSONBバックアップからの復元
+      if (resolvedClosingDay === 0 && cData?.attendance_rules && Array.isArray(cData.attendance_rules)) {
+        const meta = cData.attendance_rules.find((r: any) => r.__metadata);
+        if (meta?.closing_day) {
+          resolvedClosingDay = Number(meta.closing_day);
+        }
+      }
+
       setClosingDay(resolvedClosingDay);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`agri_attendance_closing_day_${tenantId}`, String(resolvedClosingDay));
+        localStorage.setItem('agri_attendance_closing_day', String(resolvedClosingDay));
+      }
 
       // 締日に基づく正確な集計期間（開始日・終了日）を算出
       const year = currentMonth.getFullYear();

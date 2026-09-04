@@ -291,7 +291,7 @@ function PortalContent() {
           try {
             const { data: companyData } = await supabase
               .from('company_settings')
-              .select('company_name, attendance_closing_day, payment_day_rule')
+              .select('company_name, attendance_closing_day, payment_day_rule, attendance_rules')
               .eq('user_id', ownerId)
               .maybeSingle();
 
@@ -305,12 +305,22 @@ function PortalContent() {
               }
               if (companyData.attendance_closing_day !== undefined && companyData.attendance_closing_day !== null) {
                 const dbClosing = Number(companyData.attendance_closing_day);
-                resolvedClosing = dbClosing;
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem(`agri_attendance_closing_day_${ownerId}`, String(dbClosing));
-                  localStorage.setItem('agri_attendance_closing_day', String(dbClosing));
+                if (dbClosing > 0) {
+                  resolvedClosing = dbClosing;
                 }
               }
+              // JSONBバックアップからの復元
+              if (resolvedClosing === 0 && companyData.attendance_rules && Array.isArray(companyData.attendance_rules)) {
+                const meta = companyData.attendance_rules.find((r: any) => r.__metadata);
+                if (meta?.closing_day) {
+                  resolvedClosing = Number(meta.closing_day);
+                }
+              }
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(`agri_attendance_closing_day_${ownerId}`, String(resolvedClosing));
+                localStorage.setItem('agri_attendance_closing_day', String(resolvedClosing));
+              }
+
               if (companyData.payment_day_rule) {
                 resolvedPayment = companyData.payment_day_rule;
                 if (typeof window !== 'undefined') {
