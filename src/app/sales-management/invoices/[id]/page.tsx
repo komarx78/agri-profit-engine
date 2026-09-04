@@ -107,7 +107,7 @@ export default function InvoicePrintPage({ params }: { params: Promise<{ id: str
       }
 
       const subtotal = orders.reduce((sum, o) => sum + Number(o.total_amount), 0);
-      const tax = Math.floor(subtotal * 0.1);
+      const tax = Math.floor(subtotal * 0.08);
       const total = subtotal + tax;
       const res = await updateInvoiceAmounts(invoiceId, subtotal, tax, total);
 

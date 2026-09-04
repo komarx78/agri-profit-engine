@@ -35,6 +35,7 @@ import { getCurrentTenantId } from '@/lib/tenant';
 import { CultivationActionSheet, CultivationTarget } from '@/components/CultivationActionSheet';
 import { saveWorkerShareSettings, getWorkerShareSettings } from '@/app/actions/farm';
 import { generateComprehensiveSearchKeywords, isFuzzyMatch } from '@/lib/fuzzySearch';
+import { getJSTDate } from '@/lib/dateUtils';
 import Link from 'next/link';
 
 interface CultivationItem {
@@ -92,7 +93,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   const [searchSprayQuery, setSearchSprayQuery] = useState('');
   const [selectedPesticideIds, setSelectedPesticideIds] = useState<string[]>([]);
   const [isSprayModalOpen, setIsSprayModalOpen] = useState(false);
-  const [sprayDate, setSprayDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [sprayDate, setSprayDate] = useState<string>(() => getJSTDate());
   const [sprayWaterVolume, setSprayWaterVolume] = useState<string>('100');
   const [sprayMemo, setSprayMemo] = useState<string>('');
   const [isSavingSpray, setIsSavingSpray] = useState(false);
@@ -123,7 +124,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
 
   // 履歴の直接新規登録用ステート
   const [isDirectAddModalOpen, setIsDirectAddModalOpen] = useState(false);
-  const [directAddDate, setDirectAddDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [directAddDate, setDirectAddDate] = useState<string>(() => getJSTDate());
   const [directAddFieldId, setDirectAddFieldId] = useState<string>('');
   const [directAddCropId, setDirectAddCropId] = useState<string>('');
   const [directAddWorkType, setDirectAddWorkType] = useState<string>('収穫');
@@ -807,7 +808,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   // 作業記録の編集モーダルを開く
   const handleOpenEditModal = (log: any) => {
     setEditingLog(log);
-    setEditWorkDate(log.work_date || new Date().toISOString().split('T')[0]);
+    setEditWorkDate(log.work_date || getJSTDate());
     setEditFieldId(log.field_id || '');
     setEditCropId(log.crop_id || '');
     setEditWorkType(log.work_type || '農作業');

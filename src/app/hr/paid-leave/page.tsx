@@ -434,6 +434,7 @@ export default function PaidLeavePage() {
     e.preventDefault();
     try {
       const { error } = await supabase.from('leave_requests').insert([{
+        user_id: tenantId,
         worker_id: requestForm.worker_id,
         type: requestForm.type,
         start_date: requestForm.start_date,

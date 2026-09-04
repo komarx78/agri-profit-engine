@@ -2,6 +2,7 @@
 
 import { supabase } from '@/lib/supabase';
 import { getAdminSupabase } from '@/lib/supabase-admin';
+import { getJSTDate } from '@/lib/dateUtils';
 
 /**
  * サーバー側で管理者セッションを検証し、なりすまし（IDOR）を防止するヘルパー
@@ -448,13 +449,13 @@ export async function generateInvoicesForMonth(targetMonth: string, tenantId?: s
         }
       });
 
-      const tax = Math.floor(subtotal * 0.1);
+      const tax = Math.floor(subtotal * 0.08);
       const total = subtotal + tax;
 
       const invoiceData: any = {
         customer_id: customerId,
         target_month: targetMonth,
-        issue_date: new Date().toISOString().split('T')[0],
+        issue_date: getJSTDate(),
         subtotal,
         tax,
         total_amount: total,

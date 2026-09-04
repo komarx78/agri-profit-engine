@@ -5,15 +5,18 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { Table, Download, Loader2, Calendar as CalendarIcon, Briefcase } from 'lucide-react';
 import Papa from 'papaparse';
+import { getJSTDate } from '@/lib/dateUtils';
 
 export default function WorkLedgerPage() {
   const [workLogs, setWorkLogs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  // 期間指定フィルター (デフォルトは今月1日〜月末)
-  const today = new Date();
-  const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().substring(0, 10);
-  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().substring(0, 10);
+  // 期間指定フィルター (デフォルトは今月1日〜月末: JST安全算出)
+  const todayStr = getJSTDate();
+  const [y, m] = todayStr.split('-').map(Number);
+  const lastDate = new Date(y, m, 0).getDate();
+  const firstDay = `${y}-${String(m).padStart(2, '0')}-01`;
+  const lastDay = `${y}-${String(m).padStart(2, '0')}-${String(lastDate).padStart(2, '0')}`;
   
   const [startDate, setStartDate] = useState<string>(firstDay);
   const [endDate, setEndDate] = useState<string>(lastDay);

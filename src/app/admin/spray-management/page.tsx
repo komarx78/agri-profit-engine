@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getJSTDate } from '@/lib/dateUtils';
 import Link from 'next/link';
 
 interface PesticideDisplayItem {
@@ -60,7 +61,7 @@ function SprayManagementContent() {
   
   // 散布登録モーダル
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
-  const [sprayDate, setSprayDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [sprayDate, setSprayDate] = useState<string>(() => getJSTDate());
   const [waterVolume, setWaterVolume] = useState<string>('100');
   const [sprayMemo, setSprayMemo] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
@@ -250,6 +251,9 @@ function SprayManagementContent() {
 
     setIsSaving(true);
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error('農園テナントIDが特定できませんでした');
+
       const selectedPesticideObjects = pesticides.filter(p => selectedPesticideIds.includes(p.id));
       const pesticideNames = selectedPesticideObjects.map(p => `${p.name}(${p.dilution})`).join(' ＋ ');
       const racCodes = selectedPesticideObjects.map(p => p.racCode).join(', ');
@@ -257,6 +261,7 @@ function SprayManagementContent() {
       const timestamp = new Date().toISOString();
 
       const recordsToInsert = selectedFieldIds.map(fId => ({
+        user_id: tenantId,
         field_id: fId,
         crop_id: selectedCropId || null,
         work_date: sprayDate,
