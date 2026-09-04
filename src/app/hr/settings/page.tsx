@@ -36,6 +36,28 @@ export default function HrSettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // 締日の即時変更＆LocalStorage同期
+  const handleSelectClosingDay = (day: number) => {
+    setClosingDay(day);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('agri_attendance_closing_day', String(day));
+      getCurrentTenantId().then(tId => {
+        if (tId) localStorage.setItem(`agri_attendance_closing_day_${tId}`, String(day));
+      });
+    }
+  };
+
+  // 支払日の即時変更＆LocalStorage同期
+  const handleSelectPaymentDayRule = (rule: string) => {
+    setPaymentDayRule(rule);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('agri_payment_day_rule', rule);
+      getCurrentTenantId().then(tId => {
+        if (tId) localStorage.setItem(`agri_payment_day_rule_${tId}`, rule);
+      });
+    }
+  };
+
   useEffect(() => {
     async function fetchSettingsAndRules() {
       try {
@@ -45,7 +67,21 @@ export default function HrSettingsPage() {
           return;
         }
 
-        // 1. company_settings の取得
+        // 1. まずLocalStorageから即座に最新キャッシュを復元（体感速度＆未マイグレーション時対策）
+        let localClosingVal: number | null = null;
+        if (typeof window !== 'undefined') {
+          const localClosing = localStorage.getItem(`agri_attendance_closing_day_${tenantId}`) || localStorage.getItem('agri_attendance_closing_day');
+          if (localClosing !== null && localClosing !== undefined && localClosing !== '') {
+            localClosingVal = Number(localClosing);
+            setClosingDay(localClosingVal);
+          }
+          const localPayment = localStorage.getItem(`agri_payment_day_rule_${tenantId}`) || localStorage.getItem('agri_payment_day_rule');
+          if (localPayment) {
+            setPaymentDayRule(localPayment);
+          }
+        }
+
+        // 2. company_settings の取得（DBにデータがあれば優先同期）
         let compRules: any[] = [];
         const { data: compData } = await supabase
           .from('company_settings')
@@ -57,8 +93,12 @@ export default function HrSettingsPage() {
 
         if (compData) {
           setSettingsId(compData.id);
+          // DBに0以外の値が入っていればDB優先、DBが0でローカルに有効値(20等)があればローカル維持
           if (compData.attendance_closing_day !== undefined && compData.attendance_closing_day !== null) {
-            setClosingDay(Number(compData.attendance_closing_day));
+            const dbVal = Number(compData.attendance_closing_day);
+            if (dbVal > 0 || localClosingVal === null) {
+              setClosingDay(dbVal);
+            }
           }
           if (compData.payment_day_rule) {
             setPaymentDayRule(compData.payment_day_rule);
@@ -71,18 +111,6 @@ export default function HrSettingsPage() {
           }
           if (compData.attendance_rules && Array.isArray(compData.attendance_rules) && compData.attendance_rules.length > 0) {
             compRules = compData.attendance_rules;
-          }
-        }
-
-        // LocalStorage から締日フォールバック復元
-        if (typeof window !== 'undefined') {
-          const localClosing = localStorage.getItem(`agri_attendance_closing_day_${tenantId}`);
-          if (localClosing !== null && localClosing !== undefined && (!compData || compData.attendance_closing_day === undefined)) {
-            setClosingDay(Number(localClosing));
-          }
-          const localPayment = localStorage.getItem(`agri_payment_day_rule_${tenantId}`);
-          if (localPayment && (!compData || !compData.payment_day_rule)) {
-            setPaymentDayRule(localPayment);
           }
         }
 
@@ -351,6 +379,8 @@ export default function HrSettingsPage() {
         localStorage.setItem(`agri_attendance_rules_${tenantId}`, JSON.stringify(updatedRules));
         localStorage.setItem(`agri_attendance_closing_day_${tenantId}`, String(closingDay));
         localStorage.setItem(`agri_payment_day_rule_${tenantId}`, paymentDayRule);
+        localStorage.setItem('agri_attendance_closing_day', String(closingDay));
+        localStorage.setItem('agri_payment_day_rule', paymentDayRule);
       }
 
       setRules(updatedRules);
@@ -429,7 +459,7 @@ export default function HrSettingsPage() {
                     <button
                       key={p.day}
                       type="button"
-                      onClick={() => setClosingDay(p.day)}
+                      onClick={() => handleSelectClosingDay(p.day)}
                       className={`p-2.5 rounded-xl border text-left transition-all ${
                         closingDay === p.day
                           ? 'border-indigo-600 bg-indigo-50/70 text-indigo-900 shadow-xs ring-2 ring-indigo-500/20'
@@ -458,9 +488,9 @@ export default function HrSettingsPage() {
                       onChange={(e) => {
                         const val = parseInt(e.target.value);
                         if (!isNaN(val) && val >= 1 && val <= 28) {
-                          setClosingDay(val);
+                          handleSelectClosingDay(val);
                         } else if (e.target.value === '') {
-                          setClosingDay(0);
+                          handleSelectClosingDay(0);
                         }
                       }}
                       className="w-20 p-2 bg-slate-50 border border-slate-200 rounded-xl font-black text-center text-slate-800 text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500"
@@ -507,7 +537,7 @@ export default function HrSettingsPage() {
                     <button
                       key={p}
                       type="button"
-                      onClick={() => setPaymentDayRule(p)}
+                      onClick={() => handleSelectPaymentDayRule(p)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                         paymentDayRule === p
                           ? 'bg-emerald-600 text-white shadow-xs'
@@ -526,7 +556,7 @@ export default function HrSettingsPage() {
                   <input
                     type="text"
                     value={paymentDayRule}
-                    onChange={(e) => setPaymentDayRule(e.target.value)}
+                    onChange={(e) => handleSelectPaymentDayRule(e.target.value)}
                     placeholder="例: 翌月25日払い (土日祝は前営業日)"
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:bg-white"
                   />

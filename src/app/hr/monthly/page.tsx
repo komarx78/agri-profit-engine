@@ -80,15 +80,17 @@ export default function MonthlyTimecardPage() {
 
       if (cData) setCompanySettings(cData);
 
-      // 勤怠締日の解決（DB ➔ LocalStorage ➔ デフォルト末日:0）
+      // 勤怠締日の解決（LocalStorage最優先 ➔ DB ➔ デフォルト末日:0）
       let resolvedClosingDay = 0;
-      if (cData && cData.attendance_closing_day !== undefined && cData.attendance_closing_day !== null) {
-        resolvedClosingDay = Number(cData.attendance_closing_day);
-      } else if (typeof window !== 'undefined') {
-        const localClosing = localStorage.getItem(`agri_attendance_closing_day_${tenantId}`);
-        if (localClosing !== null && localClosing !== undefined) {
+      if (typeof window !== 'undefined') {
+        const localClosing = (tenantId ? localStorage.getItem(`agri_attendance_closing_day_${tenantId}`) : null) || localStorage.getItem('agri_attendance_closing_day');
+        if (localClosing !== null && localClosing !== undefined && localClosing !== '') {
           resolvedClosingDay = Number(localClosing);
         }
+      }
+
+      if (resolvedClosingDay === 0 && cData && cData.attendance_closing_day !== undefined && cData.attendance_closing_day !== null) {
+        resolvedClosingDay = Number(cData.attendance_closing_day);
       }
       setClosingDay(resolvedClosingDay);
 

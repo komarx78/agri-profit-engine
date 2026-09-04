@@ -3,16 +3,18 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId, getTenantWorkerIds } from '@/lib/tenant';
-import { Clock, Users, Calendar as CalendarIcon, Coffee, Sun, CloudRain, ShieldCheck, ArrowRight, Save, Loader2, AlertCircle } from 'lucide-react';
+import { Clock, Users, Calendar as CalendarIcon, Coffee, Sun, CloudRain, ShieldCheck, ArrowRight, Save, Loader2, AlertCircle, Settings, FileSpreadsheet, Calendar } from 'lucide-react';
 import Link from 'next/link';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
-import { getJSTDate, formatDisplayTime } from '@/lib/dateUtils';
+import { getJSTDate, formatDisplayTime, getAttendancePeriod } from '@/lib/dateUtils';
 
 export default function HrDashboardPage() {
   const [attendanceLogs, setAttendanceLogs] = useState<any[]>([]);
   const [workLogs, setWorkLogs] = useState<any[]>([]);
   const [workers, setWorkers] = useState<any[]>([]);
   const [attendanceRules, setAttendanceRules] = useState<any[]>([]);
+  const [closingDay, setClosingDay] = useState<number>(0);
+  const [paymentDayRule, setPaymentDayRule] = useState<string>('翌月25日払い');
   const [isLoading, setIsLoading] = useState(true);
 
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
@@ -33,6 +35,39 @@ export default function HrDashboardPage() {
         }
 
         const dateStr = getJSTDate();
+
+        // 0. 勤怠締日・支払日設定の取得 (DB & LocalStorage フォールバック)
+        try {
+          if (typeof window !== 'undefined') {
+            const localClosing = localStorage.getItem(`agri_attendance_closing_day_${tenantId}`) || localStorage.getItem('agri_attendance_closing_day');
+            if (localClosing !== null && localClosing !== undefined) {
+              setClosingDay(Number(localClosing));
+            }
+            const localPayment = localStorage.getItem(`agri_payment_day_rule_${tenantId}`) || localStorage.getItem('agri_payment_day_rule');
+            if (localPayment) {
+              setPaymentDayRule(localPayment);
+            }
+          }
+
+          const { data: compData } = await supabase
+            .from('company_settings')
+            .select('*')
+            .eq('user_id', tenantId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (compData) {
+            if (compData.attendance_closing_day !== undefined && compData.attendance_closing_day !== null) {
+              setClosingDay(Number(compData.attendance_closing_day));
+            }
+            if (compData.payment_day_rule) {
+              setPaymentDayRule(compData.payment_day_rule);
+            }
+          }
+        } catch (e) {
+          console.warn('closing day fetch warning:', e);
+        }
 
         // 1. 自社テナントの従業員一覧を取得
         const { data: wData } = await supabase
@@ -172,6 +207,59 @@ export default function HrDashboardPage() {
     <AdminOnlyGuard>
       <div className="min-h-screen bg-slate-50">
         <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+          {/* ページヘッダー ＆ 全社締日ステータスバー */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2.5">
+                  <span className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black">
+                    <Clock className="w-5 h-5" />
+                  </span>
+                  本日の勤怠・打刻モニタリング
+                </h1>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {(() => {
+                  const now = new Date();
+                  const period = getAttendancePeriod(now.getFullYear(), now.getMonth() + 1, closingDay);
+                  const closingLabel = closingDay === 0 ? '末日締め' : `${closingDay}日締め`;
+                  return (
+                    <>
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 border border-indigo-200/70 text-indigo-700 rounded-lg text-xs font-bold">
+                        <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>全社締日: <strong>{closingLabel}</strong></span>
+                        <span className="text-indigo-400">|</span>
+                        <span>当月度: {period.startDate} 〜 {period.endDate}</span>
+                      </div>
+                      <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 border border-emerald-200/70 text-emerald-700 rounded-lg text-xs font-bold">
+                        <span>給与支給日: {paymentDayRule}</span>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0">
+              <Link
+                href="/hr/settings"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-700 text-xs font-bold transition-all"
+                title="締日や勤怠ルールを変更"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span>締日・ルール設定</span>
+              </Link>
+              <Link
+                href="/hr/monthly"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs hover:shadow transition-all"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>月次タイムカード・給与集計</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+
           {/* サマリーカード */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">

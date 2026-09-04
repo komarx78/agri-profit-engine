@@ -3,15 +3,16 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
-import { Table, Download, Loader2, Calendar as CalendarIcon, Briefcase } from 'lucide-react';
+import { Table, Download, Loader2, Calendar as CalendarIcon, Briefcase, Calendar, Sparkles } from 'lucide-react';
 import Papa from 'papaparse';
-import { getJSTDate } from '@/lib/dateUtils';
+import { getJSTDate, getAttendancePeriod } from '@/lib/dateUtils';
 
 export default function WorkLedgerPage() {
   const [workLogs, setWorkLogs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [closingDay, setClosingDay] = useState<number>(0);
   
-  // 期間指定フィルター (デフォルトは今月1日〜月末: JST安全算出)
+  // 初期期間の計算（締日未ロード時は当月1日〜末日）
   const todayStr = getJSTDate();
   const [y, m] = todayStr.split('-').map(Number);
   const lastDate = new Date(y, m, 0).getDate();
@@ -20,11 +21,84 @@ export default function WorkLedgerPage() {
   
   const [startDate, setStartDate] = useState<string>(firstDay);
   const [endDate, setEndDate] = useState<string>(lastDay);
+  const [activePreset, setActivePreset] = useState<string>('current-period');
   
   // 表示モード (時間 or 人件費 or 資材費 or 総コスト)
   const [viewMode, setViewMode] = useState<'hours' | 'cost' | 'materialCost' | 'totalCost'>('hours');
 
   const [salesLogs, setSalesLogs] = useState<any[]>([]);
+
+  // 1. 初回マウント時に締日設定を取得し、初期集計期間を締日に連動させる
+  useEffect(() => {
+    async function initClosingDay() {
+      try {
+        const tenantId = await getCurrentTenantId();
+        let resolvedDay = 0;
+        if (typeof window !== 'undefined') {
+          const localClosing = (tenantId ? localStorage.getItem(`agri_attendance_closing_day_${tenantId}`) : null) || localStorage.getItem('agri_attendance_closing_day');
+          if (localClosing !== null && localClosing !== undefined) {
+            resolvedDay = Number(localClosing);
+          }
+        }
+
+        if (tenantId) {
+          const { data: compData } = await supabase
+            .from('company_settings')
+            .select('attendance_closing_day')
+            .eq('user_id', tenantId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (compData && compData.attendance_closing_day !== undefined && compData.attendance_closing_day !== null) {
+            resolvedDay = Number(compData.attendance_closing_day);
+          }
+        }
+
+        setClosingDay(resolvedDay);
+        // 締日サイクルで当月度の期間をセット
+        const now = new Date();
+        const p = getAttendancePeriod(now.getFullYear(), now.getMonth() + 1, resolvedDay);
+        setStartDate(p.startDate);
+        setEndDate(p.endDate);
+      } catch (e) {
+        console.warn('Closing day init warning:', e);
+      }
+    }
+    initClosingDay();
+  }, []);
+
+  // 期間プリセットの切り替えハンドラ
+  const applyPeriodPreset = (preset: 'current-period' | 'prev-period' | 'current-month' | 'prev-month') => {
+    setActivePreset(preset);
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth() + 1;
+
+    if (preset === 'current-period') {
+      const p = getAttendancePeriod(curYear, curMonth, closingDay);
+      setStartDate(p.startDate);
+      setEndDate(p.endDate);
+    } else if (preset === 'prev-period') {
+      const prevMonth = curMonth === 1 ? 12 : curMonth - 1;
+      const prevYear = curMonth === 1 ? curYear - 1 : curYear;
+      const p = getAttendancePeriod(prevYear, prevMonth, closingDay);
+      setStartDate(p.startDate);
+      setEndDate(p.endDate);
+    } else if (preset === 'current-month') {
+      const monthStr = String(curMonth).padStart(2, '0');
+      const ld = new Date(curYear, curMonth, 0).getDate();
+      setStartDate(`${curYear}-${monthStr}-01`);
+      setEndDate(`${curYear}-${monthStr}-${String(ld).padStart(2, '0')}`);
+    } else if (preset === 'prev-month') {
+      const prevM = curMonth === 1 ? 12 : curMonth - 1;
+      const prevY = curMonth === 1 ? curYear - 1 : curYear;
+      const monthStr = String(prevM).padStart(2, '0');
+      const ld = new Date(prevY, prevM, 0).getDate();
+      setStartDate(`${prevY}-${monthStr}-01`);
+      setEndDate(`${prevY}-${monthStr}-${String(ld).padStart(2, '0')}`);
+    }
+  };
 
   useEffect(() => {
     fetchLogs();
@@ -221,27 +295,91 @@ export default function WorkLedgerPage() {
       </div>
 
       {/* コントロールパネル */}
-      <div className="bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:flex-wrap items-start md:items-center gap-4 md:gap-6">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full md:w-auto">
-          <label className="text-slate-500 font-bold flex items-center gap-2 shrink-0">
-            <CalendarIcon className="w-5 h-5" /> 対象期間:
-          </label>
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-indigo-500"
-          />
-          <span className="text-slate-400 font-bold">〜</span>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-none focus:border-indigo-500"
-          />
+      <div className="bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+        {/* 上段: 期間指定 ＆ プリセットボタン */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full lg:w-auto">
+            <label className="text-slate-700 font-black text-xs sm:text-sm flex items-center gap-2 shrink-0">
+              <CalendarIcon className="w-4 h-4 text-indigo-600" /> 対象期間:
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setActivePreset('custom');
+                }}
+                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 text-xs sm:text-sm focus:outline-none focus:border-indigo-500"
+              />
+              <span className="text-slate-400 font-bold">〜</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setActivePreset('custom');
+                }}
+                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 text-xs sm:text-sm focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+          </div>
+
+          {/* プリセットボタン群 */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-400 mr-1 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-indigo-500" />
+              <span>プリセット:</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => applyPeriodPreset('current-period')}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                activePreset === 'current-period'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100/80'
+              }`}
+            >
+              当月度 ({closingDay === 0 ? '末日締め' : `${closingDay}日締め`})
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPeriodPreset('prev-period')}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                activePreset === 'prev-period'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+              }`}
+            >
+              前月度
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPeriodPreset('current-month')}
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all ${
+                activePreset === 'current-month'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+              }`}
+            >
+              今月 (カレンダー)
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPeriodPreset('prev-month')}
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all ${
+                activePreset === 'prev-month'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+              }`}
+            >
+              先月 (カレンダー)
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 md:border-l border-slate-200 md:pl-6 w-full md:w-auto pt-2 md:pt-0 border-t md:border-t-0">
+        {/* 下段: 表示切替 */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full">
           <label className="text-slate-500 font-bold flex items-center gap-2 shrink-0">
             <Briefcase className="w-5 h-5" /> 表示切替:
           </label>

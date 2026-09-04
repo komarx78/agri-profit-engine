@@ -3,8 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
-import { Settings, Save, CheckCircle2, Building, MapPin, Phone, FileText, Landmark } from 'lucide-react';
+import { Settings, Save, CheckCircle2, Building, MapPin, Phone, FileText, Landmark, Calendar, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
+import { getAttendancePeriod } from '@/lib/dateUtils';
 
 export default function SettingsPage() {
   const [settingsId, setSettingsId] = useState<string | null>(null);
@@ -17,6 +19,9 @@ export default function SettingsPage() {
     bank_info: '',
   });
 
+  const [closingDay, setClosingDay] = useState<number>(0);
+  const [paymentDayRule, setPaymentDayRule] = useState<string>('翌月25日払い');
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -28,6 +33,18 @@ export default function SettingsPage() {
         if (!tenantId) {
           setIsLoading(false);
           return;
+        }
+
+        // LocalStorage からキャッシュ読み込み
+        if (typeof window !== 'undefined') {
+          const localClosing = (tenantId ? localStorage.getItem(`agri_attendance_closing_day_${tenantId}`) : null) || localStorage.getItem('agri_attendance_closing_day');
+          if (localClosing !== null && localClosing !== undefined) {
+            setClosingDay(Number(localClosing));
+          }
+          const localPayment = (tenantId ? localStorage.getItem(`agri_payment_day_rule_${tenantId}`) : null) || localStorage.getItem('agri_payment_day_rule');
+          if (localPayment) {
+            setPaymentDayRule(localPayment);
+          }
         }
 
         const { data, error } = await supabase
@@ -46,6 +63,12 @@ export default function SettingsPage() {
             invoice_number: data.invoice_number || '',
             bank_info: data.bank_info || '',
           });
+          if (data.attendance_closing_day !== undefined && data.attendance_closing_day !== null) {
+            setClosingDay(Number(data.attendance_closing_day));
+          }
+          if (data.payment_day_rule) {
+            setPaymentDayRule(data.payment_day_rule);
+          }
         }
       } catch (err) {
         console.error(err);
@@ -128,6 +151,47 @@ export default function SettingsPage() {
         <p className="text-slate-500 mt-2 font-medium">
           ここで設定した情報は、請求書の自動発行時にヘッダーや振込先として印字されます。
         </p>
+      </div>
+
+      {/* 全社勤怠締日 ＆ 給与支払日 連動カード */}
+      <div className="bg-gradient-to-r from-indigo-50/80 via-blue-50/50 to-slate-50 p-5 rounded-2xl border border-indigo-100 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 bg-indigo-600 text-white rounded-lg">
+              <Calendar className="w-4 h-4" />
+            </span>
+            <h2 className="text-sm font-black text-slate-800">
+              全社勤怠締日 ＆ 給与支払日設定
+            </h2>
+          </div>
+          <p className="text-xs text-slate-500 font-bold pl-8">
+            月次タイムカード・作業台帳・給与計算の全社集計サイクル
+          </p>
+          <div className="flex flex-wrap items-center gap-2 pl-8 pt-1">
+            <span className="px-2.5 py-0.5 bg-indigo-100 text-indigo-800 rounded-md font-black text-xs">
+              {closingDay === 0 ? '末日締め' : `${closingDay}日締め`}
+            </span>
+            <span className="text-xs font-bold text-slate-500">
+              ({(() => {
+                const now = new Date();
+                const p = getAttendancePeriod(now.getFullYear(), now.getMonth() + 1, closingDay);
+                return p.label;
+              })()})
+            </span>
+            <span className="text-slate-300">|</span>
+            <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-md font-black text-xs">
+              {paymentDayRule}
+            </span>
+          </div>
+        </div>
+
+        <Link
+          href="/hr/settings"
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-xl font-black text-xs shadow-2xs hover:shadow-xs transition-all shrink-0 self-start sm:self-center"
+        >
+          <span>締日・労務設定を変更</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
       </div>
 
       <form onSubmit={handleSave} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
