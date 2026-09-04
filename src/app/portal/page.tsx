@@ -19,7 +19,7 @@ import dynamic from 'next/dynamic';
 import VideoPlayerWithSubtitles, { Narration, TrimRange } from '@/components/VideoPlayerWithSubtitles';
 import { t, getTranslatedName, getTranslatedWorkType, getWeekdayName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
-import { getPortalTasks, submitAttendance } from '@/app/actions/farm';
+import { getPortalTasks, submitAttendance, submitLeaveRequest, getWorkerLeaveRequests } from '@/app/actions/farm';
 import { translateSingleText } from '@/app/actions/translate';
 import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import Link from 'next/link';
@@ -611,14 +611,19 @@ function PortalContent() {
       // 直近の休暇申請履歴（本人以外の他人の申請データを100%混入させない）
       const activeWorkerId = targetWorker?.id || (profile && profile.id);
       if (activeWorkerId) {
-        const { data: reqData } = await supabase
-          .from('leave_requests')
-          .select('*, workers!inner(name, user_id)')
-          .eq('workers.user_id', targetUserId)
-          .eq('worker_id', activeWorkerId)
-          .order('created_at', { ascending: false })
-          .limit(50);
-        if (reqData) setLeaveRequests(reqData);
+        const reqRes = await getWorkerLeaveRequests(targetUserId, activeWorkerId);
+        if (reqRes.success && reqRes.data) {
+          setLeaveRequests(reqRes.data);
+        } else {
+          // フォールバック
+          const { data: reqData } = await supabase
+            .from('leave_requests')
+            .select('*, workers!inner(name, user_id)')
+            .eq('worker_id', activeWorkerId)
+            .order('created_at', { ascending: false })
+            .limit(50);
+          if (reqData) setLeaveRequests(reqData);
+        }
       } else {
         setLeaveRequests([]);
       }
@@ -660,35 +665,46 @@ function PortalContent() {
     fetchWorkerMonthlyAttendance(targetWorker.id, timecardMonth);
 
     // そのスタッフ本人の有給申請履歴取得
-    const { data: reqData } = await supabase
-      .from('leave_requests')
-      .select('*, workers!inner(name, user_id)')
-      .eq('worker_id', targetWorker.id)
-      .order('created_at', { ascending: false })
-      .limit(50);
-    setLeaveRequests(reqData || []);
+    const reqRes = await getWorkerLeaveRequests(targetWorker.user_id || '', targetWorker.id);
+    if (reqRes.success && reqRes.data) {
+      setLeaveRequests(reqRes.data);
+    } else {
+      const { data: reqData } = await supabase
+        .from('leave_requests')
+        .select('*, workers!inner(name, user_id)')
+        .eq('worker_id', targetWorker.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      setLeaveRequests(reqData || []);
+    }
   };
 
   // 有給休暇の申請送信
   const handleSubmitLeaveRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!leaveForm.worker_id) {
+    const targetWorkerId = leaveForm.worker_id || workerProfile?.id || currentUser?.id;
+    if (!targetWorkerId) {
       alert(t('leave_selectWorkerPrompt', language));
       return;
     }
     setIsSubmittingLeave(true);
     try {
       const isAutoApprove = role === 'admin';
-      const { error } = await supabase.from('leave_requests').insert([{
-        worker_id: leaveForm.worker_id,
-        type: leaveForm.type,
-        start_date: leaveForm.start_date,
-        end_date: leaveForm.end_date,
-        reason: leaveForm.reason || '私用のため',
-        status: isAutoApprove ? '承認' : '申請中'
-      }]);
+      const targetTenantId = workerProfile?.user_id || currentUser?.user_id || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
+      
+      const res = await submitLeaveRequest(
+        targetTenantId,
+        targetWorkerId,
+        leaveForm.type,
+        leaveForm.start_date,
+        leaveForm.end_date,
+        leaveForm.reason || '私用のため',
+        isAutoApprove
+      );
 
-      if (error) throw error;
+      if (!res.success) {
+        throw new Error(res.error || '送信に失敗しました');
+      }
 
       setShowLeaveModal(false);
       setLeaveToast(t('leave_submittedToast', language));
@@ -699,8 +715,8 @@ function PortalContent() {
       const ownerId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
       await fetchPortalData(ownerId, role, workerProfile);
     } catch (err: any) {
-      console.error(err);
-      alert('有給申請に失敗しました: ' + err.message);
+      console.error('有給申請エラー:', err);
+      alert('有給申請に失敗しました: ' + (err.message || '通信エラー'));
     } finally {
       setIsSubmittingLeave(false);
     }

@@ -506,6 +506,7 @@ export function t(key: string, lang: LanguageCode = 'ja'): string {
   return TRANSLATIONS[key][lang] || TRANSLATIONS[key]['en'] || TRANSLATIONS[key]['ja'] || key;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getTranslatedName(item: any, lang: LanguageCode = 'ja'): string {
   if (!item) return '';
   if (lang === 'ja') return item.name || '';

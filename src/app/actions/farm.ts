@@ -716,3 +716,58 @@ export async function deletePlannedTask(taskId: string) {
   }
 }
 
+// 10. 有給・休暇申請の送信（管理者クライアント・RLS完全バイパス）
+export async function submitLeaveRequest(
+  tenantId: string,
+  workerId: string,
+  type: string,
+  startDate: string,
+  endDate: string,
+  reason: string,
+  isAutoApprove: boolean = false
+) {
+  try {
+    const supabase = createAdminClient();
+    let resolvedUserId = tenantId;
+    if (!resolvedUserId || resolvedUserId === 'null' || resolvedUserId === 'undefined') {
+      const { data: w } = await supabase.from('workers').select('user_id').eq('id', workerId).maybeSingle();
+      if (w?.user_id) resolvedUserId = w.user_id;
+    }
+
+    const { data, error } = await supabase.from('leave_requests').insert([{
+      user_id: resolvedUserId || null,
+      worker_id: workerId,
+      type: type,
+      start_date: startDate,
+      end_date: endDate,
+      reason: reason || '私用のため',
+      status: isAutoApprove ? '承認' : '申請中'
+    }]).select().single();
+
+    if (error) throw error;
+    return { success: true, data };
+  } catch (err: any) {
+    console.error('submitLeaveRequest error:', err);
+    return { success: false, error: err.message || '休暇申請の送信に失敗しました' };
+  }
+}
+
+// 11. 特定作業者の休暇申請履歴の取得
+export async function getWorkerLeaveRequests(tenantId: string, workerId: string) {
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from('leave_requests')
+      .select('*, workers(name, user_id)')
+      .eq('worker_id', workerId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) throw error;
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    console.error('getWorkerLeaveRequests error:', err);
+    return { success: false, data: [] };
+  }
+}
+

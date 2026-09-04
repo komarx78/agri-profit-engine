@@ -158,7 +158,7 @@ export async function fetchFieldAccumulatedWeather(
 
   // 日付の正規化
   let actualStartStr = startDateStr && startDateStr.length === 10 ? startDateStr : todayStr;
-  let targetEndStr = customEndDateStr && customEndDateStr.length === 10 ? customEndDateStr : todayStr;
+  const targetEndStr = customEndDateStr && customEndDateStr.length === 10 ? customEndDateStr : todayStr;
 
   // 開始日が終了日より未来の場合は開始日を終了日に合わせる
   if (actualStartStr > targetEndStr) {
