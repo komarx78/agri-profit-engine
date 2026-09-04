@@ -23,7 +23,7 @@ import { getPortalTasks, submitAttendance, submitLeaveRequest, getWorkerLeaveReq
 import { translateSingleText } from '@/app/actions/translate';
 import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import Link from 'next/link';
-import { getJSTDate, getJSTTime, formatDisplayTime, parseTimeToMinutes } from '@/lib/dateUtils';
+import { getJSTDate, getJSTTime, formatDisplayTime, parseTimeToMinutes, getAttendancePeriod, getDateListBetween } from '@/lib/dateUtils';
 
 const CalendarWrapper = dynamic(() => import('@/components/CalendarWrapper'), { 
   ssr: false, 
@@ -125,6 +125,8 @@ function PortalContent() {
     const today = new Date();
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
   });
+  const [closingDay, setClosingDay] = useState<number>(0);
+  const [paymentDayRule, setPaymentDayRule] = useState<string>('翌月25日払い');
   const [monthlyLogs, setMonthlyLogs] = useState<any[]>([]);
   const [isLoadingMonthly, setIsLoadingMonthly] = useState(false);
   const [currentMonthSummary, setCurrentMonthSummary] = useState<{
@@ -254,20 +256,6 @@ function PortalContent() {
             if (ownerId) {
               localStorage.setItem('agri_owner_id', ownerId);
             }
-
-            // 会社名の取得
-            if (ownerId) {
-              const { data: companyData } = await supabase.from('company_settings').select('company_name').eq('user_id', ownerId).maybeSingle();
-              if (companyData && companyData.company_name) {
-                setCompanyName(companyData.company_name);
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem(`agri_company_${ownerId}`, companyData.company_name);
-                  localStorage.removeItem('agri_cached_company_name');
-                }
-              } else {
-                setCompanyName('');
-              }
-            }
           } catch (e) {
             console.error('Failed to parse saved worker:', e);
           }
@@ -275,18 +263,6 @@ function PortalContent() {
           // 2. 現場作業者が未選択で、Supabase Auth セッションがある場合は管理者として起動
           ownerId = session.user.id;
           localStorage.setItem('agri_owner_id', ownerId);
-
-          const { data: companyData } = await supabase.from('company_settings').select('company_name').eq('user_id', ownerId).maybeSingle();
-          if (companyData && companyData.company_name) {
-            setCompanyName(companyData.company_name);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem(`agri_company_${ownerId}`, companyData.company_name);
-              localStorage.removeItem('agri_cached_company_name');
-            }
-          } else {
-            setCompanyName('');
-          }
-
           currentRole = 'admin';
           setRole('admin');
           setCurrentUser({ name: '管理者', name_en: 'Admin', role: 'admin' });
@@ -297,7 +273,55 @@ function PortalContent() {
           return;
         }
 
-        await fetchPortalData(ownerId, currentRole, profile);
+        // 会社設定（会社名・勤怠締日・給与支払日）の解決
+        let resolvedClosing = 0;
+        let resolvedPayment = '翌月25日払い';
+        if (typeof window !== 'undefined') {
+          const localClosing = (ownerId ? localStorage.getItem(`agri_attendance_closing_day_${ownerId}`) : null) || localStorage.getItem('agri_attendance_closing_day');
+          if (localClosing !== null && localClosing !== undefined && localClosing !== '') {
+            resolvedClosing = Number(localClosing);
+          }
+          const localPayment = (ownerId ? localStorage.getItem(`agri_payment_day_rule_${ownerId}`) : null) || localStorage.getItem('agri_payment_day_rule');
+          if (localPayment) {
+            resolvedPayment = localPayment;
+          }
+        }
+
+        if (ownerId) {
+          try {
+            const { data: companyData } = await supabase
+              .from('company_settings')
+              .select('company_name, attendance_closing_day, payment_day_rule')
+              .eq('user_id', ownerId)
+              .maybeSingle();
+
+            if (companyData) {
+              if (companyData.company_name) {
+                setCompanyName(companyData.company_name);
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem(`agri_company_${ownerId}`, companyData.company_name);
+                  localStorage.removeItem('agri_cached_company_name');
+                }
+              }
+              if (companyData.attendance_closing_day !== undefined && companyData.attendance_closing_day !== null) {
+                const dbClosing = Number(companyData.attendance_closing_day);
+                if (dbClosing > 0 || resolvedClosing === 0) {
+                  resolvedClosing = dbClosing;
+                }
+              }
+              if (companyData.payment_day_rule) {
+                resolvedPayment = companyData.payment_day_rule;
+              }
+            }
+          } catch (compErr) {
+            console.warn('portal company_settings fetch warning:', compErr);
+          }
+        }
+
+        setClosingDay(resolvedClosing);
+        setPaymentDayRule(resolvedPayment);
+
+        await fetchPortalData(ownerId, currentRole, profile, resolvedClosing);
 
         // URLクエリに manual=1 または openManual=true があればマニュアルモーダルを開く
         if (typeof window !== 'undefined') {
@@ -315,15 +339,16 @@ function PortalContent() {
     init();
   }, [router]);
 
-  // 🕒 個人タイムカード：対象月の勤怠データ取得
-  const fetchWorkerMonthlyAttendance = async (workerId: string, monthStr: string) => {
+  // 🕒 個人タイムカード：対象月の勤怠データ取得（全社締日サイクル連動）
+  const fetchWorkerMonthlyAttendance = async (workerId: string, monthStr: string, overrideClosingDay?: number) => {
     if (!workerId || !monthStr) return;
     setIsLoadingMonthly(true);
     try {
+      const activeClosingDay = overrideClosingDay !== undefined ? overrideClosingDay : closingDay;
       const [y, m] = monthStr.split('-').map(Number);
-      const lastDay = new Date(y, m, 0).getDate();
-      const startDate = `${monthStr}-01`;
-      const endDate = `${monthStr}-${String(lastDay).padStart(2, '0')}`;
+      const period = getAttendancePeriod(y, m, activeClosingDay);
+      const startDate = period.startDate;
+      const endDate = period.endDate;
 
       const { data, error } = await supabase
         .from('attendance_logs')
@@ -404,20 +429,21 @@ function PortalContent() {
     }
   };
 
-  // 当月のカレンダー日数（1日〜末日）を生成し、ログとマッピング
+  // 当月のカレンダー日数（全社締日サイクル期間）を生成し、ログとマッピング
   const timecardDaysList = useMemo(() => {
     const [y, m] = timecardMonth.split('-').map(Number);
-    const lastDay = new Date(y, m, 0).getDate();
-    const list = [];
+    const period = getAttendancePeriod(y, m, closingDay);
+    const dateList = getDateListBetween(period.startDate, period.endDate);
+    const list: any[] = [];
 
     const logMap = new Map<string, any>();
     monthlyLogs.forEach(log => {
       if (log.date) logMap.set(log.date, log);
     });
 
-    for (let day = 1; day <= lastDay; day++) {
-      const dateStr = `${timecardMonth}-${String(day).padStart(2, '0')}`;
-      const d = new Date(y, m - 1, day);
+    dateList.forEach(dateStr => {
+      const d = new Date(dateStr);
+      const day = d.getDate();
       const dayOfWeek = d.getDay();
       const log = logMap.get(dateStr);
 
@@ -459,10 +485,10 @@ function PortalContent() {
         isOvertime,
         matchedLeave
       });
-    }
+    });
 
     return list;
-  }, [timecardMonth, monthlyLogs, leaveRequests, language]);
+  }, [timecardMonth, monthlyLogs, leaveRequests, language, closingDay]);
 
   // タイムカードの日付から直接有給申請を開くハンドラー
   const handleOpenLeaveModalForDate = (dateStr: string) => {
@@ -504,7 +530,7 @@ function PortalContent() {
     };
   }, [timecardDaysList]);
 
-  const fetchPortalData = async (userId: string, currentRole: string, profile: any) => {
+  const fetchPortalData = async (userId: string, currentRole: string, profile: any, overrideClosingDay?: number) => {
     const today = getJSTDate();
 
     // 1. タスク (カレンダー用: サーバーアクション経由でRLSを回避し確実に取得)
@@ -566,7 +592,7 @@ function PortalContent() {
       }
       if (matchedLog) setAttendance(matchedLog);
       // 当月の個人勤怠集計データを取得
-      fetchWorkerMonthlyAttendance(workerId, timecardMonth);
+      fetchWorkerMonthlyAttendance(workerId, timecardMonth, overrideClosingDay);
     }
 
     // 5. 有給休暇・残高と申請履歴の取得 (自農園のワーカーのみ厳格に取得)
@@ -3836,11 +3862,22 @@ function PortalContent() {
                     <span>{t('tc_prevMonth', language)}</span>
                   </button>
 
-                  <div className="flex items-center gap-2">
-                    <CalendarIcon className="w-4 h-4 text-blue-600" />
-                    <span className="text-base sm:text-lg font-black text-slate-900 tracking-tight font-mono">
-                      {timecardMonth.split('-')[0]} / {timecardMonth.split('-')[1]}
-                    </span>
+                  <div className="flex flex-col sm:flex-row items-center gap-1.5 sm:gap-2 text-center">
+                    <div className="flex items-center gap-1.5">
+                      <CalendarIcon className="w-4 h-4 text-blue-600" />
+                      <span className="text-base sm:text-lg font-black text-slate-900 tracking-tight font-mono">
+                        {timecardMonth.split('-')[0]} / {timecardMonth.split('-')[1]}
+                      </span>
+                    </div>
+                    {(() => {
+                      const [y, m] = timecardMonth.split('-').map(Number);
+                      const p = getAttendancePeriod(y, m, closingDay);
+                      return (
+                        <span className="text-[11px] font-black text-indigo-700 bg-indigo-50 border border-indigo-200/70 px-2 py-0.5 rounded-lg">
+                          集計期間: {p.label}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   <button
@@ -3925,7 +3962,7 @@ function PortalContent() {
 
                         return (
                           <tr 
-                            key={item.day}
+                            key={item.dateStr}
                             className={`hover:bg-slate-50/80 transition-colors ${
                               isLeaveApproved
                                 ? 'bg-amber-50/40'
@@ -3937,7 +3974,14 @@ function PortalContent() {
                             <td className="py-2.5 sm:py-3 px-3 sm:px-4 whitespace-nowrap">
                               <div className="flex items-center gap-1.5 sm:gap-2">
                                 <span className="font-mono font-black text-slate-900 text-xs sm:text-sm">
-                                  {item.day}
+                                  {closingDay > 0 ? (
+                                    <span className="inline-flex items-baseline">
+                                      <span className="text-[10px] text-slate-400 font-bold">{Number(item.dateStr.split('-')[1])}/</span>
+                                      <span>{item.day}</span>
+                                    </span>
+                                  ) : (
+                                    item.day
+                                  )}
                                 </span>
                                 <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
                                   isSunday 
