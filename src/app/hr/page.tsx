@@ -87,19 +87,26 @@ export default function HrDashboardPage() {
   const handleSaveBreak = async (id: string) => {
     setIsSaving(true);
     try {
-      const { error } = await supabase
+      const tenantId = await getCurrentTenantId();
+      let query1 = supabase
         .from('attendance_logs')
         .update({ 
           total_break_minutes: editBreakMinutes,
           actual_rest_minutes: editBreakMinutes 
         })
         .eq('id', id);
+
+      if (tenantId) query1 = query1.eq('user_id', tenantId);
+
+      const { error } = await query1;
       if (error) {
         // actual_rest_minutesカラムが無い場合のフォールバック
-        await supabase
+        let query2 = supabase
           .from('attendance_logs')
           .update({ total_break_minutes: editBreakMinutes })
           .eq('id', id);
+        if (tenantId) query2 = query2.eq('user_id', tenantId);
+        await query2;
       }
       
       setAttendanceLogs(prev => prev.map(log => log.id === id ? { ...log, total_break_minutes: editBreakMinutes } : log));
@@ -119,19 +126,26 @@ export default function HrDashboardPage() {
 
     setIsBulkSaving(true);
     try {
+      const tenantId = await getCurrentTenantId();
       const ids = attendanceLogs.map(l => l.id);
-      const { error } = await supabase
+      let query1 = supabase
         .from('attendance_logs')
         .update({ 
           total_break_minutes: bulkBreakMinutes,
           actual_rest_minutes: bulkBreakMinutes 
         })
         .in('id', ids);
+
+      if (tenantId) query1 = query1.eq('user_id', tenantId);
+
+      const { error } = await query1;
       if (error) {
-        await supabase
+        let query2 = supabase
           .from('attendance_logs')
           .update({ total_break_minutes: bulkBreakMinutes })
           .in('id', ids);
+        if (tenantId) query2 = query2.eq('user_id', tenantId);
+        await query2;
       }
 
       setAttendanceLogs(prev => prev.map(log => ({ ...log, total_break_minutes: bulkBreakMinutes })));

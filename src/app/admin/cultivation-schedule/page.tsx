@@ -152,7 +152,12 @@ export default function CultivationSchedulePage() {
     if (!confirm("この計画を削除しますか？\n（関連する育苗スケジュールも削除されます）")) return;
     
     try {
-      const { error } = await supabase.from('cultivation_plans_v2').delete().eq('id', id);
+      const tenantId = await getCurrentTenantId();
+      let query = supabase.from('cultivation_plans_v2').delete().eq('id', id);
+      if (tenantId) {
+        query = query.eq('user_id', tenantId);
+      }
+      const { error } = await query;
       if (error) throw error;
       if (selectedPlan?.id === id) setSelectedPlan(null);
       fetchData();

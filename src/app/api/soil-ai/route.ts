@@ -27,7 +27,7 @@ export async function POST(req: Request) {
       }
 
       const base64Data = imageBase64.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '');
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
       const prompt = `
 あなたは日本の農業土壌分析センターおよびJAの検査報告書を解析する最高峰のAI-OCRエンジンです。
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
         soilData,
       } = body;
 
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
       const prompt = `
 あなたは日本の農研機構・都道府県農業改良普及センターの最高峰の土壌肥料専門技術員です。

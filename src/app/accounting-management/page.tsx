@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getJSTDate } from '@/lib/dateUtils';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Receipt, Search, Image as ImageIcon, Camera, DollarSign, Store, Plus, AlertCircle, Check, History, Loader2 } from 'lucide-react';
 
@@ -19,7 +20,7 @@ export default function AccountingPurchasesPage() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
-    purchase_date: new Date().toISOString().split('T')[0],
+    purchase_date: getJSTDate(),
     material_id: '',
     supplier: '',
     unit_price: 0,

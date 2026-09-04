@@ -822,7 +822,8 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     if (!editingLog) return;
     setIsUpdatingLog(true);
     try {
-      const { error } = await supabase
+      const tenantId = await getCurrentTenantId();
+      let query = supabase
         .from('work_logs')
         .update({
           work_date: editWorkDate,
@@ -833,6 +834,12 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
           memo: editMemo
         })
         .eq('id', editingLog.id);
+
+      if (tenantId) {
+        query = query.eq('user_id', tenantId);
+      }
+
+      const { error } = await query;
 
       if (error) throw error;
       setEditingLog(null);
@@ -850,10 +857,17 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   const handleDeleteWorkLog = async (logId: string) => {
     if (!window.confirm('この作業記録を削除してもよろしいですか？\n※削除した記録は元に戻せません。')) return;
     try {
-      const { error } = await supabase
+      const tenantId = await getCurrentTenantId();
+      let query = supabase
         .from('work_logs')
         .delete()
         .eq('id', logId);
+
+      if (tenantId) {
+        query = query.eq('user_id', tenantId);
+      }
+
+      const { error } = await query;
 
       if (error) throw error;
       setToastMessage('作業記録を削除しました');
@@ -902,10 +916,17 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   // タスク完了処理
   const handleCompleteTask = async (taskId: string) => {
     try {
-      const { error } = await supabase
+      const tenantId = await getCurrentTenantId();
+      let query = supabase
         .from('work_logs')
         .update({ status: 'completed' })
         .eq('id', taskId);
+
+      if (tenantId) {
+        query = query.eq('user_id', tenantId);
+      }
+
+      const { error } = await query;
       if (error) throw error;
       setToastMessage('予定作業を完了（実績化）しました！');
       fetchAllData();

@@ -55,10 +55,19 @@ export default function OvertimeApprovalPage() {
     if (!window.confirm(`この申請を${newStatus === 'approved' ? '承認' : '却下'}しますか？`)) return;
     setIsProcessing(id);
     try {
-      const { error } = await supabase
+      const tenantId = await getCurrentTenantId();
+      const workerIds = tenantId ? await getTenantWorkerIds(tenantId) : [];
+
+      let query = supabase
         .from('overtime_requests')
         .update({ status: newStatus, updated_at: new Date().toISOString() })
         .eq('id', id);
+
+      if (workerIds.length > 0) {
+        query = query.in('worker_id', workerIds);
+      }
+
+      const { error } = await query;
 
       if (error) throw error;
       

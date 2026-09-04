@@ -8,6 +8,7 @@ import { MapPin, ArrowLeft, Loader2, Calendar, Edit, History, Sprout, Leaf, Flas
 import Link from 'next/link';
 import { GoogleMap, useJsApiLoader, Polygon } from '@react-google-maps/api';
 import FieldWeatherCard from '@/components/FieldWeatherCard';
+import { getJSTDate } from '@/lib/dateUtils';
 
 const containerStyle = {
   width: '100%',
@@ -37,7 +38,7 @@ export default function FieldDetailPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [soilFormData, setSoilFormData] = useState({
-    diagnosis_date: new Date().toISOString().split('T')[0],
+    diagnosis_date: getJSTDate(),
     agency_name: '',
     soil_type: '壌土',
     ph: '',
@@ -224,10 +225,14 @@ export default function FieldDetailPage() {
       };
 
       if (editingSoilItem && editingSoilItem.id) {
-        const { error } = await supabase
+        let updateQuery = supabase
           .from('soil_diagnoses')
           .update(payload)
           .eq('id', editingSoilItem.id);
+        if (tenantId) {
+          updateQuery = updateQuery.eq('user_id', tenantId);
+        }
+        const { error } = await updateQuery;
         if (error) throw error;
       } else {
         const { error } = await supabase
@@ -250,7 +255,12 @@ export default function FieldDetailPage() {
   const handleDeleteSoilDiagnosis = async (id: string) => {
     if (!confirm('この土壌診断記録を削除しますか？')) return;
     try {
-      const { error } = await supabase.from('soil_diagnoses').delete().eq('id', id);
+      const tenantId = await getCurrentTenantId();
+      let deleteQuery = supabase.from('soil_diagnoses').delete().eq('id', id);
+      if (tenantId) {
+        deleteQuery = deleteQuery.eq('user_id', tenantId);
+      }
+      const { error } = await deleteQuery;
       if (error) throw error;
       fetchFieldDetails();
     } catch (e: any) {

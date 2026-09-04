@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getJSTDate } from '@/lib/dateUtils';
 import { 
   Coffee, Download, Users, Loader2, AlertCircle, CheckCircle, XCircle, 
   Plus, Calendar, Sparkles, Clock, AlertTriangle, ShieldCheck, Edit3, 
@@ -158,7 +159,7 @@ export function calculateStatutoryLeave(
     prevStatutoryGrant: prevGrant,
     serviceMonths: months,
     serviceText,
-    nextGrantDate: nextGrantDate.toISOString().split('T')[0],
+    nextGrantDate: getJSTDate(nextGrantDate),
     nextGrantDays,
     daysUntilNextGrant,
     isTarget: true
@@ -361,15 +362,20 @@ export default function PaidLeavePage() {
 
     setIsProcessing(true);
     try {
+      const resolvedTenantId = tenantId || await getCurrentTenantId();
       for (const w of targets) {
         const statutory = w.statutory;
-        await supabase
+        let query = supabase
           .from('workers')
           .update({
             paid_leave_balance: statutory.statutoryGrant,
             paid_leave_carryover: statutory.prevStatutoryGrant
           })
           .eq('id', w.id);
+        if (resolvedTenantId) {
+          query = query.eq('user_id', resolvedTenantId);
+        }
+        await query;
       }
 
       showToast(`⚡ 全 ${targets.length} 名の法定有給付与日数を自動計算・反映しました！`);
@@ -392,13 +398,18 @@ export default function PaidLeavePage() {
 
     setIsProcessing(true);
     try {
-      const { error } = await supabase
+      const resolvedTenantId = tenantId || await getCurrentTenantId();
+      let query = supabase
         .from('workers')
         .update({
           paid_leave_balance: statutory.statutoryGrant,
           paid_leave_carryover: statutory.prevStatutoryGrant
         })
         .eq('id', emp.id);
+      if (resolvedTenantId) {
+        query = query.eq('user_id', resolvedTenantId);
+      }
+      const { error } = await query;
 
       if (error) throw error;
 
@@ -414,10 +425,15 @@ export default function PaidLeavePage() {
   // 承認・却下処理
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     try {
-      const { error } = await supabase
+      const resolvedTenantId = tenantId || await getCurrentTenantId();
+      let query = supabase
         .from('leave_requests')
         .update({ status: newStatus, updated_at: new Date().toISOString() })
         .eq('id', id);
+      if (resolvedTenantId) {
+        query = query.eq('user_id', resolvedTenantId);
+      }
+      const { error } = await query;
       
       if (error) throw error;
       
@@ -433,8 +449,9 @@ export default function PaidLeavePage() {
   const handleSubmitRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const resolvedTenantId = tenantId || await getCurrentTenantId();
       const { error } = await supabase.from('leave_requests').insert([{
-        user_id: tenantId,
+        user_id: resolvedTenantId,
         worker_id: requestForm.worker_id,
         type: requestForm.type,
         start_date: requestForm.start_date,
@@ -459,13 +476,18 @@ export default function PaidLeavePage() {
     e.preventDefault();
     if (!editingWorker) return;
     try {
-      const { error } = await supabase.from('workers').update({
+      const resolvedTenantId = tenantId || await getCurrentTenantId();
+      let query = supabase.from('workers').update({
         paid_leave_carryover: Number(editingWorker.paid_leave_carryover) || 0,
         paid_leave_balance: Number(editingWorker.paid_leave_balance) || 0,
         join_date: editingWorker.join_date || null,
         employment_type: editingWorker.employment_type || '正社員',
         weekly_working_days: Number(editingWorker.weekly_working_days) || 5
       }).eq('id', editingWorker.id);
+      if (resolvedTenantId) {
+        query = query.eq('user_id', resolvedTenantId);
+      }
+      const { error } = await query;
       
       if (error) throw error;
       

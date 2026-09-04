@@ -4,6 +4,7 @@ import React, { useState, useEffect, use } from 'react';
 import { Truck, CheckCircle2, ShoppingCart, Plus, Minus, AlertCircle, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { getB2BPortalData, createB2BOrder } from '@/app/actions/b2b';
+import { getJSTDate, getJSTDateWithOffset } from '@/lib/dateUtils';
 
 export default function B2BClientOrderPage({ params }: { params: Promise<{ customerId: string }> }) {
   const unwrappedParams = use(params);
@@ -15,11 +16,7 @@ export default function B2BClientOrderPage({ params }: { params: Promise<{ custo
   const [loading, setLoading] = useState(true);
   
   const [cart, setCart] = useState<{[key: string]: number}>({});
-  const [deliveryDate, setDeliveryDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 2); // デフォルトは明後日
-    return d.toISOString().split('T')[0];
-  });
+  const [deliveryDate, setDeliveryDate] = useState(() => getJSTDateWithOffset(2).dateStr);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState<'order'|'invoices'>('order');
@@ -66,7 +63,7 @@ export default function B2BClientOrderPage({ params }: { params: Promise<{ custo
 
     const orderData = {
       customer_id: customer.id,
-      order_date: new Date().toISOString().split('T')[0],
+      order_date: getJSTDate(),
       delivery_date: deliveryDate,
       status: 'pending',
       total_amount: 0 // B2B向けは単価を隠す場合があるため0にしておくか、マスタから計算

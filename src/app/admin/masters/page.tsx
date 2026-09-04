@@ -246,7 +246,11 @@ export default function MastersPage() {
       let savedData: any = null;
       
       if (editingItem) {
-        const { data, error } = await supabase.from(table).update(dataToSave).eq('id', editingItem.id).select();
+        let updateQuery = supabase.from(table).update(dataToSave).eq('id', editingItem.id);
+        if (tenantId) {
+          updateQuery = (table === 'departments') ? updateQuery.eq('tenant_id', tenantId) : updateQuery.eq('user_id', tenantId);
+        }
+        const { data, error } = await updateQuery.select();
         if (error) {
           console.warn('Update failed with multilang, retrying with fallback:', error);
           // 多言語カラムを除去してリトライ
@@ -257,7 +261,11 @@ export default function MastersPage() {
           delete fallbackData.name_zh;
           delete fallbackData.name_si;
           delete fallbackData.name_km;
-          const { data: retryData, error: retryErr } = await supabase.from(table).update(fallbackData).eq('id', editingItem.id).select();
+          let retryQuery = supabase.from(table).update(fallbackData).eq('id', editingItem.id);
+          if (tenantId) {
+            retryQuery = (table === 'departments') ? retryQuery.eq('tenant_id', tenantId) : retryQuery.eq('user_id', tenantId);
+          }
+          const { data: retryData, error: retryErr } = await retryQuery.select();
           if (retryErr) throw retryErr;
           savedData = retryData;
         } else {
@@ -331,7 +339,13 @@ export default function MastersPage() {
     
     try {
       setUploadStatus({ type: 'info', message: '削除中...' });
-      const { error } = await supabase.from(type).delete().eq('id', id);
+      const tenantId = await getCurrentTenantId();
+      const table = (type === 'pesticides' || type === 'fertilizers') ? 'materials' : type;
+      let deleteQuery = supabase.from(table).delete().eq('id', id);
+      if (tenantId) {
+        deleteQuery = (table === 'departments') ? deleteQuery.eq('tenant_id', tenantId) : deleteQuery.eq('user_id', tenantId);
+      }
+      const { error } = await deleteQuery;
       if (error) throw error;
       
       setUploadStatus({ type: 'success', message: '削除しました' });

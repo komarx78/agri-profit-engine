@@ -203,7 +203,7 @@ export default function HrSettingsPage() {
       // 1. attendance_rules テーブルの削除レコード処理
       if (deletedRuleIds.length > 0) {
         try {
-          await supabase.from('attendance_rules').delete().in('id', deletedRuleIds);
+          await supabase.from('attendance_rules').delete().in('id', deletedRuleIds).eq('user_id', tenantId);
           setDeletedRuleIds([]);
         } catch (delErr) {
           console.warn('Delete rules warning:', delErr);
@@ -231,6 +231,7 @@ export default function HrSettingsPage() {
               .from('attendance_rules')
               .update(rulePayload)
               .eq('id', r.id)
+              .eq('user_id', tenantId)
               .select()
               .single();
             if (!uErr && uData) {
@@ -294,12 +295,12 @@ export default function HrSettingsPage() {
 
       try {
         if (settingsId) {
-          const { error: cUpErr } = await supabase.from('company_settings').update(compPayload).eq('id', settingsId);
+          const { error: cUpErr } = await supabase.from('company_settings').update(compPayload).eq('id', settingsId).eq('user_id', tenantId);
           if (cUpErr) {
             // カラムが無い場合の安全フォールバック
             delete compPayload.attendance_rules;
             delete compPayload.line_notification_offset_minutes;
-            await supabase.from('company_settings').update(compPayload).eq('id', settingsId);
+            await supabase.from('company_settings').update(compPayload).eq('id', settingsId).eq('user_id', tenantId);
           }
         } else {
           const { data: newComp, error: cInErr } = await supabase.from('company_settings').insert([compPayload]).select().single();

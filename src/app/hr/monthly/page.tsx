@@ -301,19 +301,24 @@ export default function MonthlyTimecardPage() {
 
       if (editModal.logId) {
         // UPDATE
-        let { error } = await supabase
+        let updateQuery = supabase
           .from('attendance_logs')
           .update(payload)
           .eq('id', editModal.logId);
+
+        if (tenantId) updateQuery = updateQuery.eq('user_id', tenantId);
+        let { error } = await updateQuery;
 
         // もし memo や status カラムがDBに未追加の場合のフォールバック
         if (error && (error.message?.includes('memo') || error.message?.includes('status') || (error as any).code === 'PGRST204')) {
           delete payload.memo;
           delete payload.status;
-          const retryRes = await supabase
+          let retryQuery = supabase
             .from('attendance_logs')
             .update(payload)
             .eq('id', editModal.logId);
+          if (tenantId) retryQuery = retryQuery.eq('user_id', tenantId);
+          const retryRes = await retryQuery;
           error = retryRes.error;
         }
 
@@ -365,10 +370,14 @@ export default function MonthlyTimecardPage() {
 
     setIsSaving(true);
     try {
-      const { error } = await supabase
+      const tenantId = await getCurrentTenantId();
+      let delQuery = supabase
         .from('attendance_logs')
         .delete()
         .eq('id', editModal.logId);
+
+      if (tenantId) delQuery = delQuery.eq('user_id', tenantId);
+      const { error } = await delQuery;
       if (error) throw error;
 
       setLogs(prev => prev.filter(l => l.id !== editModal.logId));

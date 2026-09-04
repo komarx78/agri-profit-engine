@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getJSTDate } from '@/lib/dateUtils';
 import Link from 'next/link';
 
 export interface CultivationTarget {
@@ -94,7 +95,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
   const [pesticideFamicData, setPesticideFamicData] = useState<any>(null);
 
   // 共通フォームステート
-  const [formDate, setFormDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [formDate, setFormDate] = useState<string>(() => getJSTDate());
   const [durationMinutes, setDurationMinutes] = useState<string>('60');
   const [durationMode, setDurationMode] = useState<'total_proportional' | 'uniform'>('total_proportional');
   const [memo, setMemo] = useState<string>('');

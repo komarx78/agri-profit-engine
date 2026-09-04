@@ -109,6 +109,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
 
     setIsSubmitting(true);
 
+    const tenantId = await getCurrentTenantId();
     const orderData = {
       customer_id: selectedCustomerId,
       delivery_date: deliveryDate,
@@ -120,7 +121,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       total_price: Number(item.quantity) * Number(item.unit_price)
     }));
 
-    const res = await updateB2BOrderDetails(orderId, orderData, orderItems);
+    const res = await updateB2BOrderDetails(orderId, orderData, orderItems, tenantId);
     
     setIsSubmitting(false);
     
@@ -135,7 +136,8 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   const handleDelete = async () => {
     if (!window.confirm("本当にこの注文を完全に削除しますか？\n（この操作は取り消せません）")) return;
     setIsSubmitting(true);
-    const res = await deleteB2BOrder(orderId);
+    const tenantId = await getCurrentTenantId();
+    const res = await deleteB2BOrder(orderId, tenantId);
     setIsSubmitting(false);
     if (res.success) {
       alert("注文を削除しました。");

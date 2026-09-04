@@ -359,7 +359,12 @@ export default function HrEmployeesPage() {
   const handleDelete = async (id: string) => {
     if (!window.confirm('本当に削除しますか？\n関連する打刻データも消える可能性があります。')) return;
     try {
-      const { error } = await supabase.from('workers').delete().eq('id', id);
+      const tenantId = await getCurrentTenantId();
+      let query = supabase.from('workers').delete().eq('id', id);
+      if (tenantId) {
+        query = query.eq('user_id', tenantId);
+      }
+      const { error } = await query;
       if (error) throw error;
       setWorkers(workers.filter(w => w.id !== id));
     } catch (err: any) {
