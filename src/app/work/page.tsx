@@ -14,7 +14,7 @@ import { getB2BOrders, updateB2BOrderStatus } from '@/app/actions/b2b';
 import { getWorkerShareSettings, submitAttendance } from '@/app/actions/farm';
 import { WorkerGate } from '@/components/WorkerGate';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
+import { PwaInstallPrompt, PwaBottomBanner } from '@/components/PwaInstallPrompt';
 import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode, UNITS, getTranslatedUnit } from '@/lib/i18n';
 import { useCompany } from '@/hooks/useCompany';
 import imageCompression from 'browser-image-compression';
@@ -2199,6 +2199,9 @@ export default function WorkEntryPage() {
           </div>
         </div>
       )}
+
+      {/* 📱 ページの最下部に配置するアプリ化案内バナー（画面に被らない安全配置） */}
+      <PwaBottomBanner />
     </main>
   );
 }

@@ -21,7 +21,7 @@ import { t, getTranslatedName, getTranslatedWorkType, getWeekdayName, LANGUAGES,
 import { WorkerGate } from '@/components/WorkerGate';
 import { getPortalTasks, submitAttendance, submitLeaveRequest, getWorkerLeaveRequests } from '@/app/actions/farm';
 import { translateSingleText } from '@/app/actions/translate';
-import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
+import { PwaInstallPrompt, PwaBottomBanner } from '@/components/PwaInstallPrompt';
 import Link from 'next/link';
 import { getJSTDate, getJSTTime, formatDisplayTime, parseTimeToMinutes, getAttendancePeriod, getDateListBetween } from '@/lib/dateUtils';
 
@@ -4145,6 +4145,8 @@ function PortalContent() {
         </div>
       )}
 
+      {/* 📱 ページの最下部に配置するアプリ化案内バナー（画面に被らない安全配置） */}
+      <PwaBottomBanner />
     </div>
   );
 }
