@@ -72,7 +72,40 @@ function isPointInPolygon(point: {lat: number, lng: number}, vs: {lat: number, l
   return inside;
 }
 
+function getCropEmoji(name: string): string {
+  if (!name) return '🌱';
+  const n = name.toLowerCase();
+  if (n.includes('トマト') || n.includes('tomato')) return '🍅';
+  if (n.includes('ナス') || n.includes('なす') || n.includes('eggplant')) return '🍆';
+  if (n.includes('にんじん') || n.includes('ニンジン') || n.includes('carrot')) return '🥕';
+  if (n.includes('ピーマン') || n.includes('pepper')) return '🫑';
+  if (n.includes('きゅうり') || n.includes('キュウリ') || n.includes('cucumber')) return '🥒';
+  if (n.includes('いちご') || n.includes('イチゴ') || n.includes('strawberry')) return '🍓';
+  if (n.includes('白菜') || n.includes('キャベツ') || n.includes('レタス') || n.includes('cabbage') || n.includes('lettuce')) return '🥬';
+  if (n.includes('枝豆') || n.includes('大豆') || n.includes('bean') || n.includes('edamame')) return '🫛';
+  if (n.includes('とうもろこし') || n.includes('コーン') || n.includes('corn')) return '🌽';
+  if (n.includes('芋') || n.includes('イモ') || n.includes('potato')) return '🥔';
+  if (n.includes('ねぎ') || n.includes('ネギ') || n.includes('onion')) return '🧅';
+  if (n.includes('モロヘイヤ') || n.includes('ほうれん草') || n.includes('小松菜')) return '🌿';
+  if (n.includes('大根') || n.includes('ダイコン') || n.includes('radish')) return '🥢';
+  if (n.includes('スイカ') || n.includes('watermelon')) return '🍉';
+  if (n.includes('メロン') || n.includes('melon')) return '🍈';
+  if (n.includes('米') || n.includes('稲') || n.includes('rice')) return '🌾';
+  return '🌱';
+}
 
+function getWorkTypeEmoji(type: string): string {
+  if (!type) return '🚜';
+  if (type.includes('収穫')) return '🧺';
+  if (type.includes('播種') || type.includes('種まき')) return '🌱';
+  if (type.includes('定植') || type.includes('苗植え')) return '🌿';
+  if (type.includes('水やり') || type.includes('潅水')) return '💧';
+  if (type.includes('肥料') || type.includes('農薬') || type.includes('防除') || type.includes('消毒') || type.includes('追肥')) return '🧪';
+  if (type.includes('草刈り') || type.includes('除草') || type.includes('草引き')) return '✂️';
+  if (type.includes('片付け') || type.includes('メンテ') || type.includes('掃除')) return '🧹';
+  if (type.includes('出荷') || type.includes('選別') || type.includes('袋詰め')) return '📦';
+  return '✨';
+}
 
 export default function WorkEntryPage() {
   const router = useRouter();
@@ -140,6 +173,7 @@ export default function WorkEntryPage() {
 
   // フォーム状態
   const [selectedCrop, setSelectedCrop] = useState<string>('');
+  const [cropSearchQuery, setCropSearchQuery] = useState<string>('');
   const [selectedField, setSelectedField] = useState<string>('');
   const [workType, setWorkType] = useState<string>('');
   const [duration, setDuration] = useState<string>('');
@@ -1498,29 +1532,152 @@ export default function WorkEntryPage() {
                 </select>
               </section>
 
-              <div className="grid grid-cols-2 gap-4">
-                <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2 mb-2.5"><Sprout className="w-4 h-4" />{t('crop', language)}</h2>
-                  <div className="flex flex-col gap-2">
-                    {crops.map(c => (
-                      <button key={c.id} type="button" onClick={() => setSelectedCrop(c.name)} className={`py-2 px-1 rounded-lg font-bold text-xs border ${selectedCrop === c.name ? 'bg-emerald-500 text-emerald-950 border-emerald-300' : 'bg-emerald-950/60 text-slate-300 border-emerald-800'}`}>{getTranslatedName(c, language)}</button>
-                    ))}
+              {/* 🌱 作目選択セクション (アグリハブ型 横3〜4列グリッド ＆ アイコン表示) */}
+              <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
+                    <Sprout className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>{t('crop', language)}</span>
+                  </h2>
+                  
+                  {/* 選択中の作目バッジ */}
+                  {selectedCrop && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-500/20 border border-emerald-500/40 rounded-full text-xs font-black text-emerald-300">
+                      <span>{getCropEmoji(selectedCrop)}</span>
+                      <span className="truncate max-w-[120px]">
+                        {getTranslatedName(crops.find(c => c.name === selectedCrop) || { name: selectedCrop }, language)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCrop('')}
+                        className="text-emerald-400 hover:text-white ml-0.5 cursor-pointer"
+                        title="選択解除"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* 作目が多数ある場合の検索フィルター */}
+                {crops.length > 9 && (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={cropSearchQuery}
+                      onChange={(e) => setCropSearchQuery(e.target.value)}
+                      placeholder="🔍 作目を絞り込み..."
+                      className="w-full bg-emerald-950/60 border border-emerald-800/60 text-white rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-emerald-500 placeholder:text-emerald-500/50"
+                    />
+                    {cropSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setCropSearchQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
-                </section>
-                <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2 mb-2.5"><Sparkles className="w-4 h-4" />{t('workType', language)}</h2>
-                  <div className="flex flex-col gap-2">
-                    {workTypes.map(w => (
-                      <button key={`default-${w}`} type="button" onClick={() => setWorkType(w)} className={`py-2 px-1 rounded-lg font-bold text-xs border transition-all ${workType === w ? 'bg-amber-500 text-amber-950 border-amber-300' : 'bg-emerald-950/60 text-slate-300 border-emerald-800'}`}>{t(w, language)}</button>
-                    ))}
-                    {customWorkTypes.map(cw => (
-                      <div key={`custom-${cw}`} className="relative flex group">
-                        <button 
-                          type="button" 
-                          onClick={() => setWorkType(cw)} 
-                          className={`flex-1 py-2 px-1 rounded-lg font-bold text-xs border transition-all flex items-center justify-center gap-1 ${workType === cw ? 'bg-amber-500 text-amber-950 border-amber-300' : 'bg-emerald-900/20 text-emerald-200 border-emerald-700/50'}`}
+                )}
+
+                {/* 横3〜4列の均等グリッド配置 */}
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {crops
+                    .filter(c => {
+                      if (!cropSearchQuery.trim()) return true;
+                      const q = cropSearchQuery.toLowerCase();
+                      const name = (c.name || '').toLowerCase();
+                      const trans = getTranslatedName(c, language).toLowerCase();
+                      return name.includes(q) || trans.includes(q);
+                    })
+                    .map(c => {
+                      const isSelected = selectedCrop === c.name;
+                      const emoji = getCropEmoji(c.name);
+                      const translatedName = getTranslatedName(c, language);
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setSelectedCrop(isSelected ? '' : c.name)}
+                          className={`min-h-[46px] p-2 rounded-xl font-black text-xs transition-all flex flex-col items-center justify-center text-center gap-0.5 select-none active:scale-95 cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-500 text-emerald-950 border-2 border-emerald-300 shadow-md ring-2 ring-emerald-400/40 scale-[1.02]'
+                              : 'bg-emerald-950/70 hover:bg-emerald-900/80 text-slate-200 border border-emerald-800/60 hover:border-emerald-600'
+                          }`}
                         >
-                          <Sparkles className="w-3 h-3 text-amber-500/70" /> {cw}
+                          <span className="text-base leading-none">{emoji}</span>
+                          <span className="truncate max-w-full leading-tight">{translatedName}</span>
+                        </button>
+                      );
+                    })}
+                </div>
+              </section>
+
+              {/* ✨ 作業内容選択セクション (アグリハブ型 横3〜4列グリッド ＆ ピクトグラム表示) */}
+              <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>{t('workType', language)}</span>
+                  </h2>
+
+                  {/* 選択中の作業バッジ */}
+                  {workType && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-500/20 border border-amber-500/40 rounded-full text-xs font-black text-amber-300">
+                      <span>{getWorkTypeEmoji(workType)}</span>
+                      <span className="truncate max-w-[120px]">{t(workType, language)}</span>
+                      <button
+                        type="button"
+                        onClick={() => setWorkType('')}
+                        className="text-amber-400 hover:text-white ml-0.5 cursor-pointer"
+                        title="選択解除"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* 横3〜4列の均等グリッド配置 */}
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {/* 標準作業 */}
+                  {workTypes.map(w => {
+                    const isSelected = workType === w;
+                    const emoji = getWorkTypeEmoji(w);
+                    return (
+                      <button
+                        key={`default-${w}`}
+                        type="button"
+                        onClick={() => setWorkType(isSelected ? '' : w)}
+                        className={`min-h-[46px] p-2 rounded-xl font-black text-xs transition-all flex flex-col items-center justify-center text-center gap-0.5 select-none active:scale-95 cursor-pointer ${
+                          isSelected
+                            ? 'bg-amber-500 text-amber-950 border-2 border-amber-300 shadow-md ring-2 ring-amber-400/40 scale-[1.02]'
+                            : 'bg-emerald-950/70 hover:bg-emerald-900/80 text-slate-200 border border-emerald-800/60 hover:border-emerald-600'
+                        }`}
+                      >
+                        <span className="text-base leading-none">{emoji}</span>
+                        <span className="truncate max-w-full leading-tight">{t(w, language)}</span>
+                      </button>
+                    );
+                  })}
+
+                  {/* 独自作業 */}
+                  {customWorkTypes.map(cw => {
+                    const isSelected = workType === cw;
+                    return (
+                      <div key={`custom-${cw}`} className="relative group">
+                        <button
+                          type="button"
+                          onClick={() => setWorkType(isSelected ? '' : cw)}
+                          className={`w-full min-h-[46px] p-2 rounded-xl font-black text-xs transition-all flex flex-col items-center justify-center text-center gap-0.5 select-none active:scale-95 cursor-pointer ${
+                            isSelected
+                              ? 'bg-amber-500 text-amber-950 border-2 border-amber-300 shadow-md ring-2 ring-amber-400/40 scale-[1.02]'
+                              : 'bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-200 border border-emerald-700/60'
+                          }`}
+                        >
+                          <span className="text-base leading-none">{getWorkTypeEmoji(cw)}</span>
+                          <span className="truncate max-w-full leading-tight">{cw}</span>
                         </button>
                         <button
                           type="button"
@@ -1541,55 +1698,57 @@ export default function WorkEntryPage() {
                               }
                             }
                           }}
-                          className="absolute right-1 top-1/2 -translate-y-1/2 p-2 text-emerald-500 hover:text-red-400 hover:bg-red-500/10 rounded-full transition-colors opacity-70 hover:opacity-100"
+                          className="absolute -top-1.5 -right-1.5 p-1 bg-slate-800 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-full shadow border border-slate-600 transition-colors opacity-80 hover:opacity-100 cursor-pointer"
                           title="この独自作業を削除"
                         >
                           <X className="w-3 h-3" />
                         </button>
                       </div>
-                    ))}
+                    );
+                  })}
+
+                  {/* ＋ 新規作業追加タイル */}
+                  <button
+                    key="add-new-btn"
+                    type="button"
+                    onClick={() => setIsAddingWorkType(!isAddingWorkType)}
+                    className="min-h-[46px] p-2 rounded-xl font-black text-xs border-2 border-dashed border-emerald-500/50 text-emerald-300 bg-emerald-950/40 hover:bg-emerald-900/40 flex flex-col items-center justify-center text-center gap-0.5 transition-all cursor-pointer active:scale-95"
+                  >
+                    <Plus className="w-4 h-4 text-emerald-400" />
+                    <span className="truncate max-w-full leading-tight">{t('addNewWorkType', language)}</span>
+                  </button>
+                </div>
+
+                {/* 新規作業追加入力欄 */}
+                {isAddingWorkType && (
+                  <div className="pt-2 flex gap-2 animate-in slide-in-from-top-2">
+                    <input
+                      type="text"
+                      value={newWorkType}
+                      onChange={(e) => setNewWorkType(e.target.value)}
+                      placeholder={t('enterWorkTypePlaceholder', language)}
+                      className="flex-1 bg-emerald-950/80 border border-emerald-700 text-white rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-emerald-500"
+                    />
                     <button
-                      key="add-new-btn"
                       type="button"
-                      onClick={() => setIsAddingWorkType(!isAddingWorkType)}
-                      className="py-2 px-1 rounded-lg font-bold text-xs border border-dashed border-emerald-500/50 text-emerald-400 hover:bg-emerald-900/40 flex items-center justify-center gap-1 transition-all"
+                      onClick={() => {
+                        const val = newWorkType.trim();
+                        if (val) {
+                          setWorkType(val);
+                          if (!customWorkTypes.includes(val) && !workTypes.includes(val)) {
+                            setCustomWorkTypes([...customWorkTypes, val]);
+                          }
+                          setNewWorkType('');
+                          setIsAddingWorkType(false);
+                        }
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl px-4 py-2 text-xs transition-colors cursor-pointer shrink-0 shadow"
                     >
-                      <Plus className="w-3 h-3" /> {t('addNewWorkType', language)}
+                      {t('confirmWorkType', language)}
                     </button>
                   </div>
-
-                  <div>
-                    {isAddingWorkType && (
-                      <div className="mt-3 flex gap-2 animate-in slide-in-from-top-2">
-                        <input
-                          type="text"
-                          value={newWorkType}
-                          onChange={(e) => setNewWorkType(e.target.value)}
-                          placeholder={t('enterWorkTypePlaceholder', language)}
-                          className="flex-1 bg-emerald-950/60 border border-emerald-800/60 text-white rounded-lg px-2 py-1.5 text-xs font-bold focus:outline-none focus:border-emerald-500"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const val = newWorkType.trim();
-                            if (val) {
-                              setWorkType(val);
-                              if (!customWorkTypes.includes(val) && !workTypes.includes(val)) {
-                                setCustomWorkTypes([...customWorkTypes, val]);
-                              }
-                              setNewWorkType('');
-                              setIsAddingWorkType(false);
-                            }
-                          }}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg px-3 py-1.5 text-xs transition-colors"
-                        >
-                          {t('confirmWorkType', language)}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </section>
-              </div>
+                )}
+              </section>
 
               <section className="bg-slate-900/40 p-4 rounded-2xl border border-slate-700/50 shadow-sm space-y-4">
                 <div>
