@@ -1561,7 +1561,7 @@ export default function WorkEntryPage() {
               const topFourDays = Array.from({ length: 4 }).map((_, idx) => {
                 const { dateStr, dateObj } = getJSTDateWithOffset(idx);
                 const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
-                const label = idx === 0 ? '今日' : idx === 1 ? '明日' : idx === 2 ? '明後日' : `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+                const label = idx === 0 ? '今日' : idx === 1 ? '明日' : idx === 2 ? '明後日' : '3日後';
                 
                 const dayPendingOrders = allB2bOrders.filter(o => o.delivery_date === dateStr && o.status === 'pending');
                 const dayAllOrders = allB2bOrders.filter(o => o.delivery_date === dateStr);
@@ -1612,7 +1612,7 @@ export default function WorkEntryPage() {
                     <div>
                       <h2 className="text-sm sm:text-base font-black text-emerald-300 flex items-center gap-2">
                         <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
-                        <span>📅 配達・収穫予定</span>
+                        <span>配達・収穫予定</span>
                       </h2>
                       <p className="text-[10px] sm:text-[11px] font-bold text-emerald-300/70 mt-0.5">
                         明日・明後日の注文量と収穫目標
@@ -1971,92 +1971,6 @@ export default function WorkEntryPage() {
                       </div>
                     </div>
                   )}
-
-                  {/* 🌾 選択日の総収穫量（目標）サマリーカード */}
-                  <div className="bg-emerald-950/80 p-4 rounded-2xl border border-emerald-700/50 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs font-black text-emerald-300 flex items-center gap-1.5">
-                        <span>🌾</span>
-                        <span>
-                          {currentSelectedDay.label}（{currentSelectedDay.monthDate} {currentSelectedDay.dayOfWeek}）の総収穫・出荷目標
-                        </span>
-                      </div>
-                      <span className="text-[11px] font-bold text-emerald-400/80">
-                        {selectedOrders.length}件の注文
-                      </span>
-                    </div>
-
-                    {Object.keys(harvestSummary).length === 0 ? (
-                      <div className="text-center py-3 text-emerald-400/50 text-xs font-bold">
-                        この日の注文予定はありません
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {Object.values(harvestSummary).map((sum, idx) => (
-                          <div 
-                            key={idx}
-                            className="bg-emerald-900/70 border border-emerald-600/50 px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-xs"
-                          >
-                            <span className="font-black text-white text-xs">
-                              {getTranslatedName(sum.rawCrop, language)}
-                            </span>
-                            <span className="font-black text-emerald-300 text-sm bg-emerald-950 px-2 py-0.5 rounded-lg">
-                              {sum.quantity} {getTranslatedUnit(sum.unit, language)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 該当日の注文詳細リスト */}
-                  <div className="space-y-2.5">
-                    {selectedOrders.length === 0 ? (
-                      <div className="text-center py-6 bg-emerald-950/40 rounded-2xl border border-emerald-900/50">
-                        <CheckCircle2 className="w-7 h-7 text-emerald-500/40 mx-auto mb-1.5" />
-                        <div className="text-emerald-400/70 font-bold text-xs">
-                          {currentSelectedDay.label}（{currentSelectedDay.monthDate}）の配達予定はありません
-                        </div>
-                      </div>
-                    ) : (
-                      selectedOrders.map(order => {
-                        const isDelivered = order.status === 'delivered' || order.status === 'invoiced';
-                        return (
-                          <div 
-                            key={order.id} 
-                            className={`p-4 rounded-2xl flex items-center justify-between gap-3 shadow-sm border transition-all ${
-                              isDelivered
-                                ? 'bg-emerald-950/30 border-emerald-900/40 opacity-70'
-                                : 'bg-emerald-950/90 border-emerald-700/70'
-                            }`}
-                          >
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-black text-white text-sm">{order.customer?.name}</span>
-                                {isDelivered && (
-                                  <span className="bg-emerald-900/80 text-emerald-300 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-700">
-                                    ✅ 納品済
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-xs font-bold text-emerald-300/90 mt-1">
-                                {order.items?.map((i: any) => `${getTranslatedName(i.crops || i.crop || { name: '作物' }, language)} ${i.quantity}${getTranslatedUnit(i.unit || 'kg', language)}`).join(' / ')}
-                              </div>
-                            </div>
-
-                            {!isDelivered && (
-                              <button 
-                                onClick={() => handleCompleteB2BOrder(order.id)}
-                                className="bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-emerald-950 font-black text-xs py-2 px-3.5 rounded-xl transition-all flex items-center gap-1 shadow-md shrink-0"
-                              >
-                                {t('markDeliveredBtn', language)} <ArrowRight className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
                 </section>
               );
             })()}
