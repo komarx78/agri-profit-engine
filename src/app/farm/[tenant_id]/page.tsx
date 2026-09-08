@@ -5,7 +5,7 @@ import { Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Pack
 import { getFarmInfo, getFarmWorkers, verifyWorkerPin, getFarmMasters, getCustomWorkTypes, submitWorkLog, getTodayAttendance, submitAttendance, toggleWorkerLineNotification, TenantInfo } from '@/app/actions/farm';
 import { supabase } from '@/lib/supabase';
 import imageCompression from 'browser-image-compression';
-import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
+import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { getJSTDate } from '@/lib/dateUtils';
 
 // プライベートブラウズ等の例外で落ちない安全なStorageラッパー
@@ -931,13 +931,13 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                             : 'bg-emerald-900/20 text-emerald-200 border-emerald-700/50'
                         }`}
                       >
-                        <Sparkles className="w-3 h-3 text-amber-500/70" /> {cw}
+                        <Sparkles className="w-3 h-3 text-amber-500/70" /> {getTranslatedWorkType(cw, language) || cw}
                       </button>
                       <button
                         type="button"
                         onClick={async (e) => {
                           e.stopPropagation();
-                          if (confirm(`独自作業「${cw}」をリストから削除しますか？\n※この作業で保存された過去の記録は『片付け・その他』に名称統合されます。`)) {
+                          if (confirm(`独自作業「${getTranslatedWorkType(cw, language) || cw}」をリストから削除しますか？\n※この作業で保存された過去の記録は『片付け・その他』に名称統合されます。`)) {
                             setIsSubmitting(true);
                             try {
                               await supabase.from('work_logs').update({ work_type: '片付け・その他' }).eq('user_id', farmInfo?.id).eq('work_type', cw);

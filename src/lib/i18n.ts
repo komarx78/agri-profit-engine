@@ -534,6 +534,14 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   , si: 'වල් නෙලීම', km: 'ការកាត់ស្មៅ' },
   '片付け・メンテ': { ja: '片付け・メンテ', en: 'Cleanup / Maintenance', vi: 'Dọn dẹp / Bảo trì', id: 'Pembersihan / Perawatan', zh: '清理/维护'
   , si: 'පිරිසිදු කිරීම / නඩත්තු කිරීම', km: 'ការសម្អាត / ការថែទាំ' },
+  // テスト用作業名・キーワード
+  'テスト': { ja: 'テスト', en: 'Test', vi: 'Kiểm tra (Test)', id: 'Uji Coba', zh: '测试', si: 'පරීක්ෂණය', km: 'ការសាកល្បង' },
+  'テスト1': { ja: 'テスト1', en: 'Test 1', vi: 'Kiểm tra 1', id: 'Uji Coba 1', zh: '测试1', si: 'පරීක්ෂණය 1', km: 'ការសាកល្បង 1' },
+  'テスト2': { ja: 'テスト2', en: 'Test 2', vi: 'Kiểm tra 2', id: 'Uji Coba 2', zh: '测试2', si: 'පරීක්ෂණය 2', km: 'ការសាកល្បង 2' },
+  'テスト3': { ja: 'テスト3', en: 'Test 3', vi: 'Kiểm tra 3', id: 'Uji Coba 3', zh: '测试3', si: 'පරීක්ෂණය 3', km: 'ការសាកល្បង 3' },
+  'テスト4': { ja: 'テスト4', en: 'Test 4', vi: 'Kiểm tra 4', id: 'Uji Coba 4', zh: '测试4', si: 'පරීක්ෂණය 4', km: 'ការសាកល្បង 4' },
+  'テスト5': { ja: 'テスト5', en: 'Test 5', vi: 'Kiểm tra 5', id: 'Uji Coba 5', zh: '测试5', si: 'පරීක්ෂණය 5', km: 'ការសាកល្បង 5' },
+  'searchCropPlaceholder': { ja: '🔍 作目を絞り込み...', en: '🔍 Filter crops...', vi: '🔍 Lọc cây trồng...', id: '🔍 Saring tanaman...', zh: '🔍 筛选作物...', si: '🔍 බෝග පෙරහන් කරන්න...', km: '🔍 ត្រងដំណាំ...' },
   // 勤怠関連の新規追加分
   attendance: { ja: '勤怠打刻', en: 'Attendance', vi: 'Chấm công', id: 'Kehadiran', zh: '考勤打卡' , si: 'පැමිණීම', km: 'ការចូលរួម' },
   realtimeRecord: { ja: 'リアルタイム記録', en: 'Realtime Record', vi: 'Ghi thời gian thực', id: 'Rekam Waktu Nyata', zh: '实时记录' , si: 'තත්‍ය කාලීන වාර්තාව', km: 'កំណត់ត្រាពេលវេលាពិត' },
@@ -654,11 +662,16 @@ export function getWeekdayName(dayIndex: number, lang: LanguageCode = 'ja'): str
 }
 
 export function t(key: string, lang: LanguageCode = 'ja'): string {
-  if (!TRANSLATIONS[key]) {
-    console.warn(`Translation key missing: ${key}`);
-    return key;
+  if (!key) return '';
+  if (lang === 'ja') return key;
+  if (TRANSLATIONS[key]) {
+    return TRANSLATIONS[key][lang] || TRANSLATIONS[key]['en'] || TRANSLATIONS[key]['ja'] || key;
   }
-  return TRANSLATIONS[key][lang] || TRANSLATIONS[key]['en'] || TRANSLATIONS[key]['ja'] || key;
+  const translated = getTranslatedWorkType(key, lang);
+  if (translated && translated !== key) {
+    return translated;
+  }
+  return key;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -694,7 +707,11 @@ export function getTranslatedWorkType(text: string, lang: LanguageCode = 'ja'): 
   // 2. 代表的な農作業用語・テスト・圃場・作目等のキーワード辞書
   const dict: Record<string, Record<string, string>> = {
     'テスト': { en: 'Test', vi: 'Kiểm tra (Test)', id: 'Uji Coba', zh: '测试', si: 'පරීක්ෂණය', km: 'ការសាកល្បង' },
+    'テスト1': { en: 'Test 1', vi: 'Kiểm tra 1', id: 'Uji Coba 1', zh: '测试1', si: 'පරීක්ෂණය 1', km: 'ការសាកល្បង 1' },
     'テスト2': { en: 'Test 2', vi: 'Kiểm tra 2', id: 'Uji Coba 2', zh: '测试2', si: 'පරීක්ෂණය 2', km: 'ការសាកល្បង 2' },
+    'テスト3': { en: 'Test 3', vi: 'Kiểm tra 3', id: 'Uji Coba 3', zh: '测试3', si: 'පරීක්ෂණය 3', km: 'ការសាកល្បង 3' },
+    'テスト4': { en: 'Test 4', vi: 'Kiểm tra 4', id: 'Uji Coba 4', zh: '测试4', si: 'පරීක්ෂණය 4', km: 'ការសាកល្បង 4' },
+    'テスト5': { en: 'Test 5', vi: 'Kiểm tra 5', id: 'Uji Coba 5', zh: '测试5', si: 'පරීක්ෂණය 5', km: 'ការសាកល្បង 5' },
     '作業': { en: 'Work', vi: 'Công việc', id: 'Pekerjaan', zh: '作业', si: 'වැඩ', km: 'ការងារ' },
     '播種': { en: 'Sowing', vi: 'Gieo hạt', id: 'Menabur', zh: '播种', si: 'බීජ වැපිරීම', km: 'ការសាបព្រោះ' },
     '定植': { en: 'Planting', vi: 'Trồng cây', id: 'Menanam', zh: '定植', si: 'පැල සිටුවීම', km: 'ការដាំកូនឈើ' },
@@ -741,8 +758,8 @@ export function getTranslatedWorkType(text: string, lang: LanguageCode = 'ja'): 
     return dict[text][lang];
   }
 
-  // テスト1, テスト 2 などの正規表現対応
-  const testMatch = text.match(/^テスト\s*([0-9０-９]+)$/);
+  // テスト1, テスト 2, Test 1 などの正規表現対応
+  const testMatch = text.match(/^(?:テスト|test)\s*([0-9０-９]+)$/i);
   if (testMatch) {
     const num = testMatch[1];
     const prefix = dict['テスト']?.[lang] || 'Test';

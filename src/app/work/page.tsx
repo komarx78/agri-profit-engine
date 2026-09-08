@@ -1566,7 +1566,7 @@ export default function WorkEntryPage() {
                       type="text"
                       value={cropSearchQuery}
                       onChange={(e) => setCropSearchQuery(e.target.value)}
-                      placeholder="🔍 作目を絞り込み..."
+                      placeholder={t('searchCropPlaceholder', language)}
                       className="w-full bg-emerald-950/60 border border-emerald-800/60 text-white rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-emerald-500 placeholder:text-emerald-500/50"
                     />
                     {cropSearchQuery && (
@@ -1626,7 +1626,7 @@ export default function WorkEntryPage() {
                   {workType && (
                     <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-500/20 border border-amber-500/40 rounded-full text-xs font-black text-amber-300">
                       <span>{getWorkTypeEmoji(workType)}</span>
-                      <span className="truncate max-w-[120px]">{t(workType, language)}</span>
+                      <span className="truncate max-w-[120px]">{getTranslatedWorkType(workType, language) || t(workType, language)}</span>
                       <button
                         type="button"
                         onClick={() => setWorkType('')}
@@ -1657,7 +1657,7 @@ export default function WorkEntryPage() {
                         }`}
                       >
                         <span className="text-base leading-none">{emoji}</span>
-                        <span className="truncate max-w-full leading-tight">{t(w, language)}</span>
+                        <span className="truncate max-w-full leading-tight">{getTranslatedWorkType(w, language) || t(w, language)}</span>
                       </button>
                     );
                   })}
@@ -1677,13 +1677,13 @@ export default function WorkEntryPage() {
                           }`}
                         >
                           <span className="text-base leading-none">{getWorkTypeEmoji(cw)}</span>
-                          <span className="truncate max-w-full leading-tight">{cw}</span>
+                          <span className="truncate max-w-full leading-tight">{getTranslatedWorkType(cw, language) || t(cw, language) || cw}</span>
                         </button>
                         <button
                           type="button"
                           onClick={async (e) => {
                             e.stopPropagation();
-                            if (confirm(`独自作業「${cw}」をリストから削除しますか？\n※この作業で保存された過去の記録は『片付け・メンテ』に名称統合されます。`)) {
+                            if (confirm(`独自作業「${getTranslatedWorkType(cw, language) || cw}」をリストから削除しますか？\n※この作業で保存された過去の記録は『片付け・メンテ』に名称統合されます。`)) {
                               setIsSubmitting(true);
                               try {
                                 const { data: farmWorkers } = await supabase.from('workers').select('id').eq('user_id', workerProfile?.user_id);
