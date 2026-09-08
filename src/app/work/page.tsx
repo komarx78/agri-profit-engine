@@ -7,7 +7,8 @@ import {
   Truck, Layout, Home,
   Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, 
   History, LogOut, Loader2, AlertCircle, Coffee, LogIn, LogOut as LogOutIcon, Sun, CloudRain, Plus, X,
-  ImageIcon, FileText, Video, MessageSquare, Globe2, MessageCircle, Trash2
+  ImageIcon, FileText, Video, MessageSquare, Globe2, MessageCircle, Trash2,
+  RefreshCw, AlertTriangle, HelpCircle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getB2BOrders, updateB2BOrderStatus } from '@/app/actions/b2b';
@@ -15,6 +16,7 @@ import { getWorkerShareSettings, submitAttendance } from '@/app/actions/farm';
 import { WorkerGate } from '@/components/WorkerGate';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { PwaInstallPrompt, PwaBottomBanner } from '@/components/PwaInstallPrompt';
+import { GpsGuideModal } from '@/components/GpsGuideModal';
 import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode, UNITS, getTranslatedUnit } from '@/lib/i18n';
 import { useCompany } from '@/hooks/useCompany';
 import imageCompression from 'browser-image-compression';
@@ -118,6 +120,17 @@ export default function WorkEntryPage() {
   const [workerProfile, setWorkerProfile] = useState<any>(null);
   const [gpsStatus, setGpsStatus] = useState<string>('');
   const [currentAddress, setCurrentAddress] = useState<string>('');
+  
+  // GPS位置情報コントロール状態
+  const [isGpsEnabled, setIsGpsEnabled] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('agri_gps_enabled') !== 'false';
+    }
+    return true;
+  });
+  const [isGpsLoading, setIsGpsLoading] = useState<boolean>(false);
+  const [gpsPermissionState, setGpsPermissionState] = useState<'granted' | 'prompt' | 'denied' | 'unsupported' | 'unknown'>('unknown');
+  const [showGpsGuideModal, setShowGpsGuideModal] = useState<boolean>(false);
 
   // --- 掲示板用状態 ---
   const [boardPosts, setBoardPosts] = useState<any[]>([]);
@@ -461,45 +474,128 @@ export default function WorkEntryPage() {
       }
     }
     fetchData();
-
-    // 初期マウント時にGPS住所を一度取得しておく
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(async (pos) => {
-        const addr = await fetchAddress(pos.coords.latitude, pos.coords.longitude);
-        setCurrentAddress(addr);
-      }, () => {
-        setCurrentAddress(t('locationOff', language));
-      });
-    }
-
   }, [currentUser?.id, language]); // languageを依存配列に追加
 
-  // GPSによる自動圃場選択
-  useEffect(() => {
-    if (activeTab === 'work' && fields.length > 0 && !selectedField && navigator.geolocation) {
-      setGpsStatus(t('gpsChecking', language));
-      navigator.geolocation.getCurrentPosition((pos) => {
-        const myPoint = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        let foundField = '';
-        for (const f of fields) {
-          if (f.polygon_coordinates && Array.isArray(f.polygon_coordinates)) {
-            if (isPointInPolygon(myPoint, f.polygon_coordinates)) {
-              foundField = f.name;
-              break;
+  // 📍 GPS位置情報の取得・再測位ロジック
+  const refreshGpsPosition = async (force: boolean = false): Promise<void> => {
+    if (typeof window === 'undefined') return;
+    if (!navigator.geolocation) {
+      setGpsPermissionState('unsupported');
+      setCurrentAddress('位置情報非対応ブラウザ');
+      return;
+    }
+
+    const enabled = force ? true : isGpsEnabled;
+    if (!enabled) {
+      setCurrentAddress('位置情報OFF');
+      setGpsStatus('');
+      return;
+    }
+
+    setIsGpsLoading(true);
+
+    // Permission API による事前チェック（対応ブラウザのみ）
+    if (typeof navigator !== 'undefined' && 'permissions' in navigator && (navigator as any).permissions?.query) {
+      try {
+        const pStatus = await (navigator as any).permissions.query({ name: 'geolocation' });
+        setGpsPermissionState(pStatus.state);
+        pStatus.onchange = () => {
+          setGpsPermissionState(pStatus.state);
+        };
+      } catch (e) {}
+    }
+
+    return new Promise<void>((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          setGpsPermissionState('granted');
+          setIsGpsLoading(false);
+          const { latitude, longitude } = pos.coords;
+          try {
+            const addr = await fetchAddress(latitude, longitude);
+            setCurrentAddress(addr || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+          } catch (e) {
+            setCurrentAddress(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+          }
+
+          // 圃場判定（圃場リストが存在する場合）
+          if (fields.length > 0 && !selectedField) {
+            const myPoint = { lat: latitude, lng: longitude };
+            let foundField = '';
+            for (const f of fields) {
+              if (f.polygon_coordinates && Array.isArray(f.polygon_coordinates)) {
+                if (isPointInPolygon(myPoint, f.polygon_coordinates)) {
+                  foundField = f.name;
+                  break;
+                }
+              }
+            }
+            if (foundField) {
+              setSelectedField(foundField);
+              setGpsStatus(`${t('gpsAutoSelect', language)} ${foundField}`);
+            } else {
+              setGpsStatus(t('outOfField', language));
             }
           }
+          resolve();
+        },
+        (err) => {
+          setIsGpsLoading(false);
+          if (err.code === 1) { // PERMISSION_DENIED
+            setGpsPermissionState('denied');
+            setCurrentAddress('⚠️ 位置情報がブロックされています');
+            setGpsStatus('位置情報が拒否されています');
+          } else if (err.code === 2) { // POSITION_UNAVAILABLE
+            setCurrentAddress('GPS電波を受信できません');
+            setGpsStatus(t('gpsFailed', language));
+          } else if (err.code === 3) { // TIMEOUT
+            setCurrentAddress('GPS取得タイムアウト');
+            setGpsStatus(t('gpsFailed', language));
+          } else {
+            setCurrentAddress(t('locationOff', language));
+            setGpsStatus(t('gpsFailed', language));
+          }
+          resolve();
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 8000,
+          maximumAge: 30000
         }
-        if (foundField) {
-          setSelectedField(foundField);
-          setGpsStatus(`${t('gpsAutoSelect', language)} ${foundField}`);
-        } else {
-          setGpsStatus(t('outOfField', language));
-        }
-      }, () => {
-        setGpsStatus(t('gpsFailed', language));
-      });
+      );
+    });
+  };
+
+  // GPS オン/オフ切り替え
+  const toggleGps = () => {
+    const nextState = !isGpsEnabled;
+    setIsGpsEnabled(nextState);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('agri_gps_enabled', String(nextState));
     }
-  }, [activeTab, fields, language]);
+    if (nextState) {
+      refreshGpsPosition(true);
+    } else {
+      setCurrentAddress('位置情報OFF');
+      setGpsStatus('');
+    }
+  };
+
+  // マウント時および言語/ユーザー変更時のGPS自動取得
+  useEffect(() => {
+    if (isGpsEnabled) {
+      refreshGpsPosition();
+    } else {
+      setCurrentAddress('位置情報OFF');
+    }
+  }, [currentUser?.id, isGpsEnabled]);
+
+  // 作業タブ切り替え時、圃場未選択なら自動判定
+  useEffect(() => {
+    if (activeTab === 'work' && fields.length > 0 && !selectedField && isGpsEnabled) {
+      refreshGpsPosition();
+    }
+  }, [activeTab, fields.length]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -712,9 +808,11 @@ export default function WorkEntryPage() {
       let lat=0, lng=0;
       let weatherText = null, temp = null;
 
-      if (action === 'clock_in' && navigator.geolocation) {
+      if (action === 'clock_in' && isGpsEnabled && typeof navigator !== 'undefined' && navigator.geolocation) {
         try {
-          const pos = await new Promise<GeolocationPosition>((res, rej) => navigator.geolocation.getCurrentPosition(res, rej));
+          const pos = await new Promise<GeolocationPosition>((res, rej) => 
+            navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 5000, maximumAge: 30000 })
+          );
           lat = pos.coords.latitude;
           lng = pos.coords.longitude;
           const w = await fetchWeather(lat, lng);
@@ -789,9 +887,11 @@ export default function WorkEntryPage() {
         const startTime = new Date().toISOString();
 
         let weatherText = null, temp = null;
-        if (navigator.geolocation) {
+        if (isGpsEnabled && typeof navigator !== 'undefined' && navigator.geolocation) {
           try {
-            const pos = await new Promise<GeolocationPosition>((res, rej) => navigator.geolocation.getCurrentPosition(res, rej));
+            const pos = await new Promise<GeolocationPosition>((res, rej) => 
+              navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 5000, maximumAge: 30000 })
+            );
             const w = await fetchWeather(pos.coords.latitude, pos.coords.longitude);
             weatherText = w.text;
             temp = w.temp;
@@ -1030,10 +1130,83 @@ export default function WorkEntryPage() {
           </button>
         </div>
         
-        {/* GPS住所の表示 */}
-        <div className="max-w-md w-full mx-auto flex items-center justify-center gap-1 text-[10px] font-bold text-emerald-400 truncate">
-          <MapPin className="w-2.5 h-2.5 flex-shrink-0" />
-          <span className="truncate">{currentAddress}</span>
+        {/* 📍 GPS位置情報 コントロール ＆ ステータスバー */}
+        <div className="max-w-md w-full mx-auto flex items-center justify-between gap-2 px-2 py-1 bg-emerald-950/70 border border-emerald-800/60 rounded-xl text-[10px] font-bold">
+          
+          {/* 左側：ON/OFF スイッチ */}
+          <button
+            type="button"
+            onClick={toggleGps}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg font-black transition-all cursor-pointer select-none shrink-0 ${
+              isGpsEnabled 
+                ? 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-500' 
+                : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-white'
+            }`}
+            title={isGpsEnabled ? "クリックして位置情報をOFFにする" : "クリックして位置情報をONにする"}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${isGpsEnabled ? 'bg-emerald-200 animate-pulse' : 'bg-slate-500'}`} />
+            <span>GPS {isGpsEnabled ? 'ON' : 'OFF'}</span>
+          </button>
+
+          {/* 中央：現在地住所またはステータス表示 */}
+          <div className="flex-1 min-w-0 flex items-center justify-center gap-1 truncate text-center">
+            {!isGpsEnabled ? (
+              <span className="text-slate-400 truncate">位置情報OFF (手動設定)</span>
+            ) : isGpsLoading ? (
+              <span className="text-amber-300 flex items-center gap-1 truncate">
+                <RefreshCw className="w-2.5 h-2.5 animate-spin shrink-0 text-amber-400" />
+                <span>GPS測位中...</span>
+              </span>
+            ) : gpsPermissionState === 'denied' ? (
+              <span className="text-amber-300 flex items-center gap-1 truncate">
+                <AlertTriangle className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                <span className="truncate">ブラウザでブロック中</span>
+              </span>
+            ) : (
+              <span className="text-emerald-300 flex items-center gap-1 truncate">
+                <MapPin className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                <span className="truncate">{currentAddress || '現在地取得中...'}</span>
+              </span>
+            )}
+          </div>
+
+          {/* 右側：再取得ボタン または 設定ガイドボタン */}
+          <div className="flex items-center gap-1 shrink-0">
+            {isGpsEnabled && (
+              <>
+                {gpsPermissionState === 'denied' ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowGpsGuideModal(true)}
+                    className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[10px] font-black transition-all cursor-pointer"
+                  >
+                    <span>設定方法</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => refreshGpsPosition(true)}
+                    disabled={isGpsLoading}
+                    className="p-1 hover:bg-emerald-800 text-emerald-300 hover:text-white rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                    title="現在地を再測位する"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isGpsLoading ? 'animate-spin' : ''}`} />
+                  </button>
+                )}
+                
+                {/* 常時開けるヘルプアイコン */}
+                <button
+                  type="button"
+                  onClick={() => setShowGpsGuideModal(true)}
+                  className="p-1 text-emerald-400/60 hover:text-emerald-300 rounded-lg transition-colors cursor-pointer"
+                  title="位置情報の設定・トラブル解決手順"
+                >
+                  <HelpCircle className="w-3 h-3" />
+                </button>
+              </>
+            )}
+          </div>
+
         </div>
       </header>
 
@@ -2199,6 +2372,16 @@ export default function WorkEntryPage() {
           </div>
         </div>
       )}
+
+      {/* 📍 位置情報設定・解除ガイドモーダル */}
+      <GpsGuideModal
+        isOpen={showGpsGuideModal}
+        onClose={() => setShowGpsGuideModal(false)}
+        onRetry={async () => {
+          await refreshGpsPosition(true);
+        }}
+        isRetrying={isGpsLoading}
+      />
 
       {/* 📱 ページの最下部に配置するアプリ化案内バナー（画面に被らない安全配置） */}
       <PwaBottomBanner />
