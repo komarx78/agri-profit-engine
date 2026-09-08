@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Smartphone, Share, PlusSquare, X, Download, CheckCircle2, Sparkles, ExternalLink, AlertTriangle } from 'lucide-react';
 import { t, LanguageCode } from '@/lib/i18n';
 
@@ -223,15 +224,20 @@ function PwaInstallModal({
   language?: LanguageCode;
 }) {
   const [platform, setPlatform] = useState<'ios' | 'android'>(isIos ? 'ios' : 'android');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     setPlatform(isIos ? 'ios' : 'android');
   }, [isIos]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
-    <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[200] overflow-y-auto p-3 sm:p-4 animate-in fade-in duration-200">
+  return createPortal(
+    <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[9999] overflow-y-auto p-3 sm:p-4 animate-in fade-in duration-200">
       <div className="flex min-h-full items-center justify-center py-4">
         <div className="bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 text-slate-100 relative my-auto">
           
@@ -368,6 +374,7 @@ function PwaInstallModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

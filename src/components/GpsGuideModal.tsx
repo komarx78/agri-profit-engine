@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { MapPin, AlertTriangle, CheckCircle2, X, RefreshCw, Smartphone, ExternalLink, Settings, ShieldCheck } from 'lucide-react';
 import { t, LanguageCode } from '@/lib/i18n';
 
@@ -168,12 +169,18 @@ function getGuideText(key: string, lang: LanguageCode = 'ja'): string {
 
 export function GpsGuideModal({ isOpen, onClose, onRetry, isRetrying = false, language = 'ja' }: GpsGuideModalProps) {
   const [activeTab, setActiveTab] = useState<'iphone' | 'android'>('iphone');
+  const [mounted, setMounted] = useState(false);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  return (
-    <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[300] flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 text-slate-100 relative max-h-[90vh] overflow-y-auto">
+  if (!isOpen || !mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[9999] overflow-y-auto p-3 sm:p-4 animate-in fade-in duration-200">
+      <div className="flex min-h-full items-center justify-center py-4">
+        <div className="bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 text-slate-100 relative my-auto">
         
         <button
           type="button"
@@ -322,5 +329,7 @@ export function GpsGuideModal({ isOpen, onClose, onRetry, isRetrying = false, la
 
       </div>
     </div>
-  );
+  </div>,
+  document.body
+);
 }

@@ -834,10 +834,10 @@ export function getWeekdayName(dayIndex: number, lang: LanguageCode = 'ja'): str
 
 export function t(key: string, lang: LanguageCode = 'ja'): string {
   if (!key) return '';
-  if (lang === 'ja') return key;
   if (TRANSLATIONS[key]) {
-    return TRANSLATIONS[key][lang] || TRANSLATIONS[key]['en'] || TRANSLATIONS[key]['ja'] || key;
+    return TRANSLATIONS[key][lang] || TRANSLATIONS[key]['ja'] || TRANSLATIONS[key]['en'] || key;
   }
+  if (lang === 'ja') return key;
   const translated = getTranslatedWorkType(key, lang);
   if (translated && translated !== key) {
     return translated;
