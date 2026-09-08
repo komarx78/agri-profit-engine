@@ -88,6 +88,7 @@ export function PwaInstallPrompt({ language = 'ja' }: { language?: LanguageCode 
         isIos={isIos}
         deferredPrompt={deferredPrompt}
         onInstallClick={handleInstallClick}
+        language={language}
       />
     </>
   );
@@ -197,6 +198,7 @@ export function PwaBottomBanner({ language = 'ja' }: { language?: LanguageCode }
         isIos={isIos}
         deferredPrompt={deferredPrompt}
         onInstallClick={handleInstallClick}
+        language={language}
       />
     </>
   );
@@ -209,7 +211,8 @@ function PwaInstallModal({
   isLine,
   isIos,
   deferredPrompt,
-  onInstallClick
+  onInstallClick,
+  language = 'ja'
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -217,125 +220,153 @@ function PwaInstallModal({
   isIos: boolean;
   deferredPrompt: any;
   onInstallClick: () => void;
+  language?: LanguageCode;
 }) {
+  const [platform, setPlatform] = useState<'ios' | 'android'>(isIos ? 'ios' : 'android');
+
+  useEffect(() => {
+    setPlatform(isIos ? 'ios' : 'android');
+  }, [isIos]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-5 text-slate-100 relative max-h-[90vh] overflow-y-auto">
-        
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
-        >
-          <X className="w-5 h-5" />
-        </button>
+    <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[200] overflow-y-auto p-3 sm:p-4 animate-in fade-in duration-200">
+      <div className="flex min-h-full items-center justify-center py-4">
+        <div className="bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 text-slate-100 relative my-auto">
+          
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+            title="閉じる"
+          >
+            <X className="w-5 h-5" />
+          </button>
 
-        {/* ヘッダー */}
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-2xl shadow-lg shadow-emerald-900/50 border border-emerald-400/40 shrink-0">
-            🌱
-          </div>
-          <div>
-            <h3 className="text-base font-black text-white flex items-center gap-1.5">
-              <span>アグリ現場 をアプリ化</span>
-              <Sparkles className="w-4 h-4 text-amber-400" />
-            </h3>
-            <p className="text-xs text-slate-400 font-medium">
-              URLバーが消え、全画面でサクサク起動します
-            </p>
-          </div>
-        </div>
-
-        {/* LINE注意 */}
-        {isLine && (
-          <div className="p-3 bg-amber-500/20 border border-amber-500/40 rounded-2xl text-xs space-y-1 text-amber-200">
-            <p className="font-black text-amber-300">⚠️ 現在LINEアプリ内で開かれています</p>
-            <p className="leading-relaxed text-[11px]">
-              LINE内ではホーム画面追加が制限されるため、右下の「︙」または共有アイコンから<strong>「Safariで開く（ブラウザで開く）」</strong>を選択してください。
-            </p>
-          </div>
-        )}
-
-        {/* メリット */}
-        <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700 space-y-2 text-xs">
-          <div className="flex items-center gap-2 text-emerald-400 font-bold">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span>ホーム画面から1タップで即起動</span>
-          </div>
-          <div className="flex items-center gap-2 text-emerald-400 font-bold">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span>ブラウザの余計な枠がなく画面広々</span>
-          </div>
-          <div className="flex items-center gap-2 text-emerald-400 font-bold">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span>現場での作業記録や打刻が超スムーズ</span>
-          </div>
-        </div>
-
-        {/* iPhone (Safari) の手順 */}
-        <div className="space-y-3 pt-1">
-          <div className="text-xs font-black text-amber-300 bg-amber-500/10 px-3 py-1.5 rounded-xl border border-amber-500/20 flex items-center gap-1.5">
-            <span>🍎 iPhone (Safari) での手順:</span>
-          </div>
-
-          <div className="space-y-2 text-xs font-bold text-slate-200">
-            <div className="flex items-start gap-2.5 p-3 bg-slate-800/90 rounded-xl border border-slate-700/60">
-              <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black text-[11px] shrink-0 mt-0.5">1</span>
-              <p className="leading-relaxed">
-                Safari画面下の <span className="inline-flex items-center px-1.5 py-0.5 bg-slate-700 rounded text-sky-400 font-mono"><Share className="w-3.5 h-3.5 inline mr-1" />共有ボタン</span> をタップ
-              </p>
+          {/* ヘッダー */}
+          <div className="flex items-center gap-3 pr-8">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-2xl shadow-lg shadow-emerald-900/50 border border-emerald-400/40 shrink-0">
+              🌱
             </div>
-
-            <div className="flex items-start gap-2.5 p-3 bg-slate-800/90 rounded-xl border border-slate-700/60">
-              <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black text-[11px] shrink-0 mt-0.5">2</span>
-              <p className="leading-relaxed">
-                メニュー内の <span className="inline-flex items-center px-1.5 py-0.5 bg-slate-700 rounded text-emerald-400 font-mono"><PlusSquare className="w-3.5 h-3.5 inline mr-1" />「ホーム画面に追加」</span> を選択して「追加」をタップ！
+            <div className="min-w-0">
+              <h3 className="text-base font-black text-white flex items-center gap-1.5">
+                <span>{t('pwaModalTitle', language)}</span>
+                <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+              </h3>
+              <p className="text-xs text-slate-400 font-medium leading-tight">
+                {t('pwaModalSub', language)}
               </p>
             </div>
           </div>
-        </div>
 
-        {/* Android (Chrome) の手順 */}
-        <div className="space-y-3 pt-1">
-          <div className="text-xs font-black text-emerald-300 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20">
-            🤖 Android / Chrome での手順:
+          {/* LINE注意 */}
+          {isLine && (
+            <div className="p-3 bg-amber-500/20 border border-amber-500/40 rounded-2xl text-xs space-y-1 text-amber-200">
+              <p className="font-black text-amber-300">{t('pwaLineWarning', language)}</p>
+              <p className="leading-relaxed text-[11px]">
+                {t('pwaLineDesc', language)}
+              </p>
+            </div>
+          )}
+
+          {/* メリット */}
+          <div className="bg-slate-800/80 p-3 rounded-2xl border border-slate-700 space-y-1.5 text-xs">
+            <div className="flex items-center gap-2 text-emerald-400 font-bold">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{t('pwaBenefit1', language)}</span>
+            </div>
+            <div className="flex items-center gap-2 text-emerald-400 font-bold">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{t('pwaBenefit2', language)}</span>
+            </div>
+            <div className="flex items-center gap-2 text-emerald-400 font-bold">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{t('pwaBenefit3', language)}</span>
+            </div>
           </div>
 
-          {deferredPrompt ? (
+          {/* プラットフォーム切り替えタブ */}
+          <div className="grid grid-cols-2 p-1 bg-slate-800 rounded-xl gap-1 text-xs font-bold">
             <button
               type="button"
-              onClick={onInstallClick}
-              className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl font-black text-xs shadow-lg flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+              onClick={() => setPlatform('ios')}
+              className={`py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                platform === 'ios'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
             >
-              <Download className="w-4 h-4" />
-              <span>今すぐワンタップでインストール</span>
+              <span>🍎 iPhone</span>
             </button>
-          ) : (
-            <div className="space-y-2 text-xs font-bold text-slate-200">
+            <button
+              type="button"
+              onClick={() => setPlatform('android')}
+              className={`py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                platform === 'android'
+                  ? 'bg-emerald-500 text-slate-950 font-black shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span>🤖 Android</span>
+            </button>
+          </div>
+
+          {/* iPhone (Safari) の手順 */}
+          {platform === 'ios' && (
+            <div className="space-y-2 text-xs font-bold text-slate-200 animate-in fade-in duration-150">
+              <div className="flex items-start gap-2.5 p-3 bg-slate-800/90 rounded-xl border border-slate-700/60">
+                <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center font-black text-[11px] shrink-0 mt-0.5">1</span>
+                <p className="leading-relaxed">
+                  {t('pwaIosStep1', language)}
+                </p>
+              </div>
+
+              <div className="flex items-start gap-2.5 p-3 bg-slate-800/90 rounded-xl border border-slate-700/60">
+                <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center font-black text-[11px] shrink-0 mt-0.5">2</span>
+                <p className="leading-relaxed">
+                  {t('pwaIosStep2', language)}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Android (Chrome) の手順 */}
+          {platform === 'android' && (
+            <div className="space-y-2 text-xs font-bold text-slate-200 animate-in fade-in duration-150">
+              {deferredPrompt && (
+                <button
+                  type="button"
+                  onClick={onInstallClick}
+                  className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl font-black text-xs shadow-lg flex items-center justify-center gap-2 cursor-pointer active:scale-95 mb-2"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>{t('pwaAndroidOneTap', language)}</span>
+                </button>
+              )}
               <div className="flex items-start gap-2.5 p-3 bg-slate-800/90 rounded-xl border border-slate-700/60">
                 <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black text-[11px] shrink-0 mt-0.5">1</span>
                 <p className="leading-relaxed">
-                  Chrome右上のメニュー（<strong>︙</strong>）をタップ
+                  {t('pwaAndroidStep1', language)}
                 </p>
               </div>
               <div className="flex items-start gap-2.5 p-3 bg-slate-800/90 rounded-xl border border-slate-700/60">
                 <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black text-[11px] shrink-0 mt-0.5">2</span>
                 <p className="leading-relaxed">
-                  <strong>「アプリをインストール」</strong> または <strong>「ホーム画面に追加」</strong> を選択！
+                  {t('pwaAndroidStep2', language)}
                 </p>
               </div>
             </div>
           )}
-        </div>
 
-        <button
-          type="button"
-          onClick={onClose}
-          className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-        >
-          閉じる
-        </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+          >
+            {t('pwaCloseBtn', language)}
+          </button>
+        </div>
       </div>
     </div>
   );

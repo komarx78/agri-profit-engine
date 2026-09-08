@@ -577,13 +577,13 @@ export default function WorkEntryPage() {
           setIsGpsLoading(false);
           if (err.code === 1) { // PERMISSION_DENIED
             setGpsPermissionState('denied');
-            setCurrentAddress('⚠️ 位置情報がブロックされています');
-            setGpsStatus('位置情報が拒否されています');
+            setCurrentAddress(t('gpsBlockedWarning', language));
+            setGpsStatus(t('gpsDenied', language));
           } else if (err.code === 2) { // POSITION_UNAVAILABLE
-            setCurrentAddress('GPS電波を受信できません');
+            setCurrentAddress(t('gpsNoSignal', language));
             setGpsStatus(t('gpsFailed', language));
           } else if (err.code === 3) { // TIMEOUT
-            setCurrentAddress('GPS取得タイムアウト');
+            setCurrentAddress(t('gpsTimeout', language));
             setGpsStatus(t('gpsFailed', language));
           } else {
             setCurrentAddress(t('locationOff', language));

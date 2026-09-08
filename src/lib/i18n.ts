@@ -192,6 +192,177 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
     si: 'පියවර බලන්න',
     km: 'មើលជំហាន'
   },
+  pwaModalTitle: {
+    ja: 'アグリ現場 をアプリ化',
+    en: 'Install Field App',
+    vi: 'Cài ứng dụng Hiện trường',
+    id: 'Pasang Apl Lapangan',
+    zh: '将农业现场安装为应用',
+    si: 'ක්ෂේත්‍ර යෙදුම ස්ථාපනය කරන්න',
+    km: 'ដំឡើងកម្មវិធីវាល'
+  },
+  pwaModalSub: {
+    ja: 'URLバーが消え、全画面でサクサク起動します',
+    en: 'No URL bar, runs smoothly in fullscreen',
+    vi: 'Không còn thanh URL, mở mượt mà toàn màn hình',
+    id: 'Bilah URL hilang, berjalan lancar layar penuh',
+    zh: '隐藏地址栏，全屏极速运行',
+    si: 'URL තීරුව නැත, සම්පූර්ණ තිරයෙන් වේගයෙන් ක්‍රියා කරයි',
+    km: 'គ្មានរបារ URL ដំណើរការយ៉ាងរលូនពេញអេក្រង់'
+  },
+  pwaLineWarning: {
+    ja: '⚠️ 現在LINEアプリ内で開かれています',
+    en: '⚠️ Currently opened inside LINE app',
+    vi: '⚠️ Hiện đang mở trong ứng dụng LINE',
+    id: '⚠️ Saat ini dibuka di aplikasi LINE',
+    zh: '⚠️ 当前在LINE应用内打开',
+    si: '⚠️ දැනට LINE යෙදුම තුළ විවෘත කර ඇත',
+    km: '⚠️ បច្ចុប្បន្នកំពុងបើកនៅក្នុងកម្មវិធី LINE'
+  },
+  pwaLineDesc: {
+    ja: 'LINE内ではホーム画面追加が制限されるため、右下の「︙」または共有アイコンから「Safariで開く（ブラウザで開く）」を選択してください。',
+    en: 'Adding to home screen is restricted in LINE. Please tap the menu or share icon and select "Open in Safari / Browser".',
+    vi: 'Thêm vào màn hình chính bị hạn chế trong LINE. Vui lòng nhấn biểu tượng chia sẻ và chọn "Mở bằng trình duyệt".',
+    id: 'Penambahan ke layar utama dibatasi di LINE. Silakan ketuk ikon menu/bagikan dan pilih "Buka di Peramban".',
+    zh: 'LINE内受限无法添加到主屏幕。请点击右下角“︙”或分享图标选择“在浏览器中打开”。',
+    si: 'LINE තුළ මුල් තිරයට එක් කිරීම සීමා කර ඇත. කරුණාකර "බ්‍රව්සරයෙන් විවෘත කරන්න" තෝරන්න.',
+    km: 'ការបន្ថែមទៅអេក្រង់ដើមត្រូវបានកំណត់ក្នុង LINE។ សូមចុច "បើកក្នុងកម្មវិធីរុករក"។'
+  },
+  pwaBenefit1: {
+    ja: 'ホーム画面から1タップで即起動',
+    en: '1-tap launch from home screen',
+    vi: '1 chạm khởi động từ màn hình chính',
+    id: 'Buka langsung dengan 1 ketukan dari layar utama',
+    zh: '主屏幕1键快捷启动',
+    si: 'මුල් තිරයෙන් එක් ක්ලික් එකකින් ආරම්භ කරන්න',
+    km: 'បើកដំណើរការដោយចុច 1 ដងពីអេក្រង់ដើម'
+  },
+  pwaBenefit2: {
+    ja: 'ブラウザの余計な枠がなく画面広々',
+    en: 'Spacious screen without browser bars',
+    vi: 'Màn hình rộng rãi không bị vướng khung',
+    id: 'Layar luas tanpa bingkai peramban',
+    zh: '无多余边框，界面更开阔',
+    si: 'බ්‍රව්සර් රාමු නොමැතිව පුළුල් තිරය',
+    km: 'អេក្រង់ធំទូលាយដោយគ្មានស៊ុម'
+  },
+  pwaBenefit3: {
+    ja: '現場での作業記録や打刻が超スムーズ',
+    en: 'Super smooth work logging & clock-in',
+    vi: 'Ghi chép và chấm công cực nhanh',
+    id: 'Pencatatan kerja & absensi sangat lancar',
+    zh: '现场记录与打卡更顺畅',
+    si: 'වැඩ සටහන් සහ පැමිණීම ඉතා පහසුය',
+    km: 'ការកត់ត្រាការងារ និង វត្តមានយ៉ាងរលូន'
+  },
+  pwaIosTitle: {
+    ja: '🍎 iPhone (Safari) での手順:',
+    en: '🍎 Steps for iPhone (Safari):',
+    vi: '🍎 Hướng dẫn cho iPhone (Safari):',
+    id: '🍎 Langkah untuk iPhone (Safari):',
+    zh: '🍎 iPhone (Safari) 操作步骤:',
+    si: '🍎 iPhone (Safari) පියවර:',
+    km: '🍎 ជំហានសម្រាប់ iPhone (Safari):'
+  },
+  pwaIosStep1: {
+    ja: 'Safari画面下の [共有ボタン] をタップ',
+    en: 'Tap the [Share button] at the bottom of Safari',
+    vi: 'Chạm vào [nút Chia sẻ] ở cuối màn hình Safari',
+    id: 'Ketuk [tombol Bagikan] di bagian bawah Safari',
+    zh: '点击Safari底部的 [分享按钮]',
+    si: 'Safari හි පහළ ඇති [බෙදාගැනීමේ බොත්තම] ඔබන්න',
+    km: 'ចុច [ប៊ូតុងចែករំលែក] នៅខាងក្រោម Safari'
+  },
+  pwaIosStep2: {
+    ja: 'メニュー内の [「ホーム画面に追加」] を選択して「追加」をタップ！',
+    en: 'Select ["Add to Home Screen"] and tap "Add"!',
+    vi: 'Chọn ["Thêm vào màn hình chính"] và chạm "Thêm"!',
+    id: 'Pilih ["Tambah ke Layar Utama"] lalu ketuk "Tambah"!',
+    zh: '选择 [“添加到主屏幕”] 并点击“添加”！',
+    si: '["මුල් තිරයට එක් කරන්න"] තෝරා "එක් කරන්න" ඔබන්න!',
+    km: 'ជ្រើសរើស ["បន្ថែមទៅអេក្រង់ដើម"] ហើយចុច "បន្ថែម"!'
+  },
+  pwaAndroidTitle: {
+    ja: '🤖 Android / Chrome での手順:',
+    en: '🤖 Steps for Android / Chrome:',
+    vi: '🤖 Hướng dẫn cho Android / Chrome:',
+    id: '🤖 Langkah untuk Android / Chrome:',
+    zh: '🤖 Android / Chrome 操作步骤:',
+    si: '🤖 Android / Chrome පියවර:',
+    km: '🤖 ជំហានសម្រាប់ Android / Chrome:'
+  },
+  pwaAndroidOneTap: {
+    ja: '今すぐワンタップでインストール',
+    en: 'Install with 1 Tap Now',
+    vi: 'Cài đặt ngay với 1 chạm',
+    id: 'Pasang Sekarang dengan 1 Ketukan',
+    zh: '立即一键安装',
+    si: 'දැන්ම එක් ක්ලික් එකකින් ස්ථාපනය කරන්න',
+    km: 'ដំឡើងឥឡូវនេះដោយចុច 1 ដង'
+  },
+  pwaAndroidStep1: {
+    ja: 'Chrome右上のメニュー（︙）をタップ',
+    en: 'Tap menu (︙) at top right of Chrome',
+    vi: 'Chạm menu (︙) ở góc trên bên phải Chrome',
+    id: 'Ketuk menu (︙) di kanan atas Chrome',
+    zh: '点击Chrome右上角菜单 (︙)',
+    si: 'Chrome හි ඉහළ දකුණු මෙනුව (︙) ඔබන්න',
+    km: 'ចុចម៉ឺនុយ (︙) នៅខាងស្តាំខាងលើនៃ Chrome'
+  },
+  pwaAndroidStep2: {
+    ja: '「アプリをインストール」 または 「ホーム画面に追加」 を選択！',
+    en: 'Select "Install app" or "Add to Home screen"!',
+    vi: 'Chọn "Cài đặt ứng dụng" hoặc "Thêm vào màn hình chính"!',
+    id: 'Pilih "Pasang aplikasi" atau "Tambah ke Layar Utama"!',
+    zh: '选择“安装应用”或“添加到主屏幕”！',
+    si: '"යෙදුම ස්ථාපනය කරන්න" හෝ "මුල් තිරයට එක් කරන්න" තෝරන්න!',
+    km: 'ជ្រើសរើស "ដំឡើងកម្មវិធី" ឬ "បន្ថែមទៅអេក្រង់ដើម"!'
+  },
+  pwaCloseBtn: {
+    ja: '閉じる',
+    en: 'Close',
+    vi: 'Đóng',
+    id: 'Tutup',
+    zh: '关闭',
+    si: 'වසා දමන්න',
+    km: 'បិទ'
+  },
+  gpsDenied: {
+    ja: '位置情報が拒否されています',
+    en: 'Location access denied',
+    vi: 'Truy cập vị trí bị từ chối',
+    id: 'Akses lokasi ditolak',
+    zh: '位置信息已被拒绝',
+    si: 'ස්ථාන ප්‍රවේශය ප්‍රතික්ෂේප කර ඇත',
+    km: 'ការចូលប្រើទីតាំងត្រូវបានបដិសេធ'
+  },
+  gpsBlockedWarning: {
+    ja: '⚠️ 位置情報がブロックされています',
+    en: '⚠️ Location is blocked',
+    vi: '⚠️ Vị trí đang bị chặn',
+    id: '⚠️ Lokasi diblokir',
+    zh: '⚠️ 位置信息被阻止',
+    si: '⚠️ ස්ථානය අවහිර කර ඇත',
+    km: '⚠️ ទីតាំងត្រូវបានរារាំង'
+  },
+  gpsNoSignal: {
+    ja: 'GPS電波を受信できません',
+    en: 'Cannot receive GPS signal',
+    vi: 'Không thể nhận tín hiệu GPS',
+    id: 'Tidak dapat sinyal GPS',
+    zh: '无法接收GPS信号',
+    si: 'GPS සංඥා ලබා ගත නොහැක',
+    km: 'មិនអាចទទួលសញ្ញា GPS បានទេ'
+  },
+  gpsTimeout: {
+    ja: 'GPS取得タイムアウト',
+    en: 'GPS request timed out',
+    vi: 'Hết thời gian chờ GPS',
+    id: 'Waktu tunggu GPS habis',
+    zh: 'GPS获取超时',
+    si: 'GPS කාලය ඉකුත් විය',
+    km: 'ការទាញយក GPS បានផុតកំណត់'
+  },
   gpsManualOff: {
     ja: '位置情報OFF (手動設定)',
     en: 'GPS OFF (Manual)',
