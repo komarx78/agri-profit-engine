@@ -21,7 +21,7 @@ import { t, getTranslatedName, getTranslatedWorkType, getWeekdayName, LANGUAGES,
 import { WorkerGate } from '@/components/WorkerGate';
 import { getPortalTasks, submitAttendance, submitLeaveRequest, getWorkerLeaveRequests } from '@/app/actions/farm';
 import { translateSingleText } from '@/app/actions/translate';
-import { PwaInstallPrompt, PwaBottomBanner } from '@/components/PwaInstallPrompt';
+import { PwaBottomBanner } from '@/components/PwaInstallPrompt';
 import Link from 'next/link';
 import { getJSTDate, getJSTTime, formatDisplayTime, parseTimeToMinutes, getAttendancePeriod, getDateListBetween } from '@/lib/dateUtils';
 
@@ -1623,9 +1623,6 @@ function PortalContent() {
                 ))}
               </select>
             </div>
-
-            {/* 📱 PWAホーム画面追加ガイドボタン */}
-            <PwaInstallPrompt />
 
             {/* ログアウト */}
             <button 

@@ -143,12 +143,30 @@ export function PwaBottomBanner({ language = 'ja' }: { language?: LanguageCode }
     }
   };
 
-  // アプリとして起動中、または閉じた後は非表示
-  if (isStandalone || isDismissed || isLine) return null;
+  // アプリとして起動中は完全非表示
+  if (isStandalone) return null;
 
   return (
     <>
-      <div className="w-full max-w-md mx-auto my-6 px-1">
+      {/* LINE内ブラウザ用 緊急警告バー */}
+      {isLine && (
+        <div className="fixed top-0 left-0 right-0 z-[250] bg-amber-500 text-slate-950 px-3 py-2 text-xs font-black flex items-center justify-between shadow-lg">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-slate-950" />
+            <span className="truncate">LINE内ブラウザです。右下の「︙」から「Safariで開く」を押すと快適に使えます</span>
+          </div>
+          <a
+            href={typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?openExternalBrowser=1` : '#'}
+            className="px-2 py-1 bg-slate-950 text-white rounded text-[11px] font-bold shrink-0 ml-2 shadow"
+          >
+            Safariで開く
+          </a>
+        </div>
+      )}
+
+      {/* バナー（閉じられた場合やLINE内ブラウザの場合は非表示） */}
+      {!isDismissed && !isLine && (
+        <div className="w-full max-w-md mx-auto my-6 px-1">
         <div className="bg-slate-900/95 backdrop-blur-md border-2 border-emerald-500/80 rounded-2xl p-3 shadow-xl flex items-center justify-between gap-3 text-slate-100">
           <div 
             onClick={() => setIsOpen(true)}
@@ -190,6 +208,7 @@ export function PwaBottomBanner({ language = 'ja' }: { language?: LanguageCode }
           </div>
         </div>
       </div>
+      )}
 
       {/* インストール手順モーダル */}
       <PwaInstallModal 
