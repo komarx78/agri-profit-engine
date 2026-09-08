@@ -1092,7 +1092,7 @@ export default function WorkEntryPage() {
                 <option key={l.code} value={l.code}>{l.flag} {l.code.toUpperCase()}</option>
               ))}
             </select>
-            <PwaInstallPrompt />
+            <PwaInstallPrompt language={language} />
             <button onClick={handleLogout} className="p-1 bg-emerald-900/80 text-emerald-400 rounded-lg hover:bg-emerald-800 transition-colors" title="ログアウト">
               <LogOut className="w-3.5 h-3.5" />
             </button>
@@ -1142,7 +1142,7 @@ export default function WorkEntryPage() {
                 ? 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-500' 
                 : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-white'
             }`}
-            title={isGpsEnabled ? "クリックして位置情報をOFFにする" : "クリックして位置情報をONにする"}
+            title={isGpsEnabled ? "GPS ON" : "GPS OFF"}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${isGpsEnabled ? 'bg-emerald-200 animate-pulse' : 'bg-slate-500'}`} />
             <span>GPS {isGpsEnabled ? 'ON' : 'OFF'}</span>
@@ -1151,21 +1151,21 @@ export default function WorkEntryPage() {
           {/* 中央：現在地住所またはステータス表示 */}
           <div className="flex-1 min-w-0 flex items-center justify-center gap-1 truncate text-center">
             {!isGpsEnabled ? (
-              <span className="text-slate-400 truncate">位置情報OFF (手動設定)</span>
+              <span className="text-slate-400 truncate">{t('gpsManualOff', language)}</span>
             ) : isGpsLoading ? (
               <span className="text-amber-300 flex items-center gap-1 truncate">
                 <RefreshCw className="w-2.5 h-2.5 animate-spin shrink-0 text-amber-400" />
-                <span>GPS測位中...</span>
+                <span>{t('gpsMeasuring', language)}</span>
               </span>
             ) : gpsPermissionState === 'denied' ? (
               <span className="text-amber-300 flex items-center gap-1 truncate">
                 <AlertTriangle className="w-2.5 h-2.5 text-amber-400 shrink-0" />
-                <span className="truncate">ブラウザでブロック中</span>
+                <span className="truncate">{t('gpsBlocked', language)}</span>
               </span>
             ) : (
               <span className="text-emerald-300 flex items-center gap-1 truncate">
                 <MapPin className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
-                <span className="truncate">{currentAddress || '現在地取得中...'}</span>
+                <span className="truncate">{currentAddress || t('gpsAcquiring', language)}</span>
               </span>
             )}
           </div>
@@ -1178,9 +1178,9 @@ export default function WorkEntryPage() {
                   <button
                     type="button"
                     onClick={() => setShowGpsGuideModal(true)}
-                    className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[10px] font-black transition-all cursor-pointer"
+                    className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[10px] font-black transition-all cursor-pointer whitespace-nowrap"
                   >
-                    <span>設定方法</span>
+                    <span>{t('gpsSettingsBtn', language)}</span>
                   </button>
                 ) : (
                   <button
@@ -1188,7 +1188,7 @@ export default function WorkEntryPage() {
                     onClick={() => refreshGpsPosition(true)}
                     disabled={isGpsLoading}
                     className="p-1 hover:bg-emerald-800 text-emerald-300 hover:text-white rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                    title="現在地を再測位する"
+                    title={t('gpsRefreshTooltip', language)}
                   >
                     <RefreshCw className={`w-3 h-3 ${isGpsLoading ? 'animate-spin' : ''}`} />
                   </button>
@@ -1199,7 +1199,7 @@ export default function WorkEntryPage() {
                   type="button"
                   onClick={() => setShowGpsGuideModal(true)}
                   className="p-1 text-emerald-400/60 hover:text-emerald-300 rounded-lg transition-colors cursor-pointer"
-                  title="位置情報の設定・トラブル解決手順"
+                  title={t('gpsHelpTooltip', language)}
                 >
                   <HelpCircle className="w-3 h-3" />
                 </button>
@@ -2377,6 +2377,7 @@ export default function WorkEntryPage() {
       <GpsGuideModal
         isOpen={showGpsGuideModal}
         onClose={() => setShowGpsGuideModal(false)}
+        language={language}
         onRetry={async () => {
           await refreshGpsPosition(true);
         }}
@@ -2384,7 +2385,7 @@ export default function WorkEntryPage() {
       />
 
       {/* 📱 ページの最下部に配置するアプリ化案内バナー（画面に被らない安全配置） */}
-      <PwaBottomBanner />
+      <PwaBottomBanner language={language} />
     </main>
   );
 }

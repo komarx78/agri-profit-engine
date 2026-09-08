@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Smartphone, Share, PlusSquare, X, Download, CheckCircle2, Sparkles, ExternalLink, AlertTriangle } from 'lucide-react';
+import { t, LanguageCode } from '@/lib/i18n';
 
-export function PwaInstallPrompt() {
+export function PwaInstallPrompt({ language = 'ja' }: { language?: LanguageCode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isIos, setIsIos] = useState(false);
   const [isLine, setIsLine] = useState(false);
@@ -60,7 +61,7 @@ export function PwaInstallPrompt() {
         title="スマホのホーム画面にアプリアイコンを追加できます"
       >
         <Smartphone className="w-3.5 h-3.5 text-emerald-100 shrink-0" />
-        <span className="whitespace-nowrap">📱 アプリ化</span>
+        <span className="whitespace-nowrap">{t('pwaInstallBtn', language)}</span>
       </button>
 
       {/* ② LINE内ブラウザ用 緊急警告バー */}
@@ -93,7 +94,7 @@ export function PwaInstallPrompt() {
 }
 
 {/* 📱 ページの最下部に配置するアプリ化案内バナー（画面に被らない安全配置） */}
-export function PwaBottomBanner() {
+export function PwaBottomBanner({ language = 'ja' }: { language?: LanguageCode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isIos, setIsIos] = useState(false);
   const [isLine, setIsLine] = useState(false);
@@ -156,11 +157,11 @@ export function PwaBottomBanner() {
             </div>
             <div className="min-w-0">
               <div className="text-xs font-black text-white flex items-center gap-1 truncate">
-                <span>アグリ現場をアプリにする</span>
+                <span>{t('pwaBannerTitle', language)}</span>
                 <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
               </div>
               <p className="text-[10px] text-emerald-300 font-bold truncate">
-                ホーム画面に追加して全画面起動
+                {t('pwaBannerSub', language)}
               </p>
             </div>
           </div>
@@ -171,7 +172,7 @@ export function PwaBottomBanner() {
               onClick={() => setIsOpen(true)}
               className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg text-[11px] font-black transition-all shadow cursor-pointer active:scale-95"
             >
-              手順を見る
+              {t('pwaViewSteps', language)}
             </button>
             <button
               type="button"

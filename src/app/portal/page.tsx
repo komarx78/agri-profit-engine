@@ -4146,7 +4146,7 @@ function PortalContent() {
       )}
 
       {/* 📱 ページの最下部に配置するアプリ化案内バナー（画面に被らない安全配置） */}
-      <PwaBottomBanner />
+      <PwaBottomBanner language={language} />
     </div>
   );
 }

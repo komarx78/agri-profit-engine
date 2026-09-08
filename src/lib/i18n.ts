@@ -137,6 +137,161 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
     id: 'Apa pun yang Anda perhatikan...',
     zh: '您注意到的任何事情...' , si: 'මා දුටු දේ...', km: 'អ្វីដែលខ្ញុំបានកត់សម្គាល់ ...' },
   
+  // GPS位置情報
+  gpsBlocked: {
+    ja: 'ブラウザでブロック中',
+    en: 'Blocked in browser',
+    vi: 'Bị chặn trên trình duyệt',
+    id: 'Diblokir di peramban',
+    zh: '浏览器中被阻止',
+    si: 'බ්‍රව්සරයේ අවහිර කර ඇත',
+    km: 'ត្រូវបានរារាំងក្នុងកម្មវិធីរុករក'
+  },
+  gpsSettingsBtn: {
+    ja: '設定方法',
+    en: 'How to Setup',
+    vi: 'Cách cài đặt',
+    id: 'Cara Pengaturan',
+    zh: '设置方法',
+    si: 'සැකසුම් ක්‍රමය',
+    km: 'វិធីកំណត់'
+  },
+  pwaInstallBtn: {
+    ja: '📱 アプリ化',
+    en: '📱 Install App',
+    vi: '📱 Cài ứng dụng',
+    id: '📱 Pasang Apl',
+    zh: '📱 安装应用',
+    si: '📱 යෙදුම ස්ථාපනය',
+    km: '📱 ដំឡើងកម្មវិធី'
+  },
+  pwaBannerTitle: {
+    ja: 'アグリ現場をアプリにする',
+    en: 'Install Agri App',
+    vi: 'Cài ứng dụng Nông trại',
+    id: 'Pasang Apl Lapangan',
+    zh: '将农业现场安装为应用',
+    si: 'කෘෂි ක්ෂේත්‍ර යෙදුම',
+    km: 'ដំឡើងកម្មវិធីកសិកម្ម'
+  },
+  pwaBannerSub: {
+    ja: 'ホーム画面に追加して全画面起動',
+    en: 'Add to Home Screen for fullscreen',
+    vi: 'Thêm vào màn hình chính để mở toàn màn hình',
+    id: 'Tambah ke Layar Utama untuk layar penuh',
+    zh: '添加到主屏幕以全屏启动',
+    si: 'මුල් තිරයට එක් කරන්න',
+    km: 'បន្ថែមទៅអេក្រង់ដើម'
+  },
+  pwaViewSteps: {
+    ja: '手順を見る',
+    en: 'How to',
+    vi: 'Xem cách làm',
+    id: 'Lihat Cara',
+    zh: '查看步骤',
+    si: 'පියවර බලන්න',
+    km: 'មើលជំហាន'
+  },
+  gpsManualOff: {
+    ja: '位置情報OFF (手動設定)',
+    en: 'GPS OFF (Manual)',
+    vi: 'Tắt GPS (Thủ công)',
+    id: 'GPS MATI (Manual)',
+    zh: 'GPS已关闭 (手动)',
+    si: 'GPS අක්‍රියයි (අතින්)',
+    km: 'បិទ GPS (ដោយដៃ)'
+  },
+  gpsMeasuring: {
+    ja: 'GPS測位中...',
+    en: 'Locating GPS...',
+    vi: 'Đang định vị GPS...',
+    id: 'Mencari GPS...',
+    zh: '正在进行GPS定位...',
+    si: 'GPS ස්ථානගත වෙමින්...',
+    km: 'កំពុងកំណត់ទីតាំង GPS...'
+  },
+  gpsAcquiring: {
+    ja: '現在地取得中...',
+    en: 'Acquiring location...',
+    vi: 'Đang lấy vị trí...',
+    id: 'Mendapatkan lokasi...',
+    zh: '正在获取当前位置...',
+    si: 'වත්මන් ස්ථානය ලබා ගනිමින්...',
+    km: 'កំពុងទាញយកទីតាំង...'
+  },
+  gpsRefreshTooltip: {
+    ja: '現在地を再測位する',
+    en: 'Refresh current location',
+    vi: 'Định vị lại vị trí hiện tại',
+    id: 'Perbarui lokasi saat ini',
+    zh: '重新获取当前位置',
+    si: 'වත්මන් ස්ථානය නැවත ලබා ගන්න',
+    km: 'កំណត់ទីតាំងឡើងវិញ'
+  },
+  gpsHelpTooltip: {
+    ja: '位置情報の設定・トラブル解決手順',
+    en: 'GPS Settings & Troubleshooting',
+    vi: 'Cài đặt GPS & Hướng dẫn khắc phục sự cố',
+    id: 'Pengaturan GPS & Pemecahan Masalah',
+    zh: 'GPS设置与故障排除指南',
+    si: 'GPS සැකසුම් සහ දෝශ නිරාකරණය',
+    km: 'ការកំណត់ GPS និង ការដោះស្រាយបញ្ហា'
+  },
+  gpsGuideTitle: {
+    ja: '位置情報の許可・設定ガイド',
+    en: 'GPS Permission & Setup Guide',
+    vi: 'Hướng dẫn cho phép & cài đặt vị trí (GPS)',
+    id: 'Panduan Izin & Pengaturan Lokasi (GPS)',
+    zh: '位置信息允许与设置指南',
+    si: 'ස්ථාන අවසරය සහ සැකසුම් මාර්ගෝපදේශය',
+    km: 'ការអនុញ្ញាត និង ការណែនាំកំណត់ទីតាំង (GPS)'
+  },
+  gpsGuideSub: {
+    ja: 'ブラウザの設定で位置情報を「許可」にする手順',
+    en: 'Steps to allow location access in your browser',
+    vi: 'Các bước để cho phép truy cập vị trí trong trình duyệt',
+    id: 'Langkah mengizinkan akses lokasi di peramban',
+    zh: '在浏览器设置中将位置信息设为“允许”的步骤',
+    si: 'බ්‍රව්සර් සැකසුම් තුළ ස්ථාන ප්‍රවේශයට ඉඩ දීමේ පියවර',
+    km: 'ជំហានដើម្បីអនុញ្ញាតការចូលប្រើទីតាំងនៅក្នុងកម្មវិធីរុករក'
+  },
+  gpsGuideBlockedBanner: {
+    ja: '位置情報が「ブロック中（OFF）」になっています',
+    en: 'Location access is currently blocked (OFF)',
+    vi: 'Truy cập vị trí hiện đang bị chặn (TẮT)',
+    id: 'Akses lokasi saat ini diblokir (MATI)',
+    zh: '位置信息访问当前已被阻止 (关闭)',
+    si: 'ස්ථාන ප්‍රවේශය දැනට අවහිර කර ඇත (අක්‍රියයි)',
+    km: 'ការចូលប្រើទីតាំងបច្ចុប្បន្នត្រូវបានរារាំង (បិទ)'
+  },
+  gpsGuideBlockedDesc: {
+    ja: '初回アクセス時に「許可しない」を選んだ場合、ブラウザの仕様により自動では再確認されません。以下の手順で許可に変更してください。',
+    en: 'If you selected "Deny" initially, your browser will not prompt again automatically. Please follow these steps to enable it.',
+    vi: 'Nếu bạn đã chọn "Từ chối" lúc đầu, trình duyệt sẽ không hỏi lại tự động. Vui lòng làm theo các bước dưới đây để bật.',
+    id: 'Jika Anda memilih "Tolak" pada awalnya, peramban tidak akan menanyakan lagi secara otomatis. Silakan ikuti langkah di bawah untuk mengaktifkannya.',
+    zh: '如果初次访问时选择了“不允许”，由于浏览器限制将不会自动再次弹出确认。请按照以下步骤更改为允许。',
+    si: 'ඔබ මුලින් "ඉඩ නොදෙන්න" තෝරා ගත්තේ නම්, බ්‍රව්සරය ස්වයංක්‍රීයව නැවත නොඅසනු ඇත. කරුණාකර පහත පියවර අනුගමනය කරන්න.',
+    km: 'ប្រសិនបើអ្នកបានជ្រើសរើស "មិនអនុញ្ញាត" នៅពេលដំបូង កម្មវិធីរុករកនឹងមិនសួរឡើងវិញដោយស្វ័យប្រវត្តិទេ។ សូមអនុវត្តតាមជំហានខាងក្រោមដើម្បីបើកវា។'
+  },
+  gpsGuideRetryBtn: {
+    ja: '設定完了！今すぐ位置情報を再取得する',
+    en: 'Done! Refresh location now',
+    vi: 'Đã cài đặt xong! Lấy lại vị trí ngay',
+    id: 'Selesai! Perbarui lokasi sekarang',
+    zh: '设置完成！立即重新获取位置信息',
+    si: 'සැකසීම අවසන්! දැන්ම ස්ථානය නැවත ලබා ගන්න',
+    km: 'បានកំណត់រួចរាល់! យកទីតាំងឡើងវិញឥឡូវនេះ'
+  },
+  gpsGuideRetrying: {
+    ja: '位置情報を再測位中...',
+    en: 'Locating GPS position...',
+    vi: 'Đang định vị lại vị trí GPS...',
+    id: 'Mencari posisi GPS...',
+    zh: '正在重新定位GPS...',
+    si: 'ස්ථානය නැවත ලබා ගනිමින්...',
+    km: 'កំពុងកំណត់ទីតាំង GPS ឡើងវិញ...'
+  },
+  
   // 現場アプリ - タブ・入力
   tabTimer: { ja: 'タイマー記録',
     en: 'Timer',
