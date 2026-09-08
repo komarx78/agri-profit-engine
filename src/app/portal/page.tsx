@@ -213,7 +213,12 @@ function PortalContent() {
           }
         }
 
-        const { data: { session } } = await supabase.auth.getSession();
+        // 1. セッションチェック（1.2秒タイムアウト保護で現場未ログイン端末のハング防止）
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutSession = new Promise<{ data: { session: any } }>((resolve) =>
+          setTimeout(() => resolve({ data: { session: null } }), 1200)
+        );
+        const { data: { session } } = await Promise.race([sessionPromise, timeoutSession]);
         
         let ownerId = '';
         let currentRole = 'worker';
@@ -229,7 +234,7 @@ function PortalContent() {
           }
         }
 
-        // 1. 現場作業者情報（agri_current_worker）を最優先で確認
+        // 1. 現場作業者情報（agri_current_worker）を最優先で確認（0ms即座にUI復元）
         const savedUser = typeof window !== 'undefined' ? localStorage.getItem('agri_current_worker') : null;
 
         if (savedUser) {
@@ -277,6 +282,10 @@ function PortalContent() {
         let resolvedClosing = 0;
         let resolvedPayment = '翌月25日払い';
         if (typeof window !== 'undefined') {
+          const cachedComp = (ownerId ? localStorage.getItem(`agri_company_${ownerId}`) : null) || localStorage.getItem('agri_cached_company_name');
+          if (cachedComp) {
+            setCompanyName(cachedComp);
+          }
           const localClosing = (ownerId ? localStorage.getItem(`agri_attendance_closing_day_${ownerId}`) : null) || localStorage.getItem('agri_attendance_closing_day');
           if (localClosing !== null && localClosing !== undefined && localClosing !== '') {
             resolvedClosing = Number(localClosing);
@@ -337,7 +346,10 @@ function PortalContent() {
         setClosingDay(resolvedClosing);
         setPaymentDayRule(resolvedPayment);
 
-        await fetchPortalData(ownerId, currentRole, profile, resolvedClosing);
+        // fetchPortalData に 2.5秒タイムアウト保護を追加（通信待機による無限ローディングを物理遮断）
+        const fetchPromise = fetchPortalData(ownerId, currentRole, profile, resolvedClosing);
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 2500));
+        await Promise.race([fetchPromise, timeoutPromise]);
 
         // URLクエリに manual=1 または openManual=true があればマニュアルモーダルを開く
         if (typeof window !== 'undefined') {
@@ -547,130 +559,151 @@ function PortalContent() {
   }, [timecardDaysList]);
 
   const fetchPortalData = async (userId: string, currentRole: string, profile: any, overrideClosingDay?: number) => {
-    const today = getJSTDate();
-
-    // 1. タスク (カレンダー用: サーバーアクション経由でRLSを回避し確実に取得)
-    const targetUserId = userId;
-    const taskRes = await getPortalTasks(targetUserId);
-    if (taskRes.success && taskRes.data && taskRes.data.length > 0) {
-      setTasks(taskRes.data);
-    } else {
-      // クライアント側でもフォールバック試行
-      const { data: taskData } = await supabase.from('work_logs')
-        .select('*, crops(*), fields(*), workers(*)')
-        .eq('user_id', targetUserId)
-        .eq('status', 'planned')
-        .order('work_date', { ascending: true });
-      if (taskData) setTasks(taskData);
-    }
-
-    // 2. 承認待ち (現場スタッフが完了報告した作業: status='completed' かつ approval_status='pending')
-    if (currentRole === 'admin') {
-      const { data: appData } = await supabase.from('work_logs')
-        .select('id, task_title, work_date, workers(name)')
-        .eq('user_id', userId)
-        .eq('status', 'completed')
-        .eq('approval_status', 'pending');
-      if (appData) setPendingApprovals(appData);
-    }
-
-    // 3. 掲示板最新3件 (自社テナントのみ)
-    if (targetUserId) {
-      const { data: boardData } = await supabase.from('board_posts')
-        .select('*')
-        .eq('user_id', targetUserId)
-        .order('created_at', { ascending: false })
-        .limit(3);
-      if (boardData) setBoardPosts(boardData);
-    } else {
-      setBoardPosts([]);
-    }
-
-    // 4. 今日の打刻状態（当日の打刻、なければ未退勤ログ）
-    const workerId = profile ? profile.id : userId;
-    if (workerId) {
-      let matchedLog = null;
-      const { data: aLog } = await supabase.from('attendance_logs')
-        .select('*')
-        .eq('worker_id', workerId)
-        .eq('date', today)
-        .maybeSingle();
-      if (aLog) {
-        matchedLog = aLog;
-      } else {
-        const { data: unclosed } = await supabase.from('attendance_logs')
-          .select('*')
-          .eq('worker_id', workerId)
-          .is('clock_out', null)
-          .order('created_at', { ascending: false })
-          .limit(1);
-        if (unclosed && unclosed.length > 0) matchedLog = unclosed[0];
-      }
-      if (matchedLog) setAttendance(matchedLog);
-      // 当月の個人勤怠集計データを取得
-      fetchWorkerMonthlyAttendance(workerId, timecardMonth, overrideClosingDay);
-    }
-
-    // 5. 有給休暇・残高と申請履歴の取得 (自農園のワーカーのみ厳格に取得)
+    if (!userId) return;
     try {
-      let targetWorker: any = null;
-      const { data: wList } = await supabase
-        .from('workers')
-        .select('id, name, role, type, employment_type, paid_leave_carryover, paid_leave_balance')
-        .eq('user_id', targetUserId)
-        .order('name');
+      const today = getJSTDate();
 
-      if (wList) {
-        setAllWorkers(wList);
-        
-        // ログイン中のワーカーを探す（他人のデータを勝手に割り当てない）
-        if (profile && profile.id) {
-          targetWorker = wList.find(w => w.id === profile.id) || null;
-        } else if (currentRole === 'admin') {
-          // 管理者の場合、管理者自身のワーカーレコードがあればそれを探す
-          targetWorker = wList.find(w => w.role === 'admin' || w.name === '管理者') || null;
+      // 1. タスク (カレンダー用: サーバーアクション経由でRLSを回避し確実に取得)
+      const targetUserId = userId;
+      try {
+        const taskRes = await getPortalTasks(targetUserId);
+        if (taskRes.success && taskRes.data && taskRes.data.length > 0) {
+          setTasks(taskRes.data);
+        } else {
+          // クライアント側でもフォールバック試行
+          const { data: taskData } = await supabase.from('work_logs')
+            .select('*, crops(*), fields(*), workers(*)')
+            .eq('user_id', targetUserId)
+            .eq('status', 'planned')
+            .order('work_date', { ascending: true });
+          if (taskData) setTasks(taskData);
         }
+      } catch (tErr) {
+        console.warn('Task fetch error:', tErr);
+      }
 
-        if (targetWorker) {
-          const wType = targetWorker.type || targetWorker.employment_type;
-          setWorkerProfile(targetWorker);
-          if (wType) {
-            setWorkerProfile((prev: any) => ({ ...prev, ...targetWorker, type: wType, employment_type: wType }));
-            setCurrentUser((prev: any) => ({ ...prev, ...targetWorker, type: wType, employment_type: wType }));
+      // 2. 承認待ち (現場スタッフが完了報告した作業: status='completed' かつ approval_status='pending')
+      if (currentRole === 'admin') {
+        try {
+          const { data: appData } = await supabase.from('work_logs')
+            .select('id, task_title, work_date, workers(name)')
+            .eq('user_id', userId)
+            .eq('status', 'completed')
+            .eq('approval_status', 'pending');
+          if (appData) setPendingApprovals(appData);
+        } catch (aErr) {
+          console.warn('Approvals fetch error:', aErr);
+        }
+      }
+
+      // 3. 掲示板最新3件 (自社テナントのみ)
+      if (targetUserId) {
+        try {
+          const { data: boardData } = await supabase.from('board_posts')
+            .select('*')
+            .eq('user_id', targetUserId)
+            .order('created_at', { ascending: false })
+            .limit(3);
+          if (boardData) setBoardPosts(boardData);
+        } catch (bErr) {
+          console.warn('Board fetch error:', bErr);
+        }
+      } else {
+        setBoardPosts([]);
+      }
+
+      // 4. 今日の打刻状態（当日の打刻、なければ未退勤ログ）
+      const workerId = profile ? profile.id : userId;
+      if (workerId) {
+        try {
+          let matchedLog = null;
+          const { data: aLog } = await supabase.from('attendance_logs')
+            .select('*')
+            .eq('worker_id', workerId)
+            .eq('date', today)
+            .maybeSingle();
+          if (aLog) {
+            matchedLog = aLog;
+          } else {
+            const { data: unclosed } = await supabase.from('attendance_logs')
+              .select('*')
+              .eq('worker_id', workerId)
+              .is('clock_out', null)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            if (unclosed && unclosed.length > 0) matchedLog = unclosed[0];
+          }
+          if (matchedLog) setAttendance(matchedLog);
+          // 当月の個人勤怠集計データを取得
+          fetchWorkerMonthlyAttendance(workerId, timecardMonth, overrideClosingDay);
+        } catch (attErr) {
+          console.warn('Attendance fetch error:', attErr);
+        }
+      }
+
+      // 5. 有給休暇・残高と申請履歴の取得 (自農園のワーカーのみ厳格に取得)
+      try {
+        let targetWorker: any = null;
+        const { data: wList } = await supabase
+          .from('workers')
+          .select('id, name, role, type, employment_type, paid_leave_carryover, paid_leave_balance')
+          .eq('user_id', targetUserId)
+          .order('name');
+
+        if (wList) {
+          setAllWorkers(wList);
+          
+          // ログイン中のワーカーを探す（他人のデータを勝手に割り当てない）
+          if (profile && profile.id) {
+            targetWorker = wList.find(w => w.id === profile.id) || null;
+          } else if (currentRole === 'admin') {
+            // 管理者の場合、管理者自身のワーカーレコードがあればそれを探す
+            targetWorker = wList.find(w => w.role === 'admin' || w.name === '管理者') || null;
           }
 
-          const c = Number(targetWorker.paid_leave_carryover) || 0;
-          const b = Number(targetWorker.paid_leave_balance) || 0;
-          setLeaveBalance({ carryover: c, balance: b, total: c + b });
-          setLeaveForm(prev => ({ ...prev, worker_id: targetWorker.id }));
-        } else {
-          // 本人ワーカーが紐付いていない場合は他人の有給を誤表示しない
-          setLeaveBalance(null);
-          setWorkerProfile(null);
-        }
-      }
+          if (targetWorker) {
+            const wType = targetWorker.type || targetWorker.employment_type;
+            setWorkerProfile(targetWorker);
+            if (wType) {
+              setWorkerProfile((prev: any) => ({ ...prev, ...targetWorker, type: wType, employment_type: wType }));
+              setCurrentUser((prev: any) => ({ ...prev, ...targetWorker, type: wType, employment_type: wType }));
+            }
 
-      // 直近の休暇申請履歴（本人以外の他人の申請データを100%混入させない）
-      const activeWorkerId = targetWorker?.id || (profile && profile.id);
-      if (activeWorkerId) {
-        const reqRes = await getWorkerLeaveRequests(targetUserId, activeWorkerId);
-        if (reqRes.success && reqRes.data) {
-          setLeaveRequests(reqRes.data);
-        } else {
-          // フォールバック
-          const { data: reqData } = await supabase
-            .from('leave_requests')
-            .select('*, workers!inner(name, user_id)')
-            .eq('worker_id', activeWorkerId)
-            .order('created_at', { ascending: false })
-            .limit(50);
-          if (reqData) setLeaveRequests(reqData);
+            const c = Number(targetWorker.paid_leave_carryover) || 0;
+            const b = Number(targetWorker.paid_leave_balance) || 0;
+            setLeaveBalance({ carryover: c, balance: b, total: c + b });
+            setLeaveForm(prev => ({ ...prev, worker_id: targetWorker.id }));
+          } else {
+            // 本人ワーカーが紐付いていない場合は他人の有給を誤表示しない
+            setLeaveBalance(null);
+            if (!profile) setWorkerProfile(null);
+          }
         }
-      } else {
-        setLeaveRequests([]);
+
+        // 直近の休暇申請履歴（本人以外の他人の申請データを100%混入させない）
+        const activeWorkerId = targetWorker?.id || (profile && profile.id);
+        if (activeWorkerId) {
+          const reqRes = await getWorkerLeaveRequests(targetUserId, activeWorkerId);
+          if (reqRes.success && reqRes.data) {
+            setLeaveRequests(reqRes.data);
+          } else {
+            // フォールバック
+            const { data: reqData } = await supabase
+              .from('leave_requests')
+              .select('*, workers!inner(name, user_id)')
+              .eq('worker_id', activeWorkerId)
+              .order('created_at', { ascending: false })
+              .limit(50);
+            if (reqData) setLeaveRequests(reqData);
+          }
+        } else {
+          setLeaveRequests([]);
+        }
+      } catch (err) {
+        console.error('Error loading leave data:', err);
       }
-    } catch (err) {
-      console.error('Error loading leave data:', err);
+    } catch (globalFetchErr) {
+      console.error('fetchPortalData fatal warning:', globalFetchErr);
     }
   };
 
@@ -1481,9 +1514,20 @@ function PortalContent() {
   if (showWorkerGate) {
     return (
       <WorkerGate 
-        onLogin={(user) => {
+        onLogin={async (user) => {
           setShowWorkerGate(false);
-          window.location.reload();
+          setCurrentUser(user);
+          setWorkerProfile(user);
+          const isWorkerAdmin = user.role === 'admin';
+          setRole(isWorkerAdmin ? 'admin' : 'worker');
+          setIsLoading(false);
+
+          const activeOwnerId = user.user_id || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
+          if (activeOwnerId) {
+            fetchPortalData(activeOwnerId, isWorkerAdmin ? 'admin' : 'worker', user, closingDay).catch((err) => {
+              console.warn('Background portal fetch error:', err);
+            });
+          }
         }} 
       />
     );

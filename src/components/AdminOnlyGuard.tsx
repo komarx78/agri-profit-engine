@@ -11,34 +11,64 @@ interface AdminOnlyGuardProps {
 
 export function AdminOnlyGuard({ children }: AdminOnlyGuardProps) {
   const router = useRouter();
-  const [isChecking, setIsChecking] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isChecking, setIsChecking] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const currentWorkerStr = localStorage.getItem('agri_current_worker') || localStorage.getItem('current_worker');
+        if (currentWorkerStr) {
+          const worker = JSON.parse(currentWorkerStr);
+          if (worker && worker.role === 'admin') return false;
+        }
+      } catch (e) {}
+    }
+    return true;
+  });
+  const [isAdmin, setIsAdmin] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const currentWorkerStr = localStorage.getItem('agri_current_worker') || localStorage.getItem('current_worker');
+        if (currentWorkerStr) {
+          const worker = JSON.parse(currentWorkerStr);
+          if (worker && worker.role === 'admin') return true;
+        }
+      } catch (e) {}
+    }
+    return false;
+  });
 
   useEffect(() => {
     async function verifyAdmin() {
       try {
-        // 1. Supabase Auth セッションをチェック
-        const { data: { session } } = await supabase.auth.getSession();
+        // 1. localStorage の現在の作業者ロールを即座にチェック（0ms・通信不要）
+        if (typeof window !== 'undefined') {
+          const currentWorkerStr = localStorage.getItem('agri_current_worker') || localStorage.getItem('current_worker');
+          if (currentWorkerStr) {
+            try {
+              const worker = JSON.parse(currentWorkerStr);
+              if (worker && worker.role === 'admin') {
+                setIsAdmin(true);
+                setIsChecking(false);
+                return;
+              }
+            } catch (e) {}
+          }
+        }
+
+        // 2. Supabase Auth セッションをチェック（1.5秒タイムアウト保護付きでハング防止）
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise<{ data: { session: null } }>((resolve) =>
+          setTimeout(() => resolve({ data: { session: null } }), 1500)
+        );
+
+        const res: any = await Promise.race([sessionPromise, timeoutPromise]);
+        const session = res?.data?.session;
         if (session && session.user) {
           setIsAdmin(true);
           setIsChecking(false);
           return;
         }
 
-        // 2. localStorage の現在の作業者ロールをチェック
-        const currentWorkerStr = localStorage.getItem('agri_current_worker') || localStorage.getItem('current_worker');
-        if (currentWorkerStr) {
-          try {
-            const worker = JSON.parse(currentWorkerStr);
-            if (worker.role === 'admin') {
-              setIsAdmin(true);
-              setIsChecking(false);
-              return;
-            }
-          } catch (e) {}
-        }
-
-        // 認証失敗
+        // 認証失敗（非管理者）
         setIsAdmin(false);
       } catch (err) {
         console.error('Admin verify failed:', err);

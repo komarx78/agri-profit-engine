@@ -461,13 +461,12 @@ export default function HrSettingsPage() {
     }
   };
 
-  if (isLoading) {
-    return <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;
-  }
-
   return (
     <AdminOnlyGuard>
-      <div className="max-w-5xl mx-auto px-4 py-8">
+      {isLoading ? (
+        <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
+      ) : (
+        <div className="max-w-5xl mx-auto px-4 py-8">
         <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-black text-slate-800">労務・勤怠マスタ設定</h1>
@@ -939,6 +938,7 @@ export default function HrSettingsPage() {
 
         </form>
       </div>
+      )}
     </AdminOnlyGuard>
   );
 }

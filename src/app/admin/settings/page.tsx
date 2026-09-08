@@ -136,13 +136,12 @@ export default function SettingsPage() {
     }
   };
 
-  if (isLoading) {
-    return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div></div>;
-  }
-
   return (
     <AdminOnlyGuard>
-      <div className="max-w-3xl mx-auto space-y-8 pb-12">
+      {isLoading ? (
+        <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div></div>
+      ) : (
+        <div className="max-w-3xl mx-auto space-y-8 pb-12">
       <div>
         <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
           <Settings className="w-8 h-8 text-slate-600" />
@@ -322,7 +321,8 @@ export default function SettingsPage() {
           </button>
         </div>
       </form>
-    </div>
+      </div>
+      )}
     </AdminOnlyGuard>
   );
 }

@@ -201,11 +201,14 @@ export default function HrDashboardPage() {
     return Math.floor(diff / 1000 / 60);
   };
 
-  if (isLoading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;
-
   return (
     <AdminOnlyGuard>
-      <div className="min-h-screen bg-slate-50">
+      {isLoading ? (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        </div>
+      ) : (
+        <div className="min-h-screen bg-slate-50">
         <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
           {/* ページヘッダー ＆ 全社締日ステータスバー */}
           <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -437,6 +440,7 @@ export default function HrDashboardPage() {
 
         </main>
       </div>
+      )}
     </AdminOnlyGuard>
   );
 }

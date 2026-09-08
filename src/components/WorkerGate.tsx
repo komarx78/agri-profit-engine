@@ -6,7 +6,7 @@ import { User, Lock, ArrowRight, Loader2, Globe } from 'lucide-react';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 
 interface WorkerGateProps {
-  onLogin: (user: { id: string, name: string, role: string }) => void;
+  onLogin: (user: any) => void;
 }
 
 export function WorkerGate({ onLogin }: WorkerGateProps) {
@@ -43,24 +43,33 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
 
       let workerList: any[] = [];
 
-      // 1. まずクライアントSDKで直接取得
+      // 1. まずクライアントSDKで直接取得（3秒タイムアウト保護）
       try {
-        const { data, error } = await supabase
+        const clientPromise = supabase
           .from('workers')
           .select('*')
           .eq('user_id', targetOwnerId)
           .order('name');
+        const timeoutPromise = new Promise<any>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 3000)
+        );
+        const { data, error } = await Promise.race([clientPromise, timeoutPromise]);
         if (!error && data && data.length > 0) {
           workerList = data;
         }
       } catch (e) {
-        console.warn('Client SDK fetch failed, trying API:', e);
+        console.warn('Client SDK fetch failed or timed out, trying API:', e);
       }
 
-      // 2. クライアントで取れなかった場合はAPI経由で取得
+      // 2. クライアントで取れなかった場合はAPI経由で取得（3.5秒タイムアウト保護）
       if (workerList.length === 0) {
         try {
-          const res = await fetch(`/api/workers?ownerId=${encodeURIComponent(targetOwnerId)}`);
+          const controller = new AbortController();
+          const tId = setTimeout(() => controller.abort(), 3500);
+          const res = await fetch(`/api/workers?ownerId=${encodeURIComponent(targetOwnerId)}`, {
+            signal: controller.signal
+          });
+          clearTimeout(tId);
           const json = await res.json();
           if (json.workers && json.workers.length > 0) {
             workerList = json.workers;
