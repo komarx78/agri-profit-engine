@@ -17,7 +17,8 @@ import { WorkerGate } from '@/components/WorkerGate';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { PwaBottomBanner } from '@/components/PwaInstallPrompt';
 import { GpsGuideModal } from '@/components/GpsGuideModal';
-import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode, UNITS, getTranslatedUnit } from '@/lib/i18n';
+import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode, UNITS, getTranslatedUnit, getWeekdayName } from '@/lib/i18n';
+import { translateSingleText } from '@/app/actions/translate';
 import { useCompany } from '@/hooks/useCompany';
 import imageCompression from 'browser-image-compression';
 import { getJSTDate, getJSTDateWithOffset, formatDisplayTime } from '@/lib/dateUtils';
@@ -149,6 +150,58 @@ export default function WorkEntryPage() {
   const [isSubmittingSales, setIsSubmittingSales] = useState(false);
   const [tasks, setTasks] = useState<any[]>([]);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<any | null>(null);
+  const [dynamicTranslations, setDynamicTranslations] = useState<{ [rawText: string]: string }>({});
+
+  // 自由入力タスクタイトル・指示メモの多言語自動翻訳
+  useEffect(() => {
+    if (language === 'ja' || tasks.length === 0) {
+      return;
+    }
+
+    let isMounted = true;
+    const translateTexts = async () => {
+      const untranslated: string[] = [];
+      tasks.forEach(t => {
+        const title = t.task_title || t.work_type;
+        if (title) untranslated.push(title);
+
+        const rawNote = t.notes || t.memo || '';
+        const clean = rawNote
+          .replace(/【👑現場責任者】\n?/, '')
+          .replace(/【👑現場リーダー:[^】]+】\n?/, '')
+          .trim();
+        if (clean) {
+          untranslated.push(clean);
+        }
+      });
+
+      if (untranslated.length === 0) return;
+
+      const uniqueList = Array.from(new Set(untranslated));
+      const newMap: Record<string, string> = {};
+
+      await Promise.all(
+        uniqueList.map(async (rawText) => {
+          try {
+            const trans = await translateSingleText(rawText, language);
+            if (trans) newMap[rawText] = trans;
+          } catch (e) {
+            console.error('Translation error in /work:', e);
+          }
+        })
+      );
+
+      if (isMounted) {
+        setDynamicTranslations(prev => ({ ...prev, ...newMap }));
+      }
+    };
+
+    translateTexts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [language, tasks]);
   const [attendanceLog, setAttendanceLog] = useState<any>(null);
   const [workerProfile, setWorkerProfile] = useState<any>(null);
   const [gpsStatus, setGpsStatus] = useState<string>('');
@@ -535,13 +588,13 @@ export default function WorkEntryPage() {
     if (typeof window === 'undefined') return;
     if (!navigator.geolocation) {
       setGpsPermissionState('unsupported');
-      setCurrentAddress('位置情報非対応ブラウザ');
+      setCurrentAddress(t('gpsNotSupported', language));
       return;
     }
 
     const enabled = force ? true : isGpsEnabled;
     if (!enabled) {
-      setCurrentAddress('位置情報OFF');
+      setCurrentAddress(t('gpsManualOff', language));
       setGpsStatus('');
       return;
     }
@@ -630,7 +683,7 @@ export default function WorkEntryPage() {
     if (nextState) {
       refreshGpsPosition(true);
     } else {
-      setCurrentAddress('位置情報OFF');
+      setCurrentAddress(t('gpsManualOff', language));
       setGpsStatus('');
     }
   };
@@ -640,7 +693,7 @@ export default function WorkEntryPage() {
     if (isGpsEnabled) {
       refreshGpsPosition();
     } else {
-      setCurrentAddress('位置情報OFF');
+      setCurrentAddress(t('gpsManualOff', language));
     }
   }, [currentUser?.id, isGpsEnabled]);
 
@@ -1360,7 +1413,7 @@ export default function WorkEntryPage() {
               {attendanceLog && attendanceLog.weather && (
                 <div className="flex items-center justify-center gap-2 text-emerald-200 text-sm font-bold bg-emerald-950/50 py-2 rounded-xl">
                   {attendanceLog.weather === '晴れ' ? <Sun className="w-4 h-4 text-amber-400" /> : <CloudRain className="w-4 h-4 text-blue-400" />}
-                  {t('weatherInfo', language)}: {attendanceLog.weather} ({attendanceLog.temperature}℃)
+                  {t('weatherInfo', language)}: {t(attendanceLog.weather, language) || attendanceLog.weather} ({attendanceLog.temperature}℃)
                 </div>
               )}
             </div>
@@ -1423,7 +1476,7 @@ export default function WorkEntryPage() {
               )}
               {overtimeStatus === 'rejected' && (
                 <div className="w-full py-3 bg-rose-500/20 text-rose-400 font-bold rounded-xl text-center border border-rose-500/30 flex items-center justify-center gap-2">
-                  <AlertCircle className="w-5 h-5" /> 【本日】残業申請 却下
+                  <AlertCircle className="w-5 h-5" /> {t('overtimeRejected', language)}
                 </div>
               )}
               
@@ -1434,7 +1487,7 @@ export default function WorkEntryPage() {
                 }}
                 className="w-full py-4 bg-amber-600 hover:bg-amber-500 text-white font-black rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
               >
-                <Clock className="w-5 h-5" /> 残業を申請する
+                <Clock className="w-5 h-5" /> {t('applyOvertimeBtn', language)}
               </button>
             </div>
 
@@ -1536,13 +1589,13 @@ export default function WorkEntryPage() {
                             {isLeader && (
                               <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 text-[10px] font-black rounded-full flex items-center gap-1 shadow-xs">
                                 <Crown className="w-3 h-3 fill-amber-950" />
-                                <span>👑 現場責任者</span>
+                                <span>{t('task_leaderCrown', language)}</span>
                               </span>
                             )}
                             {otherLeaderName && (
                               <span className="px-1.5 py-0.5 bg-amber-900/60 text-amber-300 text-[10px] font-bold rounded-md flex items-center gap-0.5 border border-amber-700/50">
                                 <Crown className="w-2.5 h-2.5 text-amber-400" />
-                                <span>リーダー: {otherLeaderName}</span>
+                                <span>{t('task_leaderLabel', language)}: {otherLeaderName}</span>
                               </span>
                             )}
                           </div>
@@ -1552,7 +1605,7 @@ export default function WorkEntryPage() {
                           </div>
                           {cleanNote && (
                             <p className="text-[11px] text-emerald-200/60 truncate pl-4">
-                              💬 {cleanNote}
+                              💬 {language === 'ja' ? cleanNote : (dynamicTranslations[cleanNote] || cleanNote)}
                             </p>
                           )}
                         </div>
@@ -1742,7 +1795,7 @@ export default function WorkEntryPage() {
                           type="button"
                           onClick={async (e) => {
                             e.stopPropagation();
-                            if (confirm(`独自作業「${getTranslatedWorkType(cw, language) || cw}」をリストから削除しますか？\n※この作業で保存された過去の記録は『片付け・メンテ』に名称統合されます。`)) {
+                            if (confirm(`${t('deleteConfirmPrefix', language)}${getTranslatedWorkType(cw, language) || cw}${t('deleteConfirmSuffix', language)}`)) {
                               setIsSubmitting(true);
                               try {
                                 const { data: farmWorkers } = await supabase.from('workers').select('id').eq('user_id', workerProfile?.user_id);
@@ -1751,14 +1804,14 @@ export default function WorkEntryPage() {
                                 setCustomWorkTypes(customWorkTypes.filter(t => t !== cw));
                                 if (workType === cw) setWorkType('');
                               } catch(err) {
-                                alert('削除に失敗しました');
+                                alert(t('deleteFailed', language));
                               } finally {
                                 setIsSubmitting(false);
                               }
                             }
                           }}
                           className="absolute -top-1.5 -right-1.5 p-1 bg-slate-800 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-full shadow border border-slate-600 transition-colors opacity-80 hover:opacity-100 cursor-pointer"
-                          title="この独自作業を削除"
+                          title={t('deleteWorkTypeTitle', language)}
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -1864,7 +1917,7 @@ export default function WorkEntryPage() {
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file && file.size > 50 * 1024 * 1024) {
-                          alert('動画のサイズは50MB以下にしてください。');
+                          alert(t('videoSizeLimitAlert', language));
                           e.target.value = '';
                           setVideoFile(null);
                         } else {
@@ -1928,11 +1981,11 @@ export default function WorkEntryPage() {
               // 週間フル7日間の日付リストを生成 (モーダル用、calendarWeekOffsetと連動)
               const modalWeekDaysList = Array.from({ length: 7 }).map((_, idx) => {
                 const { dateStr, dateObj } = getJSTDateWithOffset((calendarWeekOffset * 7) + idx);
-                const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
+                const dayOfWeek = getWeekdayName(dateObj.getDay(), language);
                 
                 // 相対日数
                 const totalDiff = (calendarWeekOffset * 7) + idx;
-                const label = totalDiff === 0 ? '今日' : totalDiff === 1 ? '明日' : totalDiff === 2 ? '明後日' : `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+                const label = totalDiff === 0 ? t('todayShort', language) : totalDiff === 1 ? t('tomorrowShort', language) : totalDiff === 2 ? t('dayAfterTomorrowShort', language) : `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
                 
                 const dayPendingOrders = allB2bOrders.filter(o => o.delivery_date === dateStr && o.status === 'pending');
                 const dayAllOrders = allB2bOrders.filter(o => o.delivery_date === dateStr);
@@ -1951,8 +2004,8 @@ export default function WorkEntryPage() {
               // メイン画面の直近4日間ピル (スクロールなしでピタッと美しく収める)
               const topFourDays = Array.from({ length: 4 }).map((_, idx) => {
                 const { dateStr, dateObj } = getJSTDateWithOffset(idx);
-                const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
-                const label = idx === 0 ? '今日' : idx === 1 ? '明日' : idx === 2 ? '明後日' : '3日後';
+                const dayOfWeek = getWeekdayName(dateObj.getDay(), language);
+                const label = idx === 0 ? t('todayShort', language) : idx === 1 ? t('tomorrowShort', language) : idx === 2 ? t('dayAfterTomorrowShort', language) : t('threeDaysLaterShort', language);
                 
                 const dayPendingOrders = allB2bOrders.filter(o => o.delivery_date === dateStr && o.status === 'pending');
                 const dayAllOrders = allB2bOrders.filter(o => o.delivery_date === dateStr);
@@ -2003,10 +2056,10 @@ export default function WorkEntryPage() {
                     <div>
                       <h2 className="text-sm sm:text-base font-black text-emerald-300 flex items-center gap-2">
                         <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
-                        <span>配達・収穫予定</span>
+                        <span>{t('deliveryScheduleTitle', language)}</span>
                       </h2>
                       <p className="text-[10px] sm:text-[11px] font-bold text-emerald-300/70 mt-0.5">
-                        明日・明後日の注文量と収穫目標
+                        {t('deliveryScheduleSub', language)}
                       </p>
                     </div>
 
@@ -2015,7 +2068,7 @@ export default function WorkEntryPage() {
                       onClick={() => setShowWeekCalendarModal(true)}
                       className="px-3 py-2 bg-emerald-700/90 hover:bg-emerald-600 active:scale-95 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-xs shrink-0 border border-emerald-600/50"
                     >
-                      <span>📊 注文カレンダー</span>
+                      <span>{t('orderCalendarBtn', language)}</span>
                     </button>
                   </div>
 
@@ -2044,7 +2097,7 @@ export default function WorkEntryPage() {
                             <span className={`text-[10px] px-2 py-0.2 rounded-full font-black mt-0.5 ${
                               isSelected ? 'bg-emerald-950 text-emerald-300' : 'bg-rose-500 text-white shadow-xs'
                             }`}>
-                              {item.pendingCount}件
+                              {item.pendingCount}{t('orderCountUnit', language)}
                             </span>
                           ) : (
                             <span className="text-[10px] text-emerald-500/40 mt-0.5 font-bold">
@@ -2062,23 +2115,23 @@ export default function WorkEntryPage() {
                       <div className="text-xs font-black text-emerald-300 flex items-center gap-1.5">
                         <span>🌾</span>
                         <span>
-                          {currentSelectedDay.label}（{currentSelectedDay.monthDate} {currentSelectedDay.dayOfWeek}）の総収穫・出荷目標
+                          {currentSelectedDay.label}（{currentSelectedDay.monthDate} {currentSelectedDay.dayOfWeek}）{t('harvestTargetTitleSuffix', language)}
                         </span>
                       </div>
                       <span className="text-[11px] font-bold text-emerald-400/80">
-                        {selectedOrders.length}件の注文
+                        {selectedOrders.length} {t('orderCountUnit', language)}
                       </span>
                     </div>
 
                     {Object.keys(harvestSummary).length === 0 ? (
                       <div className="text-center py-3 text-emerald-400/50 text-xs font-bold">
-                        この日の注文予定はありません
+                        {t('noOrdersForThisDay', language)}
                       </div>
                     ) : (
                       <div className="flex flex-wrap gap-2 pt-1">
                         {Object.values(harvestSummary).map((sum, idx) => (
                           <div 
-                            key={idx}
+                            key={idx} 
                             className="bg-emerald-900/70 border border-emerald-600/50 px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-xs"
                           >
                             <span className="font-black text-white text-xs">
@@ -2099,7 +2152,7 @@ export default function WorkEntryPage() {
                       <div className="text-center py-6 bg-emerald-950/40 rounded-2xl border border-emerald-900/50">
                         <CheckCircle2 className="w-7 h-7 text-emerald-500/40 mx-auto mb-1.5" />
                         <div className="text-emerald-400/70 font-bold text-xs">
-                          {currentSelectedDay.label}（{currentSelectedDay.monthDate}）の配達予定はありません
+                          {currentSelectedDay.label}（{currentSelectedDay.monthDate}）{t('noDeliveryForThisDaySuffix', language)}
                         </div>
                       </div>
                     ) : (
@@ -2119,7 +2172,7 @@ export default function WorkEntryPage() {
                                 <span className="font-black text-white text-sm">{order.customer?.name}</span>
                                 {isDelivered && (
                                   <span className="bg-emerald-900/80 text-emerald-300 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-700">
-                                    ✅ 納品済
+                                    {t('deliveredBadge', language)}
                                   </span>
                                 )}
                               </div>
@@ -2152,7 +2205,7 @@ export default function WorkEntryPage() {
                             <div className="flex items-center gap-2">
                               <Calendar className="w-5 h-5 text-emerald-400" />
                               <h3 className="text-base sm:text-lg font-black text-white">
-                                注文・収穫カレンダー（直近1ヶ月対応）
+                                {t('orderCalendarModalTitle', language)}
                               </h3>
                             </div>
                             <button
@@ -2173,7 +2226,7 @@ export default function WorkEntryPage() {
                                 disabled={calendarWeekOffset === 0}
                                 className="px-3 py-1.5 bg-emerald-900/80 hover:bg-emerald-800 text-emerald-200 rounded-xl text-xs font-black transition-colors disabled:opacity-30 disabled:pointer-events-none"
                               >
-                                ◀ 前の週
+                                {t('prevWeekBtn', language)}
                               </button>
                               
                               <span className="text-xs font-black text-emerald-300 px-1">
@@ -2186,18 +2239,18 @@ export default function WorkEntryPage() {
                                 disabled={calendarWeekOffset >= 4}
                                 className="px-3 py-1.5 bg-emerald-900/80 hover:bg-emerald-800 text-emerald-200 rounded-xl text-xs font-black transition-colors disabled:opacity-30 disabled:pointer-events-none"
                               >
-                                次の週 ▶
+                                {t('nextWeekBtn', language)}
                               </button>
                             </div>
 
                             {/* 1ヶ月クイック週選択ピル */}
                             <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
                               {[
-                                { offset: 0, label: '今週' },
-                                { offset: 1, label: '来週 (+1)' },
-                                { offset: 2, label: '再来週 (+2)' },
-                                { offset: 3, label: '3週後 (+3)' },
-                                { offset: 4, label: '4週後 (+4)' }
+                                { offset: 0, label: t('weekPillThisWeek', language) },
+                                { offset: 1, label: t('weekPillNextWeek', language) },
+                                { offset: 2, label: t('weekPillTwoWeeks', language) },
+                                { offset: 3, label: t('weekPillThreeWeeks', language) },
+                                { offset: 4, label: t('weekPillFourWeeks', language) }
                               ].map(pill => (
                                 <button
                                   key={pill.offset}
@@ -2262,7 +2315,7 @@ export default function WorkEntryPage() {
                                       {item.monthDate} ({item.dayOfWeek})
                                     </div>
                                     <div className="text-[10px] mt-0.5 font-bold opacity-90">
-                                      {item.pendingCount > 0 ? `未納品: ${item.pendingCount}件` : '注文なし'}
+                                      {item.pendingCount > 0 ? `${t('unshippedLabel', language)}: ${item.pendingCount}${t('orderCountUnit', language)}` : t('noOrdersShort', language)}
                                     </div>
                                   </div>
 
@@ -2272,7 +2325,7 @@ export default function WorkEntryPage() {
                                     {Object.keys(daySum).length > 0 && (
                                       <div className="bg-emerald-900/80 border border-emerald-600/50 p-2 rounded-xl space-y-1 shadow-xs">
                                         <div className="text-[10px] font-black text-emerald-300 flex items-center gap-1">
-                                          <span>🌾</span> 収穫目標:
+                                          <span>🌾</span> {t('harvestTargetLabel', language)}
                                         </div>
                                         <div className="space-y-1">
                                           {Object.values(daySum).map((s, sIdx) => (
@@ -2288,12 +2341,12 @@ export default function WorkEntryPage() {
                                     {/* 📦 顧客別注文カード */}
                                     {item.orders.length === 0 ? (
                                       <div className="text-center py-8 text-emerald-500/30 text-[11px] font-bold">
-                                        予定なし
+                                        {t('noScheduleLabel', language)}
                                       </div>
                                     ) : (
                                       <div className="space-y-1.5">
                                         <div className="text-[10px] font-bold text-emerald-400/80 px-1">
-                                          注文一覧 ({item.orders.length}件):
+                                          {t('orderListTitle', language)} ({item.orders.length}):
                                         </div>
                                         {item.orders.map(o => {
                                           const isDelivered = o.status === 'delivered' || o.status === 'invoiced';
@@ -2309,9 +2362,9 @@ export default function WorkEntryPage() {
                                               <div className="flex items-center justify-between font-black text-white">
                                                 <span className="truncate">{o.customer?.name}</span>
                                                 {isDelivered ? (
-                                                  <span className="text-[9px] text-emerald-400 bg-emerald-950 px-1.5 py-0.2 rounded">済</span>
+                                                  <span className="text-[9px] text-emerald-400 bg-emerald-950 px-1.5 py-0.2 rounded">{t('doneShort', language)}</span>
                                                 ) : (
-                                                  <span className="text-[9px] text-rose-400 bg-rose-950/80 px-1.5 py-0.2 rounded">未</span>
+                                                  <span className="text-[9px] text-rose-400 bg-rose-950/80 px-1.5 py-0.2 rounded">{t('undoneShort', language)}</span>
                                                 )}
                                               </div>
                                               <div className="text-[10px] text-emerald-300/80 font-bold truncate">
@@ -2338,7 +2391,7 @@ export default function WorkEntryPage() {
                                           : 'bg-emerald-800/60 hover:bg-emerald-700 text-emerald-200'
                                       }`}
                                     >
-                                      {isSelected ? '✓ 選択中' : 'この日を開く'}
+                                      {isSelected ? t('currentlySelected', language) : t('openThisDay', language)}
                                     </button>
                                   </div>
                                 </div>
@@ -2350,13 +2403,13 @@ export default function WorkEntryPage() {
                         {/* モーダルフッター */}
                         <div className="p-4 border-t border-emerald-800/80 bg-emerald-900/40 flex items-center justify-between">
                           <p className="text-xs font-bold text-emerald-300/70 hidden sm:block">
-                            💡 各週を切り替えて直近1ヶ月先までの注文を確認でき、「この日を開く」で詳細へジャンプできます。
+                            {t('orderCalendarGuideNote', language)}
                           </p>
                           <button
                             onClick={() => setShowWeekCalendarModal(false)}
                             className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black rounded-xl text-xs transition-all shadow-md ml-auto"
                           >
-                            閉じる
+                            {t('close', language)}
                           </button>
                         </div>
                       </div>
@@ -2487,16 +2540,16 @@ export default function WorkEntryPage() {
                         <Crown className="w-5 h-5 fill-white" />
                       </div>
                       <div className="min-w-0">
-                        <div className="font-black text-xs">👑 あなたが本日の現場責任者（リーダー）です！</div>
+                        <div className="font-black text-xs">{t('task_youAreLeader', language)}</div>
                         <p className="text-[10px] font-bold text-amber-900 mt-0.5">
-                          安全確認・人員配置・指示進行をお願いします
+                          {t('task_leaderInstruction', language)}
                         </p>
                       </div>
                     </div>
                   ) : otherLeaderName ? (
                     <div className="p-2.5 bg-amber-950/60 border border-amber-500/40 rounded-xl text-amber-300 flex items-center gap-2 text-xs font-bold">
                       <Crown className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span>本日の現場リーダー: <strong className="font-black text-amber-200">{otherLeaderName}</strong> さん</span>
+                      <span>{t('task_todayLeaderIs', language)}<strong className="font-black text-amber-200">{otherLeaderName}</strong>{t('sanSuffix', language)}</span>
                     </div>
                   ) : null}
 
@@ -2526,7 +2579,7 @@ export default function WorkEntryPage() {
                       <div>
                         <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">📝 {t('instructionsNotes', language)}</span>
                         <div className="bg-emerald-950/90 p-3 rounded-xl border border-emerald-800/80 text-xs font-bold text-slate-200 whitespace-pre-wrap leading-relaxed">
-                          {cleanModalNotes}
+                          {language === 'ja' ? cleanModalNotes : (dynamicTranslations[cleanModalNotes] || cleanModalNotes)}
                         </div>
                       </div>
                     )}
@@ -2567,11 +2620,11 @@ export default function WorkEntryPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-slate-800 rounded-3xl p-6 w-full max-w-sm border border-slate-700 shadow-2xl">
             <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2">
-              <Clock className="w-6 h-6 text-amber-400" /> 残業の申請
+              <Clock className="w-6 h-6 text-amber-400" /> {t('overtime_modalTitle', language)}
             </h3>
             <form onSubmit={handleOvertimeSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-slate-400 mb-1">残業する日付</label>
+                <label className="block text-sm font-bold text-slate-400 mb-1">{t('overtime_dateLabel', language)}</label>
                 <input
                   type="date"
                   required
@@ -2581,7 +2634,7 @@ export default function WorkEntryPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-400 mb-1">残業終了(予定)時刻</label>
+                <label className="block text-sm font-bold text-slate-400 mb-1">{t('overtime_endTimeLabel', language)}</label>
                 <input
                   type="time"
                   required
@@ -2590,16 +2643,16 @@ export default function WorkEntryPage() {
                   className="w-full p-4 bg-slate-900 border border-slate-700 rounded-2xl text-white font-black text-xl text-center focus:outline-none focus:border-amber-500"
                 />
                 <p className="text-xs text-emerald-400 mt-2 font-bold">
-                  ※承認されると、LINEの退勤忘れアラートは「この予定時刻の30分後」に自動で延長されます。
+                  {t('overtime_lineNote', language)}
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-400 mb-1">残業の理由・作業内容</label>
+                <label className="block text-sm font-bold text-slate-400 mb-1">{t('overtime_reasonLabel', language)}</label>
                 <textarea
                   required
                   value={overtimeReason}
                   onChange={e => setOvertimeReason(e.target.value)}
-                  placeholder="例: トマトの収穫が長引いたため"
+                  placeholder={t('overtime_reasonPlaceholder', language)}
                   className="w-full p-4 bg-slate-900 border border-slate-700 rounded-2xl text-white focus:outline-none focus:border-amber-500"
                   rows={3}
                 />
@@ -2610,14 +2663,14 @@ export default function WorkEntryPage() {
                   onClick={() => setShowOvertimeModal(false)}
                   className="py-3 bg-slate-700 text-slate-300 font-bold rounded-xl"
                 >
-                  キャンセル
+                  {t('leave_cancel', language)}
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
                   className="py-3 bg-amber-500 hover:bg-amber-400 text-amber-950 font-black rounded-xl disabled:opacity-50"
                 >
-                  {isSubmitting ? '送信中...' : '申請する'}
+                  {isSubmitting ? t('sendingBtn', language) : t('overtime_submitBtn', language)}
                 </button>
               </div>
             </form>

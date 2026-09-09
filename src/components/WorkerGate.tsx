@@ -169,7 +169,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
         setDebugOwnerId(resolvedOwnerId);
       } else {
         setWorkers([]);
-        setErrorMsg('この農園に登録された作業者が見つかりません。\n管理者画面からスタッフを登録するか、別の農園を選択してください。');
+        setErrorMsg(t('noWorkersInFarm', language));
       }
     } catch (err: any) {
       console.error(err);
@@ -269,10 +269,10 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
         onLogin(user);
       } else {
         const isDefaultZero = expectedPin === '0000';
+        const enteredPinText = enteredPin ? t('inputPinNumber', language).replace('{pin}', enteredPin) : '';
+        const hintText = isDefaultZero ? t('pinHintDefault', language) : t('pinHintBirthday', language);
         setErrorMsg(
-          t('incorrectPin', language) + 
-          (enteredPin ? `（入力: ${enteredPin}）` : '') + 
-          (isDefaultZero ? '\n※初期設定「0000」をお試しください。' : '\n※誕生日4桁（例: 0129）をお試しください。')
+          t('incorrectPin', language) + enteredPinText + '\n' + hintText
         );
         setPinCode('');
       }
@@ -344,9 +344,9 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
       <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl">
         {isLineBrowser && (
           <div className="mb-4 p-3 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-300 text-xs leading-relaxed">
-            <p className="font-bold mb-1">⚠️ LINEアプリ内で開かれています</p>
+            <p className="font-bold mb-1">{t('lineBrowserAlertTitle', language)}</p>
             <p className="text-[11px] text-amber-200/90">
-              右下の「…」から<strong>「ブラウザで開く」</strong>を選ぶとより快適に動作します。
+              {t('lineBrowserAlertSub', language)}
             </p>
           </div>
         )}
@@ -360,9 +360,9 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
               <div className="w-14 h-14 bg-emerald-500/20 rounded-2xl mx-auto flex items-center justify-center mb-3 border border-emerald-500/30">
                 <Building className="w-7 h-7 text-emerald-400" />
               </div>
-              <h1 className="text-xl sm:text-2xl font-black text-white">農園ポータルの接続</h1>
+              <h1 className="text-xl sm:text-2xl font-black text-white">{t('farmPortalConnect', language)}</h1>
               <p className="text-xs sm:text-sm text-slate-400 font-medium mt-1.5 leading-relaxed">
-                本画面は各農園ごとに発行される専用URLまたはQRコードからアクセスしてご利用ください。
+                {t('farmPortalConnectSub', language)}
               </p>
             </div>
 
@@ -376,10 +376,10 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
               {/* 農園コード・ID入力フォーム */}
               <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
                 <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                  🔑 農園コード・IDを入力して接続
+                  {t('connectFarmWithCode', language)}
                 </label>
                 <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
-                  管理者から案内された農園ID（UUIDまたは専用コード）を入力してください。
+                  {t('farmIdPrompt', language)}
                 </p>
                 <form onSubmit={handleManualSetupSubmit} className="space-y-3">
                   <input
@@ -398,7 +398,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <>
-                        <span>農園ポータルへ入る</span>
+                        <span>{t('enterFarmPortalBtn', language)}</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </>
                     )}
@@ -409,13 +409,13 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
               {/* 管理者ログイン案内 */}
               <div className="text-center pt-2">
                 <p className="text-[11px] text-slate-500 mb-2">
-                  農園のオーナー・管理者の方はこちら
+                  {t('farmOwnerGuide', language)}
                 </p>
                 <a
                   href="/login"
                   className="w-full py-2.5 bg-slate-800/80 hover:bg-slate-800 text-slate-200 border border-slate-700/80 font-bold rounded-xl text-xs transition-all inline-flex items-center justify-center gap-2"
                 >
-                  <span>👨‍💼 管理者ログイン（専用URL発行）</span>
+                  <span>{t('adminLoginBtnWithUrl', language)}</span>
                   <ArrowRight className="w-3 h-3" />
                 </a>
               </div>
@@ -439,7 +439,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
                 <User className="w-6 h-6 text-emerald-400" />
               </div>
               <h1 className="text-xl sm:text-2xl font-black text-white">{t('workerLogin', language)}</h1>
-              <p className="text-xs sm:text-sm text-emerald-400 font-bold mt-1">👇 あなたのお名前をタップしてください</p>
+              <p className="text-xs sm:text-sm text-emerald-400 font-bold mt-1">{t('tapNamePrompt', language)}</p>
             </div>
 
             {errorMsg && (
@@ -464,7 +464,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
                       </div>
                       {w.role === 'admin' && (
                         <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 font-black rounded-md border border-amber-500/30">
-                          管理
+                          {t('adminRole', language)}
                         </span>
                       )}
                     </div>
@@ -484,14 +484,14 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
 
               {workers.length === 0 && !isLoading && (
                 <div className="text-center py-6 text-slate-400 text-xs">
-                  作業者が見つかりません。
+                  {t('noWorkersFound', language)}
                 </div>
               )}
             </div>
 
             {/* セレクトボックス（万が一用） */}
             <div className="pt-2.5 border-t border-slate-800/80">
-              <label className="block text-[11px] text-slate-400 font-bold mb-1">またはリストから選択:</label>
+              <label className="block text-[11px] text-slate-400 font-bold mb-1">{t('orSelectFromList', language)}</label>
               <select
                 value={selectedWorkerId}
                 onChange={(e) => {
@@ -528,18 +528,18 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
               className="text-xs text-slate-400 hover:text-white font-bold inline-flex items-center gap-1 mb-4 cursor-pointer active:scale-95 transition-all"
             >
               <ArrowRight className="w-3.5 h-3.5 rotate-180 text-emerald-400" />
-              <span>お名前を選び直す</span>
+              <span>{t('reselectName', language)}</span>
             </button>
 
             <div className="text-center mb-5">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-full mb-2">
                 <User className="w-4 h-4 text-emerald-400" />
                 <span className="font-black text-white text-sm">
-                  {getTranslatedName(selectedWorker, language)} さん
+                  {getTranslatedName(selectedWorker, language)}{t('sanSuffix', language)}
                 </span>
               </div>
-              <h2 className="text-base font-black text-slate-200">暗証番号（4桁）を入力</h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">画面のテンキーをタップしてください</p>
+              <h2 className="text-base font-black text-slate-200">{t('yourPin', language)}</h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">{t('tapKeypadPrompt', language)}</p>
             </div>
 
             {/* 4桁インジケーター ＆ 表示切替 */}
@@ -565,7 +565,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
                   type="button"
                   onClick={() => setShowPin(!showPin)}
                   className="p-1.5 text-slate-400 hover:text-white ml-1 cursor-pointer"
-                  title={showPin ? "非表示" : "数字を表示"}
+                  title={showPin ? t('hidePin', language) : t('showPin', language)}
                 >
                   {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -600,7 +600,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
                 className="h-14 bg-emerald-500/15 hover:bg-emerald-500/25 active:scale-90 active:bg-emerald-500 active:text-slate-950 border border-emerald-500/30 text-emerald-300 font-black text-xs rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer shadow-sm disabled:opacity-50 px-1 text-center"
               >
                 <span>0000</span>
-                <span className="text-[9px] font-bold">自動入力</span>
+                <span className="text-[9px] font-bold">{t('autoFill', language)}</span>
               </button>
 
               {/* 「0」ボタン */}
@@ -620,7 +620,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
                 disabled={isSubmitting || pinCode.length === 0}
                 className="h-14 bg-slate-950 hover:bg-slate-800 active:scale-90 active:bg-rose-500 active:text-white border border-slate-800 text-slate-400 hover:text-white font-black text-sm rounded-2xl flex items-center justify-center transition-all cursor-pointer shadow-sm disabled:opacity-30"
               >
-                ⌫ 戻る
+                ⌫ {t('keypadBackspace', language)}
               </button>
             </div>
 
@@ -635,7 +635,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
                 <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
                 <>
-                  <span>ログインして作業開始</span>
+                  <span>{t('loginAndStart', language)}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -658,7 +658,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
                 className="text-xs text-slate-400 hover:text-emerald-400 font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
               >
                 <Building className="w-3.5 h-3.5" />
-                <span>🏢 別の農園に切り替える</span>
+                <span>🏢 {t('switchFarm', language)}</span>
               </button>
             </div>
           )}
@@ -668,7 +668,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
               href="/login"
               className="text-[11px] font-bold text-slate-400 hover:text-emerald-400 transition-colors inline-flex items-center gap-1"
             >
-              <span>👨‍💼 管理者アカウントでログインする</span>
+              <span>👨‍💼 {t('adminLoginLink', language)}</span>
               <ArrowRight className="w-3 h-3" />
             </a>
           </div>
@@ -686,7 +686,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
               }}
               className="text-[10px] text-slate-500 hover:text-amber-400 transition-colors inline-block"
             >
-              🔄 画面が固まる・更新されない場合はここをタップ（端末初期化）
+              🔄 {t('resetTerminalLink', language)}
             </button>
           </div>
         </div>

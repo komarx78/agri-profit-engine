@@ -187,9 +187,9 @@ function PortalContent() {
     }
   };
 
-  // 自由入力タスクタイトルのリアルタイム自動翻訳
+  // 自由入力タスクタイトル・作業指示・日報メモのリアルタイム自動翻訳
   useEffect(() => {
-    if (language === 'ja' || tasks.length === 0) {
+    if (language === 'ja' || (tasks.length === 0 && dailyWorkLogs.length === 0)) {
       return;
     }
 
@@ -201,6 +201,20 @@ function PortalContent() {
         if (title) {
           untranslated.push(title);
         }
+        const note = t.notes || t.memo || '';
+        const clean = note
+          .replace(/【👑現場責任者】\n?/, '')
+          .replace(/【👑現場リーダー:[^】]+】\n?/, '')
+          .trim();
+        if (clean) {
+          untranslated.push(clean);
+        }
+      });
+
+      dailyWorkLogs.forEach(w => {
+        const title = w.task_title || w.work_type;
+        if (title) untranslated.push(title);
+        if (w.memo) untranslated.push(w.memo);
       });
 
       if (untranslated.length === 0) return;
@@ -229,7 +243,7 @@ function PortalContent() {
     return () => {
       isMounted = false;
     };
-  }, [language, tasks]);
+  }, [language, tasks, dailyWorkLogs]);
 
   // 有給・休暇関連ステート
   const [leaveBalance, setLeaveBalance] = useState<{ carryover: number; balance: number; total: number } | null>(null);
@@ -3208,7 +3222,7 @@ function PortalContent() {
                         {/* 指示メモ・特記事項 */}
                         {task.memo && (
                           <p className="text-[11px] text-slate-600 bg-white/90 p-2 rounded-xl border border-slate-100 italic">
-                            💬 {task.memo}
+                            💬 {language === 'ja' ? task.memo : (dynamicTranslations[task.memo] || task.memo)}
                           </p>
                         )}
 
@@ -3217,8 +3231,8 @@ function PortalContent() {
                           {isCompleted ? (
                             <div className="flex items-center justify-between w-full">
                               <span className="text-xs font-black text-emerald-700 flex items-center gap-1">
-                                <CheckCircle className="w-3.5 h-3.5" /> 完了済
-                                {task.duration_minutes ? ` (${task.duration_minutes}分)` : ''}
+                                <CheckCircle className="w-3.5 h-3.5" /> {t('tc_completed', language)}
+                                {task.duration_minutes ? ` (${task.duration_minutes}${t('minute', language)})` : ''}
                               </span>
                               <button
                                 type="button"
@@ -3504,7 +3518,7 @@ function PortalContent() {
                           onClick={() => router.push('/admin/tasks')}
                           className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition-colors border border-slate-200 cursor-pointer"
                         >
-                          <span>🗓️ 全体タスク管理</span>
+                          <span>🗓️ {t('manageAllTasks', language)}</span>
                           <ArrowRight className="w-3.5 h-3.5" />
                         </button>
                       )}
@@ -3516,7 +3530,7 @@ function PortalContent() {
                     <div className="flex items-center justify-between text-xs font-black">
                       <span className="text-slate-700 flex items-center gap-1.5">
                         <Sparkles className="w-4 h-4 text-emerald-600" />
-                        <span>{t('todo_progress', language)}: {todayTasksProgress.completed} / {todayTasksProgress.total} 件完了</span>
+                        <span>{t('todo_progress', language)}: {todayTasksProgress.completed} / {todayTasksProgress.total}{t('tasksCompletedCount', language)}</span>
                       </span>
                       <span className="text-emerald-700 text-sm font-black">{todayTasksProgress.percent}%</span>
                     </div>
@@ -3536,7 +3550,7 @@ function PortalContent() {
                         {t('todo_allDone', language)}
                       </h3>
                       <p className="text-xs text-emerald-700 font-bold">
-                        本日の予定作業はすべて報告済みです。ゆっくりお休みいただくか、追加の作業があれば管理画面で追加してください。
+                        {t('todo_allDoneSub', language)}
                       </p>
                     </div>
                   )}
@@ -3546,7 +3560,7 @@ function PortalContent() {
                     <div className="p-12 text-center text-slate-400 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 space-y-2">
                       <CheckCircle2 className="w-12 h-12 text-slate-300 mx-auto" />
                       <p className="font-bold text-sm text-slate-600">{t('todo_noTasks', language)}</p>
-                      <p className="text-xs text-slate-400">管理画面から作業スケジュールを登録すると、ここに自動で表示されます。</p>
+                      <p className="text-xs text-slate-400">{t('todo_noTasksSub', language)}</p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3615,7 +3629,7 @@ function PortalContent() {
                               )}
                               {task.duration_minutes ? (
                                 <span className="px-2.5 py-1 bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-bold">
-                                  ⌛ 予定: {task.duration_minutes}分
+                                  ⌛ {t('plannedEst', language)}: {task.duration_minutes}{t('minute', language)}
                                 </span>
                               ) : null}
                             </div>
@@ -3623,8 +3637,8 @@ function PortalContent() {
                             {/* 指示メモ・特記事項 */}
                             {task.memo && (
                               <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-1">
-                                <span className="text-[10px] font-bold text-slate-400 block">指示メモ:</span>
-                                <p className="font-medium whitespace-pre-wrap">{task.memo}</p>
+                                <span className="text-[10px] font-bold text-slate-400 block">{t('instructionsNotes', language)}:</span>
+                                <p className="font-medium whitespace-pre-wrap">{language === 'ja' ? task.memo : (dynamicTranslations[task.memo] || task.memo)}</p>
                               </div>
                             )}
 
@@ -3634,16 +3648,16 @@ function PortalContent() {
                                 <div className="flex items-center justify-between w-full">
                                   <div className="flex items-center gap-2">
                                     <span className="text-xs font-black text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-                                      <CheckCircle className="w-4 h-4" /> 完了済
+                                      <CheckCircle className="w-4 h-4" /> {t('tc_completed', language)}
                                     </span>
                                     {task.duration_minutes ? (
                                       <span className="text-xs font-bold text-slate-500">
-                                        実績: {task.duration_minutes}分
+                                        {t('actualResult', language)}: {task.duration_minutes}{t('minute', language)}
                                       </span>
                                     ) : null}
                                     {task.harvest_amount ? (
                                       <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-100">
-                                        収穫: {task.harvest_amount}
+                                        {t('harvestLabel', language)}: {task.harvest_amount}
                                       </span>
                                     ) : null}
                                   </div>
@@ -3671,7 +3685,7 @@ function PortalContent() {
                                     type="button"
                                     onClick={() => handleQuickCompleteTask(task)}
                                     className="py-2 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-95 rounded-xl text-xs font-black transition-all border border-slate-200 flex items-center gap-1 shrink-0 cursor-pointer"
-                                    title="ワンタップで完了にする"
+                                    title={t('todo_quickCompleteTooltip', language)}
                                   >
                                     <Check className="w-4 h-4 text-emerald-600" />
                                     <span>{t('todo_completeBtn', language)}</span>
@@ -3681,7 +3695,7 @@ function PortalContent() {
                                     type="button"
                                     onClick={() => router.push('/work')}
                                     className="py-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 active:scale-95 rounded-xl text-xs font-black transition-all border border-blue-100 flex items-center gap-1 shrink-0 cursor-pointer"
-                                    title="現場作業画面（GPS/タイマー）へ"
+                                    title={t('goToWorkScreenTooltip', language)}
                                   >
                                     <ArrowRight className="w-3.5 h-3.5" />
                                   </button>
@@ -3705,7 +3719,7 @@ function PortalContent() {
                       <h2 className="text-base sm:text-lg font-black text-slate-800 flex items-center gap-2">
                         <Users className="w-5 h-5 text-emerald-600" />
                         <span>{t('live_title', language)}</span>
-                        <span className="text-xs font-normal text-slate-400">({allWorkers.length}名登録)</span>
+                        <span className="text-xs font-normal text-slate-400">({allWorkers.length}{t('registeredCountSuffix', language)})</span>
                       </h2>
                       <p className="text-xs text-slate-500 font-medium mt-0.5">
                         {t('live_sub', language)}
@@ -3823,15 +3837,15 @@ function PortalContent() {
                           {/* 中段：出勤・退勤時刻＆本日合計時間 */}
                           <div className="grid grid-cols-2 gap-2 text-xs bg-white/90 p-2.5 rounded-xl border border-slate-100">
                             <div className="space-y-0.5">
-                              <span className="text-[10px] font-bold text-slate-400 block">打刻時間</span>
+                              <span className="text-[10px] font-bold text-slate-400 block">{t('clockTimeTitle', language)}</span>
                               <span className="font-black text-slate-700">
                                 {item.att?.clock_in ? (
                                   <>
                                     {formatDisplayTime(item.att.clock_in)}
-                                    {item.att.clock_out ? ` 〜 ${formatDisplayTime(item.att.clock_out)}` : ' 〜 勤務中'}
+                                    {item.att.clock_out ? ` 〜 ${formatDisplayTime(item.att.clock_out)}` : ` 〜 ${t('tc_working', language)}`}
                                   </>
                                 ) : (
-                                  <span className="text-slate-400">未打刻</span>
+                                  <span className="text-slate-400">{t('notClockedInShort', language)}</span>
                                 )}
                               </span>
                             </div>
@@ -3868,13 +3882,13 @@ function PortalContent() {
                                     </span>
                                   )}
                                   <span className="text-[11px] font-black text-slate-600 ml-auto">
-                                    {item.latestWork.duration_minutes}分
+                                    {item.latestWork.duration_minutes}{t('minute', language)}
                                   </span>
                                 </div>
 
                                 {item.latestWork.memo && (
                                   <p className="text-[11px] text-slate-600 bg-white/80 p-1.5 rounded-lg border border-slate-100 italic truncate">
-                                    💬 {item.latestWork.memo}
+                                    💬 {language === 'ja' ? item.latestWork.memo : (dynamicTranslations[item.latestWork.memo] || item.latestWork.memo)}
                                   </p>
                                 )}
                               </div>
@@ -3884,11 +3898,11 @@ function PortalContent() {
                               </p>
                             ) : item.status === 'break' ? (
                               <p className="text-[11px] font-bold text-amber-700">
-                                ☕ 休憩中です（打刻中）
+                                {t('live_onBreakClocked', language)}
                               </p>
                             ) : (
                               <p className="text-[11px] text-slate-400">
-                                本日の作業記録はありません
+                                {t('live_noWorkRecordsToday', language)}
                               </p>
                             )}
                           </div>
