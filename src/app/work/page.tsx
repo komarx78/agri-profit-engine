@@ -239,20 +239,40 @@ export default function WorkEntryPage() {
     setIsMounted(true);
 
     if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      const farmParam = urlParams.get('farm') || urlParams.get('tenant');
-      if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
-        localStorage.setItem('agri_owner_id', farmParam);
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        // リセット指示があれば古いキャッシュをパージ
+        if (urlParams.get('reset') === '1' || urlParams.get('clear') === '1') {
+          localStorage.removeItem('agri_current_worker');
+          localStorage.removeItem('agri_owner_id');
+        }
+
+        const farmParam = urlParams.get('farm') || urlParams.get('tenant');
+        if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
+          localStorage.setItem('agri_owner_id', farmParam);
+        }
+      } catch (e) {
+        console.warn('URL parsing error:', e);
       }
     }
 
-    const savedUser = localStorage.getItem('agri_current_worker');
-    const savedLang = (localStorage.getItem('agri_language') || localStorage.getItem('agri_lang') || localStorage.getItem('agri_lang_sales')) as LanguageCode;
-    if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
-      setLanguage(savedLang as LanguageCode);
-    }
-    if (savedUser) {
-      setCurrentUser(JSON.parse(savedUser));
+    try {
+      const savedUser = localStorage.getItem('agri_current_worker');
+      const savedLang = (localStorage.getItem('agri_language') || localStorage.getItem('agri_lang') || localStorage.getItem('agri_lang_sales')) as LanguageCode;
+      if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
+        setLanguage(savedLang as LanguageCode);
+      }
+      if (savedUser) {
+        const parsed = JSON.parse(savedUser);
+        if (parsed && parsed.id) {
+          setCurrentUser(parsed);
+        } else {
+          localStorage.removeItem('agri_current_worker');
+        }
+      }
+    } catch (e) {
+      console.warn('Storage read error in work page:', e);
     }
   }, []);
 
@@ -1065,7 +1085,20 @@ export default function WorkEntryPage() {
     }
   };
 
-  if (!isMounted) return <div className="min-h-screen bg-emerald-950 flex items-center justify-center text-emerald-500"><Loader2 className="w-8 h-8 animate-spin" /></div>;
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-emerald-950 flex flex-col items-center justify-center p-4 text-emerald-500 gap-3">
+        <Loader2 className="w-8 h-8 animate-spin" />
+        <p className="text-xs text-emerald-400 font-bold">日報画面を起動中...</p>
+        <button
+          onClick={() => setIsMounted(true)}
+          className="text-xs text-emerald-300 underline font-medium"
+        >
+          画面が進まない場合はここをタップ
+        </button>
+      </div>
+    );
+  }
   if (!currentUser) return <WorkerGate onLogin={(user) => setCurrentUser(user)} />;
 
   return (

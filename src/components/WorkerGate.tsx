@@ -9,6 +9,54 @@ interface WorkerGateProps {
   onLogin: (user: any) => void;
 }
 
+// 安全なlocalStorageラッパー（Safari プライベートブラウズ等の例外クラッシュ防止）
+const safeStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      if (typeof window === 'undefined') return null;
+      return window.localStorage.getItem(key);
+    } catch (e) {
+      console.warn(`safeStorage.getItem error for ${key}:`, e);
+      return null;
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(key, value);
+      }
+    } catch (e) {
+      console.warn(`safeStorage.setItem error for ${key}:`, e);
+    }
+  },
+  removeItem: (key: string): void => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(key);
+      }
+    } catch (e) {
+      console.warn(`safeStorage.removeItem error for ${key}:`, e);
+    }
+  },
+  clearWorkerCache: (): void => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem('agri_current_worker');
+        window.localStorage.removeItem('agri_owner_id');
+        window.localStorage.removeItem('agri_cached_company_name');
+        const keys = Object.keys(window.localStorage);
+        keys.forEach(k => {
+          if (k.startsWith('sb-') || k.startsWith('agri_attendance_') || k.startsWith('agri_payment_')) {
+            window.localStorage.removeItem(k);
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('safeStorage.clearWorkerCache error:', e);
+    }
+  }
+};
+
 export function WorkerGate({ onLogin }: WorkerGateProps) {
   const [workers, setWorkers] = useState<any[]>([]);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
@@ -18,14 +66,19 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
   const [errorMsg, setErrorMsg] = useState('');
   const [language, setLanguage] = useState<LanguageCode>('ja');
   const [debugOwnerId, setDebugOwnerId] = useState('');
+  const [isLineBrowser, setIsLineBrowser] = useState(false);
 
   useEffect(() => {
     let loadedLang = 'ja' as LanguageCode;
-    const savedGlobalLang = localStorage.getItem('agri_language') as LanguageCode;
+    const savedGlobalLang = safeStorage.getItem('agri_language') as LanguageCode;
     if (savedGlobalLang && LANGUAGES.some(l => l.code === savedGlobalLang)) {
         loadedLang = savedGlobalLang;
     }
     setLanguage(loadedLang);
+
+    if (typeof window !== 'undefined' && /Line\//i.test(navigator.userAgent)) {
+      setIsLineBrowser(true);
+    }
   }, []);
 
   const [showManualSetup, setShowManualSetup] = useState(false);
@@ -43,7 +96,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
 
       let workerList: any[] = [];
 
-      // 1. まずクライアントSDKで直接取得（3秒タイムアウト保護）
+      // 1. まずクライアントSDKで直接取得（2秒タイムアウト保護）
       try {
         const clientPromise = supabase
           .from('workers')
@@ -51,7 +104,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           .eq('user_id', targetOwnerId)
           .order('name');
         const timeoutPromise = new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), 3000)
+          setTimeout(() => reject(new Error('timeout')), 2000)
         );
         const { data, error } = await Promise.race([clientPromise, timeoutPromise]);
         if (!error && data && data.length > 0) {
@@ -61,11 +114,11 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
         console.warn('Client SDK fetch failed or timed out, trying API:', e);
       }
 
-      // 2. クライアントで取れなかった場合はAPI経由で取得（3.5秒タイムアウト保護）
+      // 2. クライアントで取れなかった場合はAPI経由で取得（2.5秒タイムアウト保護）
       if (workerList.length === 0) {
         try {
           const controller = new AbortController();
-          const tId = setTimeout(() => controller.abort(), 3500);
+          const tId = setTimeout(() => controller.abort(), 2500);
           const res = await fetch(`/api/workers?ownerId=${encodeURIComponent(targetOwnerId)}`, {
             signal: controller.signal
           });
@@ -84,7 +137,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
       if (workerList.length > 0) {
         setErrorMsg('');
         setWorkers(workerList);
-        localStorage.setItem('agri_owner_id', targetOwnerId);
+        safeStorage.setItem('agri_owner_id', targetOwnerId);
         setDebugOwnerId(targetOwnerId);
       } else {
         setErrorMsg('この農園に登録された作業者が見つかりません。管理者画面（スタッフマスタ）から作業者を登録してください。');
@@ -98,15 +151,31 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
   };
 
   useEffect(() => {
-    let ownerId = localStorage.getItem('agri_owner_id') || '';
+    // 3.5秒で何があってもスピナーを強制解除する安全脱出タイマー
+    const failsafeTimer = setTimeout(() => {
+      setIsLoading(false);
+    }, 3500);
 
-    // URLクエリパラメータ（?farm=xxx または ?tenant=xxx）を最優先で取得・保存
+    let ownerId = safeStorage.getItem('agri_owner_id') || '';
+
+    // URLクエリパラメータ（?farm=xxx または ?tenant=xxx、?reset=1）を取得・処理
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const paramFarmId = params.get('farm') || params.get('tenant');
-      if (paramFarmId && paramFarmId !== 'null' && paramFarmId !== 'undefined') {
-        ownerId = paramFarmId;
-        localStorage.setItem('agri_owner_id', paramFarmId);
+      try {
+        const params = new URLSearchParams(window.location.search);
+        
+        // リセット指令があれば端末の古い認証・作業者キャッシュを全パージ
+        if (params.get('reset') === '1' || params.get('clear') === '1') {
+          safeStorage.clearWorkerCache();
+          ownerId = '';
+        }
+
+        const paramFarmId = params.get('farm') || params.get('tenant');
+        if (paramFarmId && paramFarmId !== 'null' && paramFarmId !== 'undefined') {
+          ownerId = paramFarmId;
+          safeStorage.setItem('agri_owner_id', paramFarmId);
+        }
+      } catch (urlErr) {
+        console.warn('URL parsing error in WorkerGate:', urlErr);
       }
     }
 
@@ -115,10 +184,12 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
     if (!ownerId || ownerId === 'null' || ownerId === 'undefined') {
       setIsLoading(false);
       setErrorMsg('所属農園が未設定です。管理者から案内された専用URLまたはQRコードからアクセスしてください。');
-      return;
+      return () => clearTimeout(failsafeTimer);
     }
 
     loadWorkersForOwner(ownerId);
+
+    return () => clearTimeout(failsafeTimer);
   }, []);
 
   const handleManualSetupSubmit = (e: React.FormEvent) => {
@@ -156,9 +227,9 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           user_id: data.user_id
         };
 
-        localStorage.setItem('agri_current_worker', JSON.stringify(user));
+        safeStorage.setItem('agri_current_worker', JSON.stringify(user));
         if (data.user_id) {
-          localStorage.setItem('agri_owner_id', data.user_id);
+          safeStorage.setItem('agri_owner_id', data.user_id);
         }
         onLogin(user);
       } else {
@@ -173,7 +244,21 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
   };
 
   if (isLoading) {
-    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-emerald-500"><Loader2 className="w-8 h-8 animate-spin" /></div>;
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-emerald-500 gap-4">
+        <Loader2 className="w-10 h-10 animate-spin" />
+        <div className="text-center">
+          <p className="text-sm font-bold text-slate-300">スタッフ画面を準備中...</p>
+          <p className="text-xs text-slate-500 mt-1">電波状況により数秒かかる場合があります</p>
+        </div>
+        <button
+          onClick={() => setIsLoading(false)}
+          className="mt-3 px-4 py-2 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-emerald-400 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
+        >
+          画面が進まない場合はここをタップ
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -199,6 +284,15 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
       </div>
 
       <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
+        {isLineBrowser && (
+          <div className="mb-6 p-3 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-300 text-xs leading-relaxed">
+            <p className="font-bold mb-1">⚠️ LINEアプリ内で開かれています</p>
+            <p className="text-[11px] text-amber-200/90">
+              画面右下の「…」または右上のメニューから<strong>「Safariで開く」</strong>または<strong>「ブラウザで開く」</strong>を選ぶと、より快適・高速に動作します。
+            </p>
+          </div>
+        )}
+
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-emerald-500/20 rounded-2xl mx-auto flex items-center justify-center mb-4 border border-emerald-500/30">
             <User className="w-8 h-8 text-emerald-400" />
@@ -301,6 +395,22 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
               <span>👨‍💼 管理者アカウントでログインする</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </a>
+          </div>
+          <div className="pt-2 border-t border-slate-800/60">
+            <button
+              type="button"
+              onClick={() => {
+                safeStorage.clearWorkerCache();
+                if (typeof window !== 'undefined') {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set('reset', '1');
+                  window.location.href = url.toString();
+                }
+              }}
+              className="text-[11px] text-slate-500 hover:text-amber-400 transition-colors inline-block"
+            >
+              🔄 画面が固まる・更新されない場合はここをタップ（端末初期化）
+            </button>
           </div>
         </div>
       </div>
