@@ -874,7 +874,45 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   leave_cancel: { ja: 'キャンセル', en: 'Cancel', vi: 'Hủy', id: 'Batal', zh: '取消', si: 'අවලංගු කරන්න', km: 'បោះបង់' },
   leave_submitBtn: { ja: '申請を送信する', en: 'Submit Request', vi: 'Gửi đơn xin phép', id: 'Kirim Pengajuan', zh: '提交申请', si: 'ඉල්ලීම යවන්න', km: 'បញ្ជូនពាក្យស្នើសុំ' },
   leave_registerBtn: { ja: '有給を登録する', en: 'Register Leave', vi: 'Đăng ký nghỉ phép', id: 'Daftarkan Cuti', zh: '登记休假', si: 'නිවාඩු ලියාපදිංචි කරන්න', km: 'ចុះឈ្មោះឈប់សម្រាក' },
-  leave_submittedToast: { ja: '有給休暇の申請を送信しました！', en: 'Leave request submitted successfully!', vi: 'Đã gửi đơn xin nghỉ phép thành công!', id: 'Pengajuan cuti berhasil dikirim!', zh: '请假申请已提交！', si: 'නිවාඩු ඉල්ලීම සාර්ථකව යවන ලදී!', km: 'ពាក្យស្នើសុំឈប់សម្រាកត្រូវបានបញ្ជូនដោយជោគជ័យ!' }
+  leave_submittedToast: { ja: '有給休暇の申請を送信しました！', en: 'Leave request submitted successfully!', vi: 'Đã gửi đơn xin nghỉ phép thành công!', id: 'Pengajuan cuti berhasil dikirim!', zh: '请假申请已提交！', si: 'නිවාඩු ඉල්ලීම සාර්ථකව යවන ලදී!', km: 'ពាក្យស្នើសុំឈប់សម្រាកត្រូវបានបញ្ជូនដោយជោគជ័យ!' },
+  adminDashboardBtn: { ja: '🏢 管理者画面へ', en: '🏢 To Admin', vi: '🏢 Đến trang quản trị', id: '🏢 Ke Halaman Admin', zh: '🏢 前往管理端', si: '🏢 පරිපාලක වෙත', km: '🏢 ទៅកាន់អ្នកគ្រប់គ្រង' },
+  selectViewingStaff: { ja: '👁️ 表示スタッフ:', en: '👁️ Viewing Staff:', vi: '👁️ Nhân viên hiển thị:', id: '👁️ Tampilkan Staf:', zh: '👁️ 查看员工:', si: '👁️ පෙන්වන සේවකයා:', km: '👁️ បុគ្គលិកបង្ហាញ:' },
+  viewDetails: { ja: '詳細を見る', en: 'View Details', vi: 'Xem chi tiết', id: 'Lihat Detail', zh: '查看详情', si: 'විස්තර බලන්න', km: 'មើលព័ត៌មានលម្អិត' },
+  peopleActiveUnit: { ja: '名稼働', en: ' active', vi: ' đang làm', id: ' aktif', zh: '人出勤', si: ' සක්‍රීයයි', km: ' នាក់ធ្វើការ' },
+  peopleCountUnit: { ja: '名', en: '', vi: '', id: '', zh: '人', si: '', km: ' នាក់' },
+  report_headerSubtitle: { ja: '日を追って確認できるタイムライン・圃場別・作物別・人別集計', en: 'Timeline, field, crop, and worker daily aggregated logs', vi: 'Dòng thời gian, tổng hợp theo khu đất, cây trồng và nhân viên', id: 'Lacak garis waktu harian, per lahan, tanaman, dan pekerja', zh: '按日时间轴、地块、作物及人员汇总活动记录', si: 'කාලරාමුව, ක්ෂේත්‍රය, බෝගය සහ සේවක දෛනික එකතුව', km: 'តាមដានពេលវេលាប្រចាំថ្ងៃ សង្ខេបតាមដីស្រែ ដំណាំ និងបុគ្គលិក' },
+  report_refreshBtn: { ja: '更新', en: 'Refresh', vi: 'Làm mới', id: 'Segarkan', zh: '刷新', si: 'යාවත්කාලීන', km: 'ផ្ទុកឡើងវិញ' },
+  report_fullscreenBtn: { ja: '全画面で開く', en: 'Fullscreen', vi: 'Toàn màn hình', id: 'Layar Penuh', zh: '全屏打开', si: 'සම්පූර්ණ තිරය', km: 'បើកពេញអេក្រង់' },
+  report_periodLabel: { ja: '表示期間:', en: 'Period:', vi: 'Khoảng thời gian:', id: 'Periode:', zh: '显示期间:', si: 'කාල සීමාව:', km: 'រយៈពេលបង្ហាញ:' },
+  report_periodDay: { ja: '📅 本日（単日）', en: '📅 Today', vi: '📅 Hôm nay', id: '📅 Hari Ini', zh: '📅 今天（单日）', si: '📅 අද දිනය', km: '📅 ថ្ងៃនេះ (១ថ្ងៃ)' },
+  report_periodWeek: { ja: '📆 直近7日間', en: '📆 Last 7 Days', vi: '📆 7 ngày qua', id: '📆 7 Hari Terakhir', zh: '📆 最近7天', si: '📆 පසුගිය දින 7', km: '📆 ៧ ថ្ងៃចុងក្រោយ' },
+  report_periodMonth: { ja: '🗓️ 直近30日間', en: '🗓️ Last 30 Days', vi: '🗓️ 30 ngày qua', id: '🗓️ 30 Hari Terakhir', zh: '🗓️ 最近30天', si: '🗓️ පසුගිය දින 30', km: '🗓️ ៣០ ថ្ងៃចុងក្រោយ' },
+  report_periodCustom: { ja: '⚙️ 期間指定', en: '⚙️ Custom Range', vi: '⚙️ Tùy chọn ngày', id: '⚙️ Rentang Kustom', zh: '⚙️ 自定义期间', si: '⚙️ අභිරුචි පරාසය', km: '⚙️ កំណត់កាលបរិច្ឆេទ' },
+  report_tabTimeline: { ja: '📋 タイムライン (日別)', en: '📋 Timeline (Daily)', vi: '📋 Dòng thời gian (Ngày)', id: '📋 Garis Waktu (Harian)', zh: '📋 时间轴（按日）', si: '📋 කාලරාමුව (දෛනික)', km: '📋 បន្ទាត់ពេលវេលា (ប្រចាំថ្ងៃ)' },
+  report_tabField: { ja: '🏡 圃場別まとめ', en: '🏡 By Field', vi: '🏡 Theo khu đất', id: '🏡 Ringkasan Lahan', zh: '🏡 按地块汇总', si: '🏡 ක්ෂේත්‍ර අනුව', km: '🏡 សង្ខេបតាមដីស្រែ' },
+  report_tabCrop: { ja: '🌱 作物別まとめ', en: '🌱 By Crop', vi: '🌱 Theo cây trồng', id: '🌱 Ringkasan Tanaman', zh: '🌱 按作物汇总', si: '🌱 බෝග අනුව', km: '🌱 សង្ខេបតាមដំណាំ' },
+  report_tabWorker: { ja: '👤 人別まとめ', en: '👤 By Worker', vi: '👤 Theo nhân viên', id: '👤 Ringkasan Pekerja', zh: '👤 按人员汇总', si: '👤 සේවකයන් අනුව', km: '👤 សង្ខេបតាមបុគ្គលិក' },
+  report_filterWorkerLabel: { ja: '👤 作業スタッフ:', en: '👤 Worker:', vi: '👤 Nhân viên:', id: '👤 Pekerja:', zh: '👤 作业人员:', si: '👤 සේවකයා:', km: '👤 បុគ្គលិកធ្វើការ:' },
+  report_allWorkersOption: { ja: '全スタッフ', en: 'All Staff', vi: 'Tất cả nhân viên', id: 'Semua Staf', zh: '全体员工', si: 'සියලු සේවකයින්', km: 'បុគ្គលិកទាំងអស់' },
+  report_filterFieldLabel: { ja: '🏡 圃場:', en: '🏡 Field:', vi: '🏡 Khu đất:', id: '🏡 Lahan:', zh: '🏡 地块:', si: '🏡 ක්ෂේත්‍රය:', km: '🏡 ដីស្រែ:' },
+  report_allFieldsOption: { ja: 'すべての圃場', en: 'All Fields', vi: 'Tất cả khu đất', id: 'Semua Lahan', zh: '所有地块', si: 'සියලු ක්ෂේත්‍ර', km: 'ដីស្រែទាំងអស់' },
+  report_filterCropLabel: { ja: '🌱 作物:', en: '🌱 Crop:', vi: '🌱 Cây trồng:', id: '🌱 Tanaman:', zh: '🌱 作物:', si: '🌱 බෝගය:', km: '🌱 ដំណាំ:' },
+  report_allCropsOption: { ja: 'すべての作物', en: 'All Crops', vi: 'Tất cả cây trồng', id: 'Semua Tanaman', zh: '所有作物', si: 'සියලු බෝග', km: 'ដំណាំទាំងអស់' },
+  report_searchLabel: { ja: '🔍 キーワード検索:', en: '🔍 Keyword Search:', vi: '🔍 Tìm từ khóa:', id: '🔍 Cari Kata Kunci:', zh: '🔍 关键词搜索:', si: '🔍 මූල පද සෙවීම:', km: '🔍 ស្វែងរកពាក្យគន្លឹះ:' },
+  report_searchPlaceholder: { ja: '作業名・メモ等...', en: 'Task, memo, etc...', vi: 'Tên việc, ghi chú...', id: 'Nama tugas, catatan...', zh: '作业名称、备注等...', si: 'කාර්යය, සටහන්...', km: 'ឈ្មោះការងារ, កំណត់ចំណាំ...' },
+  report_breakdownTitle: { ja: '作業内訳 (時間順):', en: 'Breakdown (by time):', vi: 'Phân tích công việc (theo giờ):', id: 'Rincian Kerja (berdasarkan waktu):', zh: '作业明细（按时长）:', si: 'වැඩ බිඳවැටීම (කාලය අනුව):', km: 'ការវិភាគការងារ (តាមម៉ោង):' },
+  report_filterActiveNotice: { ja: '絞り込み適用中（{count}件表示中）', en: 'Filters active ({count} items shown)', vi: 'Đang áp dụng bộ lọc ({count} mục)', id: 'Filter aktif ({count} item)', zh: '已应用筛选（显示 {count} 条）', si: 'පෙරහන් සක්‍රීයයි ({count} ක්)', km: 'កំពុងអនុវត្តតម្រង (បង្ហាញ {count} ករណី)' },
+  report_resetFilterBtn: { ja: '条件をリセット', en: 'Reset Filters', vi: 'Đặt lại bộ lọc', id: 'Atur Ulang Filter', zh: '重置筛选条件', si: 'පෙරහන් යළි සකසන්න', km: 'កំណត់តម្រងឡើងវិញ' },
+  report_periodShowing: { ja: '📅 表示中:', en: '📅 Showing:', vi: '📅 Đang hiển thị:', id: '📅 Menampilkan:', zh: '📅 正在显示:', si: '📅 පෙන්වයි:', km: '📅 កំពុងបង្ហាញ:' },
+  report_periodStart: { ja: '開始:', en: 'Start:', vi: 'Bắt đầu:', id: 'Mulai:', zh: '开始:', si: 'ආරම්භය:', km: 'ចាប់ផ្តើម:' },
+  report_periodEnd: { ja: '〜 終了:', en: '〜 End:', vi: '〜 Kết thúc:', id: '〜 Selesai:', zh: '〜 结束:', si: '〜 අවසානය:', km: '〜 បញ្ចប់:' },
+  report_fullscreenBadge: { ja: '全画面ビュー', en: 'Fullscreen View', vi: 'Chế độ toàn màn hình', id: 'Tampilan Layar Penuh', zh: '全屏视图', si: 'සම්පූර්ණ තිරය', km: 'ទិដ្ឋភាពពេញអេក្រង់' },
+  report_daysCount: { ja: '日間', en: ' days', vi: ' ngày', id: ' hari', zh: '天', si: ' දින', km: ' ថ្ងៃ' },
+  report_loadingLogs: { ja: '作業日報を読み込み中...', en: 'Loading work reports...', vi: 'Đang tải báo cáo công việc...', id: 'Memuat laporan kerja...', zh: '正在加载工作日报...', si: 'වාර්තා පූරණය වෙමින් පවතී...', km: 'កំពុងផ្ទុករបាយការណ៍ការងារ...' },
+  report_noLogsFound: { ja: '作業日報が見つかりません', en: 'No work reports found', vi: 'Không tìm thấy báo cáo công việc', id: 'Tidak ada laporan kerja', zh: '未找到工作日报', si: 'වැඩ වාර්තා හමු නොවීය', km: 'រកមិនឃើញរបាយការណ៍ការងារទេ' },
+  report_noLogsFoundSub: { ja: '表示期間や絞り込み条件を変更してお試しください', en: 'Please change the date range or filters', vi: 'Vui lòng thay đổi khoảng thời gian hoặc bộ lọc', id: 'Silakan ubah rentang tanggal atau filter', zh: '请更改日期范围或筛选条件后重试', si: 'කරුණාකර දින පරාසය හෝ පෙරහන් වෙනස් කරන්න', km: 'សូមផ្លាស់ប្តូរជួរកាលបរិច្ឆេទ ឬតម្រង' },
+  report_leaderCrown: { ja: '責任者', en: 'Leader', vi: 'Trưởng nhóm', id: 'Pemimpin', zh: '负责人', si: 'නායක', km: 'ប្រធាន' },
+  report_workerFallback: { ja: '作業スタッフ', en: 'Staff', vi: 'Nhân viên', id: 'Staf', zh: '作业员工', si: 'සේවකයා', km: 'បុគ្គលិក' }
 };
 
 export const WEEKDAY_NAMES: Record<LanguageCode, string[]> = {
@@ -895,7 +933,19 @@ export function getWeekdayName(dayIndex: number, lang: LanguageCode = 'ja'): str
 export function t(key: string, lang: LanguageCode = 'ja'): string {
   if (!key) return '';
   if (TRANSLATIONS[key]) {
-    return TRANSLATIONS[key][lang] || TRANSLATIONS[key]['ja'] || TRANSLATIONS[key]['en'] || key;
+    const val = TRANSLATIONS[key][lang];
+    if (val !== undefined && val !== null) {
+      return val;
+    }
+    const jaVal = TRANSLATIONS[key]['ja'];
+    if (jaVal !== undefined && jaVal !== null) {
+      return jaVal;
+    }
+    const enVal = TRANSLATIONS[key]['en'];
+    if (enVal !== undefined && enVal !== null) {
+      return enVal;
+    }
+    return key;
   }
   if (lang === 'ja') return key;
   const translated = getTranslatedWorkType(key, lang);
@@ -972,6 +1022,14 @@ export function getTranslatedWorkType(text: string, lang: LanguageCode = 'ja'): 
     'ナス': { en: 'Eggplant', vi: 'Cà tím', id: 'Terong', zh: '茄子', si: 'වම්බටු', km: 'ត្រប់' },
     'なす': { en: 'Eggplant', vi: 'Cà tím', id: 'Terong', zh: '茄子', si: 'වම්බටු', km: 'ត្រប់' },
     'ピーマン': { en: 'Bell Pepper', vi: 'Ớt chuông xanh', id: 'Paprika Hijau', zh: '青椒', si: 'බෙල් පෙපර්', km: 'ម្ទេសប្លោក' },
+    'キャベツ': { en: 'Cabbage', vi: 'Bắp cải', id: 'Kubis', zh: '卷心菜', si: 'ගෝවා', km: 'ស្ពៃក្តោប' },
+    '白菜': { en: 'Chinese Cabbage', vi: 'Cải thảo', id: 'Sawi Putih', zh: '大白菜', si: 'චීන ගෝවා', km: 'ស្ពៃបូកគោ' },
+    'レタス': { en: 'Lettuce', vi: 'Xà lách', id: 'Selada', zh: '生菜', si: 'සලාද කොළ', km: 'សាឡាត់' },
+    'にんじん': { en: 'Carrot', vi: 'Cà rốt', id: 'Wortel', zh: '胡萝卜', si: 'කැරට්', km: 'ការ៉ុត' },
+    'ニンジン': { en: 'Carrot', vi: 'Cà rốt', id: 'Wortel', zh: '胡萝卜', si: 'කැරට්', km: 'ការ៉ុត' },
+    'ねぎ': { en: 'Green Onion', vi: 'Hành lá', id: 'Daun Bawang', zh: '葱', si: 'ලූණු කොළ', km: 'ខ្ទឹមបារាំងបៃតង' },
+    'ネギ': { en: 'Green Onion', vi: 'Hành lá', id: 'Daun Bawang', zh: '葱', si: 'ලූණු කොළ', km: 'ខ្ទឹមបារាំងបៃតង' },
+    '大根': { en: 'Radish', vi: 'Củ cải trắng', id: 'Lobak Putih', zh: '白萝卜', si: 'රාබු', km: 'ឆៃថាវ' },
     // 圃場・棟
     '露地': { en: 'Open Field', vi: 'Đất trống', id: 'Ladang Terbuka', zh: '露天田地', si: 'එළිමහන් ක්ෂේත්‍රය', km: 'វាលស្រែបើកចំហ' },
     'ハウス': { en: 'Greenhouse', vi: 'Nhà kính', id: 'Rumah Kaca', zh: '温室大棚', si: 'හරිතාගාරය', km: 'ផ្ទះកញ្ចក់' },

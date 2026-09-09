@@ -1094,7 +1094,7 @@ function PortalContent() {
           return {
             groupKey,
             groupTitle: groupKey,
-            groupSub: `${logs.length}件 ・ ${Math.floor(groupMinutes / 60)}h${groupMinutes % 60}m`,
+            groupSub: `${logs.length}${t('report_itemsCount', language)} ・ ${Math.floor(groupMinutes / 60)}h ${groupMinutes % 60}m`,
             logs,
             totalMinutes: groupMinutes,
             badgeColor: 'bg-blue-100 text-blue-800 border-blue-200'
@@ -1116,7 +1116,7 @@ function PortalContent() {
           return {
             groupKey,
             groupTitle: name,
-            groupSub: `${logs.length}件 ・ ${Math.floor(groupMinutes / 60)}h${groupMinutes % 60}m`,
+            groupSub: `${logs.length}${t('report_itemsCount', language)} ・ ${Math.floor(groupMinutes / 60)}h ${groupMinutes % 60}m`,
             logs,
             totalMinutes: groupMinutes,
             badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200'
@@ -1138,7 +1138,7 @@ function PortalContent() {
           return {
             groupKey,
             groupTitle: name,
-            groupSub: `${logs.length}件 ・ ${Math.floor(groupMinutes / 60)}h${groupMinutes % 60}m`,
+            groupSub: `${logs.length}${t('report_itemsCount', language)} ・ ${Math.floor(groupMinutes / 60)}h ${groupMinutes % 60}m`,
             logs,
             totalMinutes: groupMinutes,
             badgeColor: 'bg-amber-100 text-amber-800 border-amber-200'
@@ -1160,7 +1160,7 @@ function PortalContent() {
           return {
             groupKey,
             groupTitle: name,
-            groupSub: `${logs.length}件 ・ ${Math.floor(groupMinutes / 60)}h${groupMinutes % 60}m`,
+            groupSub: `${logs.length}${t('report_itemsCount', language)} ・ ${Math.floor(groupMinutes / 60)}h ${groupMinutes % 60}m`,
             logs,
             totalMinutes: groupMinutes,
             badgeColor: 'bg-purple-100 text-purple-800 border-purple-200'
@@ -1183,12 +1183,12 @@ function PortalContent() {
               </h2>
               {isFullscreen && (
                 <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-black rounded-full border border-blue-200">
-                  全画面ビュー
+                  {t('report_fullscreenBadge', language)}
                 </span>
               )}
             </div>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              日を追って確認できるタイムライン・圃場別・作物別・人別集計
+              {t('report_headerSubtitle', language)}
             </p>
           </div>
 
@@ -1204,10 +1204,10 @@ function PortalContent() {
               }}
               disabled={isLoadingDailyData}
               className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
-              title="最新データに更新"
+              title={t('report_refreshBtn', language)}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoadingDailyData ? 'animate-spin text-blue-600' : ''}`} />
-              <span className="hidden sm:inline">更新</span>
+              <span className="hidden sm:inline">{t('report_refreshBtn', language)}</span>
             </button>
 
             {/* 全画面切り替えボタン（インライン時のみ） */}
@@ -1218,7 +1218,7 @@ function PortalContent() {
                 className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
-                <span>全画面で開く</span>
+                <span>{t('report_fullscreenBtn', language)}</span>
               </button>
             )}
           </div>
@@ -1229,7 +1229,7 @@ function PortalContent() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <span className="text-[11px] font-black text-slate-500 flex items-center gap-1">
               <CalendarDays className="w-3.5 h-3.5 text-blue-600" />
-              <span>表示期間:</span>
+              <span>{t('report_periodLabel', language)}</span>
             </span>
 
             {/* 期間切替ピルボタン */}
@@ -1243,7 +1243,7 @@ function PortalContent() {
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                📅 本日（単日）
+                {t('report_periodDay', language)}
               </button>
               <button
                 type="button"
@@ -1254,7 +1254,7 @@ function PortalContent() {
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                📆 直近7日間
+                {t('report_periodWeek', language)}
               </button>
               <button
                 type="button"
@@ -1265,7 +1265,7 @@ function PortalContent() {
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                🗓️ 直近30日間
+                {t('report_periodMonth', language)}
               </button>
               <button
                 type="button"
@@ -1276,7 +1276,7 @@ function PortalContent() {
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                ⚙️ 期間指定
+                {t('report_periodCustom', language)}
               </button>
             </div>
           </div>
@@ -1328,12 +1328,12 @@ function PortalContent() {
 
           {reportPeriod === 'week' && (
             <div className="text-xs font-bold text-blue-700 pt-1 border-t border-slate-200/60 flex items-center gap-1.5">
-              <span>📅 表示中:</span>
+              <span>{t('report_periodShowing', language)}</span>
               <span className="font-black bg-blue-100/80 px-2 py-0.5 rounded-md">
                 {(() => {
                   const startD = new Date(reportDate);
                   startD.setDate(startD.getDate() - 6);
-                  return `${startD.toISOString().substring(0, 10)} 〜 ${reportDate} (7日間)`;
+                  return `${startD.toISOString().substring(0, 10)} 〜 ${reportDate} (7${t('report_daysCount', language)})`;
                 })()}
               </span>
             </div>
@@ -1341,12 +1341,12 @@ function PortalContent() {
 
           {reportPeriod === 'month' && (
             <div className="text-xs font-bold text-blue-700 pt-1 border-t border-slate-200/60 flex items-center gap-1.5">
-              <span>📅 表示中:</span>
+              <span>{t('report_periodShowing', language)}</span>
               <span className="font-black bg-blue-100/80 px-2 py-0.5 rounded-md">
                 {(() => {
                   const startD = new Date(reportDate);
                   startD.setDate(startD.getDate() - 29);
-                  return `${startD.toISOString().substring(0, 10)} 〜 ${reportDate} (30日間)`;
+                  return `${startD.toISOString().substring(0, 10)} 〜 ${reportDate} (30${t('report_daysCount', language)})`;
                 })()}
               </span>
             </div>
@@ -1354,14 +1354,14 @@ function PortalContent() {
 
           {reportPeriod === 'custom' && (
             <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-slate-200/60 text-xs font-bold text-slate-700">
-              <span>開始:</span>
+              <span>{t('report_periodStart', language)}</span>
               <input
                 type="date"
                 value={customStartDate}
                 onChange={(e) => setCustomStartDate(e.target.value)}
                 className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none shadow-2xs cursor-pointer"
               />
-              <span>〜 終了:</span>
+              <span>{t('report_periodEnd', language)}</span>
               <input
                 type="date"
                 value={customEndDate}
@@ -1384,7 +1384,7 @@ function PortalContent() {
             }`}
           >
             <Clock className="w-4 h-4 text-blue-600" />
-            <span>📋 タイムライン (日別)</span>
+            <span>{t('report_tabTimeline', language)}</span>
           </button>
           <button
             type="button"
@@ -1396,7 +1396,7 @@ function PortalContent() {
             }`}
           >
             <MapPin className="w-4 h-4 text-emerald-600" />
-            <span>🏡 圃場別まとめ</span>
+            <span>{t('report_tabField', language)}</span>
           </button>
           <button
             type="button"
@@ -1408,7 +1408,7 @@ function PortalContent() {
             }`}
           >
             <Sprout className="w-4 h-4 text-amber-600" />
-            <span>🌱 作物別まとめ</span>
+            <span>{t('report_tabCrop', language)}</span>
           </button>
           <button
             type="button"
@@ -1420,7 +1420,7 @@ function PortalContent() {
             }`}
           >
             <Users className="w-4 h-4 text-purple-600" />
-            <span>👤 人別まとめ</span>
+            <span>{t('report_tabWorker', language)}</span>
           </button>
         </div>
 
@@ -1428,18 +1428,18 @@ function PortalContent() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
           {/* 作業者 */}
           <div className="space-y-1">
-            <span className="text-[10px] font-black text-slate-500 block">👤 作業スタッフ:</span>
+            <span className="text-[10px] font-black text-slate-500 block">{t('report_filterWorkerLabel', language)}</span>
             <select
               value={selectedWorkerFilter}
               onChange={(e) => setSelectedWorkerFilter(e.target.value)}
               className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none shadow-2xs cursor-pointer truncate"
             >
-              <option value="all">全スタッフ ({dailyWorkLogs.length}件)</option>
+              <option value="all">{t('report_allWorkersOption', language)} ({dailyWorkLogs.length}{t('report_itemsCount', language)})</option>
               {allWorkers.map(w => {
                 const count = dailyWorkLogs.filter(log => log.worker_id === w.id).length;
                 return (
                   <option key={w.id} value={w.id}>
-                    {w.name} ({count}件)
+                    {w.name} ({count}{t('report_itemsCount', language)})
                   </option>
                 );
               })}
@@ -1448,18 +1448,18 @@ function PortalContent() {
 
           {/* 圃場 */}
           <div className="space-y-1">
-            <span className="text-[10px] font-black text-slate-500 block">🏡 圃場:</span>
+            <span className="text-[10px] font-black text-slate-500 block">{t('report_filterFieldLabel', language)}</span>
             <select
               value={selectedFieldFilter}
               onChange={(e) => setSelectedFieldFilter(e.target.value)}
               className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none shadow-2xs cursor-pointer truncate"
             >
-              <option value="all">すべての圃場</option>
+              <option value="all">{t('report_allFieldsOption', language)}</option>
               {allFields.map(f => {
                 const count = dailyWorkLogs.filter(log => log.field_id === f.id).length;
                 return (
                   <option key={f.id} value={f.id}>
-                    {f.name} ({count}件)
+                    {getTranslatedName(f, language)} ({count}{t('report_itemsCount', language)})
                   </option>
                 );
               })}
@@ -1468,18 +1468,18 @@ function PortalContent() {
 
           {/* 作物 */}
           <div className="space-y-1">
-            <span className="text-[10px] font-black text-slate-500 block">🌱 作物:</span>
+            <span className="text-[10px] font-black text-slate-500 block">{t('report_filterCropLabel', language)}</span>
             <select
               value={selectedCropFilter}
               onChange={(e) => setSelectedCropFilter(e.target.value)}
               className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none shadow-2xs cursor-pointer truncate"
             >
-              <option value="all">すべての作物</option>
+              <option value="all">{t('report_allCropsOption', language)}</option>
               {allCrops.map(c => {
                 const count = dailyWorkLogs.filter(log => log.crop_id === c.id).length;
                 return (
                   <option key={c.id} value={c.id}>
-                    {c.name} ({count}件)
+                    {getTranslatedName(c, language)} ({count}{t('report_itemsCount', language)})
                   </option>
                 );
               })}
@@ -1488,14 +1488,14 @@ function PortalContent() {
 
           {/* キーワード検索 */}
           <div className="space-y-1">
-            <span className="text-[10px] font-black text-slate-500 block">🔍 キーワード検索:</span>
+            <span className="text-[10px] font-black text-slate-500 block">{t('report_searchLabel', language)}</span>
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={reportSearchKeyword}
                 onChange={(e) => setReportSearchKeyword(e.target.value)}
-                placeholder="作業名・メモ等..."
+                placeholder={t('report_searchPlaceholder', language)}
                 className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none shadow-2xs"
               />
               {reportSearchKeyword && (
@@ -1514,7 +1514,7 @@ function PortalContent() {
         {/* フィルターリセット */}
         {(selectedWorkerFilter !== 'all' || selectedFieldFilter !== 'all' || selectedCropFilter !== 'all' || reportSearchKeyword) && (
           <div className="flex items-center justify-between text-xs bg-amber-50 border border-amber-200/80 rounded-xl px-3 py-1.5 text-amber-800">
-            <span>絞り込み適用中（{filteredWorkLogs.length}件表示中）</span>
+            <span>{t('report_filterActiveNotice', language).replace('{count}', String(filteredWorkLogs.length))}</span>
             <button
               type="button"
               onClick={() => {
@@ -1525,7 +1525,7 @@ function PortalContent() {
               }}
               className="text-amber-900 font-bold underline cursor-pointer"
             >
-              条件をリセット
+              {t('report_resetFilterBtn', language)}
             </button>
           </div>
         )}
@@ -1541,7 +1541,7 @@ function PortalContent() {
                 {dailyReportStats.activeStaffCount}
               </span>
               <span className="text-[11px] text-blue-700 font-bold">
-                名稼働
+                {t('peopleActiveUnit', language)}
               </span>
             </div>
           </div>
@@ -1578,7 +1578,7 @@ function PortalContent() {
         {/* 作業種別の内訳タグ */}
         {Object.keys(dailyReportStats.workTypeMap).length > 0 && (
           <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2">
-            <span className="text-[11px] font-bold text-slate-500 block">作業内訳 (時間順):</span>
+            <span className="text-[11px] font-bold text-slate-500 block">{t('report_breakdownTitle', language)}</span>
             <div className="flex items-center gap-1.5 flex-wrap">
               {Object.entries(dailyReportStats.workTypeMap)
                 .sort((a, b) => b[1] - a[1])
@@ -1600,13 +1600,13 @@ function PortalContent() {
           {isLoadingDailyData ? (
             <div className="py-12 text-center text-slate-400">
               <Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600 mb-2" />
-              <p className="text-xs font-bold">作業日報を読み込み中...</p>
+              <p className="text-xs font-bold">{t('report_loadingLogs', language)}</p>
             </div>
           ) : filteredWorkLogs.length === 0 ? (
             <div className="py-12 text-center bg-slate-50 border border-slate-200/60 rounded-3xl p-6">
               <FileText className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-bold text-slate-600">作業日報が見つかりません</p>
-              <p className="text-xs text-slate-400 mt-1">表示期間や絞り込み条件を変更してお試しください</p>
+              <p className="text-sm font-bold text-slate-600">{t('report_noLogsFound', language)}</p>
+              <p className="text-xs text-slate-400 mt-1">{t('report_noLogsFoundSub', language)}</p>
             </div>
           ) : (
             groupedWorkLogs.map((group) => (
@@ -1640,12 +1640,12 @@ function PortalContent() {
                             {log.workers?.name ? log.workers.name.charAt(0) : '作'}
                           </div>
                           <span className="font-black text-xs sm:text-sm text-slate-800">
-                            {log.workers?.name || '作業スタッフ'}
+                            {log.workers?.name || t('report_workerFallback', language)}
                           </span>
                           {log.memo?.includes('【👑現場責任者】') && (
                             <span className="px-1.5 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 text-[9px] font-black rounded-full flex items-center gap-0.5 shadow-2xs border border-amber-400">
                               <Crown className="w-2.5 h-2.5 fill-amber-950" />
-                              <span>責任者</span>
+                              <span>{t('report_leaderCrown', language)}</span>
                             </span>
                           )}
                           {log.memo?.includes('【👑現場リーダー:') && (
@@ -1661,7 +1661,7 @@ function PortalContent() {
                             {getTranslatedWorkType(log.work_type, language)}
                           </span>
                           <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                            ⏱️ {log.duration_minutes ? `${Math.floor(log.duration_minutes / 60)}h ${log.duration_minutes % 60}m` : '0分'}
+                            ⏱️ {log.duration_minutes ? `${Math.floor(log.duration_minutes / 60)}h ${log.duration_minutes % 60}m` : `0${t('tc_minutes', language)}`}
                           </span>
                         </div>
                       </div>
@@ -1703,7 +1703,7 @@ function PortalContent() {
                         if (!cleanLogMemo) return null;
                         return (
                           <div className="text-[11px] text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                            <span className="font-bold text-slate-400 mr-1">💬 メモ:</span>
+                            <span className="font-bold text-slate-400 mr-1">💬 {t('report_memo', language)}</span>
                             <span>{cleanLogMemo}</span>
                           </div>
                         );
@@ -2742,10 +2742,10 @@ function PortalContent() {
               <Link
                 href="/admin/cultivations"
                 className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-sm shrink-0"
-                title="管理者システム（作付け・地図・分析等）へ行く"
+                title={t('adminDashboardBtn', language)}
               >
                 <Building className="w-4 h-4 shrink-0" />
-                <span>🏢 管理者画面へ</span>
+                <span>{t('adminDashboardBtn', language)}</span>
               </Link>
             )}
 
@@ -2816,13 +2816,13 @@ function PortalContent() {
                   {/* 管理者モード時のみ、確認対象スタッフを明示的に切り替え可能 */}
                   {role === 'admin' && allWorkers.length > 0 && (
                     <div className="pt-2 border-t border-emerald-200/60 flex items-center justify-between gap-2 text-xs">
-                      <span className="text-[10px] font-bold text-slate-500 whitespace-nowrap">👁️ 表示スタッフ:</span>
+                      <span className="text-[10px] font-bold text-slate-500 whitespace-nowrap">{t('selectViewingStaff', language)}</span>
                       <select
                         value={workerProfile?.id || ''}
                         onChange={(e) => handleSelectWorkerForAdmin(e.target.value)}
                         className="bg-white border border-emerald-300 text-slate-800 text-xs font-bold rounded-lg px-2 py-1 outline-none shadow-xs w-full max-w-[200px] cursor-pointer"
                       >
-                        <option value="">（選択してください）</option>
+                        <option value="">{t('selectPlaceholder', language)}</option>
                         {allWorkers.map((w: any) => (
                           <option key={w.id} value={w.id}>{w.name}</option>
                         ))}
@@ -2935,24 +2935,24 @@ function PortalContent() {
                     </span>
                   </div>
                   <span className="text-[11px] font-black text-emerald-700 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
-                    詳細を見る <ArrowRight className="w-3.5 h-3.5" />
+                    {t('viewDetails', language)} <ArrowRight className="w-3.5 h-3.5" />
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs font-bold text-slate-600 bg-white/80 backdrop-blur-xs p-2 rounded-xl border border-emerald-100">
                   <div className="flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                     <span className="text-slate-500 text-[10px]">{t('live_activeNow', language)}:</span>
-                    <span className="text-emerald-700 font-black">{currentlyWorkingCount}名</span>
+                    <span className="text-emerald-700 font-black">{currentlyWorkingCount}{t('peopleCountUnit', language)}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-amber-500"></span>
                     <span className="text-slate-500 text-[10px]">{t('live_onBreak', language)}:</span>
-                    <span className="text-amber-700 font-black">{onBreakCount}名</span>
+                    <span className="text-amber-700 font-black">{onBreakCount}{t('peopleCountUnit', language)}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-slate-400"></span>
                     <span className="text-slate-500 text-[10px]">{t('live_clockedOut', language)}:</span>
-                    <span className="text-slate-700 font-black">{clockedOutCount}名</span>
+                    <span className="text-slate-700 font-black">{clockedOutCount}{t('peopleCountUnit', language)}</span>
                   </div>
                 </div>
               </div>
