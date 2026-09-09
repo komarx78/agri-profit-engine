@@ -73,6 +73,7 @@ const INITIAL_SAHARA_WORKERS = [
 export function WorkerGate({ onLogin }: WorkerGateProps) {
   const [workers, setWorkers] = useState<any[]>(INITIAL_SAHARA_WORKERS);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
+  const [step, setStep] = useState<'select_worker' | 'enter_pin'>('select_worker');
   const [pinCode, setPinCode] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -225,23 +226,23 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
     loadWorkersForOwner(cleanId);
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // 認証・ログインの実行（共通ロジック）
+  const executeLogin = async (workerId: string, pinToTest: string) => {
+    if (!workerId) return;
     setErrorMsg('');
     setIsSubmitting(true);
 
     try {
-      const data = workers.find(w => w.id === selectedWorkerId);
-      
+      const data = workers.find(w => w.id === workerId);
       if (!data) throw new Error('Worker not found');
-      
+
       const expectedPin = (data.pin_code || '0000').trim();
-      const enteredPin = normalizePin(pinCode);
+      const enteredPin = normalizePin(pinToTest);
       const paddedEntered = enteredPin.padStart(expectedPin.length, '0');
-      
+
       // 半角変換値、または桁数補完値（例: 129 -> 0129）のいずれかが一致すればパス
       const isMatch = (enteredPin === expectedPin) || (paddedEntered === expectedPin);
-      
+
       if (data && isMatch) {
         const user = {
           id: data.id,
@@ -270,6 +271,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           (enteredPin ? `（入力: ${enteredPin}）` : '') + 
           (isDefaultZero ? '\n※初期設定「0000」をお試しください。' : '\n※誕生日4桁（例: 0129）をお試しください。')
         );
+        setPinCode('');
       }
     } catch (err) {
       console.error(err);
@@ -279,10 +281,45 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
     }
   };
 
+  // スタッフ選択ハンドラー（即座にPIN画面へ遷移）
+  const handleSelectWorker = (workerId: string) => {
+    setSelectedWorkerId(workerId);
+    setPinCode('');
+    setErrorMsg('');
+    setStep('enter_pin');
+  };
+
+  // ATMテンキー操作
+  const handleKeypadPress = (digit: string) => {
+    if (isSubmitting) return;
+    setErrorMsg('');
+    if (pinCode.length >= 4) return;
+    const nextPin = pinCode + digit;
+    setPinCode(nextPin);
+    if (nextPin.length === 4) {
+      executeLogin(selectedWorkerId, nextPin);
+    }
+  };
+
+  const handleKeypadBackspace = () => {
+    if (isSubmitting) return;
+    setErrorMsg('');
+    setPinCode(prev => prev.slice(0, -1));
+  };
+
+  const handleKeypadAuto0000 = () => {
+    if (isSubmitting) return;
+    setErrorMsg('');
+    setPinCode('0000');
+    executeLogin(selectedWorkerId, '0000');
+  };
+
+  const selectedWorker = workers.find(w => w.id === selectedWorkerId);
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4">
       {/* 言語切り替え */}
-      <div className="absolute top-4 right-4 flex items-center gap-2">
+      <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
         <Globe className="w-4 h-4 text-slate-500" />
         <select 
           value={language}
@@ -301,135 +338,243 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
         </select>
       </div>
 
-      <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
+      <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl">
         {isLineBrowser && (
-          <div className="mb-6 p-3 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-300 text-xs leading-relaxed">
+          <div className="mb-4 p-3 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-300 text-xs leading-relaxed">
             <p className="font-bold mb-1">⚠️ LINEアプリ内で開かれています</p>
             <p className="text-[11px] text-amber-200/90">
-              画面右下の「…」または右上のメニューから<strong>「Safariで開く」</strong>または<strong>「ブラウザで開く」</strong>を選ぶと、より快適・高速に動作します。
+              右下の「…」から<strong>「ブラウザで開く」</strong>を選ぶとより快適に動作します。
             </p>
           </div>
         )}
 
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-emerald-500/20 rounded-2xl mx-auto flex items-center justify-center mb-4 border border-emerald-500/30">
-            <User className="w-8 h-8 text-emerald-400" />
-          </div>
-          <h1 className="text-2xl font-black text-white">{t('workerLogin', language)}</h1>
-          <p className="text-sm text-slate-400 mt-2">{t('selectNamePrompt', language)}</p>
-        </div>
+        {/* ══════════════════════════════════════════════════════
+            【ステップ1】お名前選択画面（スタッフカード一覧）
+            ══════════════════════════════════════════════════════ */}
+        {step === 'select_worker' && (
+          <div>
+            <div className="text-center mb-6">
+              <div className="w-14 h-14 bg-emerald-500/20 rounded-2xl mx-auto flex items-center justify-center mb-3 border border-emerald-500/30">
+                <User className="w-7 h-7 text-emerald-400" />
+              </div>
+              <h1 className="text-xl sm:text-2xl font-black text-white">{t('workerLogin', language)}</h1>
+              <p className="text-xs sm:text-sm text-emerald-400 font-bold mt-1">👇 あなたのお名前をタップしてください</p>
+            </div>
 
-        {errorMsg && (
-          <div className="mb-6 p-3 bg-rose-500/20 border border-rose-500/50 text-rose-400 rounded-lg text-sm text-center font-bold">
-            {errorMsg}
+            {errorMsg && (
+              <div className="mb-4 p-3 bg-rose-500/20 border border-rose-500/50 text-rose-400 rounded-xl text-xs text-center font-bold whitespace-pre-line">
+                {errorMsg}
+              </div>
+            )}
+
+            {/* スタッフ一覧カード（スマホ幅でも押しやすい特大タッチボタン） */}
+            <div className="space-y-2 mb-6 max-h-[50vh] overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 gap-2">
+                {workers.map(w => (
+                  <button
+                    key={w.id}
+                    type="button"
+                    onClick={() => handleSelectWorker(w.id)}
+                    className="p-3 bg-slate-950/80 hover:bg-emerald-500/20 active:scale-95 active:bg-emerald-500 active:text-slate-950 border border-slate-800 hover:border-emerald-500/50 rounded-2xl text-left transition-all group flex flex-col justify-between min-h-[72px] cursor-pointer shadow-sm"
+                  >
+                    <div className="flex items-center justify-between w-full mb-1">
+                      <div className="w-6 h-6 rounded-full bg-slate-800 group-hover:bg-emerald-500/30 flex items-center justify-center text-[10px] font-black text-emerald-400">
+                        {w.name.charAt(0)}
+                      </div>
+                      {w.role === 'admin' && (
+                        <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 font-black rounded-md border border-amber-500/30">
+                          管理
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-black text-white text-sm group-hover:text-emerald-300 truncate">
+                        {w.name}
+                      </div>
+                      {(w.name_en || w.name_si || w.name_vi) && (
+                        <div className="text-[10px] text-slate-500 truncate">
+                          {getTranslatedName(w, language)}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {workers.length === 0 && !isLoading && (
+                <div className="text-center py-6 text-slate-400 text-xs">
+                  作業者が見つかりません。
+                </div>
+              )}
+            </div>
+
+            {/* セレクトボックス（万が一用） */}
+            <div className="pt-3 border-t border-slate-800/80">
+              <label className="block text-[11px] text-slate-400 font-bold mb-1">またはリストから選択:</label>
+              <select
+                value={selectedWorkerId}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleSelectWorker(e.target.value);
+                  }
+                }}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2.5 px-3 text-white text-xs font-bold focus:outline-none focus:border-emerald-500"
+              >
+                <option value="">{t('selectName', language)}</option>
+                {workers.map(w => (
+                  <option key={w.id} value={w.id} className="bg-slate-900 text-white">
+                    {getTranslatedName(w, language)}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-6">
+        {/* ══════════════════════════════════════════════════════
+            【ステップ2】暗証番号（PINコード）入力画面（ATMテンキー）
+            ══════════════════════════════════════════════════════ */}
+        {step === 'enter_pin' && selectedWorker && (
           <div>
-            <label className="block text-sm font-bold text-slate-300 mb-2">1. {t('yourName', language)}</label>
-            <select
-              value={selectedWorkerId}
-              onChange={(e) => setSelectedWorkerId(e.target.value)}
-              required
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-emerald-500 transition-colors font-bold"
+            {/* 戻るボタン */}
+            <button
+              type="button"
+              onClick={() => {
+                setStep('select_worker');
+                setErrorMsg('');
+                setPinCode('');
+              }}
+              className="text-xs text-slate-400 hover:text-white font-bold inline-flex items-center gap-1 mb-4 cursor-pointer active:scale-95 transition-all"
             >
-              <option value="" disabled>{t('selectName', language)}</option>
-              {workers.map(w => (
-                <option key={w.id} value={w.id} className="bg-slate-900 text-white py-2">{getTranslatedName(w, language)}</option>
-              ))}
-            </select>
+              <ArrowRight className="w-3.5 h-3.5 rotate-180 text-emerald-400" />
+              <span>お名前を選び直す</span>
+            </button>
 
-            {/* ⚡ ワンタップで名前を選べるクイックボタン（セレクトが開けないAndroid端末の完全防壁） */}
-            <div className="mt-2">
-              <span className="text-[10px] text-slate-400 font-bold block mb-1">または名前を直接タップ:</span>
-              <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1.5 bg-slate-950/80 rounded-xl border border-slate-800">
-                {workers.map(w => {
-                  const isSelected = selectedWorkerId === w.id;
+            <div className="text-center mb-5">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-full mb-2">
+                <User className="w-4 h-4 text-emerald-400" />
+                <span className="font-black text-white text-sm">
+                  {getTranslatedName(selectedWorker, language)} さん
+                </span>
+              </div>
+              <h2 className="text-base font-black text-slate-200">暗証番号（4桁）を入力</h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">画面のテンキーをタップしてください</p>
+            </div>
+
+            {/* 4桁インジケーター ＆ 表示切替 */}
+            <div className="flex flex-col items-center justify-center mb-4">
+              <div className="flex items-center gap-3 py-2 px-4 bg-slate-950 rounded-2xl border border-slate-800 shadow-inner">
+                {[0, 1, 2, 3].map((idx) => {
+                  const hasDigit = pinCode.length > idx;
+                  const digitChar = pinCode[idx];
                   return (
-                    <button
-                      key={w.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedWorkerId(w.id);
-                        setErrorMsg('');
-                      }}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        isSelected 
-                          ? 'bg-emerald-500 text-slate-950 font-black shadow-xs ring-2 ring-emerald-400' 
-                          : 'bg-slate-850 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                    <div
+                      key={idx}
+                      className={`w-10 h-11 rounded-xl flex items-center justify-center text-lg font-black transition-all ${
+                        hasDigit
+                          ? 'bg-emerald-500/20 border-2 border-emerald-400 text-emerald-300 shadow-sm shadow-emerald-500/30 scale-105'
+                          : 'bg-slate-900 border border-slate-700 text-slate-600'
                       }`}
                     >
-                      {getTranslatedName(w, language)}
-                    </button>
+                      {hasDigit ? (showPin ? digitChar : '●') : ''}
+                    </div>
                   );
                 })}
+                <button
+                  type="button"
+                  onClick={() => setShowPin(!showPin)}
+                  className="p-1.5 text-slate-400 hover:text-white ml-1 cursor-pointer"
+                  title={showPin ? "非表示" : "数字を表示"}
+                >
+                  {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-bold text-slate-300 mb-2">2. {t('yourPin', language)}</label>
-            <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 pointer-events-none" />
-              <input
-                type={showPin ? "text" : "password"}
-                maxLength={4}
-                inputMode="numeric"
-                value={pinCode}
-                onChange={(e) => setPinCode(normalizePin(e.target.value))}
-                required
-                placeholder="0000"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-12 pr-12 text-white focus:outline-none focus:border-emerald-500 transition-colors font-black tracking-[0.3em] text-xl"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPin(!showPin)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-white transition-colors cursor-pointer"
-                title={showPin ? "非表示" : "数字を表示"}
-              >
-                {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-              </button>
-            </div>
-            
-            <div className="flex items-center justify-between text-xs text-slate-400 mt-2">
-              <span>{t('pinHint', language)}</span>
-              <button
-                type="button"
-                onClick={() => setPinCode('0000')}
-                className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold underline cursor-pointer"
-              >
-                「0000」を自動入力
-              </button>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={!selectedWorkerId || normalizePin(pinCode).length < 3 || isSubmitting}
-            className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-black rounded-xl flex items-center justify-center gap-2 transition-colors mt-8 cursor-pointer"
-          >
-            {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : (
-              <>
-                {t('loginAndStart', language)}
-                <ArrowRight className="w-5 h-5" />
-              </>
+            {errorMsg && (
+              <div className="mb-4 p-3 bg-rose-500/20 border border-rose-500/50 text-rose-400 rounded-xl text-xs text-center font-bold whitespace-pre-line leading-relaxed">
+                {errorMsg}
+              </div>
             )}
-          </button>
-        </form>
 
-        <div className="mt-6 pt-6 border-t border-slate-800 text-center space-y-3">
+            {/* ⚡ 銀行ATM型・超大型ソフトウェアテンキー（キーボード不要・100%押しやすい） */}
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => handleKeypadPress(String(num))}
+                  disabled={isSubmitting}
+                  className="h-14 bg-slate-950 hover:bg-slate-800 active:scale-90 active:bg-emerald-500 active:text-slate-950 border border-slate-800 text-white font-black text-2xl rounded-2xl flex items-center justify-center transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                >
+                  {num}
+                </button>
+              ))}
+              
+              {/* 「0000」一発入力ボタン */}
+              <button
+                type="button"
+                onClick={handleKeypadAuto0000}
+                disabled={isSubmitting}
+                className="h-14 bg-emerald-500/15 hover:bg-emerald-500/25 active:scale-90 active:bg-emerald-500 active:text-slate-950 border border-emerald-500/30 text-emerald-300 font-black text-xs rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer shadow-sm disabled:opacity-50 px-1 text-center"
+              >
+                <span>0000</span>
+                <span className="text-[9px] font-bold">自動入力</span>
+              </button>
+
+              {/* 「0」ボタン */}
+              <button
+                type="button"
+                onClick={() => handleKeypadPress('0')}
+                disabled={isSubmitting}
+                className="h-14 bg-slate-950 hover:bg-slate-800 active:scale-90 active:bg-emerald-500 active:text-slate-950 border border-slate-800 text-white font-black text-2xl rounded-2xl flex items-center justify-center transition-all cursor-pointer shadow-sm disabled:opacity-50"
+              >
+                0
+              </button>
+
+              {/* 「⌫ 消去」ボタン */}
+              <button
+                type="button"
+                onClick={handleKeypadBackspace}
+                disabled={isSubmitting || pinCode.length === 0}
+                className="h-14 bg-slate-950 hover:bg-slate-800 active:scale-90 active:bg-rose-500 active:text-white border border-slate-800 text-slate-400 hover:text-white font-black text-sm rounded-2xl flex items-center justify-center transition-all cursor-pointer shadow-sm disabled:opacity-30"
+              >
+                ⌫ 戻る
+              </button>
+            </div>
+
+            {/* ログインボタン */}
+            <button
+              type="button"
+              onClick={() => executeLogin(selectedWorkerId, pinCode)}
+              disabled={normalizePin(pinCode).length < 3 || isSubmitting}
+              className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-black rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg active:scale-95 text-sm"
+            >
+              {isSubmitting ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  <span>ログインして作業開始</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* 共通フッターリンク */}
+        <div className="mt-6 pt-5 border-t border-slate-800 text-center space-y-2.5">
           <div>
             <button
               type="button"
               onClick={() => setShowManualSetup(!showManualSetup)}
-              className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+              className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors"
             >
               {showManualSetup ? '▲ 農園コード入力を閉じる' : '⚙️ 所属農園コードを手動で入力する'}
             </button>
             {showManualSetup && (
-              <form onSubmit={handleManualSetupSubmit} className="mt-3 p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-                <p className="text-[11px] text-slate-400 text-left">
+              <form onSubmit={handleManualSetupSubmit} className="mt-2 p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                <p className="text-[10px] text-slate-400 text-left">
                   管理者から共有された農園ID（UUID）を入力してください
                 </p>
                 <input
@@ -449,15 +594,17 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
               </form>
             )}
           </div>
+
           <div>
             <a
               href="/login"
-              className="text-xs font-bold text-slate-400 hover:text-emerald-400 transition-colors inline-flex items-center gap-1"
+              className="text-[11px] font-bold text-slate-400 hover:text-emerald-400 transition-colors inline-flex items-center gap-1"
             >
               <span>👨‍💼 管理者アカウントでログインする</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <ArrowRight className="w-3 h-3" />
             </a>
           </div>
+
           <div className="pt-2 border-t border-slate-800/60">
             <button
               type="button"
@@ -469,7 +616,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
                   window.location.href = url.toString();
                 }
               }}
-              className="text-[11px] text-slate-500 hover:text-amber-400 transition-colors inline-block"
+              className="text-[10px] text-slate-500 hover:text-amber-400 transition-colors inline-block"
             >
               🔄 画面が固まる・更新されない場合はここをタップ（端末初期化）
             </button>

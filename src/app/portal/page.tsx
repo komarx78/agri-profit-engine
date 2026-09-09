@@ -230,8 +230,12 @@ function PortalContent() {
                 localStorage.removeItem('agri_cached_company_name');
               } catch (e) {}
               setShowWorkerGate(true);
-              setIsLoading(false);
-              return;
+              // resetパラメータをURLから静かに除去して次回以降の誤爆を防止（farmパラメータは維持）
+              urlParams.delete('reset');
+              urlParams.delete('clear');
+              const remainingQuery = urlParams.toString();
+              const newUrl = window.location.pathname + (remainingQuery ? `?${remainingQuery}` : '');
+              window.history.replaceState({}, '', newUrl);
             }
           } catch (urlE) {}
         }
