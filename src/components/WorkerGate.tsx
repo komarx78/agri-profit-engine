@@ -88,44 +88,47 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
     setIsLoading(true);
     setErrorMsg('');
     try {
-      if (!targetOwnerId || targetOwnerId === 'null' || targetOwnerId === 'undefined') {
-        setErrorMsg('所属農園が未設定です。管理者から案内された専用URLまたはQRコードからアクセスしてください。');
-        setIsLoading(false);
-        return;
-      }
-
       let workerList: any[] = [];
+      let resolvedOwnerId = targetOwnerId;
 
-      // 1. まずクライアントSDKで直接取得（2秒タイムアウト保護）
-      try {
-        const clientPromise = supabase
-          .from('workers')
-          .select('*')
-          .eq('user_id', targetOwnerId)
-          .order('name');
-        const timeoutPromise = new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), 2000)
-        );
-        const { data, error } = await Promise.race([clientPromise, timeoutPromise]);
-        if (!error && data && data.length > 0) {
-          workerList = data;
+      // 1. targetOwnerId がある場合はまずクライアントSDKで直接取得（2秒タイムアウト保護）
+      if (targetOwnerId && targetOwnerId !== 'null' && targetOwnerId !== 'undefined') {
+        try {
+          const clientPromise = supabase
+            .from('workers')
+            .select('*')
+            .eq('user_id', targetOwnerId)
+            .order('name');
+          const timeoutPromise = new Promise<any>((_, reject) =>
+            setTimeout(() => reject(new Error('timeout')), 2000)
+          );
+          const { data, error } = await Promise.race([clientPromise, timeoutPromise]);
+          if (!error && data && data.length > 0) {
+            workerList = data;
+          }
+        } catch (e) {
+          console.warn('Client SDK fetch failed or timed out, trying API:', e);
         }
-      } catch (e) {
-        console.warn('Client SDK fetch failed or timed out, trying API:', e);
       }
 
-      // 2. クライアントで取れなかった場合はAPI経由で取得（2.5秒タイムアウト保護）
+      // 2. クライアントで取れなかった、またはtargetOwnerId未指定の場合はAPI経由で取得（2.5秒タイムアウト保護）
       if (workerList.length === 0) {
         try {
           const controller = new AbortController();
           const tId = setTimeout(() => controller.abort(), 2500);
-          const res = await fetch(`/api/workers?ownerId=${encodeURIComponent(targetOwnerId)}`, {
+          const apiUrl = targetOwnerId && targetOwnerId !== 'null' && targetOwnerId !== 'undefined'
+            ? `/api/workers?ownerId=${encodeURIComponent(targetOwnerId)}`
+            : `/api/workers`;
+          const res = await fetch(apiUrl, {
             signal: controller.signal
           });
           clearTimeout(tId);
           const json = await res.json();
           if (json.workers && json.workers.length > 0) {
             workerList = json.workers;
+            if (json.ownerId) {
+              resolvedOwnerId = json.ownerId;
+            }
           } else if (json.error) {
             setErrorMsg(json.error);
           }
@@ -137,8 +140,12 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
       if (workerList.length > 0) {
         setErrorMsg('');
         setWorkers(workerList);
-        safeStorage.setItem('agri_owner_id', targetOwnerId);
-        setDebugOwnerId(targetOwnerId);
+        if (resolvedOwnerId) {
+          safeStorage.setItem('agri_owner_id', resolvedOwnerId);
+          setDebugOwnerId(resolvedOwnerId);
+        }
+      } else if (!targetOwnerId) {
+        setErrorMsg('所属農園が未設定です。管理者から案内された専用URLまたはQRコードからアクセスしてください。');
       } else {
         setErrorMsg('この農園に登録された作業者が見つかりません。管理者画面（スタッフマスタ）から作業者を登録してください。');
       }
@@ -181,12 +188,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
 
     setDebugOwnerId(ownerId || '未設定');
 
-    if (!ownerId || ownerId === 'null' || ownerId === 'undefined') {
-      setIsLoading(false);
-      setErrorMsg('所属農園が未設定です。管理者から案内された専用URLまたはQRコードからアクセスしてください。');
-      return () => clearTimeout(failsafeTimer);
-    }
-
+    // ownerIdが未指定でも、単一農園運用環境の自動解決を試みる
     loadWorkersForOwner(ownerId);
 
     return () => clearTimeout(failsafeTimer);

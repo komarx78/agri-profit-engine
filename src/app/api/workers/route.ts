@@ -17,12 +17,17 @@ export async function GET(request: Request) {
       auth: { persistSession: false }
     });
 
-    // SaaSマルチテナント完全分離：ownerIdが未指定の場合は他農園のデータを絶対に返さない
+    // SaaSマルチテナント保護：ownerIdが未指定の場合、単一農園運用環境なら自動補完
     if (!ownerId || ownerId === 'null' || ownerId === 'undefined') {
-      return NextResponse.json({ 
-        error: '農園IDが指定されていません。管理者から共有された専用URLまたはQRコードからアクセスしてください。', 
-        workers: [] 
-      }, { status: 400 });
+      const { data: companies } = await supabase.from('company_settings').select('user_id').limit(2);
+      if (companies && companies.length === 1 && companies[0].user_id) {
+        ownerId = companies[0].user_id;
+      } else {
+        return NextResponse.json({ 
+          error: '農園IDが指定されていません。管理者から共有された専用URLまたはQRコードからアクセスしてください。', 
+          workers: [] 
+        }, { status: 400 });
+      }
     }
 
     // 指定された農園のワーカー一覧を取得（現場PIN照合のためpin_codeも含める）
