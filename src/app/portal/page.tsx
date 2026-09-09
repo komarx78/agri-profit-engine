@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { 
   Calendar as CalendarIcon, Clock, CheckCircle2, Inbox, 
@@ -31,22 +31,13 @@ const CalendarWrapper = dynamic(() => import('@/components/CalendarWrapper'), {
 });
 
 export default function PortalPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-      </div>
-    }>
-      <PortalContent />
-    </Suspense>
-  );
+  return <PortalContent />;
 }
 
 function PortalContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [workerProfile, setWorkerProfile] = useState<any>(null);
   const [role, setRole] = useState<'admin' | 'worker'>('worker');
@@ -59,7 +50,7 @@ function PortalContent() {
   const [pendingApprovals, setPendingApprovals] = useState<any[]>([]);
   const [boardPosts, setBoardPosts] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<any>(null);
-  const [showWorkerGate, setShowWorkerGate] = useState(false);
+  const [showWorkerGate, setShowWorkerGate] = useState(true);
   const [showBoardModal, setShowBoardModal] = useState(false);
   const [allBoardPosts, setAllBoardPosts] = useState<any[]>([]);
   const [boardFilter, setBoardFilter] = useState<'all' | 'work' | 'life' | 'general'>('all');
@@ -1764,28 +1755,8 @@ function PortalContent() {
     setShowWorkerGate(true);
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4 gap-4">
-        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-        <div className="text-center">
-          <p className="text-sm font-bold text-slate-700">現場ポータルを読み込み中...</p>
-          <p className="text-xs text-slate-400 mt-1">通信状況により数秒かかる場合があります</p>
-        </div>
-        <button
-          onClick={() => {
-            setShowWorkerGate(true);
-            setIsLoading(false);
-          }}
-          className="mt-2 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-blue-600 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95"
-        >
-          画面が進まない場合はここをタップ（スタッフ選択へ）
-        </button>
-      </div>
-    );
-  }
-
-  if (showWorkerGate) {
+  // ⚡ ログイン中ユーザーがいない場合は、白画面スピナーで待たせず直ちに現場ログイン画面を表示！
+  if (showWorkerGate || !currentUser) {
     return (
       <WorkerGate 
         onLogin={async (user) => {
@@ -1804,6 +1775,19 @@ function PortalContent() {
           }
         }} 
       />
+    );
+  }
+
+  // ログイン済みユーザーがいる場合のみ、ポータル内部データ取得中のスピナーを許可
+  if (isLoading && currentUser) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4 gap-4">
+        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+        <div className="text-center">
+          <p className="text-sm font-bold text-slate-700">現場ポータルを読み込み中...</p>
+          <p className="text-xs text-slate-400 mt-1">通信状況により数秒かかる場合があります</p>
+        </div>
+      </div>
     );
   }
 

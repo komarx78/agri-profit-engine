@@ -57,11 +57,24 @@ const safeStorage = {
   }
 };
 
+// ⚡ 佐原農園の初期作業者キャッシュ（通信ゼロでも0msで即座に選択可能にする防壁）
+const INITIAL_SAHARA_WORKERS = [
+  { id: "99c7bd61-48c1-490e-8e98-915d3d92d467", name: "佐原範靖", name_en: "Noriyasu Sahara", role: "admin", pin_code: "0301", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" },
+  { id: "6ee86491-bb39-4aba-bbe0-1c9269b6b7e0", name: "佐原由実香", name_en: "Yumika Sahara", role: "admin", pin_code: "0728", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" },
+  { id: "d173c59c-64fb-4e15-9d61-9f571e78a06f", name: "ヴィハンガデネット", name_si: "විහංග දෙනෙත්", role: null, pin_code: "1229", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" },
+  { id: "e7fa0a12-d194-42e7-85cd-5fe2ffd7b7b0", name: "塩貝和澄", role: null, pin_code: "0129", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" },
+  { id: "9e35f02b-c27b-4f2a-82b2-6591f046dd87", name: "チャンナー", role: null, pin_code: "0000", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" },
+  { id: "250f8764-c0e6-472a-8d2c-5c5dd9cdb0b2", name: "ヘイシャーニ", role: null, pin_code: "0000", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" },
+  { id: "55d7de7e-08de-44bc-a4ef-f8b09851b195", name: "チャールキー", role: null, pin_code: "0000", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" },
+  { id: "a40f2a31-fe2b-4979-9349-fdc7bb814ebe", name: "リアン", role: null, pin_code: "0707", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" },
+  { id: "6eb48ccc-cf5e-4fdd-a7f9-8746559c5efe", name: "齊藤常雄", role: null, pin_code: "0927", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" }
+];
+
 export function WorkerGate({ onLogin }: WorkerGateProps) {
-  const [workers, setWorkers] = useState<any[]>([]);
+  const [workers, setWorkers] = useState<any[]>(INITIAL_SAHARA_WORKERS);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
   const [pinCode, setPinCode] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [language, setLanguage] = useState<LanguageCode>('ja');
@@ -245,24 +258,6 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
       setIsSubmitting(false);
     }
   };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-emerald-500 gap-4">
-        <Loader2 className="w-10 h-10 animate-spin" />
-        <div className="text-center">
-          <p className="text-sm font-bold text-slate-300">スタッフ画面を準備中...</p>
-          <p className="text-xs text-slate-500 mt-1">電波状況により数秒かかる場合があります</p>
-        </div>
-        <button
-          onClick={() => setIsLoading(false)}
-          className="mt-3 px-4 py-2 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-emerald-400 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
-        >
-          画面が進まない場合はここをタップ
-        </button>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4">
