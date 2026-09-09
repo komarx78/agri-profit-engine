@@ -20,7 +20,7 @@ import dynamic from 'next/dynamic';
 import VideoPlayerWithSubtitles, { Narration, TrimRange } from '@/components/VideoPlayerWithSubtitles';
 import { t, getTranslatedName, getTranslatedWorkType, getWeekdayName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
-import { getPortalTasks, submitAttendance, submitLeaveRequest, getWorkerLeaveRequests } from '@/app/actions/farm';
+import { getPortalTasks, completePortalTask, reopenPortalTask, submitAttendance, submitLeaveRequest, getWorkerLeaveRequests } from '@/app/actions/farm';
 import { translateSingleText } from '@/app/actions/translate';
 import { PwaBottomBanner } from '@/components/PwaInstallPrompt';
 import Link from 'next/link';
@@ -30,6 +30,28 @@ const CalendarWrapper = dynamic(() => import('@/components/CalendarWrapper'), {
   ssr: false, 
   loading: () => <div className="h-[600px] flex items-center justify-center"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div> 
 });
+
+function getCropEmoji(name: string): string {
+  if (!name) return '🌱';
+  const n = name.toLowerCase();
+  if (n.includes('トマト') || n.includes('tomato')) return '🍅';
+  if (n.includes('ナス') || n.includes('なす') || n.includes('eggplant')) return '🍆';
+  if (n.includes('にんじん') || n.includes('ニンジン') || n.includes('carrot')) return '🥕';
+  if (n.includes('ピーマン') || n.includes('pepper')) return '🫑';
+  if (n.includes('きゅうり') || n.includes('キュウリ') || n.includes('cucumber')) return '🥒';
+  if (n.includes('いちご') || n.includes('イチゴ') || n.includes('strawberry')) return '🍓';
+  if (n.includes('白菜') || n.includes('キャベツ') || n.includes('レタス') || n.includes('cabbage') || n.includes('lettuce')) return '🥬';
+  if (n.includes('枝豆') || n.includes('大豆') || n.includes('bean') || n.includes('edamame')) return '🫛';
+  if (n.includes('とうもろこし') || n.includes('コーン') || n.includes('corn')) return '🌽';
+  if (n.includes('芋') || n.includes('イモ') || n.includes('potato')) return '🥔';
+  if (n.includes('ねぎ') || n.includes('ネギ') || n.includes('onion')) return '🧅';
+  if (n.includes('モロヘイヤ') || n.includes('ほうれん草') || n.includes('小松菜')) return '🌿';
+  if (n.includes('大根') || n.includes('ダイコン') || n.includes('radish')) return '🥢';
+  if (n.includes('スイカ') || n.includes('watermelon')) return '🍉';
+  if (n.includes('メロン') || n.includes('melon')) return '🍈';
+  if (n.includes('米') || n.includes('稲') || n.includes('rice')) return '🌾';
+  return '🌱';
+}
 
 export default function PortalPage() {
   return <PortalContent />;
@@ -128,7 +150,15 @@ function PortalContent() {
   }>({ workDays: 0, totalMinutes: 0, overtimeMinutes: 0 });
 
   // 👥 チーム稼働状況 & 作業日報まとめ用ステート
-  const [activePortalTab, setActivePortalTab] = useState<'status' | 'reports' | 'calendar'>('status');
+  const [activePortalTab, setActivePortalTab] = useState<'status' | 'reports' | 'calendar' | 'tasks'>('status');
+  
+  // 📋 本日のやることリスト（ToDo）用ステート
+  const [todoFilter, setTodoFilter] = useState<'all' | 'mine' | 'done'>('all');
+  const [completingTask, setCompletingTask] = useState<any | null>(null);
+  const [taskDurationMinutes, setTaskDurationMinutes] = useState<number>(60);
+  const [taskHarvestAmount, setTaskHarvestAmount] = useState<string>('');
+  const [taskMemo, setTaskMemo] = useState<string>('');
+  const [isSubmittingTaskComplete, setIsSubmittingTaskComplete] = useState<boolean>(false);
   const [reportDate, setReportDate] = useState<string>(() => getJSTDate());
   const [reportPeriod, setReportPeriod] = useState<'day' | 'week' | 'month' | 'custom'>('day');
   const [customStartDate, setCustomStartDate] = useState<string>(() => {
@@ -2536,6 +2566,125 @@ function PortalContent() {
     );
   }
 
+  // 📋 本日のやることリスト（Today's ToDo）の抽出・集計
+  const todayStr = useMemo(() => getJSTDate(), []);
+  const myWorkerId = useMemo(() => workerProfile?.id || currentUser?.id, [workerProfile, currentUser]);
+
+  const todayTasks = useMemo(() => {
+    return tasks.filter((t: any) => t.work_date === todayStr);
+  }, [tasks, todayStr]);
+
+  const filteredTodayTasks = useMemo(() => {
+    return todayTasks.filter((t: any) => {
+      const isCompleted = t.status === 'completed';
+      if (todoFilter === 'done') return isCompleted;
+      if (todoFilter === 'mine') {
+        const isMine = !t.worker_id || t.worker_id === myWorkerId;
+        return isMine && !isCompleted;
+      }
+      return true;
+    }).sort((a: any, b: any) => {
+      const aDone = a.status === 'completed' ? 1 : 0;
+      const bDone = b.status === 'completed' ? 1 : 0;
+      if (aDone !== bDone) return aDone - bDone;
+      return (a.step_order || 1) - (b.step_order || 1);
+    });
+  }, [todayTasks, todoFilter, myWorkerId]);
+
+  const todayTasksProgress = useMemo(() => {
+    const total = todayTasks.length;
+    const completed = todayTasks.filter((t: any) => t.status === 'completed').length;
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { total, completed, percent };
+  }, [todayTasks]);
+
+  // タスク完了モーダルを開く
+  const handleOpenCompleteModal = (task: any) => {
+    setCompletingTask(task);
+    setTaskDurationMinutes(task.duration_minutes || 60);
+    setTaskHarvestAmount(task.harvest_amount ? String(task.harvest_amount) : '');
+    setTaskMemo(task.memo || '');
+  };
+
+  // タスク完了日報の保存
+  const handleSaveCompleteTask = async () => {
+    if (!completingTask) return;
+    setIsSubmittingTaskComplete(true);
+    const tenantId = workerProfile?.user_id || currentUser?.user_id || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
+    
+    try {
+      const res = await completePortalTask(tenantId, completingTask.id, {
+        durationMinutes: taskDurationMinutes,
+        harvestAmount: taskHarvestAmount ? Number(taskHarvestAmount) : undefined,
+        memo: taskMemo,
+        workerId: myWorkerId
+      });
+
+      if (res.success) {
+        setTasks(prev => prev.map(t => t.id === completingTask.id ? { 
+          ...t, 
+          status: 'completed', 
+          duration_minutes: taskDurationMinutes, 
+          harvest_amount: taskHarvestAmount ? Number(taskHarvestAmount) : null, 
+          memo: taskMemo 
+        } : t));
+        setCompletingTask(null);
+        if (tenantId) {
+          fetchPortalData(tenantId, role, workerProfile, closingDay);
+          fetchDailyTeamData(tenantId, reportDate, reportPeriod, customStartDate, customEndDate);
+        }
+      } else {
+        alert('完了保存に失敗しました: ' + (res.error || 'エラー'));
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert('エラーが発生しました: ' + e.message);
+    } finally {
+      setIsSubmittingTaskComplete(false);
+    }
+  };
+
+  // クイック完了（モーダル開かず即完了）
+  const handleQuickCompleteTask = async (task: any) => {
+    const tenantId = workerProfile?.user_id || currentUser?.user_id || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
+    try {
+      const res = await completePortalTask(tenantId, task.id, {
+        durationMinutes: task.duration_minutes || 60,
+        workerId: myWorkerId
+      });
+      if (res.success) {
+        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'completed' } : t));
+        if (tenantId) {
+          fetchPortalData(tenantId, role, workerProfile, closingDay);
+          fetchDailyTeamData(tenantId, reportDate, reportPeriod, customStartDate, customEndDate);
+        }
+      } else {
+        alert('完了処理に失敗しました: ' + (res.error || 'エラー'));
+      }
+    } catch (e: any) {
+      alert('エラーが発生しました: ' + e.message);
+    }
+  };
+
+  // 未完了に戻す（予定への復帰）
+  const handleReopenTask = async (task: any) => {
+    const tenantId = workerProfile?.user_id || currentUser?.user_id || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
+    try {
+      const res = await reopenPortalTask(tenantId, task.id);
+      if (res.success) {
+        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'planned', approval_status: null } : t));
+        if (tenantId) {
+          fetchPortalData(tenantId, role, workerProfile, closingDay);
+          fetchDailyTeamData(tenantId, reportDate, reportPeriod, customStartDate, customEndDate);
+        }
+      } else {
+        alert('予定への復帰に失敗しました: ' + (res.error || 'エラー'));
+      }
+    } catch (e: any) {
+      alert('エラーが発生しました: ' + e.message);
+    }
+  };
+
   const calendarEvents = tasks.map(t => {
     let wObj = t.workers;
     let wName = '';
@@ -2909,6 +3058,217 @@ function PortalContent() {
               })()}
             </div>
 
+            {/* 📋 本日のやることリスト（Today's ToDo） */}
+            <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200 relative overflow-hidden space-y-4">
+              {/* カードヘッダー */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
+                    <CheckSquare className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                      {t('todo_title', language)}
+                    </h2>
+                    <p className="text-[10px] font-bold text-slate-400">
+                      {t('todo_sub', language)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 進捗バッジ */}
+                <span className={`text-[11px] font-black px-2.5 py-1 rounded-xl border flex items-center gap-1 shrink-0 ${
+                  todayTasksProgress.total > 0 && todayTasksProgress.completed === todayTasksProgress.total
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                }`}>
+                  <span>{todayTasksProgress.completed} / {todayTasksProgress.total}</span>
+                  <span className="text-[10px] font-bold text-slate-500">完了</span>
+                </span>
+              </div>
+
+              {/* 進捗プログレスバー */}
+              {todayTasksProgress.total > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
+                    <span>{t('todo_progress', language)}</span>
+                    <span className="font-black text-emerald-700">{todayTasksProgress.percent}%</span>
+                  </div>
+                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
+                      style={{ width: `${todayTasksProgress.percent}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* フィルターピル */}
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setTodoFilter('all')}
+                  className={`flex-1 py-1 px-2 rounded-lg font-bold transition-colors text-[11px] ${
+                    todoFilter === 'all' ? 'bg-white text-slate-800 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {t('todo_filterAll', language)} ({todayTasks.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTodoFilter('mine')}
+                  className={`flex-1 py-1 px-2 rounded-lg font-bold transition-colors text-[11px] ${
+                    todoFilter === 'mine' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {t('todo_filterMine', language)} ({todayTasks.filter(t => (!t.worker_id || t.worker_id === myWorkerId) && t.status !== 'completed').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTodoFilter('done')}
+                  className={`flex-1 py-1 px-2 rounded-lg font-bold transition-colors text-[11px] ${
+                    todoFilter === 'done' ? 'bg-white text-blue-700 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {t('todo_filterDone', language)} ({todayTasks.filter(t => t.status === 'completed').length})
+                </button>
+              </div>
+
+              {/* 全件完了のお祝いバナー */}
+              {todayTasksProgress.total > 0 && todayTasksProgress.completed === todayTasksProgress.total && todoFilter !== 'done' && (
+                <div className="p-3 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-200 rounded-2xl text-center space-y-1">
+                  <p className="text-xs font-black text-emerald-800">
+                    {t('todo_allDone', language)}
+                  </p>
+                </div>
+              )}
+
+              {/* タスクリスト一覧 */}
+              <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+                {filteredTodayTasks.length === 0 ? (
+                  <div className="p-6 text-center text-xs font-bold text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <CheckCircle2 className="w-8 h-8 text-slate-300 mx-auto mb-1.5" />
+                    <p>{t('todo_noTasks', language)}</p>
+                  </div>
+                ) : (
+                  filteredTodayTasks.map((task: any) => {
+                    const isCompleted = task.status === 'completed';
+                    const isMine = !task.worker_id || task.worker_id === myWorkerId;
+                    const cropEmoji = getCropEmoji(task.crops?.name || '');
+                    const rawTitle = task.task_title || task.work_type || '作業';
+                    const langKey = `task_title_${language}`;
+                    const dbTitle = task[langKey] || (language !== 'en' && language !== 'ja' ? task.task_title_en : null);
+                    const taskTitle = language === 'ja' ? rawTitle : (dbTitle || dynamicTranslations[rawTitle] || getTranslatedWorkType(rawTitle, language));
+
+                    return (
+                      <div 
+                        key={task.id}
+                        className={`p-3.5 rounded-2xl border transition-all space-y-2.5 ${
+                          isCompleted 
+                            ? 'bg-slate-50/80 border-slate-200 opacity-75' 
+                            : isMine
+                            ? 'bg-emerald-50/40 border-emerald-200 hover:border-emerald-300 shadow-xs'
+                            : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
+                        }`}
+                      >
+                        {/* 上段：タイトル & 担当バッジ */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-sm">{cropEmoji}</span>
+                              <span className={`font-black text-sm tracking-tight ${isCompleted ? 'text-slate-500 line-through' : 'text-slate-800'}`}>
+                                {taskTitle}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* 担当バッジ */}
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg shrink-0 ${
+                            isMine 
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                              : task.workers?.name
+                              ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                              : 'bg-blue-50 text-blue-700 border border-blue-200'
+                          }`}>
+                            {isMine 
+                              ? t('todo_myTasks', language) 
+                              : (task.workers ? getTranslatedName(task.workers, language) : t('todo_teamTasks', language))
+                            }
+                          </span>
+                        </div>
+
+                        {/* 中段：圃場・作物・時間帯メタデータ */}
+                        <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                          {task.fields?.name && (
+                            <span className="px-2 py-0.5 bg-white border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                              🏡 {getTranslatedName(task.fields, language)}
+                            </span>
+                          )}
+                          {task.crops?.name && (
+                            <span className="px-2 py-0.5 bg-white border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                              🌱 {getTranslatedName(task.crops, language)}
+                            </span>
+                          )}
+                          {task.time_slot && (
+                            <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-md text-[11px] font-bold flex items-center gap-1">
+                              ⏰ {task.time_slot}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* 指示メモ・特記事項 */}
+                        {task.memo && (
+                          <p className="text-[11px] text-slate-600 bg-white/90 p-2 rounded-xl border border-slate-100 italic">
+                            💬 {task.memo}
+                          </p>
+                        )}
+
+                        {/* 下段：アクションボタン */}
+                        <div className="pt-1 flex items-center justify-between gap-2">
+                          {isCompleted ? (
+                            <div className="flex items-center justify-between w-full">
+                              <span className="text-xs font-black text-emerald-700 flex items-center gap-1">
+                                <CheckCircle className="w-3.5 h-3.5" /> 完了済
+                                {task.duration_minutes ? ` (${task.duration_minutes}分)` : ''}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleReopenTask(task)}
+                                className="text-[10px] font-bold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                              >
+                                {t('todo_reopenBtn', language)}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 w-full">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCompleteModal(task)}
+                                className="flex-1 py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>{t('todo_reportAndComplete', language)}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleQuickCompleteTask(task)}
+                                className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-95 rounded-xl text-xs font-black transition-all border border-slate-200 flex items-center gap-1 shrink-0 cursor-pointer"
+                                title="ワンタップで完了"
+                              >
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>{t('todo_completeBtn', language)}</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
             {/* マニュアル動画 */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
               <div className="flex items-center justify-between mb-4">
@@ -3022,10 +3382,32 @@ function PortalContent() {
             <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-1.5 overflow-x-auto">
               <button
                 type="button"
+                onClick={() => setActivePortalTab('tasks')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+                  activePortalTab === 'tasks'
+                    ? 'bg-emerald-600 text-white shadow-sm scale-[1.01]'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <CheckSquare className="w-4 h-4" />
+                <span>{t('tabTasks', language)}</span>
+                {todayTasksProgress.total > 0 && (
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+                    activePortalTab === 'tasks' ? 'bg-emerald-500 text-white' : 'bg-emerald-100 text-emerald-800'
+                  }`}>
+                    {todayTasksProgress.total - todayTasksProgress.completed > 0 
+                      ? `${todayTasksProgress.total - todayTasksProgress.completed}件` 
+                      : '完了'}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setActivePortalTab('status')}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
                   activePortalTab === 'status'
-                    ? 'bg-emerald-600 text-white shadow-sm scale-[1.01]'
+                    ? 'bg-slate-800 text-white shadow-sm scale-[1.01]'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
@@ -3077,6 +3459,254 @@ function PortalContent() {
             {/* タブコンテンツ本体 */}
             <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200 min-h-[600px]">
               
+              {/* ⓪ 📋 本日のやることボード（Today's ToDo Board） */}
+              {activePortalTab === 'tasks' && (
+                <div className="space-y-6">
+                  {/* ヘッダー＆進捗バー */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                    <div>
+                      <h2 className="text-base sm:text-lg font-black text-slate-800 flex items-center gap-2">
+                        <CheckSquare className="w-5 h-5 text-emerald-600" />
+                        <span>{t('todo_title', language)}</span>
+                        <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">
+                          {todayStr}
+                        </span>
+                      </h2>
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">
+                        {t('todo_sub', language)}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* フィルターピル */}
+                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setTodoFilter('all')}
+                          className={`py-1 px-3 rounded-lg font-bold transition-colors ${
+                            todoFilter === 'all' ? 'bg-white text-slate-800 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          {t('todo_filterAll', language)} ({todayTasks.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTodoFilter('mine')}
+                          className={`py-1 px-3 rounded-lg font-bold transition-colors ${
+                            todoFilter === 'mine' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          {t('todo_filterMine', language)} ({todayTasks.filter(t => (!t.worker_id || t.worker_id === myWorkerId) && t.status !== 'completed').length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTodoFilter('done')}
+                          className={`py-1 px-3 rounded-lg font-bold transition-colors ${
+                            todoFilter === 'done' ? 'bg-white text-blue-700 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          {t('todo_filterDone', language)} ({todayTasks.filter(t => t.status === 'completed').length})
+                        </button>
+                      </div>
+
+                      {role === 'admin' && (
+                        <button
+                          type="button"
+                          onClick={() => router.push('/admin/tasks')}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition-colors border border-slate-200 cursor-pointer"
+                        >
+                          <span>🗓️ 全体タスク管理</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 進捗サマリーカード */}
+                  <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-slate-50 p-4 rounded-2xl border border-emerald-200/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-black">
+                      <span className="text-slate-700 flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-emerald-600" />
+                        <span>{t('todo_progress', language)}: {todayTasksProgress.completed} / {todayTasksProgress.total} 件完了</span>
+                      </span>
+                      <span className="text-emerald-700 text-sm font-black">{todayTasksProgress.percent}%</span>
+                    </div>
+                    <div className="w-full bg-white rounded-full h-3 overflow-hidden border border-emerald-100 p-0.5">
+                      <div 
+                        className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
+                        style={{ width: `${todayTasksProgress.percent}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 全件完了お祝い */}
+                  {todayTasksProgress.total > 0 && todayTasksProgress.completed === todayTasksProgress.total && todoFilter !== 'done' && (
+                    <div className="p-6 bg-gradient-to-r from-emerald-500/15 to-teal-500/15 border-2 border-emerald-300 rounded-3xl text-center space-y-2">
+                      <div className="text-3xl">🎉</div>
+                      <h3 className="text-base font-black text-emerald-900">
+                        {t('todo_allDone', language)}
+                      </h3>
+                      <p className="text-xs text-emerald-700 font-bold">
+                        本日の予定作業はすべて報告済みです。ゆっくりお休みいただくか、追加の作業があれば管理画面で追加してください。
+                      </p>
+                    </div>
+                  )}
+
+                  {/* タスクカードグリッド */}
+                  {filteredTodayTasks.length === 0 ? (
+                    <div className="p-12 text-center text-slate-400 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 space-y-2">
+                      <CheckCircle2 className="w-12 h-12 text-slate-300 mx-auto" />
+                      <p className="font-bold text-sm text-slate-600">{t('todo_noTasks', language)}</p>
+                      <p className="text-xs text-slate-400">管理画面から作業スケジュールを登録すると、ここに自動で表示されます。</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {filteredTodayTasks.map((task: any) => {
+                        const isCompleted = task.status === 'completed';
+                        const isMine = !task.worker_id || task.worker_id === myWorkerId;
+                        const cropEmoji = getCropEmoji(task.crops?.name || '');
+                        const rawTitle = task.task_title || task.work_type || '作業';
+                        const langKey = `task_title_${language}`;
+                        const dbTitle = task[langKey] || (language !== 'en' && language !== 'ja' ? task.task_title_en : null);
+                        const taskTitle = language === 'ja' ? rawTitle : (dbTitle || dynamicTranslations[rawTitle] || getTranslatedWorkType(rawTitle, language));
+
+                        return (
+                          <div
+                            key={task.id}
+                            className={`p-5 rounded-3xl border transition-all space-y-3.5 ${
+                              isCompleted
+                                ? 'bg-slate-50/70 border-slate-200 opacity-80'
+                                : isMine
+                                ? 'bg-gradient-to-br from-emerald-50/50 via-white to-teal-50/30 border-emerald-200 hover:border-emerald-400 shadow-sm'
+                                : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                            }`}
+                          >
+                            {/* 上段：タイトル＆担当者 */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="space-y-1 min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xl">{cropEmoji}</span>
+                                  <h3 className={`font-black text-base tracking-tight ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                                    {taskTitle}
+                                  </h3>
+                                </div>
+                              </div>
+
+                              {/* 担当バッジ */}
+                              <span className={`text-xs font-black px-2.5 py-1 rounded-xl shrink-0 flex items-center gap-1 ${
+                                isMine
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-xs'
+                                  : task.workers?.name
+                                  ? 'bg-slate-100 text-slate-700 border border-slate-200'
+                                  : 'bg-blue-50 text-blue-700 border border-blue-200'
+                              }`}>
+                                {isMine
+                                  ? t('todo_myTasks', language)
+                                  : (task.workers ? getTranslatedName(task.workers, language) : t('todo_teamTasks', language))
+                                }
+                              </span>
+                            </div>
+
+                            {/* 中段：メタ情報（圃場・作物・予定時間帯） */}
+                            <div className="flex items-center gap-2 flex-wrap text-xs">
+                              {task.fields?.name && (
+                                <span className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg font-bold text-slate-700 flex items-center gap-1 shadow-xs">
+                                  🏡 {getTranslatedName(task.fields, language)}
+                                </span>
+                              )}
+                              {task.crops?.name && (
+                                <span className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg font-bold text-slate-700 flex items-center gap-1 shadow-xs">
+                                  🌱 {getTranslatedName(task.crops, language)}
+                                </span>
+                              )}
+                              {task.time_slot && (
+                                <span className="px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg font-bold flex items-center gap-1">
+                                  ⏰ {task.time_slot}
+                                </span>
+                              )}
+                              {task.duration_minutes ? (
+                                <span className="px-2.5 py-1 bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-bold">
+                                  ⌛ 予定: {task.duration_minutes}分
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {/* 指示メモ・特記事項 */}
+                            {task.memo && (
+                              <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-1">
+                                <span className="text-[10px] font-bold text-slate-400 block">指示メモ:</span>
+                                <p className="font-medium whitespace-pre-wrap">{task.memo}</p>
+                              </div>
+                            )}
+
+                            {/* 下段：アクションボタン */}
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                              {isCompleted ? (
+                                <div className="flex items-center justify-between w-full">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                                      <CheckCircle className="w-4 h-4" /> 完了済
+                                    </span>
+                                    {task.duration_minutes ? (
+                                      <span className="text-xs font-bold text-slate-500">
+                                        実績: {task.duration_minutes}分
+                                      </span>
+                                    ) : null}
+                                    {task.harvest_amount ? (
+                                      <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-100">
+                                        収穫: {task.harvest_amount}
+                                      </span>
+                                    ) : null}
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReopenTask(task)}
+                                    className="text-xs font-bold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
+                                  >
+                                    {t('todo_reopenBtn', language)}
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 w-full">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenCompleteModal(task)}
+                                    className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                                  >
+                                    <Edit3 className="w-4 h-4" />
+                                    <span>{t('todo_reportAndComplete', language)}</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleQuickCompleteTask(task)}
+                                    className="py-2 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-95 rounded-xl text-xs font-black transition-all border border-slate-200 flex items-center gap-1 shrink-0 cursor-pointer"
+                                    title="ワンタップで完了にする"
+                                  >
+                                    <Check className="w-4 h-4 text-emerald-600" />
+                                    <span>{t('todo_completeBtn', language)}</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => router.push('/work')}
+                                    className="py-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 active:scale-95 rounded-xl text-xs font-black transition-all border border-blue-100 flex items-center gap-1 shrink-0 cursor-pointer"
+                                    title="現場作業画面（GPS/タイマー）へ"
+                                  >
+                                    <ArrowRight className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* ① 👥 農場リアルタイム稼働状況（全員の今） */}
               {activePortalTab === 'status' && (
                 <div className="space-y-4">
@@ -3315,6 +3945,172 @@ function PortalContent() {
           </div>
         </div>
       </main>
+
+      {/* 📝 タスク完了・クイック日報入力モーダル */}
+      {completingTask && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[110] flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+            
+            {/* モーダルヘッダー */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-white">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-emerald-600 text-white rounded-2xl shadow-xs">
+                  <CheckSquare className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-800">
+                    {t('todo_quickModalTitle', language)}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-bold">
+                    作業実績を入力してワンタップで完了・日報化します
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCompletingTask(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* モーダル本文 */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-sm">
+              
+              {/* 対象作業のサマリーカード */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">{getCropEmoji(completingTask.crops?.name || '')}</span>
+                  <span className="font-black text-slate-800 text-base">
+                    {completingTask.task_title || completingTask.work_type || '作業'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap text-xs">
+                  {completingTask.fields?.name && (
+                    <span className="px-2 py-0.5 bg-white border border-slate-200 rounded-md font-bold text-slate-700">
+                      🏡 {getTranslatedName(completingTask.fields, language)}
+                    </span>
+                  )}
+                  {completingTask.crops?.name && (
+                    <span className="px-2 py-0.5 bg-white border border-slate-200 rounded-md font-bold text-slate-700">
+                      🌱 {getTranslatedName(completingTask.crops, language)}
+                    </span>
+                  )}
+                  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md font-bold">
+                    📅 {completingTask.work_date}
+                  </span>
+                </div>
+              </div>
+
+              {/* 作業時間（分）入力 */}
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-700 block">
+                  {t('todo_durationLabel', language)}
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="1440"
+                    value={taskDurationMinutes}
+                    onChange={(e) => setTaskDurationMinutes(Math.max(1, parseInt(e.target.value) || 0))}
+                    className="w-32 px-3.5 py-2.5 rounded-xl border border-slate-200 text-base font-black text-slate-800 focus:border-emerald-500 focus:outline-none text-center bg-white shadow-xs"
+                  />
+                  <span className="text-xs font-bold text-slate-500">分 ({Math.floor(taskDurationMinutes / 60)}時間 {taskDurationMinutes % 60}分)</span>
+                </div>
+
+                {/* プリセットボタングループ */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                  {[30, 45, 60, 90, 120, 180].map((mins) => (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => setTaskDurationMinutes(mins)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        taskDurationMinutes === mins
+                          ? 'bg-emerald-600 text-white font-black shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {mins}分
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setTaskDurationMinutes(prev => prev + 15)}
+                    className="px-2.5 py-1 rounded-lg text-xs font-black bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 cursor-pointer"
+                  >
+                    +15分
+                  </button>
+                </div>
+              </div>
+
+              {/* 収穫量・数量（任意） */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-slate-700 block">
+                  {t('todo_harvestLabel', language)} <span className="text-[10px] text-slate-400 font-normal">（収穫作業時など）</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  placeholder="例: 25.5 (kg / 箱)"
+                  value={taskHarvestAmount}
+                  onChange={(e) => setTaskHarvestAmount(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 focus:border-emerald-500 focus:outline-none bg-white shadow-xs"
+                />
+              </div>
+
+              {/* メモ・ひとこと報告 */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-slate-700 block">
+                  {t('todo_memoLabel', language)}
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="例: 雨天のため15分早めに終了。特に病害虫の発生なし。"
+                  value={taskMemo}
+                  onChange={(e) => setTaskMemo(e.target.value)}
+                  className="w-full p-3 rounded-xl border border-slate-200 text-xs font-medium text-slate-800 focus:border-emerald-500 focus:outline-none bg-white resize-none shadow-xs"
+                />
+              </div>
+            </div>
+
+            {/* モーダルフッター */}
+            <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setCompletingTask(null)}
+                disabled={isSubmittingTaskComplete}
+                className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-800 bg-white hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer"
+              >
+                キャンセル
+              </button>
+              
+              <button
+                type="button"
+                onClick={handleSaveCompleteTask}
+                disabled={isSubmittingTaskComplete}
+                className="px-5 py-2.5 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isSubmittingTaskComplete ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>保存中...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>{t('todo_submitBtn', language)}</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* 📋 フルスクリーン作業日報 専用ビューワーモーダル */}
       {showReportModal && (

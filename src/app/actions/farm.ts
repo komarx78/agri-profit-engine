@@ -986,4 +986,78 @@ export async function shiftTasksDate(
   }
 }
 
+// 現場ポータル用：タスクの完了更新・日報化（RLS回避・安全実行）
+export async function completePortalTask(
+  tenantId: string, 
+  taskId: string, 
+  options?: { 
+    durationMinutes?: number; 
+    memo?: string; 
+    harvestAmount?: number; 
+    workerId?: string;
+  }
+) {
+  try {
+    const supabase = createAdminClient();
+    if (!taskId) return { success: false, error: 'Task ID is required' };
 
+    const updatePayload: any = {
+      status: 'completed',
+      approval_status: 'pending',
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    if (options?.durationMinutes !== undefined && options.durationMinutes !== null && !isNaN(options.durationMinutes)) {
+      updatePayload.duration_minutes = Number(options.durationMinutes);
+    }
+    if (options?.memo !== undefined && options.memo !== null) {
+      updatePayload.memo = options.memo;
+    }
+    if (options?.harvestAmount !== undefined && options.harvestAmount !== null && !isNaN(options.harvestAmount)) {
+      updatePayload.harvest_amount = Number(options.harvestAmount);
+    }
+    if (options?.workerId) {
+      updatePayload.worker_id = options.workerId;
+    }
+
+    const { data, error } = await supabase
+      .from('work_logs')
+      .update(updatePayload)
+      .eq('id', taskId)
+      .select('*, crops(*), fields(*), workers(*)')
+      .single();
+
+    if (error) throw error;
+    return { success: true, data };
+  } catch (err: any) {
+    console.error('completePortalTask error:', err);
+    return { success: false, error: err.message || '更新に失敗しました' };
+  }
+}
+
+// 現場ポータル用：タスクの未完了復帰（予定に戻す）
+export async function reopenPortalTask(tenantId: string, taskId: string) {
+  try {
+    const supabase = createAdminClient();
+    if (!taskId) return { success: false, error: 'Task ID is required' };
+
+    const { data, error } = await supabase
+      .from('work_logs')
+      .update({
+        status: 'planned',
+        approval_status: null,
+        completed_at: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', taskId)
+      .select('*, crops(*), fields(*), workers(*)')
+      .single();
+
+    if (error) throw error;
+    return { success: true, data };
+  } catch (err: any) {
+    console.error('reopenPortalTask error:', err);
+    return { success: false, error: err.message || '更新に失敗しました' };
+  }
+}
