@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { User, Lock, ArrowRight, Loader2, Globe } from 'lucide-react';
+import { User, Lock, ArrowRight, Loader2, Globe, Eye, EyeOff } from 'lucide-react';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 
 interface WorkerGateProps {
@@ -80,6 +80,16 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
   const [language, setLanguage] = useState<LanguageCode>('ja');
   const [debugOwnerId, setDebugOwnerId] = useState('');
   const [isLineBrowser, setIsLineBrowser] = useState(false);
+  const [showPin, setShowPin] = useState(false);
+
+  // 全角数字 ➔ 半角数字自動変換 ＆ 非数字除去
+  const normalizePin = (val: string) => {
+    if (!val) return '';
+    return val
+      .replace(/[０-９]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+      .replace(/\D/g, '')
+      .slice(0, 4);
+  };
 
   useEffect(() => {
     let loadedLang = 'ja' as LanguageCode;
@@ -225,9 +235,14 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
       
       if (!data) throw new Error('Worker not found');
       
-      const expectedPin = data.pin_code || '0000';
+      const expectedPin = (data.pin_code || '0000').trim();
+      const enteredPin = normalizePin(pinCode);
+      const paddedEntered = enteredPin.padStart(expectedPin.length, '0');
       
-      if (data && expectedPin === pinCode) {
+      // 半角変換値、または桁数補完値（例: 129 -> 0129）のいずれかが一致すればパス
+      const isMatch = (enteredPin === expectedPin) || (paddedEntered === expectedPin);
+      
+      if (data && isMatch) {
         const user = {
           id: data.id,
           name: data.name,
@@ -249,7 +264,12 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
         }
         onLogin(user);
       } else {
-        setErrorMsg(t('incorrectPin', language));
+        const isDefaultZero = expectedPin === '0000';
+        setErrorMsg(
+          t('incorrectPin', language) + 
+          (enteredPin ? `（入力: ${enteredPin}）` : '') + 
+          (isDefaultZero ? '\n※初期設定「0000」をお試しください。' : '\n※誕生日4桁（例: 0129）をお試しください。')
+        );
       }
     } catch (err) {
       console.error(err);
@@ -324,26 +344,43 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           <div>
             <label className="block text-sm font-bold text-slate-300 mb-2">2. {t('yourPin', language)}</label>
             <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 pointer-events-none" />
               <input
-                type="password"
+                type={showPin ? "text" : "password"}
                 maxLength={4}
                 inputMode="numeric"
-                pattern="[0-9]*"
                 value={pinCode}
-                onChange={(e) => setPinCode(e.target.value)}
+                onChange={(e) => setPinCode(normalizePin(e.target.value))}
                 required
                 placeholder="0000"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-emerald-500 transition-colors font-black tracking-[0.5em] text-xl"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-12 pr-12 text-white focus:outline-none focus:border-emerald-500 transition-colors font-black tracking-[0.3em] text-xl"
               />
+              <button
+                type="button"
+                onClick={() => setShowPin(!showPin)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                title={showPin ? "非表示" : "数字を表示"}
+              >
+                {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
-            <p className="text-xs text-slate-500 mt-2">{t('pinHint', language)}</p>
+            
+            <div className="flex items-center justify-between text-xs text-slate-400 mt-2">
+              <span>{t('pinHint', language)}</span>
+              <button
+                type="button"
+                onClick={() => setPinCode('0000')}
+                className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold underline cursor-pointer"
+              >
+                「0000」を自動入力
+              </button>
+            </div>
           </div>
 
           <button
             type="submit"
-            disabled={!selectedWorkerId || pinCode.length !== 4 || isSubmitting}
-            className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-black rounded-xl flex items-center justify-center gap-2 transition-colors mt-8"
+            disabled={!selectedWorkerId || normalizePin(pinCode).length < 3 || isSubmitting}
+            className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 font-black rounded-xl flex items-center justify-center gap-2 transition-colors mt-8 cursor-pointer"
           >
             {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : (
               <>

@@ -286,6 +286,7 @@ function PortalContent() {
             profile = workerData;
             setWorkerProfile(workerData);
             setCurrentUser(workerData);
+            setShowWorkerGate(false);
 
             // 所属農園ID（user_id）の確定
             ownerId = workerData.user_id || (session ? session.user.id : '') || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
@@ -325,9 +326,14 @@ function PortalContent() {
           currentRole = 'admin';
           setRole('admin');
           setCurrentUser({ name: '管理者', name_en: 'Admin', role: 'admin' });
+          setShowWorkerGate(false);
         } else {
           // 3. 作業者もセッションもない場合は WorkerGate（選択画面）を表示
-          setShowWorkerGate(true);
+          // ※もし init() の完了前に WorkerGate 側で onLogin されていたら上書きしない
+          setShowWorkerGate(prev => {
+            const hasWorker = typeof window !== 'undefined' && localStorage.getItem('agri_current_worker');
+            return hasWorker ? false : true;
+          });
           setIsLoading(false);
           return;
         }
