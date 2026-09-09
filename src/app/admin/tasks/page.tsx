@@ -3,12 +3,28 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Calendar, CheckCircle2, Clock, MapPin, Sprout, Loader2, Plus, Trash2, Edit2, Users, Briefcase, X, List, LayoutGrid, ChevronLeft, ChevronRight } from 'lucide-react';
+import { 
+  Calendar, CheckCircle2, Clock, MapPin, Sprout, Loader2, Plus, Trash2, Edit2, 
+  Users, Briefcase, X, List, LayoutGrid, ChevronLeft, ChevronRight, Copy, Sparkles, 
+  UserPlus, Users2, Layers, Check, ArrowRightLeft, CalendarCheck, RotateCcw, ArrowRight, UserCheck
+} from 'lucide-react';
 import { autoTranslateMasterData } from '@/app/actions/translate';
 
 import { getCurrentTenantId } from '@/lib/tenant';
-import { getJSTDate } from '@/lib/dateUtils';
-import { savePlannedTask, deletePlannedTask } from '@/app/actions/farm';
+import { getJSTDate, getJSTDateWithOffset } from '@/lib/dateUtils';
+import { savePlannedTask, deletePlannedTask, copyTasksFromDate, cloneWorkerTasks } from '@/app/actions/farm';
+
+const QUICK_TEMPLATES = [
+  { title: '朝の収穫作業', icon: '🧺', defaultSlot: '午前' },
+  { title: '播種・種まき', icon: '🌱', defaultSlot: '午前' },
+  { title: '定植・苗植え', icon: '🌿', defaultSlot: '午前' },
+  { title: '誘引・葉かき・整枝', icon: '✂️', defaultSlot: '午前' },
+  { title: '水やり・潅水管理', icon: '💧', defaultSlot: '午前' },
+  { title: '防除・農薬散布', icon: '🧪', defaultSlot: '夕方' },
+  { title: '出荷選別・袋詰め・箱詰め', icon: '📦', defaultSlot: '午後' },
+  { title: '圃場の草刈り・除草', icon: '🚜', defaultSlot: '午後' },
+  { title: 'ハウス片付け・資材メンテ', icon: '🧹', defaultSlot: '午後' },
+];
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<any[]>([]);
@@ -32,6 +48,27 @@ export default function TasksPage() {
       { field_id: '', worker_ids: [] as string[], step_order: 1, time_slot: '', field_memo: '' }
     ]
   });
+
+  // ⚡ 前日（指定日）一括コピー用ステート
+  const [showCopyDateModal, setShowCopyDateModal] = useState(false);
+  const [copySourceDate, setCopySourceDate] = useState<string>(() => getJSTDateWithOffset(-1).dateStr);
+  const [copyTargetDate, setCopyTargetDate] = useState<string>(() => getJSTDate());
+  const [isCopyingDate, setIsCopyingDate] = useState(false);
+
+  // 👤 人起点（作業者クローン）モーダル用ステート
+  const [showCloneWorkerModal, setShowCloneWorkerModal] = useState(false);
+  const [cloneSourceWorker, setCloneSourceWorker] = useState<any | null>(null);
+  const [cloneTargetDate, setCloneTargetDate] = useState<string>(() => getJSTDate());
+  const [selectedTargetWorkerIds, setSelectedTargetWorkerIds] = useState<string[]>([]);
+  const [isCloningWorker, setIsCloningWorker] = useState(false);
+
+  // トースト通知
+  const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMsg({ text, type });
+    setTimeout(() => setToastMsg(null), 3500);
+  };
 
   // UI State
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
@@ -337,6 +374,126 @@ export default function TasksPage() {
     setIsModalOpen(true);
   };
 
+  // ⚡ 指定日（前日等）の予定タスクを一括複製
+  const handleExecuteCopyDate = async () => {
+    if (!copySourceDate || !copyTargetDate) return;
+    if (copySourceDate === copyTargetDate) {
+      alert('コピー元とコピー先の日付が同じです。異なる日付を選択してください。');
+      return;
+    }
+    setIsCopyingDate(true);
+    try {
+      const activeTenantId = tenantId || await getCurrentTenantId();
+      if (!activeTenantId) {
+        alert('農園IDが特定できません');
+        return;
+      }
+      const res = await copyTasksFromDate(activeTenantId, copySourceDate, copyTargetDate);
+      if (res.success) {
+        showToast(`🎉 ${copySourceDate} の予定 ${res.count}件 を ${copyTargetDate} に一括コピーしました！`, 'success');
+        setShowCopyDateModal(false);
+        await fetchTasksData(activeTenantId);
+      } else {
+        alert(res.error || 'コピーに失敗しました');
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert('エラー: ' + e.message);
+    } finally {
+      setIsCopyingDate(false);
+    }
+  };
+
+  // 👤 特定スタッフの予定を他スタッフへ一括複製（クローン）
+  const handleExecuteCloneWorker = async () => {
+    if (!cloneSourceWorker || selectedTargetWorkerIds.length === 0) {
+      alert('コピー先のスタッフを選択してください');
+      return;
+    }
+    setIsCloningWorker(true);
+    try {
+      const activeTenantId = tenantId || await getCurrentTenantId();
+      if (!activeTenantId) {
+        alert('農園IDが特定できません');
+        return;
+      }
+      const res = await cloneWorkerTasks(
+        activeTenantId,
+        cloneSourceWorker.id,
+        selectedTargetWorkerIds,
+        cloneTargetDate
+      );
+      if (res.success) {
+        showToast(`🎉 ${cloneSourceWorker.name} さんの予定 ${res.count}件 を ${selectedTargetWorkerIds.length}名に一括コピーしました！`, 'success');
+        setShowCloneWorkerModal(false);
+        setCloneSourceWorker(null);
+        setSelectedTargetWorkerIds([]);
+        await fetchTasksData(activeTenantId);
+      } else {
+        alert(res.error || '作業者タスクの複製に失敗しました');
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert('エラー: ' + e.message);
+    } finally {
+      setIsCloningWorker(false);
+    }
+  };
+
+  // ワーカーの他者コピーモーダルを開く
+  const handleOpenCloneModalForWorker = (worker: any, dateStr: string) => {
+    setCloneSourceWorker(worker);
+    setCloneTargetDate(dateStr);
+    setSelectedTargetWorkerIds([]);
+    setShowCloneWorkerModal(true);
+  };
+
+  // 📋 個別タスクカードの1タップ複製
+  const handleDuplicateTask = (task: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingTaskId(null);
+    setFormData({
+      work_date: task.work_date,
+      task_title: task.task_title ? `${task.task_title}` : '',
+      crop_id: task.crop_id || '',
+      department_id: task.department_id || '',
+      memo: task.memo || '',
+      field_assignments: [
+        {
+          field_id: task.field_id || '',
+          worker_ids: task.worker_id ? [task.worker_id] : [],
+          step_order: task.step_order || 1,
+          time_slot: task.time_slot || '',
+          field_memo: ''
+        }
+      ]
+    });
+    setIsModalOpen(true);
+    showToast('タスク内容をコピーして作成画面を開きました', 'success');
+  };
+
+  // 🏷️ 定型スタンプの適用
+  const handleApplyQuickTemplate = (tpl: { title: string; icon: string; defaultSlot: string }) => {
+    setEditingTaskId(null);
+    setFormData({
+      work_date: getJSTDate(),
+      task_title: tpl.title,
+      crop_id: crops.length > 0 ? crops[0].id : '',
+      department_id: '',
+      memo: '',
+      field_assignments: [
+        {
+          field_id: fields.length > 0 ? fields[0].id : '',
+          worker_ids: [],
+          step_order: 1,
+          time_slot: tpl.defaultSlot,
+          field_memo: ''
+        }
+      ]
+    });
+    setIsModalOpen(true);
+  };
+
   // Calendar Logic
   const dates = useMemo(() => {
     const arr = [];
@@ -394,7 +551,22 @@ export default function TasksPage() {
           <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">誰がどこで何の作業をするか、日々のスケジュールを管理します。</p>
         </div>
         
-        <div className="flex flex-wrap items-center gap-2 md:gap-4">
+        <div className="flex flex-wrap items-center gap-2 md:gap-3">
+          {/* ⚡ 前日の予定を一括コピーボタン */}
+          <button
+            type="button"
+            onClick={() => {
+              setCopySourceDate(getJSTDateWithOffset(-1).dateStr);
+              setCopyTargetDate(getJSTDate());
+              setShowCopyDateModal(true);
+            }}
+            className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl flex items-center gap-1.5 text-xs sm:text-sm transition-all shadow-sm active:scale-95"
+            title="前日や指定日の予定を丸ごと今日（または明日）に複製"
+          >
+            <Copy className="w-4 h-4" />
+            <span>前日の予定をコピー</span>
+          </button>
+
           <div className="flex bg-slate-100 p-1 rounded-xl">
             <button 
               onClick={() => setViewMode('calendar')} 
@@ -412,13 +584,34 @@ export default function TasksPage() {
           
           <button 
             onClick={() => handleOpenModal()}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-xl flex items-center gap-2 transition-colors shadow-sm text-sm"
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-xl flex items-center gap-2 transition-colors shadow-sm text-sm active:scale-95"
           >
             <Plus className="w-4 h-4" />
             新規追加
           </button>
         </div>
       </header>
+
+      {/* 🏷️ よくある定型タスク（作業スタンプ）パレット */}
+      <div className="bg-emerald-950/5 border border-emerald-800/15 p-3 rounded-2xl flex items-center gap-2.5 overflow-x-auto">
+        <div className="flex items-center gap-1.5 text-xs font-black text-emerald-900 shrink-0">
+          <Sparkles className="w-4 h-4 text-emerald-600" />
+          <span>ワンタップ定型スタンプ:</span>
+        </div>
+        <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
+          {QUICK_TEMPLATES.map((tpl, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => handleApplyQuickTemplate(tpl)}
+              className="px-2.5 py-1.5 bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-emerald-200/80 rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 flex items-center gap-1.5 hover:scale-105 active:scale-95"
+            >
+              <span>{tpl.icon}</span>
+              <span>{tpl.title}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
         {isLoading ? (
@@ -491,6 +684,13 @@ export default function TasksPage() {
                               title="編集"
                             >
                               ✏️ 編集
+                            </button>
+                            <button 
+                              onClick={(e) => handleDuplicateTask(t, e)} 
+                              className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors font-bold text-xs flex items-center gap-1"
+                              title="このタスク内容を複製して新規作成"
+                            >
+                              <Copy className="w-3.5 h-3.5" /> 複製
                             </button>
                             <button 
                               onClick={() => handleDelete(t.id)} 
@@ -587,6 +787,16 @@ export default function TasksPage() {
                             <><MapPin className="w-4 h-4 text-emerald-500" /> {item.name}</>
                           )}
                         </div>
+                        {groupMode === 'worker' && item.id !== 'unassigned' && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenCloneModalForWorker(item, getJSTDate())}
+                            className="mt-1.5 px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all active:scale-95"
+                            title={`${item.name} さんの予定を他のスタッフへ一括コピー`}
+                          >
+                            <UserPlus className="w-3 h-3" /> 他スタッフへ複製
+                          </button>
+                        )}
                       </td>
                       {dates.map((d, i) => {
                         const dateStr = getJSTDate(d);
@@ -668,6 +878,14 @@ export default function TasksPage() {
                                             </button>
                                           </>
                                         )}
+                                        <button 
+                                          type="button"
+                                          onClick={(e) => handleDuplicateTask(task, e)}
+                                          className="p-0.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
+                                          title="このタスクを複製して新規作成"
+                                        >
+                                          <Copy className="w-3 h-3" />
+                                        </button>
                                         <button 
                                           onClick={(e) => { e.stopPropagation(); handleDelete(task.id); }}
                                           className="p-0.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
@@ -952,12 +1170,78 @@ export default function TasksPage() {
                         </div>
 
                         <div>
-                          <label className="block text-[11px] font-bold text-slate-500 mb-1.5">
-                            この圃場の担当者（複数選択可）
-                          </label>
+                          <div className="flex flex-wrap items-center justify-between gap-1.5 mb-1.5">
+                            <label className="text-[11px] font-bold text-slate-500">
+                              この圃場の担当者（複数選択可）
+                            </label>
+                            
+                            {/* 👥 チーム（班）一括選択バー */}
+                            {workers.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-1">
+                                <span className="text-[10px] font-black text-slate-400">一括選択:</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    const newAssignments = [...formData.field_assignments];
+                                    newAssignments[idx].worker_ids = workers.map(w => w.id);
+                                    setFormData({ ...formData, field_assignments: newAssignments });
+                                  }}
+                                  className="px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-md text-[10px] font-bold transition-colors"
+                                >
+                                  全員
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    const newAssignments = [...formData.field_assignments];
+                                    newAssignments[idx].worker_ids = [];
+                                    setFormData({ ...formData, field_assignments: newAssignments });
+                                  }}
+                                  className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md text-[10px] font-bold transition-colors"
+                                >
+                                  解除
+                                </button>
+                                {departments.map(dept => {
+                                  const deptWorkerIds = workers.filter(w => w.department_id === dept.id).map(w => w.id);
+                                  if (deptWorkerIds.length === 0) return null;
+                                  const isAllDeptSelected = deptWorkerIds.every(id => (assignment.worker_ids || []).includes(id));
+                                  return (
+                                    <button
+                                      key={dept.id}
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        const newAssignments = [...formData.field_assignments];
+                                        const currentIds: string[] = newAssignments[idx].worker_ids || [];
+                                        if (isAllDeptSelected) {
+                                          newAssignments[idx].worker_ids = currentIds.filter(id => !deptWorkerIds.includes(id));
+                                        } else {
+                                          newAssignments[idx].worker_ids = Array.from(new Set([...currentIds, ...deptWorkerIds]));
+                                        }
+                                        setFormData({ ...formData, field_assignments: newAssignments });
+                                      }}
+                                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-colors border flex items-center gap-1 ${
+                                        isAllDeptSelected
+                                          ? 'bg-blue-600 text-white border-blue-700'
+                                          : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                      }`}
+                                      title={`${dept.name}の所属メンバーを一括選択/解除`}
+                                    >
+                                      <Briefcase className="w-2.5 h-2.5" />
+                                      {dept.name} ({deptWorkerIds.length})
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
                           <div className="flex flex-wrap gap-1.5">
                             {workers.map(w => {
                               const isSelected = assignment.worker_ids?.includes(w.id);
+                              const wDept = departments.find(d => d.id === w.department_id);
                               return (
                                 <button
                                   key={w.id}
@@ -973,13 +1257,18 @@ export default function TasksPage() {
                                     }
                                     setFormData({ ...formData, field_assignments: newAssignments });
                                   }}
-                                  className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all border ${
+                                  className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all border flex items-center gap-1 ${
                                     isSelected
                                       ? 'bg-emerald-500 text-white border-emerald-600 shadow-xs'
                                       : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
                                   }`}
                                 >
-                                  {w.name}
+                                  <span>{w.name}</span>
+                                  {wDept && (
+                                    <span className={`text-[9px] px-1 py-0.2 rounded ${isSelected ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                                      {wDept.name}
+                                    </span>
+                                  )}
                                 </button>
                               );
                             })}
@@ -1004,6 +1293,270 @@ export default function TasksPage() {
                 {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'タスクを一括保存'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⚡ 指定日（前日等）一括コピーモーダル */}
+      {showCopyDateModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <Copy className="w-5 h-5 text-blue-600" />
+                予定の一括コピー（前日・過去日）
+              </h3>
+              <button onClick={() => setShowCopyDateModal(false)} className="p-1.5 text-slate-400 hover:bg-slate-200/60 rounded-full transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                指定日の予定タスク（status: planned）を丸ごとコピー先の日付に一発複製します。連日同じ圃場・作業が続く場合の入力が爆速になります。
+              </p>
+
+              {/* クイックプリセット */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCopySourceDate(getJSTDateWithOffset(-1).dateStr);
+                    setCopyTargetDate(getJSTDate());
+                  }}
+                  className="flex-1 py-1.5 px-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors border border-blue-200"
+                >
+                  ⚡ 昨日 ➔ 今日
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCopySourceDate(getJSTDate());
+                    setCopyTargetDate(getJSTDateWithOffset(1).dateStr);
+                  }}
+                  className="flex-1 py-1.5 px-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-colors border border-indigo-200"
+                >
+                  ⚡ 今日 ➔ 明日
+                </button>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                    コピー元の日付（この日の予定を元にする）
+                  </label>
+                  <input
+                    type="date"
+                    value={copySourceDate}
+                    onChange={(e) => setCopySourceDate(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  {copySourceDate && (
+                    <p className="text-[11px] text-blue-600 font-bold mt-1">
+                      📋 この日の予定タスク: {tasks.filter(t => t.work_date === copySourceDate).length} 件
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex justify-center my-1">
+                  <div className="p-1 bg-white border border-slate-200 rounded-full text-slate-400">
+                    <ArrowRight className="w-4 h-4 rotate-90 sm:rotate-0" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                    コピー先の日付（この日に新しく作成する）
+                  </label>
+                  <input
+                    type="date"
+                    value={copyTargetDate}
+                    onChange={(e) => setCopyTargetDate(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-400">
+                ※ コピー先に既に予定がある場合でも上書き削除はされず、新しくタスクが追加されます。
+              </p>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCopyDateModal(false)}
+                className="flex-1 py-2.5 font-bold text-xs bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteCopyDate}
+                disabled={isCopyingDate || !copySourceDate || !copyTargetDate || copySourceDate === copyTargetDate}
+                className="flex-1 py-2.5 font-bold text-xs bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-500 hover:to-indigo-500 flex items-center justify-center gap-2 shadow-xs disabled:opacity-50 transition-all active:scale-95"
+              >
+                {isCopyingDate ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                <span>一括コピーを実行</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 👤 作業者クローンモーダル */}
+      {showCloneWorkerModal && cloneSourceWorker && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-blue-50">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-blue-600" />
+                <span>{cloneSourceWorker.name} さんの予定を他スタッフへ複製</span>
+              </h3>
+              <button onClick={() => setShowCloneWorkerModal(false)} className="p-1.5 text-slate-400 hover:bg-slate-200/60 rounded-full transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Users className="w-4 h-4 text-blue-600" />
+                    <span>コピー元: <b>{cloneSourceWorker.name}</b> さん</span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-1">
+                    対象日: <b>{cloneTargetDate}</b> （予定 {tasks.filter(t => t.worker_id === cloneSourceWorker.id && t.work_date === cloneTargetDate).length} 件）
+                  </div>
+                </div>
+                <input
+                  type="date"
+                  value={cloneTargetDate}
+                  onChange={(e) => setCloneTargetDate(e.target.value)}
+                  className="p-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                    <span>👥 コピー先のスタッフを選択</span>
+                    <span className="text-blue-600 font-black">({selectedTargetWorkerIds.length}名 選択中)</span>
+                  </label>
+
+                  {/* チーム（班）一括選択バー */}
+                  <div className="flex flex-wrap items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const otherIds = workers.filter(w => w.id !== cloneSourceWorker.id).map(w => w.id);
+                        setSelectedTargetWorkerIds(otherIds);
+                      }}
+                      className="px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-md text-[10px] font-bold transition-colors"
+                    >
+                      全員
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTargetWorkerIds([])}
+                      className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md text-[10px] font-bold transition-colors"
+                    >
+                      解除
+                    </button>
+                    {departments.map(dept => {
+                      const deptWorkerIds = workers.filter(w => w.department_id === dept.id && w.id !== cloneSourceWorker.id).map(w => w.id);
+                      if (deptWorkerIds.length === 0) return null;
+                      const isAllSelected = deptWorkerIds.length > 0 && deptWorkerIds.every(id => selectedTargetWorkerIds.includes(id));
+                      return (
+                        <button
+                          key={dept.id}
+                          type="button"
+                          onClick={() => {
+                            if (isAllSelected) {
+                              setSelectedTargetWorkerIds(prev => prev.filter(id => !deptWorkerIds.includes(id)));
+                            } else {
+                              setSelectedTargetWorkerIds(prev => Array.from(new Set([...prev, ...deptWorkerIds])));
+                            }
+                          }}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-colors border flex items-center gap-1 ${
+                            isAllSelected
+                              ? 'bg-blue-600 text-white border-blue-700'
+                              : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                          }`}
+                        >
+                          <Briefcase className="w-2.5 h-2.5" />
+                          {dept.name} ({deptWorkerIds.length})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {workers
+                    .filter(w => w.id !== cloneSourceWorker.id)
+                    .map(w => {
+                      const isSelected = selectedTargetWorkerIds.includes(w.id);
+                      const wDept = departments.find(d => d.id === w.department_id);
+                      return (
+                        <button
+                          key={w.id}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedTargetWorkerIds(prev => prev.filter(id => id !== w.id));
+                            } else {
+                              setSelectedTargetWorkerIds(prev => [...prev, w.id]);
+                            }
+                          }}
+                          className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all ${
+                            isSelected
+                              ? 'bg-blue-50 border-blue-500 text-blue-900 shadow-xs'
+                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold truncate">{w.name}</div>
+                            {wDept && <div className="text-[10px] text-slate-400 truncate">{wDept.name}</div>}
+                          </div>
+                          {isSelected && <Check className="w-4 h-4 text-blue-600 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCloneWorkerModal(false)}
+                className="flex-1 py-2.5 font-bold text-xs bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteCloneWorker}
+                disabled={isCloningWorker || selectedTargetWorkerIds.length === 0}
+                className="flex-1 py-2.5 font-bold text-xs bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-500 hover:to-indigo-500 flex items-center justify-center gap-2 shadow-xs disabled:opacity-50 transition-all active:scale-95"
+              >
+                {isCloningWorker ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
+                <span>{selectedTargetWorkerIds.length}名に予定を複製</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔔 トースト通知 */}
+      {toastMsg && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-5 duration-200 max-w-[90vw]">
+          <div className={`px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 font-bold text-xs text-white ${
+            toastMsg.type === 'success' ? 'bg-emerald-700 border border-emerald-500' : 'bg-rose-700 border border-rose-500'
+          }`}>
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-white" />
+            <span>{toastMsg.text}</span>
           </div>
         </div>
       )}

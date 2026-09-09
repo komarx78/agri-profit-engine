@@ -778,3 +778,111 @@ export async function getWorkerLeaveRequests(tenantId: string, workerId: string)
   }
 }
 
+// 12. 指定日の予定タスクを丸ごと別の日付へ一括複製（前日コピー等）
+export async function copyTasksFromDate(
+  tenantId: string,
+  sourceDate: string,
+  targetDate: string
+): Promise<{ success: boolean; count?: number; error?: string }> {
+  try {
+    const supabase = createAdminClient();
+    if (!tenantId) return { success: false, error: '農園IDが不正です' };
+    if (!sourceDate || !targetDate) return { success: false, error: '複製元日と複製先日付を指定してください' };
+
+    // 複製元日の予定タスク（planned）を取得
+    const { data: sourceTasks, error: fetchErr } = await supabase
+      .from('work_logs')
+      .select('*')
+      .eq('user_id', tenantId)
+      .eq('work_date', sourceDate)
+      .eq('status', 'planned');
+
+    if (fetchErr) throw fetchErr;
+    if (!sourceTasks || sourceTasks.length === 0) {
+      return { success: false, error: `${sourceDate} の予定タスクが見つかりません` };
+    }
+
+    // 複製先のレコードを作成
+    const newTasks = sourceTasks.map(task => {
+      const { id, created_at, updated_at, actual_time, completed_at, ...rest } = task;
+      return {
+        ...rest,
+        user_id: tenantId,
+        work_date: targetDate,
+        status: 'planned',
+        duration_minutes: 0,
+        approval_status: null
+      };
+    });
+
+    const { error: insertErr } = await supabase.from('work_logs').insert(newTasks);
+    if (insertErr) throw insertErr;
+
+    return { success: true, count: newTasks.length };
+  } catch (err: any) {
+    console.error('copyTasksFromDate error:', err);
+    return { success: false, error: err.message || 'タスクの複製に失敗しました' };
+  }
+}
+
+// 13. 特定作業者の予定タスクを他の作業者たちへ一括複製（人起点クローン）
+export async function cloneWorkerTasks(
+  tenantId: string,
+  sourceWorkerId: string,
+  targetWorkerIds: string[],
+  workDate: string
+): Promise<{ success: boolean; count?: number; error?: string }> {
+  try {
+    const supabase = createAdminClient();
+    if (!tenantId) return { success: false, error: '農園IDが不正です' };
+    if (!sourceWorkerId || !targetWorkerIds || targetWorkerIds.length === 0) {
+      return { success: false, error: 'コピー元およびコピー先の作業者を指定してください' };
+    }
+
+    // コピー元の作業者の予定タスクを取得
+    let query = supabase
+      .from('work_logs')
+      .select('*')
+      .eq('user_id', tenantId)
+      .eq('work_date', workDate)
+      .eq('status', 'planned');
+
+    if (sourceWorkerId === 'unassigned') {
+      query = query.is('worker_id', null);
+    } else {
+      query = query.eq('worker_id', sourceWorkerId);
+    }
+
+    const { data: sourceTasks, error: fetchErr } = await query;
+    if (fetchErr) throw fetchErr;
+
+    if (!sourceTasks || sourceTasks.length === 0) {
+      return { success: false, error: 'コピー元のタスクがありません' };
+    }
+
+    const newTasks: any[] = [];
+    targetWorkerIds.forEach(targetWId => {
+      sourceTasks.forEach(task => {
+        const { id, created_at, updated_at, ...rest } = task;
+        newTasks.push({
+          ...rest,
+          user_id: tenantId,
+          worker_id: targetWId,
+          work_date: workDate,
+          status: 'planned',
+          duration_minutes: 0,
+          approval_status: null
+        });
+      });
+    });
+
+    const { error: insertErr } = await supabase.from('work_logs').insert(newTasks);
+    if (insertErr) throw insertErr;
+
+    return { success: true, count: newTasks.length };
+  } catch (err: any) {
+    console.error('cloneWorkerTasks error:', err);
+    return { success: false, error: err.message || '作業者タスクの複製に失敗しました' };
+  }
+}
+
