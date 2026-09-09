@@ -13,7 +13,8 @@ import {
   FileSpreadsheet, Store, Calculator, Database, Camera, ExternalLink, HelpCircle,
   Truck, Scissors, Sliders, Check, Languages, Wand2, Edit3, Save, RotateCcw,
   FlaskConical, History, CheckSquare, BarChart3, Users, Settings, Building,
-  ChevronDown, ChevronUp, Eye, Activity, Filter, CalendarDays, Crown
+  ChevronDown, ChevronUp, Eye, Activity, Filter, CalendarDays, Crown,
+  Maximize2, Search
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import VideoPlayerWithSubtitles, { Narration, TrimRange } from '@/components/VideoPlayerWithSubtitles';
@@ -129,10 +130,24 @@ function PortalContent() {
   // 👥 チーム稼働状況 & 作業日報まとめ用ステート
   const [activePortalTab, setActivePortalTab] = useState<'status' | 'reports' | 'calendar'>('status');
   const [reportDate, setReportDate] = useState<string>(() => getJSTDate());
+  const [reportPeriod, setReportPeriod] = useState<'day' | 'week' | 'month' | 'custom'>('day');
+  const [customStartDate, setCustomStartDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    return d.toISOString().substring(0, 10);
+  });
+  const [customEndDate, setCustomEndDate] = useState<string>(() => getJSTDate());
+  const [reportGroupBy, setReportGroupBy] = useState<'timeline' | 'field' | 'crop' | 'worker'>('timeline');
   const [dailyWorkLogs, setDailyWorkLogs] = useState<any[]>([]);
   const [teamAttendanceLogs, setTeamAttendanceLogs] = useState<any[]>([]);
   const [isLoadingDailyData, setIsLoadingDailyData] = useState(false);
   const [selectedWorkerFilter, setSelectedWorkerFilter] = useState<string>('all');
+  const [selectedFieldFilter, setSelectedFieldFilter] = useState<string>('all');
+  const [selectedCropFilter, setSelectedCropFilter] = useState<string>('all');
+  const [reportSearchKeyword, setReportSearchKeyword] = useState<string>('');
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [allFields, setAllFields] = useState<any[]>([]);
+  const [allCrops, setAllCrops] = useState<any[]>([]);
 
   // 言語切り替えハンドラー
   const handleLanguageChange = (newLang: LanguageCode) => {
@@ -789,16 +804,22 @@ function PortalContent() {
   };
 
   // 👥 チーム稼働状況 & 作業日報データの取得
-  const fetchDailyTeamData = async (targetUserId: string, dateStr: string) => {
+  const fetchDailyTeamData = async (
+    targetUserId: string,
+    targetDate: string,
+    period: 'day' | 'week' | 'month' | 'custom' = reportPeriod,
+    cStart: string = customStartDate,
+    cEnd: string = customEndDate
+  ) => {
     if (!targetUserId) return;
     setIsLoadingDailyData(true);
     try {
-      // 1. 指定日の全社打刻ログ
+      // 1. 指定日（または本日）の全社打刻ログ
       const { data: attData } = await supabase
         .from('attendance_logs')
         .select('*')
         .eq('user_id', targetUserId)
-        .eq('date', dateStr);
+        .eq('date', targetDate);
 
       // 未退勤ログ（日付跨ぎ等）も取得してマージ
       const { data: unclosedAtt } = await supabase
@@ -816,8 +837,41 @@ function PortalContent() {
       });
       setTeamAttendanceLogs(Array.from(mergedAttMap.values()));
 
-      // 2. 指定日の全社作業ログ（work_logs）
-      const { data: workData } = await supabase
+      // 圃場・作物マスタの取得
+      try {
+        const [fRes, cRes] = await Promise.all([
+          supabase.from('fields').select('id, name').eq('user_id', targetUserId).order('name'),
+          supabase.from('crops').select('id, name').eq('user_id', targetUserId).order('name')
+        ]);
+        if (fRes.data) setAllFields(fRes.data);
+        if (cRes.data) setAllCrops(cRes.data);
+      } catch (e) {
+        console.warn('fields/crops fetch error:', e);
+      }
+
+      // 2. 期間に応じた日付範囲の計算
+      let startDate = targetDate;
+      let endDate = targetDate;
+
+      if (period === 'week') {
+        const endD = new Date(targetDate);
+        const startD = new Date(targetDate);
+        startD.setDate(startD.getDate() - 6);
+        startDate = startD.toISOString().substring(0, 10);
+        endDate = endD.toISOString().substring(0, 10);
+      } else if (period === 'month') {
+        const endD = new Date(targetDate);
+        const startD = new Date(targetDate);
+        startD.setDate(startD.getDate() - 29);
+        startDate = startD.toISOString().substring(0, 10);
+        endDate = endD.toISOString().substring(0, 10);
+      } else if (period === 'custom') {
+        startDate = cStart || targetDate;
+        endDate = cEnd || targetDate;
+      }
+
+      // 3. 全社作業ログ（work_logs）の範囲取得
+      let workQuery = supabase
         .from('work_logs')
         .select(`
           id,
@@ -841,8 +895,16 @@ function PortalContent() {
           fields(id, name),
           workers(id, name, role)
         `)
-        .eq('user_id', targetUserId)
-        .eq('work_date', dateStr)
+        .eq('user_id', targetUserId);
+
+      if (startDate === endDate) {
+        workQuery = workQuery.eq('work_date', startDate);
+      } else {
+        workQuery = workQuery.gte('work_date', startDate).lte('work_date', endDate);
+      }
+
+      const { data: workData } = await workQuery
+        .order('work_date', { ascending: false })
         .order('created_at', { ascending: false });
 
       if (workData) {
@@ -855,13 +917,13 @@ function PortalContent() {
     }
   };
 
-  // 日付変更時の自動再取得
+  // 日付または期間設定変更時の自動再取得
   useEffect(() => {
     const targetUserId = currentUser?.user_id || currentUser?.id;
     if (targetUserId && reportDate) {
-      fetchDailyTeamData(targetUserId, reportDate);
+      fetchDailyTeamData(targetUserId, reportDate, reportPeriod, customStartDate, customEndDate);
     }
-  }, [reportDate, currentUser]);
+  }, [reportDate, reportPeriod, customStartDate, customEndDate, currentUser]);
 
   // 👥 チームリアルタイム稼働状況（全スタッフの現在のステータスと最新作業）
   const teamLiveStatusList = useMemo(() => {
@@ -934,36 +996,709 @@ function PortalContent() {
     return teamLiveStatusList.filter(s => s.status === 'off').length;
   }, [teamLiveStatusList]);
 
-  // 📋 作業日報サマリー統計
+  // 絞り込み後の作業ログ（作業者・圃場・作物・キーワード）
+  const filteredWorkLogs = useMemo(() => {
+    return dailyWorkLogs.filter(log => {
+      // 作業者フィルタ
+      if (selectedWorkerFilter !== 'all' && log.worker_id !== selectedWorkerFilter) {
+        return false;
+      }
+      // 圃場フィルタ
+      if (selectedFieldFilter !== 'all') {
+        if (selectedFieldFilter === 'none' && log.field_id) return false;
+        if (selectedFieldFilter !== 'none' && log.field_id !== selectedFieldFilter) return false;
+      }
+      // 作物フィルタ
+      if (selectedCropFilter !== 'all') {
+        if (selectedCropFilter === 'none' && log.crop_id) return false;
+        if (selectedCropFilter !== 'none' && log.crop_id !== selectedCropFilter) return false;
+      }
+      // キーワード検索
+      if (reportSearchKeyword.trim()) {
+        const kw = reportSearchKeyword.toLowerCase();
+        const matchTitle = (log.task_title || '').toLowerCase().includes(kw);
+        const matchType = (log.work_type || '').toLowerCase().includes(kw);
+        const matchMemo = (log.memo || '').toLowerCase().includes(kw);
+        const matchWorker = (log.workers?.name || '').toLowerCase().includes(kw);
+        const matchField = (log.fields?.name || '').toLowerCase().includes(kw);
+        const matchCrop = (log.crops?.name || '').toLowerCase().includes(kw);
+        if (!matchTitle && !matchType && !matchMemo && !matchWorker && !matchField && !matchCrop) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [dailyWorkLogs, selectedWorkerFilter, selectedFieldFilter, selectedCropFilter, reportSearchKeyword]);
+
+  // 📋 作業日報サマリー統計（絞り込み後ベース）
   const dailyReportStats = useMemo(() => {
-    const activeStaffCount = teamAttendanceLogs.filter(a => a.clock_in).length;
-    const totalMinutes = dailyWorkLogs.reduce((acc, w) => acc + (Number(w.duration_minutes) || 0), 0);
+    const totalMinutes = filteredWorkLogs.reduce((acc, w) => acc + (Number(w.duration_minutes) || 0), 0);
     const totalHours = Math.floor(totalMinutes / 60);
     const remainderMinutes = totalMinutes % 60;
-    const completedTasksCount = dailyWorkLogs.length;
+    const completedTasksCount = filteredWorkLogs.length;
+
+    // ユニークスタッフ数
+    const uniqueWorkerIds = new Set(filteredWorkLogs.map(w => w.worker_id).filter(Boolean));
 
     // 作業種別ごとの集計
     const workTypeMap: Record<string, number> = {};
-    dailyWorkLogs.forEach(w => {
+    filteredWorkLogs.forEach(w => {
       const type = w.work_type || 'その他';
       workTypeMap[type] = (workTypeMap[type] || 0) + (Number(w.duration_minutes) || 0);
     });
 
     return {
-      activeStaffCount,
+      activeStaffCount: uniqueWorkerIds.size || teamAttendanceLogs.filter(a => a.clock_in).length,
       totalMinutes,
       totalHours,
       remainderMinutes,
       completedTasksCount,
       workTypeMap
     };
-  }, [teamAttendanceLogs, dailyWorkLogs]);
+  }, [filteredWorkLogs, teamAttendanceLogs]);
 
-  // 選択された作業者でフィルタリングした日報リスト
-  const filteredWorkLogs = useMemo(() => {
-    if (selectedWorkerFilter === 'all') return dailyWorkLogs;
-    return dailyWorkLogs.filter(w => w.worker_id === selectedWorkerFilter);
-  }, [dailyWorkLogs, selectedWorkerFilter]);
+  // グループ化データ（タイムライン / 圃場別 / 作物別 / 人別）
+  const groupedWorkLogs = useMemo(() => {
+    if (reportGroupBy === 'timeline') {
+      // 日付ごとにグルーピング
+      const dateMap: Record<string, any[]> = {};
+      filteredWorkLogs.forEach(log => {
+        const d = log.work_date || '日付未設定';
+        if (!dateMap[d]) dateMap[d] = [];
+        dateMap[d].push(log);
+      });
+      // 降順ソート
+      return Object.entries(dateMap)
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([groupKey, logs]) => {
+          const groupMinutes = logs.reduce((sum, l) => sum + (Number(l.duration_minutes) || 0), 0);
+          return {
+            groupKey,
+            groupTitle: groupKey,
+            groupSub: `${logs.length}件 ・ ${Math.floor(groupMinutes / 60)}h${groupMinutes % 60}m`,
+            logs,
+            totalMinutes: groupMinutes,
+            badgeColor: 'bg-blue-100 text-blue-800 border-blue-200'
+          };
+        });
+    } else if (reportGroupBy === 'field') {
+      // 圃場ごとにグルーピング
+      const fieldMap: Record<string, { name: string; logs: any[] }> = {};
+      filteredWorkLogs.forEach(log => {
+        const fId = log.field_id || 'unassigned';
+        const fName = log.fields?.name || '🏡 未指定の圃場';
+        if (!fieldMap[fId]) fieldMap[fId] = { name: fName, logs: [] };
+        fieldMap[fId].logs.push(log);
+      });
+      return Object.entries(fieldMap)
+        .sort((a, b) => b[1].logs.length - a[1].logs.length)
+        .map(([groupKey, { name, logs }]) => {
+          const groupMinutes = logs.reduce((sum, l) => sum + (Number(l.duration_minutes) || 0), 0);
+          return {
+            groupKey,
+            groupTitle: name,
+            groupSub: `${logs.length}件 ・ ${Math.floor(groupMinutes / 60)}h${groupMinutes % 60}m`,
+            logs,
+            totalMinutes: groupMinutes,
+            badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200'
+          };
+        });
+    } else if (reportGroupBy === 'crop') {
+      // 作物ごとにグルーピング
+      const cropMap: Record<string, { name: string; logs: any[] }> = {};
+      filteredWorkLogs.forEach(log => {
+        const cId = log.crop_id || 'unassigned';
+        const cName = log.crops?.name || '🌱 未指定の作物';
+        if (!cropMap[cId]) cropMap[cId] = { name: cName, logs: [] };
+        cropMap[cId].logs.push(log);
+      });
+      return Object.entries(cropMap)
+        .sort((a, b) => b[1].logs.length - a[1].logs.length)
+        .map(([groupKey, { name, logs }]) => {
+          const groupMinutes = logs.reduce((sum, l) => sum + (Number(l.duration_minutes) || 0), 0);
+          return {
+            groupKey,
+            groupTitle: name,
+            groupSub: `${logs.length}件 ・ ${Math.floor(groupMinutes / 60)}h${groupMinutes % 60}m`,
+            logs,
+            totalMinutes: groupMinutes,
+            badgeColor: 'bg-amber-100 text-amber-800 border-amber-200'
+          };
+        });
+    } else {
+      // 人別（作業者別）にグルーピング
+      const workerMap: Record<string, { name: string; logs: any[] }> = {};
+      filteredWorkLogs.forEach(log => {
+        const wId = log.worker_id || 'unassigned';
+        const wName = log.workers?.name || '👤 未設定スタッフ';
+        if (!workerMap[wId]) workerMap[wId] = { name: wName, logs: [] };
+        workerMap[wId].logs.push(log);
+      });
+      return Object.entries(workerMap)
+        .sort((a, b) => b[1].logs.length - a[1].logs.length)
+        .map(([groupKey, { name, logs }]) => {
+          const groupMinutes = logs.reduce((sum, l) => sum + (Number(l.duration_minutes) || 0), 0);
+          return {
+            groupKey,
+            groupTitle: name,
+            groupSub: `${logs.length}件 ・ ${Math.floor(groupMinutes / 60)}h${groupMinutes % 60}m`,
+            logs,
+            totalMinutes: groupMinutes,
+            badgeColor: 'bg-purple-100 text-purple-800 border-purple-200'
+          };
+        });
+    }
+  }, [filteredWorkLogs, reportGroupBy]);
+
+  // 📋 作業日報まとめ（多軸・タイムライン統合ビューワー）描画関数
+  const renderWorkReportsViewer = (isFullscreen: boolean) => {
+    return (
+      <div className="space-y-4">
+        {/* 1. 上部コントロールバー：タイトル ＆ 全画面展開ボタン */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-blue-600" />
+              <h2 className="text-base sm:text-lg font-black text-slate-800">
+                {t('report_title', language)}
+              </h2>
+              {isFullscreen && (
+                <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-black rounded-full border border-blue-200">
+                  全画面ビュー
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              日を追って確認できるタイムライン・圃場別・作物別・人別集計
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* 更新ボタン */}
+            <button
+              type="button"
+              onClick={() => {
+                const targetUserId = currentUser?.user_id || currentUser?.id;
+                if (targetUserId) {
+                  fetchDailyTeamData(targetUserId, reportDate, reportPeriod, customStartDate, customEndDate);
+                }
+              }}
+              disabled={isLoadingDailyData}
+              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+              title="最新データに更新"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingDailyData ? 'animate-spin text-blue-600' : ''}`} />
+              <span className="hidden sm:inline">更新</span>
+            </button>
+
+            {/* 全画面切り替えボタン（インライン時のみ） */}
+            {!isFullscreen && (
+              <button
+                type="button"
+                onClick={() => setShowReportModal(true)}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span>全画面で開く</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 2. 期間選択バー（本日 / 直近7日 / 直近30日 / 期間指定） */}
+        <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className="text-[11px] font-black text-slate-500 flex items-center gap-1">
+              <CalendarDays className="w-3.5 h-3.5 text-blue-600" />
+              <span>表示期間:</span>
+            </span>
+
+            {/* 期間切替ピルボタン */}
+            <div className="flex items-center gap-1 p-1 bg-white border border-slate-200 rounded-xl shadow-2xs overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setReportPeriod('day')}
+                className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                  reportPeriod === 'day'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                📅 本日（単日）
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportPeriod('week')}
+                className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                  reportPeriod === 'week'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                📆 直近7日間
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportPeriod('month')}
+                className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                  reportPeriod === 'month'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                🗓️ 直近30日間
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportPeriod('custom')}
+                className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                  reportPeriod === 'custom'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                ⚙️ 期間指定
+              </button>
+            </div>
+          </div>
+
+          {/* 期間詳細ナビゲーション */}
+          {reportPeriod === 'day' && (
+            <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-200/60">
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date(reportDate);
+                  d.setDate(d.getDate() - 1);
+                  setReportDate(d.toISOString().substring(0, 10));
+                }}
+                className="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+              >
+                {t('report_prevDay', language)}
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportDate(getJSTDate())}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-colors cursor-pointer shadow-2xs ${
+                  reportDate === getJSTDate()
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white border border-slate-200 hover:bg-slate-100 text-slate-700'
+                }`}
+              >
+                {t('report_today', language)}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date(reportDate);
+                  d.setDate(d.getDate() + 1);
+                  setReportDate(d.toISOString().substring(0, 10));
+                }}
+                className="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+              >
+                {t('report_nextDay', language)}
+              </button>
+              <input
+                type="date"
+                value={reportDate}
+                onChange={(e) => setReportDate(e.target.value)}
+                className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none shadow-2xs cursor-pointer"
+              />
+            </div>
+          )}
+
+          {reportPeriod === 'week' && (
+            <div className="text-xs font-bold text-blue-700 pt-1 border-t border-slate-200/60 flex items-center gap-1.5">
+              <span>📅 表示中:</span>
+              <span className="font-black bg-blue-100/80 px-2 py-0.5 rounded-md">
+                {(() => {
+                  const startD = new Date(reportDate);
+                  startD.setDate(startD.getDate() - 6);
+                  return `${startD.toISOString().substring(0, 10)} 〜 ${reportDate} (7日間)`;
+                })()}
+              </span>
+            </div>
+          )}
+
+          {reportPeriod === 'month' && (
+            <div className="text-xs font-bold text-blue-700 pt-1 border-t border-slate-200/60 flex items-center gap-1.5">
+              <span>📅 表示中:</span>
+              <span className="font-black bg-blue-100/80 px-2 py-0.5 rounded-md">
+                {(() => {
+                  const startD = new Date(reportDate);
+                  startD.setDate(startD.getDate() - 29);
+                  return `${startD.toISOString().substring(0, 10)} 〜 ${reportDate} (30日間)`;
+                })()}
+              </span>
+            </div>
+          )}
+
+          {reportPeriod === 'custom' && (
+            <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-slate-200/60 text-xs font-bold text-slate-700">
+              <span>開始:</span>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none shadow-2xs cursor-pointer"
+              />
+              <span>〜 終了:</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none shadow-2xs cursor-pointer"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* 3. 4大集計・表示軸切替タブ（📋 タイムライン / 🏡 圃場別 / 🌱 作物別 / 👤 人別） */}
+        <div className="bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200 flex items-center gap-1.5 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setReportGroupBy('timeline')}
+            className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              reportGroupBy === 'timeline'
+                ? 'bg-white text-blue-700 shadow-sm border border-slate-200'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Clock className="w-4 h-4 text-blue-600" />
+            <span>📋 タイムライン (日別)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setReportGroupBy('field')}
+            className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              reportGroupBy === 'field'
+                ? 'bg-white text-emerald-700 shadow-sm border border-slate-200'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <MapPin className="w-4 h-4 text-emerald-600" />
+            <span>🏡 圃場別まとめ</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setReportGroupBy('crop')}
+            className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              reportGroupBy === 'crop'
+                ? 'bg-white text-amber-700 shadow-sm border border-slate-200'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Sprout className="w-4 h-4 text-amber-600" />
+            <span>🌱 作物別まとめ</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setReportGroupBy('worker')}
+            className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              reportGroupBy === 'worker'
+                ? 'bg-white text-purple-700 shadow-sm border border-slate-200'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Users className="w-4 h-4 text-purple-600" />
+            <span>👤 人別まとめ</span>
+          </button>
+        </div>
+
+        {/* 4. 多軸絞り込みフィルター ＆ 検索バー */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
+          {/* 作業者 */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 block">👤 作業スタッフ:</span>
+            <select
+              value={selectedWorkerFilter}
+              onChange={(e) => setSelectedWorkerFilter(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none shadow-2xs cursor-pointer truncate"
+            >
+              <option value="all">全スタッフ ({dailyWorkLogs.length}件)</option>
+              {allWorkers.map(w => {
+                const count = dailyWorkLogs.filter(log => log.worker_id === w.id).length;
+                return (
+                  <option key={w.id} value={w.id}>
+                    {w.name} ({count}件)
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {/* 圃場 */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 block">🏡 圃場:</span>
+            <select
+              value={selectedFieldFilter}
+              onChange={(e) => setSelectedFieldFilter(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none shadow-2xs cursor-pointer truncate"
+            >
+              <option value="all">すべての圃場</option>
+              {allFields.map(f => {
+                const count = dailyWorkLogs.filter(log => log.field_id === f.id).length;
+                return (
+                  <option key={f.id} value={f.id}>
+                    {f.name} ({count}件)
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {/* 作物 */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 block">🌱 作物:</span>
+            <select
+              value={selectedCropFilter}
+              onChange={(e) => setSelectedCropFilter(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none shadow-2xs cursor-pointer truncate"
+            >
+              <option value="all">すべての作物</option>
+              {allCrops.map(c => {
+                const count = dailyWorkLogs.filter(log => log.crop_id === c.id).length;
+                return (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({count}件)
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {/* キーワード検索 */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 block">🔍 キーワード検索:</span>
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={reportSearchKeyword}
+                onChange={(e) => setReportSearchKeyword(e.target.value)}
+                placeholder="作業名・メモ等..."
+                className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none shadow-2xs"
+              />
+              {reportSearchKeyword && (
+                <button
+                  type="button"
+                  onClick={() => setReportSearchKeyword('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* フィルターリセット */}
+        {(selectedWorkerFilter !== 'all' || selectedFieldFilter !== 'all' || selectedCropFilter !== 'all' || reportSearchKeyword) && (
+          <div className="flex items-center justify-between text-xs bg-amber-50 border border-amber-200/80 rounded-xl px-3 py-1.5 text-amber-800">
+            <span>絞り込み適用中（{filteredWorkLogs.length}件表示中）</span>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedWorkerFilter('all');
+                setSelectedFieldFilter('all');
+                setSelectedCropFilter('all');
+                setReportSearchKeyword('');
+              }}
+              className="text-amber-900 font-bold underline cursor-pointer"
+            >
+              条件をリセット
+            </button>
+          </div>
+        )}
+
+        {/* 5. 3大サマリーカード */}
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="p-3 sm:p-4 bg-blue-50/70 border border-blue-200/80 rounded-2xl">
+            <span className="text-[10px] sm:text-xs font-bold text-blue-700 block truncate">
+              {t('report_statsStaffCount', language)}
+            </span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-lg sm:text-2xl font-black text-blue-950">
+                {dailyReportStats.activeStaffCount}
+              </span>
+              <span className="text-[11px] text-blue-700 font-bold">
+                名稼働
+              </span>
+            </div>
+          </div>
+
+          <div className="p-3 sm:p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl">
+            <span className="text-[10px] sm:text-xs font-bold text-emerald-700 block truncate">
+              {t('report_statsTotalHours', language)}
+            </span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-lg sm:text-2xl font-black text-emerald-950">
+                {dailyReportStats.totalHours}
+              </span>
+              <span className="text-[11px] text-emerald-700 font-bold">
+                {t('tc_hours', language)}{dailyReportStats.remainderMinutes}{t('tc_minutes', language)}
+              </span>
+            </div>
+          </div>
+
+          <div className="p-3 sm:p-4 bg-purple-50/70 border border-purple-200/80 rounded-2xl">
+            <span className="text-[10px] sm:text-xs font-bold text-purple-700 block truncate">
+              {t('report_statsTaskCount', language)}
+            </span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-lg sm:text-2xl font-black text-purple-950">
+                {dailyReportStats.completedTasksCount}
+              </span>
+              <span className="text-[11px] text-purple-700 font-bold">
+                {t('report_itemsCount', language)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 作業種別の内訳タグ */}
+        {Object.keys(dailyReportStats.workTypeMap).length > 0 && (
+          <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2">
+            <span className="text-[11px] font-bold text-slate-500 block">作業内訳 (時間順):</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {Object.entries(dailyReportStats.workTypeMap)
+                .sort((a, b) => b[1] - a[1])
+                .map(([type, mins]) => (
+                  <span 
+                    key={type}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 shadow-2xs"
+                  >
+                    <span>{getTranslatedWorkType(type, language)}</span>
+                    <span className="font-black text-blue-600">{Math.floor(mins / 60)}h{mins % 60}m</span>
+                  </span>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* 6. グループ化カード一覧 */}
+        <div className="space-y-4 pt-1">
+          {isLoadingDailyData ? (
+            <div className="py-12 text-center text-slate-400">
+              <Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600 mb-2" />
+              <p className="text-xs font-bold">作業日報を読み込み中...</p>
+            </div>
+          ) : filteredWorkLogs.length === 0 ? (
+            <div className="py-12 text-center bg-slate-50 border border-slate-200/60 rounded-3xl p-6">
+              <FileText className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+              <p className="text-sm font-bold text-slate-600">作業日報が見つかりません</p>
+              <p className="text-xs text-slate-400 mt-1">表示期間や絞り込み条件を変更してお試しください</p>
+            </div>
+          ) : (
+            groupedWorkLogs.map((group) => (
+              <div
+                key={group.groupKey}
+                className="bg-slate-50/70 border border-slate-200/90 rounded-2xl p-3 sm:p-4 space-y-2.5 shadow-2xs"
+              >
+                {/* グループヘッダー */}
+                <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-200/80 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-sm sm:text-base text-slate-900">
+                      {group.groupTitle}
+                    </span>
+                  </div>
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-black border shadow-2xs ${group.badgeColor}`}>
+                    {group.groupSub}
+                  </span>
+                </div>
+
+                {/* グループ内の作業カード一覧 */}
+                <div className="space-y-2">
+                  {group.logs.map((log: any) => (
+                    <div
+                      key={log.id}
+                      className="bg-white p-3 sm:p-3.5 rounded-xl border border-slate-200/80 shadow-2xs hover:border-blue-300 transition-all space-y-1.5"
+                    >
+                      {/* 上段：作業者・作業種別バッジ・作業時間 */}
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-xs shadow-2xs">
+                            {log.workers?.name ? log.workers.name.charAt(0) : '作'}
+                          </div>
+                          <span className="font-black text-xs sm:text-sm text-slate-800">
+                            {log.workers?.name || '作業スタッフ'}
+                          </span>
+                          {log.memo?.includes('【👑現場責任者】') && (
+                            <span className="px-1.5 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 text-[9px] font-black rounded-full flex items-center gap-0.5 shadow-2xs border border-amber-400">
+                              <Crown className="w-2.5 h-2.5 fill-amber-950" />
+                              <span>責任者</span>
+                            </span>
+                          )}
+                          {log.memo?.includes('【👑現場リーダー:') && (
+                            <span className="px-1.5 py-0.5 bg-amber-50 text-amber-800 text-[9px] font-bold rounded-md flex items-center gap-0.5 border border-amber-200">
+                              <Crown className="w-2.5 h-2.5 text-amber-600" />
+                              <span>{log.memo.match(/【👑現場リーダー:\s*([^】]+)】/)?.[1]}</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 text-blue-800 font-black rounded-md text-[11px]">
+                            {getTranslatedWorkType(log.work_type, language)}
+                          </span>
+                          <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            ⏱️ {log.duration_minutes ? `${Math.floor(log.duration_minutes / 60)}h ${log.duration_minutes % 60}m` : '0分'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 中段：作目・圃場・日付・数量タグ */}
+                      <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-600 pt-0.5">
+                        {reportGroupBy !== 'timeline' && log.work_date && (
+                          <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-md font-bold text-slate-700">
+                            <span>📅</span>
+                            <span>{log.work_date}</span>
+                          </span>
+                        )}
+                        {log.crops?.name && (
+                          <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-md font-bold text-slate-700">
+                            <span>🌱</span>
+                            <span>{getTranslatedName(log.crops, language)}</span>
+                          </span>
+                        )}
+                        {log.fields?.name && (
+                          <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-md font-bold text-slate-700">
+                            <span>🏡</span>
+                            <span>{getTranslatedName(log.fields, language)}</span>
+                          </span>
+                        )}
+                        {log.material_quantity && (
+                          <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md font-black">
+                            <span>📦</span>
+                            <span>{log.material_quantity} {log.material_unit || ''}</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* 下段：メモ */}
+                      {(() => {
+                        const cleanLogMemo = log.memo
+                          ?.replace(/【👑現場責任者】\n?/, '')
+                          ?.replace(/【👑現場リーダー:[^】]+】\n?/, '')
+                          ?.trim();
+                        if (!cleanLogMemo) return null;
+                        return (
+                          <div className="text-[11px] text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                            <span className="font-bold text-slate-400 mr-1">💬 メモ:</span>
+                            <span>{cleanLogMemo}</span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  };
 
   // 管理者による特定スタッフのポータル・タイムカード表示切替
   const handleSelectWorkerForAdmin = async (selectedWorkerId: string) => {
@@ -2545,247 +3280,8 @@ function PortalContent() {
                 </div>
               )}
 
-              {/* ② 📋 本日の作業日報まとめ */}
-              {activePortalTab === 'reports' && (
-                <div className="space-y-4">
-                  {/* ヘッダー＆日付ナビゲーション */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-                    <div>
-                      <h2 className="text-base sm:text-lg font-black text-slate-800 flex items-center gap-2">
-                        <FileText className="w-5 h-5 text-blue-600" />
-                        <span>{t('report_title', language)}</span>
-                      </h2>
-                      <p className="text-xs text-slate-500 font-medium mt-0.5">
-                        {t('report_sub', language)}
-                      </p>
-                    </div>
-
-                    {/* 日付ナビゲーション */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const d = new Date(reportDate);
-                          d.setDate(d.getDate() - 1);
-                          setReportDate(d.toISOString().substring(0, 10));
-                        }}
-                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        {t('report_prevDay', language)}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setReportDate(getJSTDate())}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-colors cursor-pointer ${
-                          reportDate === getJSTDate()
-                            ? 'bg-blue-600 text-white shadow-xs'
-                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                        }`}
-                      >
-                        {t('report_today', language)}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const d = new Date(reportDate);
-                          d.setDate(d.getDate() + 1);
-                          setReportDate(d.toISOString().substring(0, 10));
-                        }}
-                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        {t('report_nextDay', language)}
-                      </button>
-                      <input
-                        type="date"
-                        value={reportDate}
-                        onChange={(e) => setReportDate(e.target.value)}
-                        className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none shadow-2xs cursor-pointer"
-                      />
-                    </div>
-                  </div>
-
-                  {/* 3大サマリーカード */}
-                  <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                    <div className="p-3 sm:p-4 bg-blue-50/70 border border-blue-200/80 rounded-2xl">
-                      <span className="text-[10px] sm:text-xs font-bold text-blue-700 block truncate">
-                        {t('report_statsStaffCount', language)}
-                      </span>
-                      <div className="flex items-baseline gap-1 mt-1">
-                        <span className="text-lg sm:text-2xl font-black text-blue-950">
-                          {dailyReportStats.activeStaffCount}
-                        </span>
-                        <span className="text-[11px] text-blue-700 font-bold">
-                          / {allWorkers.length} {t('report_peopleCount', language)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="p-3 sm:p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl">
-                      <span className="text-[10px] sm:text-xs font-bold text-emerald-700 block truncate">
-                        {t('report_statsTotalHours', language)}
-                      </span>
-                      <div className="flex items-baseline gap-1 mt-1">
-                        <span className="text-lg sm:text-2xl font-black text-emerald-950">
-                          {dailyReportStats.totalHours}
-                        </span>
-                        <span className="text-[11px] text-emerald-700 font-bold">
-                          {t('tc_hours', language)}{dailyReportStats.remainderMinutes}{t('tc_minutes', language)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="p-3 sm:p-4 bg-purple-50/70 border border-purple-200/80 rounded-2xl">
-                      <span className="text-[10px] sm:text-xs font-bold text-purple-700 block truncate">
-                        {t('report_statsTaskCount', language)}
-                      </span>
-                      <div className="flex items-baseline gap-1 mt-1">
-                        <span className="text-lg sm:text-2xl font-black text-purple-950">
-                          {dailyReportStats.completedTasksCount}
-                        </span>
-                        <span className="text-[11px] text-purple-700 font-bold">
-                          {t('report_itemsCount', language)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 作業種別の内訳タグ */}
-                  {Object.keys(dailyReportStats.workTypeMap).length > 0 && (
-                    <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2">
-                      <span className="text-[11px] font-bold text-slate-500 block">作業内訳 (時間順):</span>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {Object.entries(dailyReportStats.workTypeMap)
-                          .sort((a, b) => b[1] - a[1])
-                          .map(([type, mins]) => (
-                            <span 
-                              key={type}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 shadow-2xs"
-                            >
-                              <span>{getTranslatedWorkType(type, language)}</span>
-                              <span className="font-black text-blue-600">{Math.floor(mins / 60)}h{mins % 60}m</span>
-                            </span>
-                          ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 作業者絞り込みフィルター */}
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
-                      <Filter className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{t('report_filterWorker', language)}</span>
-                    </div>
-                    <select
-                      value={selectedWorkerFilter}
-                      onChange={(e) => setSelectedWorkerFilter(e.target.value)}
-                      className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 outline-none shadow-2xs cursor-pointer max-w-[220px]"
-                    >
-                      <option value="all">{t('report_allStaff', language)} ({dailyWorkLogs.length}件)</option>
-                      {allWorkers.map(w => {
-                        const count = dailyWorkLogs.filter(log => log.worker_id === w.id).length;
-                        return (
-                          <option key={w.id} value={w.id}>
-                            {w.name} ({count}件)
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-
-                  {/* 日報カード一覧 */}
-                  <div className="space-y-2.5 pt-1">
-                    {isLoadingDailyData ? (
-                      <div className="py-12 text-center text-slate-400">
-                        <Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600 mb-2" />
-                        <p className="text-xs font-bold">作業日報を読み込み中...</p>
-                      </div>
-                    ) : filteredWorkLogs.length === 0 ? (
-                      <div className="py-12 text-center bg-slate-50 border border-slate-200/60 rounded-3xl p-6">
-                        <FileText className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                        <p className="text-sm font-bold text-slate-600">{t('report_noLogsToday', language)}</p>
-                        <p className="text-xs text-slate-400 mt-1">作業スタッフが日報を登録するとリアルタイムにここに集約されます</p>
-                      </div>
-                    ) : (
-                      filteredWorkLogs.map((log: any) => (
-                        <div
-                          key={log.id}
-                          className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-xs hover:border-blue-300 transition-all space-y-2"
-                        >
-                          {/* 上段：作業者・作業種別バッジ・作業時間 */}
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-xs shadow-2xs">
-                                {log.workers?.name ? log.workers.name.charAt(0) : '作'}
-                              </div>
-                              <span className="font-black text-sm text-slate-800">
-                                {log.workers?.name || '作業スタッフ'}
-                              </span>
-                              {log.memo?.includes('【👑現場責任者】') && (
-                                <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 text-[10px] font-black rounded-full flex items-center gap-1 shadow-2xs border border-amber-400">
-                                  <Crown className="w-2.5 h-2.5 fill-amber-950" />
-                                  <span>👑 現場責任者</span>
-                                </span>
-                              )}
-                              {log.memo?.includes('【👑現場リーダー:') && (
-                                <span className="px-1.5 py-0.5 bg-amber-50 text-amber-800 text-[10px] font-bold rounded-md flex items-center gap-0.5 border border-amber-200">
-                                  <Crown className="w-2.5 h-2.5 text-amber-600" />
-                                  <span>リーダー: {log.memo.match(/【👑現場リーダー:\s*([^】]+)】/)?.[1]}</span>
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <span className="px-2.5 py-0.5 bg-blue-50 border border-blue-200 text-blue-800 font-black rounded-lg text-xs">
-                                {getTranslatedWorkType(log.work_type, language)}
-                              </span>
-                              <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
-                                ⏱️ {log.duration_minutes ? `${Math.floor(log.duration_minutes / 60)}h ${log.duration_minutes % 60}m` : '0分'}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* 中段：作目・圃場・数量タグ */}
-                          <div className="flex items-center gap-2 flex-wrap text-xs text-slate-600 pt-1">
-                            {log.crops?.name && (
-                              <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-md font-bold text-slate-700">
-                                <span>🌱</span>
-                                <span>{t('report_crop', language)} {getTranslatedName(log.crops, language)}</span>
-                              </span>
-                            )}
-                            {log.fields?.name && (
-                              <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-md font-bold text-slate-700">
-                                <span>🏡</span>
-                                <span>{t('report_field', language)} {getTranslatedName(log.fields, language)}</span>
-                              </span>
-                            )}
-                            {log.material_quantity && (
-                              <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200 px-2 py-1 rounded-md font-black">
-                                <span>📦</span>
-                                <span>{t('report_materialQuantity', language)} {log.material_quantity} {log.material_unit || ''}</span>
-                              </span>
-                            )}
-                          </div>
-
-                          {/* 下段：メモ */}
-                          {(() => {
-                            const cleanLogMemo = log.memo
-                              ?.replace(/【👑現場責任者】\n?/, '')
-                              ?.replace(/【👑現場リーダー:[^】]+】\n?/, '')
-                              ?.trim();
-                            if (!cleanLogMemo) return null;
-                            return (
-                              <div className="text-xs text-slate-700 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                                <span className="font-bold text-slate-400 mr-1.5">{t('report_memo', language)}</span>
-                                <span>{cleanLogMemo}</span>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
+              {/* ② 📋 作業日報まとめ（多軸・タイムライン統合ビューワー） */}
+              {activePortalTab === 'reports' && renderWorkReportsViewer(false)}
 
               {/* ③ 📅 スケジュール・タスク（カレンダー） */}
               {activePortalTab === 'calendar' && (
@@ -2819,6 +3315,53 @@ function PortalContent() {
           </div>
         </div>
       </main>
+
+      {/* 📋 フルスクリーン作業日報 専用ビューワーモーダル */}
+      {showReportModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex flex-col animate-in fade-in duration-200">
+          {/* フルスクリーン上部ナビゲーションバー */}
+          <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-8 shadow-sm shrink-0">
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setShowReportModal(false)}
+                className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors flex items-center gap-1.5 font-bold text-sm cursor-pointer"
+              >
+                <ArrowLeft className="w-5 h-5" />
+                <span className="hidden sm:inline">ポータルに戻る</span>
+              </button>
+              <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-blue-100 text-blue-600 rounded-xl">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h1 className="font-black text-slate-800 text-base sm:text-lg leading-none">
+                    作業日報 専用ビューワー
+                  </h1>
+                  <span className="text-[11px] sm:text-xs font-bold text-slate-400">
+                    全スタッフの作業記録・タイムライン・圃場別/作物別集計
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowReportModal(false)}
+              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              title="閉じる"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </header>
+
+          {/* モーダルコンテンツ本体 */}
+          <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-100/70">
+            <div className="max-w-6xl mx-auto bg-white rounded-3xl p-4 sm:p-8 shadow-sm border border-slate-200">
+              {renderWorkReportsViewer(true)}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* フルスクリーン社内掲示板モーダル */}
       {showBoardModal && (
