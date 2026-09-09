@@ -296,11 +296,17 @@ function PortalContent() {
         let currentRole = 'worker';
         let profile = null;
 
-        // URLクエリパラメータ（?farm=xxx または ?tenant=xxx）の最優先取得
+        // URLクエリパラメータ（?farm=xxx または ?tenant=xxx）および URLパス（/portal/[farmId]）の最優先取得
         if (typeof window !== 'undefined') {
           try {
             const urlParams = new URLSearchParams(window.location.search);
-            const farmParam = urlParams.get('farm') || urlParams.get('tenant');
+            let farmParam = urlParams.get('farm') || urlParams.get('tenant');
+            if (!farmParam) {
+              const match = window.location.pathname.match(/\/portal\/([a-zA-Z0-9_-]+)/);
+              if (match && match[1]) {
+                farmParam = match[1];
+              }
+            }
             if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
               localStorage.setItem('agri_owner_id', farmParam);
               ownerId = farmParam;

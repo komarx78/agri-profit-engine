@@ -1061,37 +1061,3 @@ export async function reopenPortalTask(tenantId: string, taskId: string) {
     return { success: false, error: err.message || '更新に失敗しました' };
   }
 }
-
-// 現場ポータル用：登録農園一覧の取得（未ログイン時の農園選択用・安全な公開情報のみ）
-export async function getPublicFarmList() {
-  try {
-    const supabase = createAdminClient();
-    const { data, error } = await supabase
-      .from('company_settings')
-      .select('id, user_id, company_name')
-      .not('company_name', 'is', null)
-      .order('company_name', { ascending: true });
-
-    if (error) throw error;
-    
-    // 重複除外
-    const seen = new Set();
-    const uniqueFarms: Array<{ id: string; user_id: string; company_name: string }> = [];
-    (data || []).forEach((item: any) => {
-      const name = item.company_name?.trim();
-      if (name && !seen.has(name)) {
-        seen.add(name);
-        uniqueFarms.push({
-          id: item.id,
-          user_id: item.user_id,
-          company_name: name
-        });
-      }
-    });
-
-    return { success: true, data: uniqueFarms };
-  } catch (err: any) {
-    console.error('getPublicFarmList error:', err);
-    return { success: false, data: [] };
-  }
-}

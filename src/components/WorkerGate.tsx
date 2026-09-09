@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User, Lock, ArrowRight, Loader2, Globe, Eye, EyeOff, Building, RefreshCw } from 'lucide-react';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
-import { getPublicFarmList } from '@/app/actions/farm';
 
 interface WorkerGateProps {
   onLogin: (user: any) => void;
@@ -60,9 +59,7 @@ const safeStorage = {
 
 export function WorkerGate({ onLogin }: WorkerGateProps) {
   const [workers, setWorkers] = useState<any[]>([]);
-  const [availableFarms, setAvailableFarms] = useState<Array<{ id: string; user_id: string; company_name: string }>>([]);
   const [currentFarmName, setCurrentFarmName] = useState<string>('');
-  const [selectedFarmId, setSelectedFarmId] = useState<string>('');
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
   const [step, setStep] = useState<'select_farm' | 'select_worker' | 'enter_pin'>('select_worker');
   const [pinCode, setPinCode] = useState<string>('');
@@ -73,7 +70,6 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
   const [debugOwnerId, setDebugOwnerId] = useState('');
   const [isLineBrowser, setIsLineBrowser] = useState(false);
   const [showPin, setShowPin] = useState(false);
-  const [showManualSetup, setShowManualSetup] = useState(false);
   const [inputFarmId, setInputFarmId] = useState('');
 
   // 全角数字 ➔ 半角数字自動変換 ＆ 非数字除去
@@ -98,29 +94,12 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
     }
   }, []);
 
-  // 農園一覧の読み込み（未設定時用）
-  const fetchFarmsList = async () => {
-    try {
-      const res = await getPublicFarmList();
-      if (res.success && res.data && res.data.length > 0) {
-        setAvailableFarms(res.data);
-      } else {
-        // クライアント側フォールバック
-        const { data } = await supabase.from('company_settings').select('id, user_id, company_name').order('company_name');
-        if (data) setAvailableFarms(data);
-      }
-    } catch (err) {
-      console.warn('fetchFarmsList error:', err);
-    }
-  };
-
   const loadWorkersForOwner = async (targetOwnerId: string) => {
     setIsLoading(true);
     setErrorMsg('');
 
-    // targetOwnerId が未設定の場合は農園選択画面を表示
+    // targetOwnerId が未設定の場合は農園案内・入力画面を表示
     if (!targetOwnerId || targetOwnerId === 'null' || targetOwnerId === 'undefined') {
-      await fetchFarmsList();
       setStep('select_farm');
       setIsLoading(false);
       return;
@@ -219,7 +198,13 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           ownerId = '';
         }
 
-        const paramFarmId = params.get('farm') || params.get('tenant');
+        let paramFarmId = params.get('farm') || params.get('tenant');
+        if (!paramFarmId) {
+          const match = window.location.pathname.match(/\/portal\/([a-zA-Z0-9_-]+)/);
+          if (match && match[1]) {
+            paramFarmId = match[1];
+          }
+        }
         if (paramFarmId && paramFarmId !== 'null' && paramFarmId !== 'undefined') {
           ownerId = paramFarmId;
           safeStorage.setItem('agri_owner_id', paramFarmId);
@@ -375,8 +360,10 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
               <div className="w-14 h-14 bg-emerald-500/20 rounded-2xl mx-auto flex items-center justify-center mb-3 border border-emerald-500/30">
                 <Building className="w-7 h-7 text-emerald-400" />
               </div>
-              <h1 className="text-xl sm:text-2xl font-black text-white">所属農園の選択</h1>
-              <p className="text-xs sm:text-sm text-emerald-400 font-bold mt-1">作業を開始する農園を選択してください</p>
+              <h1 className="text-xl sm:text-2xl font-black text-white">農園ポータルの接続</h1>
+              <p className="text-xs sm:text-sm text-slate-400 font-medium mt-1.5 leading-relaxed">
+                本画面は各農園ごとに発行される専用URLまたはQRコードからアクセスしてご利用ください。
+              </p>
             </div>
 
             {errorMsg && (
@@ -386,75 +373,51 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
             )}
 
             <div className="space-y-4 mb-6">
-              {/* 農園ドロップダウン */}
-              <div>
-                <label className="block text-xs text-slate-400 font-bold mb-1.5">
-                  登録農園一覧から選択:
+              {/* 農園コード・ID入力フォーム */}
+              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  🔑 農園コード・IDを入力して接続
                 </label>
-                <select
-                  value={selectedFarmId}
-                  onChange={(e) => setSelectedFarmId(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-3 text-white text-sm font-bold focus:outline-none focus:border-emerald-500 cursor-pointer"
-                >
-                  <option value="">-- 農園を選択してください --</option>
-                  {availableFarms.map((farm) => (
-                    <option key={farm.user_id || farm.id} value={farm.user_id || farm.id} className="bg-slate-900 text-white">
-                      🏢 {farm.company_name}
-                    </option>
-                  ))}
-                </select>
+                <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
+                  管理者から案内された農園ID（UUIDまたは専用コード）を入力してください。
+                </p>
+                <form onSubmit={handleManualSetupSubmit} className="space-y-3">
+                  <input
+                    type="text"
+                    value={inputFarmId}
+                    onChange={(e) => setInputFarmId(e.target.value)}
+                    placeholder="例: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-3 text-xs text-white outline-none focus:border-emerald-500 font-mono"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!inputFarmId.trim() || isLoading}
+                    className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-black rounded-xl text-xs transition-all cursor-pointer shadow-lg active:scale-95 flex items-center justify-center gap-1.5"
+                  >
+                    {isLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <span>農園ポータルへ入る</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </>
+                    )}
+                  </button>
+                </form>
               </div>
 
-              {/* 決定ボタン */}
-              <button
-                type="button"
-                disabled={!selectedFarmId || isLoading}
-                onClick={() => {
-                  if (!selectedFarmId) return;
-                  loadWorkersForOwner(selectedFarmId);
-                }}
-                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-black rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg active:scale-95 text-sm"
-              >
-                {isLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    <span>この農園のスタッフ画面へ</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-
-              {/* 手動農園ID入力 */}
-              <div className="pt-3 border-t border-slate-800/80">
-                <button
-                  type="button"
-                  onClick={() => setShowManualSetup(!showManualSetup)}
-                  className="text-xs text-slate-500 hover:text-slate-300 transition-colors w-full text-center cursor-pointer"
+              {/* 管理者ログイン案内 */}
+              <div className="text-center pt-2">
+                <p className="text-[11px] text-slate-500 mb-2">
+                  農園のオーナー・管理者の方はこちら
+                </p>
+                <a
+                  href="/login"
+                  className="w-full py-2.5 bg-slate-800/80 hover:bg-slate-800 text-slate-200 border border-slate-700/80 font-bold rounded-xl text-xs transition-all inline-flex items-center justify-center gap-2"
                 >
-                  {showManualSetup ? '▲ 農園コード入力を閉じる' : '⚙️ 農園コード・IDを直接入力する'}
-                </button>
-                {showManualSetup && (
-                  <form onSubmit={handleManualSetupSubmit} className="mt-2.5 p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-                    <p className="text-[10px] text-slate-400">
-                      管理者から案内された農園ID（UUID）を入力してください
-                    </p>
-                    <input
-                      type="text"
-                      value={inputFarmId}
-                      onChange={(e) => setInputFarmId(e.target.value)}
-                      placeholder="例: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 px-3 text-xs text-white outline-none focus:border-emerald-500 font-mono"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!inputFarmId.trim() || isLoading}
-                      className="w-full py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                    >
-                      農園IDを設定して進む
-                    </button>
-                  </form>
-                )}
+                  <span>👨‍💼 管理者ログイン（専用URL発行）</span>
+                  <ArrowRight className="w-3 h-3" />
+                </a>
               </div>
             </div>
           </div>
@@ -690,7 +653,6 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
                   safeStorage.clearWorkerCache();
                   setWorkers([]);
                   setCurrentFarmName('');
-                  fetchFarmsList();
                   setStep('select_farm');
                 }}
                 className="text-xs text-slate-400 hover:text-emerald-400 font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"

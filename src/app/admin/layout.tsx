@@ -120,7 +120,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       items: [
         { name: '📦 販売管理システム', path: '/sales-management', icon: ShoppingCart, external: true },
         { name: '💳 経理・購買システム', path: '/accounting-management', icon: Receipt, external: true },
-        { name: '📱 現場出退勤ポータル', path: '/portal', icon: Layout, external: true },
+        { name: '📱 現場出退勤ポータル', path: tenantId ? `/portal?farm=${tenantId}` : '/portal', icon: Layout, external: true },
         { name: '👥 労務・人事システム', path: '/hr', icon: Users, external: true },
         { name: '💊 農薬検索・防除AI', path: '/farm/pesticide-check', icon: FlaskConical },
         { name: '⚙️ マスタ管理全般', path: '/admin/masters', icon: Database },
@@ -191,7 +191,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             {tenantId && (
               <>
                 <Link 
-                  href="/portal" 
+                  href={`/portal?farm=${tenantId}`}
                   className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-blue-700 font-bold bg-blue-50 hover:bg-blue-100 transition-colors mb-1.5"
                 >
                   <Layout className="w-5 h-5 text-blue-600" />
@@ -251,7 +251,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {tenantId && (
             <>
               <Link 
-                href="/portal" 
+                href={`/portal?farm=${tenantId}`}
                 className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-blue-700 font-bold bg-blue-50 hover:bg-blue-100 transition-colors mb-2 shadow-sm"
               >
                 <Layout className="w-5 h-5 text-blue-600" />
