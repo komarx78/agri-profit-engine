@@ -903,28 +903,7 @@ function PortalContent() {
       // 3. 全社作業ログ（work_logs）の範囲取得
       let workQuery = supabase
         .from('work_logs')
-        .select(`
-          id,
-          work_date,
-          task_title,
-          task_title_en,
-          task_title_vi,
-          task_title_id,
-          task_title_zh,
-          work_type,
-          status,
-          duration_minutes,
-          material_quantity,
-          material_unit,
-          memo,
-          created_at,
-          crop_id,
-          field_id,
-          worker_id,
-          crops(id, name),
-          fields(id, name),
-          workers(id, name, role)
-        `)
+        .select('*, crops(id, name), fields(id, name), workers(id, name, role)')
         .eq('user_id', targetUserId);
 
       if (startDate === endDate) {
@@ -2530,42 +2509,6 @@ function PortalContent() {
     setShowWorkerGate(true);
   };
 
-  // ⚡ ログイン中ユーザーがいない場合は、白画面スピナーで待たせず直ちに現場ログイン画面を表示！
-  if (showWorkerGate || !currentUser) {
-    return (
-      <WorkerGate 
-        onLogin={async (user) => {
-          setShowWorkerGate(false);
-          setCurrentUser(user);
-          setWorkerProfile(user);
-          const isWorkerAdmin = user.role === 'admin';
-          setRole(isWorkerAdmin ? 'admin' : 'worker');
-          setIsLoading(false);
-
-          const activeOwnerId = user.user_id || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
-          if (activeOwnerId) {
-            fetchPortalData(activeOwnerId, isWorkerAdmin ? 'admin' : 'worker', user, closingDay).catch((err) => {
-              console.warn('Background portal fetch error:', err);
-            });
-          }
-        }} 
-      />
-    );
-  }
-
-  // ログイン済みユーザーがいる場合のみ、ポータル内部データ取得中のスピナーを許可
-  if (isLoading && currentUser) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4 gap-4">
-        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-        <div className="text-center">
-          <p className="text-sm font-bold text-slate-700">現場ポータルを読み込み中...</p>
-          <p className="text-xs text-slate-400 mt-1">通信状況により数秒かかる場合があります</p>
-        </div>
-      </div>
-    );
-  }
-
   // 📋 本日のやることリスト（Today's ToDo）の抽出・集計
   const todayStr = useMemo(() => getJSTDate(), []);
   const myWorkerId = useMemo(() => workerProfile?.id || currentUser?.id, [workerProfile, currentUser]);
@@ -2722,6 +2665,42 @@ function PortalContent() {
 
   const hasClockedIn = attendance && attendance.clock_in;
   const hasClockedOut = attendance && attendance.clock_out;
+
+  // ⚡ ログイン中ユーザーがいない場合は、白画面スピナーで待たせず直ちに現場ログイン画面を表示！
+  if (showWorkerGate || !currentUser) {
+    return (
+      <WorkerGate 
+        onLogin={async (user) => {
+          setShowWorkerGate(false);
+          setCurrentUser(user);
+          setWorkerProfile(user);
+          const isWorkerAdmin = user.role === 'admin';
+          setRole(isWorkerAdmin ? 'admin' : 'worker');
+          setIsLoading(false);
+
+          const activeOwnerId = user.user_id || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
+          if (activeOwnerId) {
+            fetchPortalData(activeOwnerId, isWorkerAdmin ? 'admin' : 'worker', user, closingDay).catch((err) => {
+              console.warn('Background portal fetch error:', err);
+            });
+          }
+        }} 
+      />
+    );
+  }
+
+  // ログイン済みユーザーがいる場合のみ、ポータル内部データ取得中のスピナーを許可
+  if (isLoading && currentUser) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4 gap-4">
+        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+        <div className="text-center">
+          <p className="text-sm font-bold text-slate-700">現場ポータルを読み込み中...</p>
+          <p className="text-xs text-slate-400 mt-1">通信状況により数秒かかる場合があります</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 font-sans">
