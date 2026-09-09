@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { User, Lock, ArrowRight, Loader2, Globe, Eye, EyeOff } from 'lucide-react';
+import { User, Lock, ArrowRight, Loader2, Globe, Eye, EyeOff, Building, RefreshCw } from 'lucide-react';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
+import { getPublicFarmList } from '@/app/actions/farm';
 
 interface WorkerGateProps {
   onLogin: (user: any) => void;
@@ -57,23 +58,13 @@ const safeStorage = {
   }
 };
 
-// ⚡ 佐原農園の初期作業者キャッシュ（通信ゼロでも0msで即座に選択可能にする防壁）
-const INITIAL_SAHARA_WORKERS = [
-  { id: "99c7bd61-48c1-490e-8e98-915d3d92d467", name: "佐原範靖", name_en: "Noriyasu Sahara", role: "admin", pin_code: "0301", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" },
-  { id: "6ee86491-bb39-4aba-bbe0-1c9269b6b7e0", name: "佐原由実香", name_en: "Yumika Sahara", role: "admin", pin_code: "0728", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" },
-  { id: "d173c59c-64fb-4e15-9d61-9f571e78a06f", name: "ヴィハンガデネット", name_si: "විහංග දෙනෙත්", role: null, pin_code: "1229", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" },
-  { id: "e7fa0a12-d194-42e7-85cd-5fe2ffd7b7b0", name: "塩貝和澄", role: null, pin_code: "0129", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" },
-  { id: "9e35f02b-c27b-4f2a-82b2-6591f046dd87", name: "チャンナー", role: null, pin_code: "0000", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" },
-  { id: "250f8764-c0e6-472a-8d2c-5c5dd9cdb0b2", name: "ヘイシャーニ", role: null, pin_code: "0000", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" },
-  { id: "55d7de7e-08de-44bc-a4ef-f8b09851b195", name: "チャールキー", role: null, pin_code: "0000", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" },
-  { id: "a40f2a31-fe2b-4979-9349-fdc7bb814ebe", name: "リアン", role: null, pin_code: "0707", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" },
-  { id: "6eb48ccc-cf5e-4fdd-a7f9-8746559c5efe", name: "齊藤常雄", role: null, pin_code: "0927", user_id: "62163024-2c8e-4057-a872-2455dbc58d32" }
-];
-
 export function WorkerGate({ onLogin }: WorkerGateProps) {
-  const [workers, setWorkers] = useState<any[]>(INITIAL_SAHARA_WORKERS);
+  const [workers, setWorkers] = useState<any[]>([]);
+  const [availableFarms, setAvailableFarms] = useState<Array<{ id: string; user_id: string; company_name: string }>>([]);
+  const [currentFarmName, setCurrentFarmName] = useState<string>('');
+  const [selectedFarmId, setSelectedFarmId] = useState<string>('');
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
-  const [step, setStep] = useState<'select_worker' | 'enter_pin'>('select_worker');
+  const [step, setStep] = useState<'select_farm' | 'select_worker' | 'enter_pin'>('select_worker');
   const [pinCode, setPinCode] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,6 +73,8 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
   const [debugOwnerId, setDebugOwnerId] = useState('');
   const [isLineBrowser, setIsLineBrowser] = useState(false);
   const [showPin, setShowPin] = useState(false);
+  const [showManualSetup, setShowManualSetup] = useState(false);
+  const [inputFarmId, setInputFarmId] = useState('');
 
   // 全角数字 ➔ 半角数字自動変換 ＆ 非数字除去
   const normalizePin = (val: string) => {
@@ -105,18 +98,52 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
     }
   }, []);
 
-  const [showManualSetup, setShowManualSetup] = useState(false);
-  const [inputFarmId, setInputFarmId] = useState('');
+  // 農園一覧の読み込み（未設定時用）
+  const fetchFarmsList = async () => {
+    try {
+      const res = await getPublicFarmList();
+      if (res.success && res.data && res.data.length > 0) {
+        setAvailableFarms(res.data);
+      } else {
+        // クライアント側フォールバック
+        const { data } = await supabase.from('company_settings').select('id, user_id, company_name').order('company_name');
+        if (data) setAvailableFarms(data);
+      }
+    } catch (err) {
+      console.warn('fetchFarmsList error:', err);
+    }
+  };
 
   const loadWorkersForOwner = async (targetOwnerId: string) => {
     setIsLoading(true);
     setErrorMsg('');
+
+    // targetOwnerId が未設定の場合は農園選択画面を表示
+    if (!targetOwnerId || targetOwnerId === 'null' || targetOwnerId === 'undefined') {
+      await fetchFarmsList();
+      setStep('select_farm');
+      setIsLoading(false);
+      return;
+    }
+
     try {
       let workerList: any[] = [];
-      const SAHARA_TENANT_ID = '62163024-2c8e-4057-a872-2455dbc58d32';
-      let resolvedOwnerId = (targetOwnerId && targetOwnerId !== 'null' && targetOwnerId !== 'undefined')
-        ? targetOwnerId
-        : SAHARA_TENANT_ID;
+      const resolvedOwnerId = targetOwnerId;
+
+      // 農園名の取得
+      try {
+        const { data: comp } = await supabase
+          .from('company_settings')
+          .select('company_name')
+          .or(`user_id.eq.${resolvedOwnerId},id.eq.${resolvedOwnerId}`)
+          .maybeSingle();
+        if (comp?.company_name) {
+          setCurrentFarmName(comp.company_name);
+          safeStorage.setItem('agri_cached_company_name', comp.company_name);
+        }
+      } catch (cErr) {
+        console.warn('Company name fetch error:', cErr);
+      }
 
       // 1. まずクライアントSDKで直接取得（2秒タイムアウト保護）
       try {
@@ -136,24 +163,17 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
         console.warn('Client SDK fetch failed or timed out, trying API:', e);
       }
 
-      // 2. クライアントで取れなかった、またはtargetOwnerId未指定の場合はAPI経由で取得（2.5秒タイムアウト保護）
+      // 2. クライアントで取れなかった場合はAPI経由で取得（2.5秒タイムアウト保護）
       if (workerList.length === 0) {
         try {
           const controller = new AbortController();
           const tId = setTimeout(() => controller.abort(), 2500);
-          const apiUrl = targetOwnerId && targetOwnerId !== 'null' && targetOwnerId !== 'undefined'
-            ? `/api/workers?ownerId=${encodeURIComponent(targetOwnerId)}`
-            : `/api/workers`;
-          const res = await fetch(apiUrl, {
-            signal: controller.signal
-          });
+          const apiUrl = `/api/workers?ownerId=${encodeURIComponent(resolvedOwnerId)}`;
+          const res = await fetch(apiUrl, { signal: controller.signal });
           clearTimeout(tId);
           const json = await res.json();
           if (json.workers && json.workers.length > 0) {
             workerList = json.workers;
-            if (json.ownerId) {
-              resolvedOwnerId = json.ownerId;
-            }
           } else if (json.error) {
             setErrorMsg(json.error);
           }
@@ -165,14 +185,12 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
       if (workerList.length > 0) {
         setErrorMsg('');
         setWorkers(workerList);
-        if (resolvedOwnerId) {
-          safeStorage.setItem('agri_owner_id', resolvedOwnerId);
-          setDebugOwnerId(resolvedOwnerId);
-        }
-      } else if (!targetOwnerId) {
-        setErrorMsg('所属農園が未設定です。管理者から案内された専用URLまたはQRコードからアクセスしてください。');
+        setStep('select_worker');
+        safeStorage.setItem('agri_owner_id', resolvedOwnerId);
+        setDebugOwnerId(resolvedOwnerId);
       } else {
-        setErrorMsg('この農園に登録された作業者が見つかりません。管理者画面（スタッフマスタ）から作業者を登録してください。');
+        setWorkers([]);
+        setErrorMsg('この農園に登録された作業者が見つかりません。\n管理者画面からスタッフを登録するか、別の農園を選択してください。');
       }
     } catch (err: any) {
       console.error(err);
@@ -349,13 +367,113 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
         )}
 
         {/* ══════════════════════════════════════════════════════
+            【ステップ0】所属農園選択画面（初回アクセス・農園未設定時）
+            ══════════════════════════════════════════════════════ */}
+        {step === 'select_farm' && (
+          <div>
+            <div className="text-center mb-6">
+              <div className="w-14 h-14 bg-emerald-500/20 rounded-2xl mx-auto flex items-center justify-center mb-3 border border-emerald-500/30">
+                <Building className="w-7 h-7 text-emerald-400" />
+              </div>
+              <h1 className="text-xl sm:text-2xl font-black text-white">所属農園の選択</h1>
+              <p className="text-xs sm:text-sm text-emerald-400 font-bold mt-1">作業を開始する農園を選択してください</p>
+            </div>
+
+            {errorMsg && (
+              <div className="mb-4 p-3 bg-rose-500/20 border border-rose-500/50 text-rose-400 rounded-xl text-xs text-center font-bold whitespace-pre-line">
+                {errorMsg}
+              </div>
+            )}
+
+            <div className="space-y-4 mb-6">
+              {/* 農園ドロップダウン */}
+              <div>
+                <label className="block text-xs text-slate-400 font-bold mb-1.5">
+                  登録農園一覧から選択:
+                </label>
+                <select
+                  value={selectedFarmId}
+                  onChange={(e) => setSelectedFarmId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-3 text-white text-sm font-bold focus:outline-none focus:border-emerald-500 cursor-pointer"
+                >
+                  <option value="">-- 農園を選択してください --</option>
+                  {availableFarms.map((farm) => (
+                    <option key={farm.user_id || farm.id} value={farm.user_id || farm.id} className="bg-slate-900 text-white">
+                      🏢 {farm.company_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 決定ボタン */}
+              <button
+                type="button"
+                disabled={!selectedFarmId || isLoading}
+                onClick={() => {
+                  if (!selectedFarmId) return;
+                  loadWorkersForOwner(selectedFarmId);
+                }}
+                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-black rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg active:scale-95 text-sm"
+              >
+                {isLoading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <span>この農園のスタッフ画面へ</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+
+              {/* 手動農園ID入力 */}
+              <div className="pt-3 border-t border-slate-800/80">
+                <button
+                  type="button"
+                  onClick={() => setShowManualSetup(!showManualSetup)}
+                  className="text-xs text-slate-500 hover:text-slate-300 transition-colors w-full text-center cursor-pointer"
+                >
+                  {showManualSetup ? '▲ 農園コード入力を閉じる' : '⚙️ 農園コード・IDを直接入力する'}
+                </button>
+                {showManualSetup && (
+                  <form onSubmit={handleManualSetupSubmit} className="mt-2.5 p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                    <p className="text-[10px] text-slate-400">
+                      管理者から案内された農園ID（UUID）を入力してください
+                    </p>
+                    <input
+                      type="text"
+                      value={inputFarmId}
+                      onChange={(e) => setInputFarmId(e.target.value)}
+                      placeholder="例: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 px-3 text-xs text-white outline-none focus:border-emerald-500 font-mono"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!inputFarmId.trim() || isLoading}
+                      className="w-full py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      農園IDを設定して進む
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════
             【ステップ1】お名前選択画面（スタッフカード一覧）
             ══════════════════════════════════════════════════════ */}
         {step === 'select_worker' && (
           <div>
-            <div className="text-center mb-6">
-              <div className="w-14 h-14 bg-emerald-500/20 rounded-2xl mx-auto flex items-center justify-center mb-3 border border-emerald-500/30">
-                <User className="w-7 h-7 text-emerald-400" />
+            <div className="text-center mb-5">
+              {currentFarmName && (
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-xs font-black text-emerald-300 mb-2">
+                  <Building className="w-3.5 h-3.5" />
+                  <span>{currentFarmName}</span>
+                </div>
+              )}
+              <div className="w-12 h-12 bg-emerald-500/20 rounded-2xl mx-auto flex items-center justify-center mb-2 border border-emerald-500/30">
+                <User className="w-6 h-6 text-emerald-400" />
               </div>
               <h1 className="text-xl sm:text-2xl font-black text-white">{t('workerLogin', language)}</h1>
               <p className="text-xs sm:text-sm text-emerald-400 font-bold mt-1">👇 あなたのお名前をタップしてください</p>
@@ -368,7 +486,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
             )}
 
             {/* スタッフ一覧カード（スマホ幅でも押しやすい特大タッチボタン） */}
-            <div className="space-y-2 mb-6 max-h-[50vh] overflow-y-auto pr-1">
+            <div className="space-y-2 mb-4 max-h-[45vh] overflow-y-auto pr-1">
               <div className="grid grid-cols-2 gap-2">
                 {workers.map(w => (
                   <button
@@ -409,7 +527,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
             </div>
 
             {/* セレクトボックス（万が一用） */}
-            <div className="pt-3 border-t border-slate-800/80">
+            <div className="pt-2.5 border-t border-slate-800/80">
               <label className="block text-[11px] text-slate-400 font-bold mb-1">またはリストから選択:</label>
               <select
                 value={selectedWorkerId}
@@ -563,37 +681,25 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
         )}
 
         {/* 共通フッターリンク */}
-        <div className="mt-6 pt-5 border-t border-slate-800 text-center space-y-2.5">
-          <div>
-            <button
-              type="button"
-              onClick={() => setShowManualSetup(!showManualSetup)}
-              className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors"
-            >
-              {showManualSetup ? '▲ 農園コード入力を閉じる' : '⚙️ 所属農園コードを手動で入力する'}
-            </button>
-            {showManualSetup && (
-              <form onSubmit={handleManualSetupSubmit} className="mt-2 p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-                <p className="text-[10px] text-slate-400 text-left">
-                  管理者から共有された農園ID（UUID）を入力してください
-                </p>
-                <input
-                  type="text"
-                  value={inputFarmId}
-                  onChange={(e) => setInputFarmId(e.target.value)}
-                  placeholder="例: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg py-1.5 px-3 text-xs text-white outline-none focus:border-emerald-500 font-mono"
-                />
-                <button
-                  type="submit"
-                  disabled={!inputFarmId.trim()}
-                  className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors"
-                >
-                  農園を設定して読み込む
-                </button>
-              </form>
-            )}
-          </div>
+        <div className="mt-6 pt-5 border-t border-slate-800 text-center space-y-3">
+          {step !== 'select_farm' && (
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  safeStorage.clearWorkerCache();
+                  setWorkers([]);
+                  setCurrentFarmName('');
+                  fetchFarmsList();
+                  setStep('select_farm');
+                }}
+                className="text-xs text-slate-400 hover:text-emerald-400 font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+              >
+                <Building className="w-3.5 h-3.5" />
+                <span>🏢 別の農園に切り替える</span>
+              </button>
+            </div>
+          )}
 
           <div>
             <a

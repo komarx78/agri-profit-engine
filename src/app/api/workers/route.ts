@@ -17,26 +17,17 @@ export async function GET(request: Request) {
       auth: { persistSession: false }
     });
 
-    // SaaSマルチテナント保護：ownerIdが未指定の場合のフォールバック
+    // SaaSマルチテナント保護：ownerIdが未指定の場合は他社データを露出せずエラーを返す
     let availableCompanies: any[] = [];
     if (!ownerId || ownerId === 'null' || ownerId === 'undefined') {
       const { data: companies } = await supabase.from('company_settings').select('user_id, company_name');
       availableCompanies = companies || [];
 
-      // 佐原農園（本番メイン農園）が存在すれば優先解決、なければ先頭農園を採用
-      const saharId = '62163024-2c8e-4057-a872-2455dbc58d32';
-      const saharaCompany = availableCompanies.find(c => c.user_id === saharId);
-      if (saharaCompany) {
-        ownerId = saharId;
-      } else if (availableCompanies.length > 0 && availableCompanies[0].user_id) {
-        ownerId = availableCompanies[0].user_id;
-      } else {
-        return NextResponse.json({ 
-          error: '所属農園が登録されていません。管理者画面から初期設定を行ってください。', 
-          workers: [],
-          companies: []
-        }, { status: 400 });
-      }
+      return NextResponse.json({ 
+        error: '所属農園が指定されていません。農園を選択または指定してください。', 
+        workers: [],
+        companies: availableCompanies 
+      }, { status: 400 });
     }
 
     // 指定された農園のワーカー一覧を取得（現場PIN照合のためpin_codeも含める）

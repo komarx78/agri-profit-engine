@@ -353,7 +353,11 @@ function PortalContent() {
             }
 
             if (!ownerId) {
-              ownerId = '62163024-2c8e-4057-a872-2455dbc58d32';
+              // 所属農園が特定できない場合は他社への誤フォールバックを遮断し、農園選択へ誘導
+              try { localStorage.removeItem('agri_current_worker'); } catch (e2) {}
+              setShowWorkerGate(true);
+              setIsLoading(false);
+              return;
             }
 
             if (ownerId && typeof window !== 'undefined') {
