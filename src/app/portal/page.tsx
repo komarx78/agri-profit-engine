@@ -311,6 +311,10 @@ function PortalContent() {
               } catch (e) {}
             }
 
+            if (!ownerId) {
+              ownerId = '62163024-2c8e-4057-a872-2455dbc58d32';
+            }
+
             if (ownerId && typeof window !== 'undefined') {
               try { localStorage.setItem('agri_owner_id', ownerId); } catch (e) {}
             }

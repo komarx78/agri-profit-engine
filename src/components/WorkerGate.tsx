@@ -89,26 +89,27 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
     setErrorMsg('');
     try {
       let workerList: any[] = [];
-      let resolvedOwnerId = targetOwnerId;
+      const SAHARA_TENANT_ID = '62163024-2c8e-4057-a872-2455dbc58d32';
+      let resolvedOwnerId = (targetOwnerId && targetOwnerId !== 'null' && targetOwnerId !== 'undefined')
+        ? targetOwnerId
+        : SAHARA_TENANT_ID;
 
-      // 1. targetOwnerId がある場合はまずクライアントSDKで直接取得（2秒タイムアウト保護）
-      if (targetOwnerId && targetOwnerId !== 'null' && targetOwnerId !== 'undefined') {
-        try {
-          const clientPromise = supabase
-            .from('workers')
-            .select('*')
-            .eq('user_id', targetOwnerId)
-            .order('name');
-          const timeoutPromise = new Promise<any>((_, reject) =>
-            setTimeout(() => reject(new Error('timeout')), 2000)
-          );
-          const { data, error } = await Promise.race([clientPromise, timeoutPromise]);
-          if (!error && data && data.length > 0) {
-            workerList = data;
-          }
-        } catch (e) {
-          console.warn('Client SDK fetch failed or timed out, trying API:', e);
+      // 1. まずクライアントSDKで直接取得（2秒タイムアウト保護）
+      try {
+        const clientPromise = supabase
+          .from('workers')
+          .select('*')
+          .eq('user_id', resolvedOwnerId)
+          .order('name');
+        const timeoutPromise = new Promise<any>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), 2000)
+        );
+        const { data, error } = await Promise.race([clientPromise, timeoutPromise]);
+        if (!error && data && data.length > 0) {
+          workerList = data;
         }
+      } catch (e) {
+        console.warn('Client SDK fetch failed or timed out, trying API:', e);
       }
 
       // 2. クライアントで取れなかった、またはtargetOwnerId未指定の場合はAPI経由で取得（2.5秒タイムアウト保護）

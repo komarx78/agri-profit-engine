@@ -17,15 +17,24 @@ export async function GET(request: Request) {
       auth: { persistSession: false }
     });
 
-    // SaaSマルチテナント保護：ownerIdが未指定の場合、単一農園運用環境なら自動補完
+    // SaaSマルチテナント保護：ownerIdが未指定の場合のフォールバック
+    let availableCompanies: any[] = [];
     if (!ownerId || ownerId === 'null' || ownerId === 'undefined') {
-      const { data: companies } = await supabase.from('company_settings').select('user_id').limit(2);
-      if (companies && companies.length === 1 && companies[0].user_id) {
-        ownerId = companies[0].user_id;
+      const { data: companies } = await supabase.from('company_settings').select('user_id, company_name');
+      availableCompanies = companies || [];
+
+      // 佐原農園（本番メイン農園）が存在すれば優先解決、なければ先頭農園を採用
+      const saharId = '62163024-2c8e-4057-a872-2455dbc58d32';
+      const saharaCompany = availableCompanies.find(c => c.user_id === saharId);
+      if (saharaCompany) {
+        ownerId = saharId;
+      } else if (availableCompanies.length > 0 && availableCompanies[0].user_id) {
+        ownerId = availableCompanies[0].user_id;
       } else {
         return NextResponse.json({ 
-          error: '農園IDが指定されていません。管理者から共有された専用URLまたはQRコードからアクセスしてください。', 
-          workers: [] 
+          error: '所属農園が登録されていません。管理者画面から初期設定を行ってください。', 
+          workers: [],
+          companies: []
         }, { status: 400 });
       }
     }
@@ -39,7 +48,7 @@ export async function GET(request: Request) {
     
     if (error) throw error;
     
-    return NextResponse.json({ workers: data || [], ownerId });
+    return NextResponse.json({ workers: data || [], ownerId, companies: availableCompanies });
   } catch (error: any) {
     console.error('API Error in /api/workers:', error.message);
     return NextResponse.json({ error: error.message || 'Failed to fetch workers', workers: [] }, { status: 500 });
