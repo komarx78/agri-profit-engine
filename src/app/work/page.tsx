@@ -8,7 +8,7 @@ import {
   Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, 
   History, LogOut, Loader2, AlertCircle, Coffee, LogIn, LogOut as LogOutIcon, Sun, CloudRain, Plus, X,
   ImageIcon, FileText, Video, MessageSquare, Globe2, MessageCircle, Trash2,
-  RefreshCw, AlertTriangle, HelpCircle
+  RefreshCw, AlertTriangle, HelpCircle, Crown
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getB2BOrders, updateB2BOrderStatus } from '@/app/actions/b2b';
@@ -1509,33 +1509,60 @@ export default function WorkEntryPage() {
                   <CheckCircle2 className="w-4 h-4" /> {t('todayTasksHeader', language)} ({tasks.length})
                 </h3>
                 <div className="space-y-2.5">
-                  {tasks.map(tTask => (
-                    <div 
-                      key={tTask.id} 
-                      onClick={() => setSelectedTaskDetail(tTask)}
-                      className="bg-emerald-900/50 hover:bg-emerald-900/80 border border-emerald-800/70 hover:border-emerald-500/50 p-3.5 rounded-2xl flex items-center justify-between gap-2 cursor-pointer transition-all active:scale-[0.99] shadow-sm group"
-                    >
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <div className="text-white font-black text-sm truncate flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                          <span>{getTranslatedWorkType(tTask.work_type || tTask.task_title || '一般作業', language)}</span>
+                  {tasks.map(tTask => {
+                    const taskMemo = tTask.notes || tTask.memo || '';
+                    const isLeader = taskMemo.includes('【👑現場責任者】');
+                    const leaderMatch = taskMemo.match(/【👑現場リーダー:\s*([^】]+)】/);
+                    const otherLeaderName = leaderMatch ? leaderMatch[1] : null;
+                    const cleanNote = taskMemo
+                      .replace(/【👑現場責任者】\n?/, '')
+                      .replace(/【👑現場リーダー:[^】]+】\n?/, '')
+                      .trim();
+
+                    return (
+                      <div 
+                        key={tTask.id} 
+                        onClick={() => setSelectedTaskDetail(tTask)}
+                        className={`border p-3.5 rounded-2xl flex items-center justify-between gap-2 cursor-pointer transition-all active:scale-[0.99] shadow-sm group ${
+                          isLeader 
+                            ? 'bg-gradient-to-r from-amber-950/70 to-emerald-950/80 hover:from-amber-950/90 hover:to-emerald-950 border-amber-500/60 ring-1 ring-amber-500/30' 
+                            : 'bg-emerald-900/50 hover:bg-emerald-900/80 border-emerald-800/70 hover:border-emerald-500/50'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="text-white font-black text-sm truncate flex items-center gap-2 flex-wrap">
+                            <span className={`w-2 h-2 rounded-full ${isLeader ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
+                            <span>{getTranslatedWorkType(tTask.work_type || tTask.task_title || '一般作業', language)}</span>
+                            {isLeader && (
+                              <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 text-[10px] font-black rounded-full flex items-center gap-1 shadow-xs">
+                                <Crown className="w-3 h-3 fill-amber-950" />
+                                <span>👑 現場責任者</span>
+                              </span>
+                            )}
+                            {otherLeaderName && (
+                              <span className="px-1.5 py-0.5 bg-amber-900/60 text-amber-300 text-[10px] font-bold rounded-md flex items-center gap-0.5 border border-amber-700/50">
+                                <Crown className="w-2.5 h-2.5 text-amber-400" />
+                                <span>リーダー: {otherLeaderName}</span>
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 text-xs font-bold text-emerald-300/80">
+                            {tTask.crops?.name && <span>🌱 {getTranslatedName(tTask.crops, language)}</span>}
+                            {tTask.fields?.name && <span>📍 {getTranslatedName(tTask.fields, language)}</span>}
+                          </div>
+                          {cleanNote && (
+                            <p className="text-[11px] text-emerald-200/60 truncate pl-4">
+                              💬 {cleanNote}
+                            </p>
+                          )}
                         </div>
-                        <div className="flex items-center gap-3 text-xs font-bold text-emerald-300/80">
-                          {tTask.crops?.name && <span>🌱 {getTranslatedName(tTask.crops, language)}</span>}
-                          {tTask.fields?.name && <span>📍 {getTranslatedName(tTask.fields, language)}</span>}
+                        <div className="text-xs font-bold text-emerald-400 group-hover:text-white flex items-center gap-1 bg-emerald-950/60 px-2.5 py-1.5 rounded-xl border border-emerald-800 flex-shrink-0">
+                          <span>{t('detail', language)}</span>
+                          <ArrowRight className="w-3 h-3" />
                         </div>
-                        {tTask.notes && (
-                          <p className="text-[11px] text-emerald-200/60 truncate pl-4">
-                            💬 {tTask.notes}
-                          </p>
-                        )}
                       </div>
-                      <div className="text-xs font-bold text-emerald-400 group-hover:text-white flex items-center gap-1 bg-emerald-950/60 px-2.5 py-1.5 rounded-xl border border-emerald-800 flex-shrink-0">
-                        <span>{t('detail', language)}</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -2442,37 +2469,71 @@ export default function WorkEntryPage() {
               </button>
             </div>
 
-            <div className="space-y-3 bg-emerald-900/30 p-4 rounded-2xl border border-emerald-800/50 text-sm">
-              <div>
-                <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">{t('taskAssignee', language)}</span>
-                <p className="font-black text-white">👤 {getTranslatedName(selectedTaskDetail.workers || currentUser, language)}</p>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">🌱 {t('crop', language)}</span>
-                  <p className="font-black text-white">{selectedTaskDetail.crops?.name ? getTranslatedName(selectedTaskDetail.crops, language) : t('unspecified', language)}</p>
-                </div>
-                <div>
-                  <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">📍 {t('field', language)}</span>
-                  <p className="font-black text-white">{selectedTaskDetail.fields?.name ? getTranslatedName(selectedTaskDetail.fields, language) : t('unspecified', language)}</p>
-                </div>
-              </div>
+            {(() => {
+              const modalMemo = selectedTaskDetail.notes || selectedTaskDetail.memo || '';
+              const isLeader = modalMemo.includes('【👑現場責任者】');
+              const leaderMatch = modalMemo.match(/【👑現場リーダー:\s*([^】]+)】/);
+              const otherLeaderName = leaderMatch ? leaderMatch[1] : null;
+              const cleanModalNotes = modalMemo
+                .replace(/【👑現場責任者】\n?/, '')
+                .replace(/【👑現場リーダー:[^】]+】\n?/, '')
+                .trim();
 
-              <div>
-                <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">📋 {t('workContentLabel', language)}</span>
-                <p className="font-black text-emerald-400 text-base">{getTranslatedWorkType(selectedTaskDetail.work_type || selectedTaskDetail.task_title || '一般作業', language)}</p>
-              </div>
+              return (
+                <>
+                  {isLeader ? (
+                    <div className="p-3 bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 rounded-2xl text-amber-950 shadow-md flex items-center gap-3 border border-amber-400">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                        <Crown className="w-5 h-5 fill-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-black text-xs">👑 あなたが本日の現場責任者（リーダー）です！</div>
+                        <p className="text-[10px] font-bold text-amber-900 mt-0.5">
+                          安全確認・人員配置・指示進行をお願いします
+                        </p>
+                      </div>
+                    </div>
+                  ) : otherLeaderName ? (
+                    <div className="p-2.5 bg-amber-950/60 border border-amber-500/40 rounded-xl text-amber-300 flex items-center gap-2 text-xs font-bold">
+                      <Crown className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>本日の現場リーダー: <strong className="font-black text-amber-200">{otherLeaderName}</strong> さん</span>
+                    </div>
+                  ) : null}
 
-              {selectedTaskDetail.notes && (
-                <div>
-                  <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">📝 {t('instructionsNotes', language)}</span>
-                  <div className="bg-emerald-950/90 p-3 rounded-xl border border-emerald-800/80 text-xs font-bold text-slate-200 whitespace-pre-wrap leading-relaxed">
-                    {selectedTaskDetail.notes}
+                  <div className="space-y-3 bg-emerald-900/30 p-4 rounded-2xl border border-emerald-800/50 text-sm">
+                    <div>
+                      <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">{t('taskAssignee', language)}</span>
+                      <p className="font-black text-white">👤 {getTranslatedName(selectedTaskDetail.workers || currentUser, language)}</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">🌱 {t('crop', language)}</span>
+                        <p className="font-black text-white">{selectedTaskDetail.crops?.name ? getTranslatedName(selectedTaskDetail.crops, language) : t('unspecified', language)}</p>
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">📍 {t('field', language)}</span>
+                        <p className="font-black text-white">{selectedTaskDetail.fields?.name ? getTranslatedName(selectedTaskDetail.fields, language) : t('unspecified', language)}</p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">📋 {t('workContentLabel', language)}</span>
+                      <p className="font-black text-emerald-400 text-base">{getTranslatedWorkType(selectedTaskDetail.work_type || selectedTaskDetail.task_title || '一般作業', language)}</p>
+                    </div>
+
+                    {cleanModalNotes && (
+                      <div>
+                        <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">📝 {t('instructionsNotes', language)}</span>
+                        <div className="bg-emerald-950/90 p-3 rounded-xl border border-emerald-800/80 text-xs font-bold text-slate-200 whitespace-pre-wrap leading-relaxed">
+                          {cleanModalNotes}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
-            </div>
+                </>
+              );
+            })()}
 
             <div className="pt-2 flex flex-col gap-2">
               <button

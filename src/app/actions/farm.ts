@@ -571,6 +571,8 @@ export async function savePlannedTask(
       step_order?: number;
       time_slot?: string;
       field_memo?: string;
+      leader_worker_id?: string | null;
+      leader_name?: string | null;
     }>;
     translations?: any;
   },
@@ -588,9 +590,17 @@ export async function savePlannedTask(
       const workerIds = assignment.worker_ids || [];
       const primaryWorkerId = workerIds.length > 0 ? workerIds[0] : null;
 
-      const combinedMemo = assignment.field_memo 
+      let combinedMemo = assignment.field_memo 
         ? (taskData.memo ? `${taskData.memo}\n${assignment.field_memo}` : assignment.field_memo)
         : (taskData.memo || null);
+
+      if (assignment.leader_worker_id) {
+        const isSelfLeader = primaryWorkerId === assignment.leader_worker_id;
+        const leaderTag = isSelfLeader ? '【👑現場責任者】' : (assignment.leader_name ? `【👑現場リーダー: ${assignment.leader_name}】` : '【👑現場リーダーあり】');
+        if (!combinedMemo || !combinedMemo.includes('【👑')) {
+          combinedMemo = combinedMemo ? `${leaderTag} ${combinedMemo}` : leaderTag;
+        }
+      }
 
       const updatePayload: any = {
         work_date: taskData.work_date,
@@ -615,23 +625,32 @@ export async function savePlannedTask(
 
       // 2人目以降の担当者が追加された場合は追加作成
       if (workerIds.length > 1) {
-        const additionalInserts = workerIds.slice(1).map(wId => ({
-          user_id: tenantId,
-          work_date: taskData.work_date,
-          task_title: taskData.task_title,
-          work_type: taskData.task_title,
-          crop_id: taskData.crop_id || null,
-          field_id: assignment.field_id || null,
-          worker_id: wId,
-          department_id: taskData.department_id || null,
-          memo: combinedMemo,
-          step_order: assignment.step_order || 1,
-          time_slot: assignment.time_slot || null,
-          status: 'planned',
-          duration_minutes: 0,
-          approval_status: null,
-          ...transPayload
-        }));
+        const additionalInserts = workerIds.slice(1).map(wId => {
+          let workerMemo = combinedMemo;
+          if (assignment.leader_worker_id) {
+            const isSelf = wId === assignment.leader_worker_id;
+            const tag = isSelf ? '【👑現場責任者】' : (assignment.leader_name ? `【👑現場リーダー: ${assignment.leader_name}】` : '【👑現場リーダーあり】');
+            workerMemo = combinedMemo ? combinedMemo.replace(/【👑[^】]+】/g, '').trim() : '';
+            workerMemo = workerMemo ? `${tag} ${workerMemo}` : tag;
+          }
+          return {
+            user_id: tenantId,
+            work_date: taskData.work_date,
+            task_title: taskData.task_title,
+            work_type: taskData.task_title,
+            crop_id: taskData.crop_id || null,
+            field_id: assignment.field_id || null,
+            worker_id: wId,
+            department_id: taskData.department_id || null,
+            memo: workerMemo,
+            step_order: assignment.step_order || 1,
+            time_slot: assignment.time_slot || null,
+            status: 'planned',
+            duration_minutes: 0,
+            approval_status: null,
+            ...transPayload
+          };
+        });
 
         await supabase.from('work_logs').insert(additionalInserts);
       }
@@ -648,12 +667,18 @@ export async function savePlannedTask(
         const fId = assignment.field_id || null;
         const wIds = assignment.worker_ids || [];
         const stepNum = assignment.step_order || (idx + 1);
-        const combinedMemo = assignment.field_memo 
+        const baseMemo = assignment.field_memo 
           ? (taskData.memo ? `${taskData.memo}\n${assignment.field_memo}` : assignment.field_memo)
           : (taskData.memo || null);
 
         if (wIds.length > 0) {
           wIds.forEach(wId => {
+            let combinedMemo = baseMemo;
+            if (assignment.leader_worker_id) {
+              const isSelf = wId === assignment.leader_worker_id;
+              const leaderTag = isSelf ? '【👑現場責任者】' : (assignment.leader_name ? `【👑現場リーダー: ${assignment.leader_name}】` : '【👑現場リーダーあり】');
+              combinedMemo = baseMemo ? `${leaderTag} ${baseMemo}` : leaderTag;
+            }
             insertData.push({
               user_id: tenantId,
               work_date: taskData.work_date,
@@ -682,7 +707,7 @@ export async function savePlannedTask(
             field_id: fId,
             worker_id: null,
             department_id: taskData.department_id || null,
-            memo: combinedMemo,
+            memo: baseMemo,
             step_order: stepNum,
             time_slot: assignment.time_slot || null,
             status: 'planned',
@@ -885,4 +910,80 @@ export async function cloneWorkerTasks(
     return { success: false, error: err.message || '作業者タスクの複製に失敗しました' };
   }
 }
+
+// 13. 指定日の予定タスクを一括スライド（移動 / 延期 / コピー）
+export async function shiftTasksDate(
+  tenantId: string,
+  sourceDate: string,
+  targetDate: string,
+  mode: 'move' | 'copy' = 'move',
+  reasonNote?: string
+): Promise<{ success: boolean; count?: number; error?: string }> {
+  try {
+    if (!tenantId || !sourceDate || !targetDate) {
+      return { success: false, error: '農園ID、移動元日、移動先日は必須です' };
+    }
+
+    const supabase = createAdminClient();
+
+    // 移動元の予定タスクを取得
+    const { data: sourceTasks, error: fetchErr } = await supabase
+      .from('work_logs')
+      .select('*')
+      .eq('user_id', tenantId)
+      .eq('work_date', sourceDate)
+      .eq('status', 'planned');
+
+    if (fetchErr) throw fetchErr;
+
+    if (!sourceTasks || sourceTasks.length === 0) {
+      return { success: false, error: `${sourceDate} に予定タスクが見つかりません` };
+    }
+
+    if (mode === 'move') {
+      // 一括移動（UPDATE）
+      for (const t of sourceTasks) {
+        let updatedMemo = t.memo || '';
+        if (reasonNote) {
+          updatedMemo = updatedMemo ? `${updatedMemo}\n[${reasonNote}]` : `[${reasonNote}]`;
+        }
+        await supabase
+          .from('work_logs')
+          .update({
+            work_date: targetDate,
+            memo: updatedMemo || null
+          })
+          .eq('id', t.id)
+          .eq('user_id', tenantId);
+      }
+      return { success: true, count: sourceTasks.length };
+    } else {
+      // 一括複製（INSERT）
+      const newTasks = sourceTasks.map(t => {
+        const { id, created_at, updated_at, ...rest } = t;
+        let memoWithNote = rest.memo || '';
+        if (reasonNote) {
+          memoWithNote = memoWithNote ? `${memoWithNote}\n[${reasonNote}]` : `[${reasonNote}]`;
+        }
+        return {
+          ...rest,
+          user_id: tenantId,
+          work_date: targetDate,
+          memo: memoWithNote || null,
+          status: 'planned',
+          duration_minutes: 0,
+          approval_status: null
+        };
+      });
+
+      const { error: insertErr } = await supabase.from('work_logs').insert(newTasks);
+      if (insertErr) throw insertErr;
+      return { success: true, count: newTasks.length };
+    }
+  } catch (err: any) {
+    console.error('shiftTasksDate error:', err);
+    return { success: false, error: err.message || '予定の一括移動に失敗しました' };
+  }
+}
+
 

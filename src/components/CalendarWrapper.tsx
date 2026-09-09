@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Clock, MapPin, Sprout, Users, X, Calendar as CalendarIcon, ChevronRight, UserCheck, Star, Sparkles } from 'lucide-react';
+import { Clock, MapPin, Sprout, Users, X, Calendar as CalendarIcon, ChevronRight, UserCheck, Star, Sparkles, Crown } from 'lucide-react';
 import { getTranslatedWorkType } from '@/lib/i18n';
 
 interface CalendarProps {
@@ -211,8 +211,8 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                               : 'bg-white border-slate-200'
                           }`}
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
+                          <div className="flex items-center justify-between gap-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span className={`w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center ${
                                 isMine ? 'bg-amber-600 text-white' : 'bg-emerald-600 text-white'
                               }`}>
@@ -223,9 +223,21 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                                   {event.timeSlot}
                                 </span>
                               )}
+                              {event.memo?.includes('【👑現場責任者】') && (
+                                <span className="text-[9px] font-black bg-amber-400 text-amber-950 px-1.5 py-0.2 rounded-md flex items-center gap-0.5 border border-amber-500/40 shadow-2xs">
+                                  <Crown className="w-2.5 h-2.5 fill-amber-950" />
+                                  <span>リーダー</span>
+                                </span>
+                              )}
+                              {event.memo?.includes('【👑現場リーダー:') && (
+                                <span className="text-[9px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded-md flex items-center gap-0.5 border border-slate-200">
+                                  <Crown className="w-2.5 h-2.5 text-amber-500" />
+                                  <span className="truncate max-w-[55px]">{event.memo.match(/【👑現場リーダー:\s*([^】]+)】/)?.[1]}</span>
+                                </span>
+                              )}
                             </div>
                             {isMine && (
-                              <span className="text-[9px] font-black bg-amber-500 text-white px-1.5 py-0.2 rounded-md flex items-center gap-0.5">
+                              <span className="text-[9px] font-black bg-amber-500 text-white px-1.5 py-0.2 rounded-md flex items-center gap-0.5 shrink-0">
                                 <Star className="w-2.5 h-2.5 fill-white" /> {t('cal_you', language)}
                               </span>
                             )}
@@ -372,21 +384,50 @@ export default function CalendarWrapper({ events, t, language, currentWorkerId, 
                             )}
                           </div>
 
+                          {/* 👑 本日の現場リーダー（責任者）バナー */}
+                          {event.memo?.includes('【👑現場責任者】') ? (
+                            <div className="mb-3 p-3 bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 rounded-2xl text-amber-950 shadow-xs flex items-center gap-2.5 border border-amber-400">
+                              <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                                <Crown className="w-5 h-5 fill-white" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-black text-xs leading-tight flex items-center gap-1">
+                                  <span>👑 本日の現場責任者（リーダー）</span>
+                                </div>
+                                <p className="text-[10px] font-bold text-amber-900 mt-0.5">
+                                  作業の安全確認・人員配置・指示進行をお願いします
+                                </p>
+                              </div>
+                            </div>
+                          ) : event.memo?.includes('【👑現場リーダー:') ? (
+                            <div className="mb-3 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 flex items-center gap-2 text-xs font-bold">
+                              <Crown className="w-4 h-4 text-amber-600 shrink-0" />
+                              <span>本日の現場リーダー: <strong className="font-black text-amber-950">{event.memo.match(/【👑現場リーダー:\s*([^】]+)】/)?.[1]}</strong> さん</span>
+                            </div>
+                          ) : null}
+
                           {/* タスク名 */}
                           <h4 className="font-black text-slate-800 text-base mb-3">
                             {getTranslatedWorkType(event.title, language as any) || event.title}
                           </h4>
 
                           {/* 📝 指示メモ（存在する場合に強調表示） */}
-                          {event.memo && (
-                            <div className="mb-3 p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-950 leading-relaxed font-bold flex items-start gap-2">
-                              <span className="text-base shrink-0">📝</span>
-                              <div>
-                                <span className="text-[10px] text-amber-700 block font-black mb-0.5">作業指示・留意事項:</span>
-                                <p className="whitespace-pre-wrap">{event.memo}</p>
+                          {(() => {
+                            const cleanMemo = event.memo
+                              ?.replace(/【👑現場責任者】\n?/, '')
+                              ?.replace(/【👑現場リーダー:[^】]+】\n?/, '')
+                              ?.trim();
+                            if (!cleanMemo) return null;
+                            return (
+                              <div className="mb-3 p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-950 leading-relaxed font-bold flex items-start gap-2">
+                                <span className="text-base shrink-0">📝</span>
+                                <div>
+                                  <span className="text-[10px] text-amber-700 block font-black mb-0.5">作業指示・留意事項:</span>
+                                  <p className="whitespace-pre-wrap">{cleanMemo}</p>
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            );
+                          })()}
                           
                           {/* 割り当て情報 */}
                           <div className="grid grid-cols-2 gap-3">

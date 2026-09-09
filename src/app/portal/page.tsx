@@ -13,7 +13,7 @@ import {
   FileSpreadsheet, Store, Calculator, Database, Camera, ExternalLink, HelpCircle,
   Truck, Scissors, Sliders, Check, Languages, Wand2, Edit3, Save, RotateCcw,
   FlaskConical, History, CheckSquare, BarChart3, Users, Settings, Building,
-  ChevronDown, ChevronUp, Eye, Activity, Filter, CalendarDays
+  ChevronDown, ChevronUp, Eye, Activity, Filter, CalendarDays, Crown
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import VideoPlayerWithSubtitles, { Narration, TrimRange } from '@/components/VideoPlayerWithSubtitles';
@@ -2710,6 +2710,18 @@ function PortalContent() {
                               <span className="font-black text-sm text-slate-800">
                                 {log.workers?.name || '作業スタッフ'}
                               </span>
+                              {log.memo?.includes('【👑現場責任者】') && (
+                                <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 text-[10px] font-black rounded-full flex items-center gap-1 shadow-2xs border border-amber-400">
+                                  <Crown className="w-2.5 h-2.5 fill-amber-950" />
+                                  <span>👑 現場責任者</span>
+                                </span>
+                              )}
+                              {log.memo?.includes('【👑現場リーダー:') && (
+                                <span className="px-1.5 py-0.5 bg-amber-50 text-amber-800 text-[10px] font-bold rounded-md flex items-center gap-0.5 border border-amber-200">
+                                  <Crown className="w-2.5 h-2.5 text-amber-600" />
+                                  <span>リーダー: {log.memo.match(/【👑現場リーダー:\s*([^】]+)】/)?.[1]}</span>
+                                </span>
+                              )}
                             </div>
 
                             <div className="flex items-center gap-2">
@@ -2745,12 +2757,19 @@ function PortalContent() {
                           </div>
 
                           {/* 下段：メモ */}
-                          {log.memo && (
-                            <div className="text-xs text-slate-700 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                              <span className="font-bold text-slate-400 mr-1.5">{t('report_memo', language)}</span>
-                              <span>{log.memo}</span>
-                            </div>
-                          )}
+                          {(() => {
+                            const cleanLogMemo = log.memo
+                              ?.replace(/【👑現場責任者】\n?/, '')
+                              ?.replace(/【👑現場リーダー:[^】]+】\n?/, '')
+                              ?.trim();
+                            if (!cleanLogMemo) return null;
+                            return (
+                              <div className="text-xs text-slate-700 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                <span className="font-bold text-slate-400 mr-1.5">{t('report_memo', language)}</span>
+                                <span>{cleanLogMemo}</span>
+                              </div>
+                            );
+                          })()}
                         </div>
                       ))
                     )}
