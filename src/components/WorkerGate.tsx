@@ -336,9 +336,36 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
             >
               <option value="" disabled>{t('selectName', language)}</option>
               {workers.map(w => (
-                <option key={w.id} value={w.id}>{getTranslatedName(w, language)}</option>
+                <option key={w.id} value={w.id} className="bg-slate-900 text-white py-2">{getTranslatedName(w, language)}</option>
               ))}
             </select>
+
+            {/* ⚡ ワンタップで名前を選べるクイックボタン（セレクトが開けないAndroid端末の完全防壁） */}
+            <div className="mt-2">
+              <span className="text-[10px] text-slate-400 font-bold block mb-1">または名前を直接タップ:</span>
+              <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1.5 bg-slate-950/80 rounded-xl border border-slate-800">
+                {workers.map(w => {
+                  const isSelected = selectedWorkerId === w.id;
+                  return (
+                    <button
+                      key={w.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedWorkerId(w.id);
+                        setErrorMsg('');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        isSelected 
+                          ? 'bg-emerald-500 text-slate-950 font-black shadow-xs ring-2 ring-emerald-400' 
+                          : 'bg-slate-850 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                      }`}
+                    >
+                      {getTranslatedName(w, language)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           <div>

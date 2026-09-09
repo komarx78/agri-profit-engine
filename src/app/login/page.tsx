@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { User, Lock, ArrowRight, Loader2, Mail } from 'lucide-react';
+import { User, Lock, ArrowRight, Loader2, Mail, Smartphone } from 'lucide-react';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -47,12 +48,30 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
       <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
+        {/* 🌾 現場スタッフ用（名前・PINログイン）直通バナー */}
+        <div className="mb-6 p-4 bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/40 rounded-2xl text-center space-y-2 shadow-lg">
+          <div className="flex items-center justify-center gap-1.5 text-xs font-black text-emerald-400">
+            <Smartphone className="w-4 h-4" />
+            <span>現場作業スタッフの方はこちら</span>
+          </div>
+          <p className="text-[11px] text-slate-300 leading-snug">
+            メールアドレスは不要です。お名前と暗証番号（PINコード）でログインできます。
+          </p>
+          <Link
+            href="/portal"
+            className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 text-sm cursor-pointer"
+          >
+            <span>🌾 現場PINログイン画面へ</span>
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-emerald-500/20 rounded-2xl mx-auto flex items-center justify-center mb-4 border border-emerald-500/30">
-            <User className="w-8 h-8 text-emerald-400" />
+          <div className="w-16 h-16 bg-slate-800 rounded-2xl mx-auto flex items-center justify-center mb-4 border border-slate-700">
+            <User className="w-8 h-8 text-slate-300" />
           </div>
           <h1 className="text-2xl font-black text-white">
-            ログイン
+            管理者ログイン
           </h1>
           <p className="text-sm text-slate-400 mt-2">
             システム管理者から発行されたメールアドレスとパスワードを入力してください
@@ -110,6 +129,16 @@ export default function LoginPage() {
             )}
           </button>
         </form>
+
+        <div className="mt-6 pt-6 border-t border-slate-800 text-center">
+          <Link
+            href="/portal"
+            className="text-xs text-emerald-400 hover:text-emerald-300 hover:underline font-bold inline-flex items-center gap-1.5 transition-colors"
+          >
+            <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+            <span>現場スタッフ用（PINコード）ログインに戻る</span>
+          </Link>
+        </div>
       </div>
     </main>
   );
