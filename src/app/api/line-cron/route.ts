@@ -18,6 +18,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const key = searchParams.get('key');
     const forceRun = searchParams.get('force') === 'true';
+    const forceFamic = searchParams.get('force_famic') === 'true';
     const filterTenantId = searchParams.get('tenant_id');
 
     // Vercel Cron から叩かれる場合: Authorization: Bearer <CRON_SECRET>
@@ -26,7 +27,7 @@ export async function GET(req: Request) {
     const cronSecret = process.env.CRON_SECRET || 'my_super_secret_key_123';
     const isCronAuthValid = (key === cronSecret) || 
                             (authHeader === `Bearer ${cronSecret}`) ||
-                            forceRun;
+                            forceRun || forceFamic;
 
     if (!isCronAuthValid) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -36,19 +37,30 @@ export async function GET(req: Request) {
     const todayStr = getJSTDate();
     const currentHourMin = getJSTTime(); // "17:30"
 
-    // 🚨【夜間帯（21:30〜翌朝06:30）の通知完全停止】
+    const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+    const supabase = getSupabase();
+
+    // 🌾【月初限定：農薬マスター更新リマインド通知（FAMIC公式データ公開案内）】
+    // 毎月1日〜3日の朝9:00以降（または force_famic=true）に、メール＆LINEで管理者に通知
+    const famicAlertResult = await processFamicMonthlyAlert(
+      supabase,
+      todayStr,
+      currentHourMin,
+      channelAccessToken,
+      forceFamic
+    );
+
+    // 🚨【夜間帯（21:30〜翌朝06:30）の勤怠通知停止】
     // 手動強制実行 (forceRun) でない限り、深夜・夜間の管理者へのLINE連打を物理遮断
     const isNightTime = currentHourMin >= '21:30' || currentHourMin < '06:30';
     if (isNightTime && !forceRun) {
       return NextResponse.json({
         status: 'success',
-        message: `夜間時間帯（21:30〜06:30、現在 ${currentHourMin}）のため、定期アラート通知を休止しています。`,
-        current_time: currentHourMin
+        message: `夜間時間帯（21:30〜06:30、現在 ${currentHourMin}）のため、勤怠アラート通知を休止しています。`,
+        current_time: currentHourMin,
+        famic_alert: famicAlertResult
       }, { status: 200 });
     }
-
-    const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-    const supabase = getSupabase();
 
     // 1. 全未退勤ログを取得
     let logQuery = supabase
@@ -66,14 +78,15 @@ export async function GET(req: Request) {
 
     if (logsError) {
       console.error('DB Error (logs):', logsError);
-      return NextResponse.json({ error: 'Database error', details: logsError.message }, { status: 500 });
+      return NextResponse.json({ error: 'Database error', details: logsError.message, famic_alert: famicAlertResult }, { status: 500 });
     }
 
     if (!allUnclockedLogs || allUnclockedLogs.length === 0) {
       return NextResponse.json({ 
         status: 'success', 
         message: '現時点で未退勤のスタッフはおりません（全員退勤済み、または未出勤です）',
-        total_unclocked: 0
+        total_unclocked: 0,
+        famic_alert: famicAlertResult
       }, { status: 200 });
     }
 
@@ -358,5 +371,176 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Internal Server Error', message: error.message }, { status: 500 });
   }
 }
+
+/**
+ * 🌾 月初限定：FAMIC農薬マスター更新リマインド通知（メール＆LINE）
+ * 毎月1日〜3日の朝9:00以降（または force_famic=true）に管理者に通知
+ * ※当月に一度送信完了した後は再送しない（憲法10条：無限通知スパム物理遮断）
+ */
+async function processFamicMonthlyAlert(
+  supabase: any,
+  todayStr: string,
+  currentHourMin: string,
+  channelAccessToken: string | undefined,
+  forceFamic: boolean
+) {
+  try {
+    const currentMonth = todayStr.substring(0, 7); // 例: "2026-09"
+    const currentDay = parseInt(todayStr.split('-')[2], 10);
+
+    // 毎月1日〜3日の朝9:00以降、または手動テスト強制実行 (forceFamic) の場合に実行
+    const isTargetSchedule = (currentDay <= 3 && currentHourMin >= '09:00') || forceFamic;
+    if (!isTargetSchedule) {
+      return { executed: false, reason: 'outside_schedule', current_day: currentDay, current_time: currentHourMin };
+    }
+
+    // 1. システム通知設定を取得
+    const { data: settings } = await supabase
+      .from('system_notification_settings')
+      .select('*')
+      .eq('id', 'default_setting')
+      .maybeSingle();
+
+    // 今月すでに送信済みなら絶対に再送しない（憲法10条：送信履歴ログ照合とクールダウンの絶対義務化）
+    const { data: sentLogs } = await supabase
+      .from('system_error_logs')
+      .select('id')
+      .eq('error_category', 'famic_monthly_alert')
+      .eq('error_message', `FAMIC_ALERT_SENT_${currentMonth}`)
+      .limit(1);
+
+    if (sentLogs && sentLogs.length > 0 && !forceFamic) {
+      return { executed: false, reason: 'already_sent_this_month', month: currentMonth };
+    }
+
+    const subject = '【農業収益エンジン】農薬マスター更新時期のお知らせ（月初FAMIC最新データ公開）';
+    const famicUrl = 'https://www.acis.famic.go.jp/ddownload/index.htm';
+    const portalMasterUrl = 'https://agri-profit-engine.vercel.app/super-admin/pesticides';
+
+    const mailBody = [
+      'お疲れ様です。農業収益エンジン（システム管理）です。',
+      '',
+      '月初となりましたので、FAMIC（独立行政法人 農林水産消費安全技術センター）より、当月度の最新農薬データ（新規登録・適用拡大・失効情報等）が更新・公開される時期となりました。',
+      '',
+      '現場での安全な防除作業、農薬取締法遵守、および出荷前審査の正確性を期すため、以下の手順にて農薬マスターの最新データ取り込みをお願いいたします。',
+      '',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '▼ 手順1: FAMIC公式から最新CSVをダウンロード',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '以下のリンクを開き、「同意する」をクリックして「基本部（kihon.csv）」および「適用部（tekiyou.csv）」の最新CSVファイルをダウンロードしてください。',
+      '',
+      '【FAMIC公式ダウンロードページ】',
+      famicUrl,
+      '',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '▼ 手順2: 農業収益エンジンにCSVをインポート',
+      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      '以下のスーパー管理者画面を開き、ダウンロードしたCSVファイルをアップロードしてください。',
+      '',
+      '【農薬マスター管理画面】',
+      portalMasterUrl,
+      '',
+      '--------------------------------------------------',
+      '※この通知は、原則毎月月初（1日〜3日頃）にスーパー管理者へ自動送信されます。',
+      '※当月中にすでにインポート・通知が完了している場合は再送されません。'
+    ].join('\n');
+
+    let mailSent = false;
+    let lineSent = false;
+
+    // A. メール送信（GAS Webhook経由）
+    if (settings?.is_email_enabled && settings?.webhook_url) {
+      try {
+        const emailList = settings.alert_emails || 'koma@ggmc.secret.jp';
+        const res = await fetch(settings.webhook_url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: emailList,
+            subject: subject,
+            body: mailBody,
+            timestamp: todayStr
+          }),
+          redirect: 'follow'
+        });
+        mailSent = res.ok;
+      } catch (mErr) {
+        console.warn('Famic alert mail error:', mErr);
+      }
+    }
+
+    // B. LINE送信（管理者宛て）
+    if (settings?.is_line_enabled && channelAccessToken) {
+      const { data: adminWorkers } = await supabase
+        .from('workers')
+        .select('line_user_id')
+        .eq('role', 'admin')
+        .not('line_user_id', 'is', null);
+
+      const lineIds = Array.from(new Set((adminWorkers || []).map((w: any) => w.line_user_id).filter(Boolean)));
+
+      const lineText = [
+        '【農業収益エンジン】農薬マスター更新リマインド🌱',
+        '',
+        '月初となりました！FAMIC（農林水産消費安全技術センター）より当月度の最新農薬データ（新規登録・適用拡大・失効情報）が公開される時期です。',
+        '',
+        '現場の安全な防除のため、最新CSVをダウンロードの上、システムへの取り込みをお願いいたします。',
+        '',
+        '▼ 1. FAMIC公式ダウンロード（最新CSV）',
+        famicUrl,
+        '',
+        '▼ 2. 農薬マスター管理画面（アップロード）',
+        portalMasterUrl
+      ].join('\n');
+
+      for (const lid of lineIds) {
+        try {
+          await fetch('https://api.line.me/v2/bot/message/push', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${channelAccessToken}`
+            },
+            body: JSON.stringify({
+              to: lid,
+              messages: [{ type: 'text', text: lineText }]
+            })
+          });
+          lineSent = true;
+        } catch (lErr) {
+          console.warn('Famic alert LINE error:', lErr);
+        }
+      }
+    }
+
+    // 送信履歴をDBに記録（今月の再送を完全遮断・憲法10条）
+    try {
+      await supabase.from('system_error_logs').insert({
+        error_category: 'famic_monthly_alert',
+        error_level: 'info',
+        error_message: `FAMIC_ALERT_SENT_${currentMonth}`,
+        page_url: famicUrl
+      });
+      // 予備でnotification_settingsも更新試行
+      await supabase
+        .from('system_notification_settings')
+        .update({ last_famic_alert_month: currentMonth })
+        .eq('id', 'default_setting');
+    } catch (uErr) {
+      console.warn('Failed to record famic alert history:', uErr);
+    }
+
+    return {
+      executed: true,
+      mailSent,
+      lineSent,
+      month: currentMonth
+    };
+  } catch (err: any) {
+    console.error('processFamicMonthlyAlert error:', err);
+    return { executed: false, error: err.message };
+  }
+}
+
 
 
