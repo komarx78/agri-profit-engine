@@ -8,6 +8,7 @@ import { reportSystemError } from '@/lib/errorReporter';
 
 interface WorkerGateProps {
   onLogin: (user: any) => void;
+  farmId?: string;
 }
 
 // 安全なlocalStorageラッパー（Safari プライベートブラウズ等の例外クラッシュ防止）
@@ -58,7 +59,7 @@ const safeStorage = {
   }
 };
 
-export function WorkerGate({ onLogin }: WorkerGateProps) {
+export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
   const [workers, setWorkers] = useState<any[]>([]);
   const [currentFarmName, setCurrentFarmName] = useState<string>('');
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
@@ -116,9 +117,11 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
               resolvedOwnerId = matched.user_id;
               setCurrentFarmName(matched.company_name);
               safeStorage.setItem('agri_cached_company_name', matched.company_name);
+            } else {
+              resolvedOwnerId = targetOwnerId;
             }
           } else {
-            // targetOwnerId が未指定の場合：佐原農園（実稼働農園）を最優先で自動解決
+            // targetOwnerId が一切未指定の場合のみ主農園を自動解決
             const mainComp = companies.find(c => c.company_name?.includes('佐原')) || companies[0];
             if (mainComp) {
               resolvedOwnerId = mainComp.user_id;
@@ -228,7 +231,7 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
       setIsLoading(false);
     }, 3500);
 
-    let ownerId = safeStorage.getItem('agri_owner_id') || '';
+    let ownerId = farmId || safeStorage.getItem('agri_owner_id') || '';
 
     // URLクエリパラメータ（?farm=xxx または ?tenant=xxx、?reset=1）を取得・処理
     if (typeof window !== 'undefined') {
@@ -238,10 +241,10 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
         // リセット指令があれば端末の古い認証・作業者キャッシュを全パージ
         if (params.get('reset') === '1' || params.get('clear') === '1') {
           safeStorage.clearWorkerCache();
-          ownerId = '';
+          ownerId = farmId || '';
         }
 
-        let paramFarmId = params.get('farm') || params.get('tenant') || params.get('ownerId') || params.get('farmId') || params.get('tenant_id');
+        let paramFarmId = farmId || params.get('farm') || params.get('tenant') || params.get('ownerId') || params.get('farmId') || params.get('tenant_id');
         if (!paramFarmId) {
           const match = window.location.pathname.match(/\/(?:portal|farm)\/([a-zA-Z0-9_-]+)/);
           if (match && match[1]) {
@@ -259,11 +262,11 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
 
     setDebugOwnerId(ownerId || '未設定');
 
-    // ownerIdが未指定でも、単一農園運用環境の自動解決を試みる
+    // 指定された農園の作業者一覧をロード
     loadWorkersForOwner(ownerId);
 
     return () => clearTimeout(failsafeTimer);
-  }, []);
+  }, [farmId]);
 
   const handleManualSetupSubmit = (e: React.FormEvent) => {
     e.preventDefault();

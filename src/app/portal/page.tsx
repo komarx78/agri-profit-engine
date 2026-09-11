@@ -54,11 +54,11 @@ function getCropEmoji(name: string): string {
   return '🌱';
 }
 
-export default function PortalPage() {
-  return <PortalContent />;
+export default function PortalPage({ requestedFarmId }: { requestedFarmId?: string } = {}) {
+  return <PortalContent requestedFarmId={requestedFarmId} />;
 }
 
-function PortalContent() {
+function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
   const router = useRouter();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -66,6 +66,7 @@ function PortalContent() {
   const [workerProfile, setWorkerProfile] = useState<any>(null);
   const [role, setRole] = useState<'admin' | 'worker'>('worker');
   const [companyName, setCompanyName] = useState<string>('会社名');
+  const [activeFarmId, setActiveFarmId] = useState<string>(requestedFarmId || '');
   const [language, setLanguage] = useState<LanguageCode>('ja');
   
   // Data States
@@ -312,11 +313,11 @@ function PortalContent() {
         let profile = null;
 
         // URLクエリパラメータ（?farm=xxx または ?tenant=xxx, ?ownerId=xxx）および URLパス（/portal/[farmId]）の最優先取得
-        let urlRequestedFarmId = '';
+        let urlRequestedFarmId = requestedFarmId || '';
         if (typeof window !== 'undefined') {
           try {
             const urlParams = new URLSearchParams(window.location.search);
-            let farmParam = urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId');
+            let farmParam = requestedFarmId || urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId');
             if (!farmParam) {
               const match = window.location.pathname.match(/\/portal\/([a-zA-Z0-9_-]+)/);
               if (match && match[1]) {
@@ -325,6 +326,7 @@ function PortalContent() {
             }
             if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
               urlRequestedFarmId = farmParam;
+              setActiveFarmId(farmParam);
               localStorage.setItem('agri_owner_id', farmParam);
               ownerId = farmParam;
             }
@@ -403,7 +405,19 @@ function PortalContent() {
             return;
           }
         } else if (session) {
-          // 2. 現場作業者が未選択で、Supabase Auth セッションがある場合は管理者として起動
+          // 2. 現場作業者が未選択で、Supabase Auth セッションがある場合
+          // 🚨【マルチテナント物理防壁】もしURLで特定農園が指定されているのに、セッションのユーザーIDと一致しない場合（別農園のAdminセッションがブラウザに残っている場合）
+          // 管理者として自動ログインさせず、URLで指定された農園の WorkerGate を表示する！
+          if (urlRequestedFarmId && session.user.id !== urlRequestedFarmId) {
+            console.log('Session user is from another farm; showing WorkerGate for requested farm:', urlRequestedFarmId);
+            ownerId = urlRequestedFarmId;
+            if (typeof window !== 'undefined') {
+              try { localStorage.setItem('agri_owner_id', urlRequestedFarmId); } catch (e) {}
+            }
+            setShowWorkerGate(true);
+            setIsLoading(false);
+            return;
+          }
           ownerId = session.user.id;
           if (typeof window !== 'undefined') {
             try { localStorage.setItem('agri_owner_id', ownerId); } catch (e) {}
@@ -2736,6 +2750,7 @@ function PortalContent() {
   if (showWorkerGate || !currentUser) {
     return (
       <WorkerGate 
+        farmId={activeFarmId || requestedFarmId}
         onLogin={async (user) => {
           setShowWorkerGate(false);
           setCurrentUser(user);
@@ -2744,7 +2759,7 @@ function PortalContent() {
           setRole(isWorkerAdmin ? 'admin' : 'worker');
           setIsLoading(false);
 
-          const activeOwnerId = user.user_id || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
+          const activeOwnerId = user.user_id || activeFarmId || requestedFarmId || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
           if (activeOwnerId) {
             fetchPortalData(activeOwnerId, isWorkerAdmin ? 'admin' : 'worker', user, closingDay).catch((err) => {
               console.warn('Background portal fetch error:', err);

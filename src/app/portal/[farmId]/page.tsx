@@ -17,5 +17,5 @@ export default function DedicatedFarmPortalPage({ params }: { params: Promise<{ 
     }
   }, [farmId]);
 
-  return <PortalPage />;
+  return <PortalPage requestedFarmId={farmId} />;
 }
