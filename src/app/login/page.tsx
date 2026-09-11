@@ -15,6 +15,15 @@ export default function LoginPage() {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [farmParam, setFarmParam] = useState('');
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      const f = p.get('farm') || p.get('tenant') || localStorage.getItem('agri_owner_id') || '';
+      if (f) setFarmParam(f);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,15 +32,20 @@ export default function LoginPage() {
 
     try {
       // ログイン処理
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       
       if (error) throw error;
       
+      const targetFarm = farmParam || data.user?.id;
+      if (targetFarm && typeof window !== 'undefined') {
+        try { localStorage.setItem('agri_owner_id', targetFarm); } catch (e) {}
+      }
+
       // ログイン成功時は管理者画面（作付け統合司令塔）へ直接遷移
-      router.push('/admin/cultivations');
+      router.push(targetFarm ? `/admin/cultivations?farm=${targetFarm}` : '/admin/cultivations');
       router.refresh();
     } catch (err: any) {
       console.error(err);
@@ -48,17 +62,17 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
       <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
-        {/* 🌾 現場スタッフ用（名前・PINログイン）直通バナー */}
-        <div className="mb-6 p-4 bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/40 rounded-2xl text-center space-y-2 shadow-lg">
-          <div className="flex items-center justify-center gap-1.5 text-xs font-black text-emerald-400">
-            <Smartphone className="w-4 h-4" />
+        {/* 現場スタッフ用（PIN）への誘導バナー */}
+        <div className="mb-8 p-4 bg-gradient-to-r from-emerald-950/80 to-slate-900 border border-emerald-500/30 rounded-2xl space-y-2">
+          <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
+            <Smartphone className="w-4 h-4 shrink-0" />
             <span>現場作業スタッフの方はこちら</span>
           </div>
           <p className="text-[11px] text-slate-300 leading-snug">
             メールアドレスは不要です。お名前と暗証番号（PINコード）でログインできます。
           </p>
           <Link
-            href="/portal"
+            href={farmParam ? `/portal/${farmParam}` : '/portal'}
             className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 text-sm cursor-pointer"
           >
             <span>🌾 現場PINログイン画面へ</span>

@@ -1399,7 +1399,10 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
 
               {currentUser?.role === 'admin' && (
                 <button
-                  onClick={() => router.push('/admin/cultivations')}
+                  onClick={() => {
+                    const targetFarm = workerTenantId || requestedFarmId;
+                    router.push(targetFarm ? `/admin/cultivations?farm=${targetFarm}` : '/admin/cultivations');
+                  }}
                   className="text-[10px] text-emerald-300 hover:text-white bg-emerald-800/60 px-2 py-1 rounded-lg border border-emerald-700 font-bold transition-all"
                 >
                   {t('detailBtn', language)}

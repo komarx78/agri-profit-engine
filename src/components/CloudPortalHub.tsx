@@ -41,7 +41,8 @@ interface CloudPortalHubProps {
 }
 
 export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) {
-  const { companyName } = useCompany();
+  const [tenantId, setTenantId] = useState<string>('');
+  const { companyName } = useCompany(tenantId);
   const [currentDate] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
@@ -53,6 +54,14 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
   const [loadingTasks, setLoadingTasks] = useState(true);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      const f = p.get('farm') || p.get('tenant') || localStorage.getItem('agri_owner_id') || '';
+      if (f) setTenantId(f);
+    }
+  }, []);
+
+  useEffect(() => {
     async function loadTasks() {
       try {
         const supabase = createBrowserClient(
@@ -60,8 +69,11 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
         );
 
-        const tenantId = await getCurrentTenantId();
-        if (!tenantId) {
+        const currentTId = await getCurrentTenantId();
+        if (currentTId) {
+          setTenantId(currentTId);
+        }
+        if (!currentTId) {
           setLoadingTasks(false);
           return;
         }
@@ -70,18 +82,18 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
         const { count: orderCount } = await supabase
           .from('b2b_orders')
           .select('*', { count: 'exact', head: true })
-          .eq('user_id', tenantId)
+          .eq('user_id', currentTId)
           .eq('status', 'pending');
 
         // 2. 自社テナントの未承認有給申請を取得
         const { count: leaveCount } = await supabase
           .from('leave_requests')
           .select('*', { count: 'exact', head: true })
-          .eq('user_id', tenantId)
+          .eq('user_id', currentTId)
           .eq('status', 'pending');
 
         // 3. 自社テナントの作業者IDリストを取得
-        const workerIds = await getTenantWorkerIds(tenantId);
+        const workerIds = await getTenantWorkerIds(currentTId);
 
         let attErrors = 0;
         if (workerIds.length > 0) {
@@ -191,7 +203,7 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
                 </div>
               </div>
               <Link 
-                href="/hr" 
+                href={tenantId ? `/hr?farm=${tenantId}` : '/hr'} 
                 className="inline-flex items-center justify-center gap-1 text-rose-700 hover:text-white text-xs font-black px-4 py-2.5 bg-rose-100 hover:bg-rose-600 rounded-xl transition-all shadow-sm shrink-0 self-start sm:self-auto"
               >
                 勤怠管理で確認する ➔
@@ -221,7 +233,7 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
                 </div>
               </div>
               <Link 
-                href="/sales-management/orders" 
+                href={tenantId ? `/sales-management/orders?farm=${tenantId}` : '/sales-management/orders'} 
                 className="inline-flex items-center justify-center gap-1 text-amber-800 hover:text-white text-xs font-black px-4 py-2.5 bg-amber-200/80 hover:bg-amber-600 rounded-xl transition-all shadow-sm shrink-0 self-start sm:self-auto"
               >
                 受注一覧へ ➔
@@ -251,7 +263,7 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
                 </div>
               </div>
               <Link 
-                href="/hr/paid-leave" 
+                href={tenantId ? `/hr/paid-leave?farm=${tenantId}` : '/hr/paid-leave'} 
                 className="inline-flex items-center justify-center gap-1 text-indigo-700 hover:text-white text-xs font-black px-4 py-2.5 bg-indigo-100 hover:bg-indigo-600 rounded-xl transition-all shadow-sm shrink-0 self-start sm:self-auto"
               >
                 有給管理で承認する ➔
@@ -288,7 +300,7 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
         
         {/* ① 👑 【最重要】作付・農業司令塔 Hub */}
         <Link 
-          href="/portal?tab=cultivations" 
+          href={tenantId ? `/portal/${tenantId}?tab=cultivations` : '/portal?tab=cultivations'} 
           className="group md:col-span-2 lg:col-span-2 bg-gradient-to-br from-emerald-900 via-slate-900 to-emerald-950 text-white rounded-3xl p-6 md:p-8 shadow-md border border-emerald-500/30 hover:border-emerald-400 hover:shadow-xl transition-all flex flex-col relative overflow-hidden"
         >
           <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-500 pointer-events-none" />
@@ -352,7 +364,7 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
             </p>
           </button>
         ) : (
-          <Link href="/portal?tab=home" className="group bg-gradient-to-br from-indigo-50 to-white rounded-3xl p-6 shadow-sm border border-indigo-100 hover:shadow-md hover:border-indigo-300 transition-all flex flex-col relative overflow-hidden">
+          <Link href={tenantId ? `/portal/${tenantId}?tab=home` : '/portal?tab=home'} className="group bg-gradient-to-br from-indigo-50 to-white rounded-3xl p-6 shadow-sm border border-indigo-100 hover:shadow-md hover:border-indigo-300 transition-all flex flex-col relative overflow-hidden">
             <div className="flex items-center justify-between mb-4 relative z-10">
               <div className="w-12 h-12 bg-indigo-600 text-white rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm">
                 <Layout className="w-6 h-6" />
@@ -367,7 +379,7 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
         )}
 
         {/* ③ ⏱️ 現場作業・日報記録 */}
-        <Link href="/work" className="group bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-emerald-300 transition-all flex flex-col relative overflow-hidden">
+        <Link href={tenantId ? `/work/${tenantId}` : '/work'} className="group bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-emerald-300 transition-all flex flex-col relative overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
               <Clock className="w-6 h-6" />
@@ -381,7 +393,7 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
         </Link>
 
         {/* ④ 🗺️ 圃場マップ & 気象カルテ */}
-        <Link href="/admin/map" className="group bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-blue-300 transition-all flex flex-col relative overflow-hidden">
+        <Link href={tenantId ? `/admin/map?farm=${tenantId}` : '/admin/map'} className="group bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-blue-300 transition-all flex flex-col relative overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
               <Map className="w-6 h-6" />
@@ -395,7 +407,7 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
         </Link>
 
         {/* ⑤ 🧪 農薬スマートカルテ & 成分重複ガード */}
-        <Link href="/farm/pesticide-check" className="group bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-amber-300 transition-all flex flex-col relative overflow-hidden">
+        <Link href={tenantId ? `/farm/pesticide-check?farm=${tenantId}` : '/farm/pesticide-check'} className="group bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-amber-300 transition-all flex flex-col relative overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
               <FlaskConical className="w-6 h-6" />
@@ -409,7 +421,7 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
         </Link>
 
         {/* ⑥ 📊 年間栽培計画 & 予実・育苗 */}
-        <Link href="/admin/cultivation-schedule" className="group bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-teal-300 transition-all flex flex-col relative overflow-hidden">
+        <Link href={tenantId ? `/admin/cultivation-schedule?farm=${tenantId}` : '/admin/cultivation-schedule'} className="group bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-teal-300 transition-all flex flex-col relative overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-teal-100 text-teal-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
               <BarChart3 className="w-6 h-6" />
@@ -423,7 +435,7 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
         </Link>
 
         {/* ⑦ 🚚 販売・受注・請求管理 */}
-        <Link href="/sales-management/invoices" className="group bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-violet-300 transition-all flex flex-col relative overflow-hidden">
+        <Link href={tenantId ? `/sales-management/invoices?farm=${tenantId}` : '/sales-management/invoices'} className="group bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-violet-300 transition-all flex flex-col relative overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-violet-100 text-violet-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
               <Truck className="w-6 h-6" />
@@ -437,7 +449,7 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
         </Link>
 
         {/* ⑧ ⏰ 勤怠管理・タイムカード */}
-        <Link href="/hr" className="group bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-sky-300 transition-all flex flex-col relative overflow-hidden">
+        <Link href={tenantId ? `/hr?farm=${tenantId}` : '/hr'} className="group bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-sky-300 transition-all flex flex-col relative overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-sky-100 text-sky-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
               <Clock className="w-6 h-6" />
@@ -451,7 +463,7 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
         </Link>
 
         {/* ⑨ ⚙️ マスタ管理センター */}
-        <Link href="/admin/masters" className="group bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-slate-400 transition-all flex flex-col relative overflow-hidden">
+        <Link href={tenantId ? `/admin/masters?farm=${tenantId}` : '/admin/masters'} className="group bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-slate-400 transition-all flex flex-col relative overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-slate-100 text-slate-700 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
               <Database className="w-6 h-6" />

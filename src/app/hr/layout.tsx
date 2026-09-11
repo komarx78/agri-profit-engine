@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
@@ -21,7 +21,17 @@ import { useCompany } from '@/hooks/useCompany';
 
 export default function HrLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { companyName } = useCompany();
+  const [currentFarmId, setCurrentFarmId] = useState<string>('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      const f = p.get('farm') || p.get('tenant') || localStorage.getItem('agri_owner_id') || '';
+      if (f) setCurrentFarmId(f);
+    }
+  }, []);
+
+  const { companyName } = useCompany(currentFarmId);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // ペイウォール（課金の壁）のデモ用ステート。
@@ -63,7 +73,10 @@ export default function HrLayout({ children }: { children: React.ReactNode }) {
           <button className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 mb-4">
             <Crown className="w-5 h-5" /> プランをアップグレードする
           </button>
-          <Link href="/" className="text-sm font-bold text-slate-400 hover:text-slate-600 flex items-center justify-center gap-1">
+          <Link 
+            href={currentFarmId ? `/portal/${currentFarmId}` : '/portal'} 
+            className="text-sm font-bold text-slate-400 hover:text-slate-600 flex items-center justify-center gap-1"
+          >
             <Cloud className="w-4 h-4" /> Cloud Portalへ戻る
           </Link>
         </div>
@@ -98,7 +111,7 @@ export default function HrLayout({ children }: { children: React.ReactNode }) {
 
         <div className="flex items-center gap-4 shrink-0">
           <Link 
-            href="/" 
+            href={currentFarmId ? `/portal/${currentFarmId}` : '/portal'} 
             className="flex items-center gap-1.5 text-sm font-bold text-blue-100 hover:text-white bg-blue-800/50 hover:bg-blue-800 px-3 py-1.5 rounded-lg transition-all"
           >
             <Cloud className="w-4 h-4" />
@@ -122,10 +135,11 @@ export default function HrLayout({ children }: { children: React.ReactNode }) {
               {navItems.map(item => {
                 const isActive = pathname === item.path;
                 const Icon = item.icon;
+                const linkHref = currentFarmId ? `${item.path}?farm=${currentFarmId}` : item.path;
                 return (
                   <Link
                     key={item.path}
-                    href={item.path}
+                    href={linkHref}
                     target={item.isExternal ? "_blank" : undefined}
                     className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-bold ${
                       isActive 
@@ -169,24 +183,25 @@ export default function HrLayout({ children }: { children: React.ReactNode }) {
                   {navItems.map(item => {
                     const isActive = pathname === item.path;
                     const Icon = item.icon;
-                      return (
-                        <Link
-                          key={item.path}
-                          href={item.path}
-                          target={item.isExternal ? "_blank" : undefined}
-                          onClick={closeMenu}
-                          className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-bold ${
-                            isActive 
-                              ? 'bg-blue-50 text-blue-700' 
-                              : item.isExternal
-                              ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-800 border border-transparent hover:border-slate-200 mt-4'
-                              : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                          }`}
-                        >
-                          <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
-                          <span className="truncate flex-1">{item.name}</span>
-                        </Link>
-                      );
+                    const linkHref = currentFarmId ? `${item.path}?farm=${currentFarmId}` : item.path;
+                    return (
+                      <Link
+                        key={item.path}
+                        href={linkHref}
+                        target={item.isExternal ? "_blank" : undefined}
+                        onClick={closeMenu}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-bold ${
+                          isActive 
+                            ? 'bg-blue-50 text-blue-700' 
+                            : item.isExternal
+                            ? 'text-slate-500 hover:bg-slate-100 hover:text-slate-800 border border-transparent hover:border-slate-200 mt-4'
+                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                      >
+                        <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                        <span className="truncate flex-1">{item.name}</span>
+                      </Link>
+                    );
                   })}
                 </nav>
               </div>
