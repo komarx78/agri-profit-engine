@@ -21,6 +21,7 @@ import VideoPlayerWithSubtitles, { Narration, TrimRange } from '@/components/Vid
 import { t, getTranslatedName, getTranslatedWorkType, getWeekdayName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
 import { getPortalTasks, completePortalTask, reopenPortalTask, submitAttendance, submitLeaveRequest, getWorkerLeaveRequests } from '@/app/actions/farm';
+import { reportSystemError } from '@/lib/errorReporter';
 import { translateSingleText } from '@/app/actions/translate';
 import { PwaBottomBanner } from '@/components/PwaInstallPrompt';
 import Link from 'next/link';
@@ -2493,6 +2494,13 @@ function PortalContent() {
           setAttendance(res.data);
           fetchWorkerMonthlyAttendance(workerId, timecardMonth);
         } else {
+          reportSystemError({
+            category: 'attendance',
+            message: `出勤打刻失敗: ${res.error || '通信エラー'}`,
+            workerId,
+            workerName: workerProfile?.name,
+            companyName
+          });
           alert('打刻に失敗しました: ' + (res.error || '通信エラー'));
         }
       } else {
@@ -2507,6 +2515,13 @@ function PortalContent() {
           if (unclosed && unclosed.length > 0) targetAtt = unclosed[0];
         }
         if (!targetAtt) {
+          reportSystemError({
+            category: 'attendance',
+            message: '退勤打刻失敗: 出勤記録が見つかりませんでした',
+            workerId,
+            workerName: workerProfile?.name,
+            companyName
+          });
           alert('出勤記録が見つかりませんでした。出勤打刻を行ってください。');
           return;
         }
@@ -2516,11 +2531,26 @@ function PortalContent() {
           setAttendance(res.data);
           fetchWorkerMonthlyAttendance(workerId, timecardMonth);
         } else {
+          reportSystemError({
+            category: 'attendance',
+            message: `退勤打刻失敗: ${res.error || '通信エラー'}`,
+            workerId,
+            workerName: workerProfile?.name,
+            companyName
+          });
           alert('打刻に失敗しました: ' + (res.error || '通信エラー'));
         }
       }
     } catch (err: any) {
       console.error('打刻エラー詳細:', err);
+      reportSystemError({
+        category: 'attendance',
+        message: `打刻例外エラー (${type === 'in' ? '出勤' : '退勤'}): ${err?.message || '通信エラー'}`,
+        error: err,
+        workerId,
+        workerName: workerProfile?.name,
+        companyName
+      });
       alert('打刻に失敗しました: ' + (err.message || '通信エラー'));
     }
   };

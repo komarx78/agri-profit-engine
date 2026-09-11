@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User, Lock, ArrowRight, Loader2, Globe, Eye, EyeOff, Building, RefreshCw } from 'lucide-react';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
+import { reportSystemError } from '@/lib/errorReporter';
 
 interface WorkerGateProps {
   onLogin: (user: any) => void;
@@ -209,6 +210,12 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
       }
     } catch (err: any) {
       console.error(err);
+      reportSystemError({
+        category: 'login',
+        message: `現場ワーカー取得エラー: ${err?.message || 'Unknown error'}`,
+        error: err,
+        companyName: currentFarmName
+      });
       setErrorMsg('データ取得エラー: ' + (err.message || 'Unknown error'));
     } finally {
       setIsLoading(false);
@@ -312,8 +319,15 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
         );
         setPinCode('');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      reportSystemError({
+        category: 'login',
+        message: `現場ログインPIN照合エラー: ${err?.message || '不明なエラー'}`,
+        error: err,
+        workerId,
+        companyName: currentFarmName
+      });
       setErrorMsg(t('loginFailed', language));
     } finally {
       setIsSubmitting(false);
