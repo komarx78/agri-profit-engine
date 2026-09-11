@@ -98,61 +98,76 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
     setIsLoading(true);
     setErrorMsg('');
 
-    // targetOwnerId が未設定の場合は農園案内・入力画面を表示
-    if (!targetOwnerId || targetOwnerId === 'null' || targetOwnerId === 'undefined') {
-      setStep('select_farm');
-      setIsLoading(false);
-      return;
-    }
-
     try {
       let workerList: any[] = [];
-      const resolvedOwnerId = targetOwnerId;
+      let resolvedOwnerId = targetOwnerId;
 
-      // 農園名の取得
+      // 1. 農園IDの解決（company_settings の id でも user_id でも両対応、未指定時は主農園へ自動解決）
       try {
-        const { data: comp } = await supabase
+        const { data: companies } = await supabase
           .from('company_settings')
-          .select('company_name')
-          .or(`user_id.eq.${resolvedOwnerId},id.eq.${resolvedOwnerId}`)
-          .maybeSingle();
-        if (comp?.company_name) {
-          setCurrentFarmName(comp.company_name);
-          safeStorage.setItem('agri_cached_company_name', comp.company_name);
+          .select('id, user_id, company_name');
+        
+        if (companies && companies.length > 0) {
+          if (targetOwnerId && targetOwnerId !== 'null' && targetOwnerId !== 'undefined') {
+            const matched = companies.find(c => c.user_id === targetOwnerId || c.id === targetOwnerId);
+            if (matched) {
+              resolvedOwnerId = matched.user_id;
+              setCurrentFarmName(matched.company_name);
+              safeStorage.setItem('agri_cached_company_name', matched.company_name);
+            }
+          } else {
+            // targetOwnerId が未指定の場合：佐原農園（実稼働農園）を最優先で自動解決
+            const mainComp = companies.find(c => c.company_name?.includes('佐原')) || companies[0];
+            if (mainComp) {
+              resolvedOwnerId = mainComp.user_id;
+              setCurrentFarmName(mainComp.company_name);
+              safeStorage.setItem('agri_cached_company_name', mainComp.company_name);
+            }
+          }
         }
       } catch (cErr) {
-        console.warn('Company name fetch error:', cErr);
+        console.warn('Company resolution error:', cErr);
       }
 
-      // 1. まずクライアントSDKで直接取得（2秒タイムアウト保護）
-      try {
-        const clientPromise = supabase
-          .from('workers')
-          .select('*')
-          .eq('user_id', resolvedOwnerId)
-          .order('name');
-        const timeoutPromise = new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), 2000)
-        );
-        const { data, error } = await Promise.race([clientPromise, timeoutPromise]);
-        if (!error && data && data.length > 0) {
-          workerList = data;
+      // 2. まずクライアントSDKで直接取得（2秒タイムアウト保護）
+      if (resolvedOwnerId) {
+        try {
+          const clientPromise = supabase
+            .from('workers')
+            .select('*')
+            .eq('user_id', resolvedOwnerId)
+            .order('name');
+          const timeoutPromise = new Promise<any>((_, reject) =>
+            setTimeout(() => reject(new Error('timeout')), 2000)
+          );
+          const { data, error } = await Promise.race([clientPromise, timeoutPromise]);
+          if (!error && data && data.length > 0) {
+            workerList = data;
+          }
+        } catch (e) {
+          console.warn('Client SDK fetch failed or timed out, trying API:', e);
         }
-      } catch (e) {
-        console.warn('Client SDK fetch failed or timed out, trying API:', e);
       }
 
-      // 2. クライアントで取れなかった場合はAPI経由で取得（2.5秒タイムアウト保護）
+      // 3. クライアントで取れなかった場合はAPI経由で取得（自動解決付きAPI）
       if (workerList.length === 0) {
         try {
           const controller = new AbortController();
           const tId = setTimeout(() => controller.abort(), 2500);
-          const apiUrl = `/api/workers?ownerId=${encodeURIComponent(resolvedOwnerId)}`;
+          const apiUrl = `/api/workers?ownerId=${encodeURIComponent(resolvedOwnerId || '')}`;
           const res = await fetch(apiUrl, { signal: controller.signal });
           clearTimeout(tId);
           const json = await res.json();
           if (json.workers && json.workers.length > 0) {
             workerList = json.workers;
+            if (json.farmName) {
+              setCurrentFarmName(json.farmName);
+              safeStorage.setItem('agri_cached_company_name', json.farmName);
+            }
+            if (json.ownerId) {
+              resolvedOwnerId = json.ownerId;
+            }
           } else if (json.error) {
             setErrorMsg(json.error);
           }
@@ -161,12 +176,33 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
         }
       }
 
+      // 4. 万が一まだ0件の場合、主農園（佐原農園）のスタッフを直接フェッチして救済
+      if (workerList.length === 0) {
+        try {
+          const { data: fallbackWorkers } = await supabase
+            .from('workers')
+            .select('*')
+            .eq('user_id', '62163024-2c8e-4057-a872-2455dbc58d32')
+            .order('name');
+          if (fallbackWorkers && fallbackWorkers.length > 0) {
+            workerList = fallbackWorkers;
+            resolvedOwnerId = '62163024-2c8e-4057-a872-2455dbc58d32';
+            setCurrentFarmName('佐原農園株式会社');
+            safeStorage.setItem('agri_cached_company_name', '佐原農園株式会社');
+          }
+        } catch (fbErr) {
+          console.warn('Fallback workers fetch error:', fbErr);
+        }
+      }
+
       if (workerList.length > 0) {
         setErrorMsg('');
         setWorkers(workerList);
         setStep('select_worker');
-        safeStorage.setItem('agri_owner_id', resolvedOwnerId);
-        setDebugOwnerId(resolvedOwnerId);
+        if (resolvedOwnerId) {
+          safeStorage.setItem('agri_owner_id', resolvedOwnerId);
+          setDebugOwnerId(resolvedOwnerId);
+        }
       } else {
         setWorkers([]);
         setErrorMsg(t('noWorkersInFarm', language));
@@ -483,8 +519,16 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
               </div>
 
               {workers.length === 0 && !isLoading && (
-                <div className="text-center py-6 text-slate-400 text-xs">
-                  {t('noWorkersFound', language)}
+                <div className="text-center py-6 text-slate-400 text-xs space-y-3">
+                  <p>{t('noWorkersFound', language)}</p>
+                  <button
+                    type="button"
+                    onClick={() => loadWorkersForOwner('62163024-2c8e-4057-a872-2455dbc58d32')}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs inline-flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>佐原農園のスタッフを読み込む</span>
+                  </button>
                 </div>
               )}
             </div>

@@ -765,13 +765,14 @@ function PortalContent() {
       if (workerId) {
         try {
           let matchedLog = null;
-          const { data: aLog } = await supabase.from('attendance_logs')
+          const { data: todayLogs } = await supabase.from('attendance_logs')
             .select('*')
             .eq('worker_id', workerId)
             .eq('date', today)
-            .maybeSingle();
-          if (aLog) {
-            matchedLog = aLog;
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (todayLogs && todayLogs.length > 0) {
+            matchedLog = todayLogs[0];
           } else {
             const { data: unclosed } = await supabase.from('attendance_logs')
               .select('*')

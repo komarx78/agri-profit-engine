@@ -396,14 +396,15 @@ export default function WorkEntryPage() {
         if (!cRes.error && currentUser) {
           // 今日の打刻状態を取得（未退勤ログのフォールバック付き）
           let activeAttLog = null;
-          const { data: aLog } = await supabase
+          const { data: todayLogs } = await supabase
             .from('attendance_logs')
             .select('*')
             .eq('worker_id', currentUser.id)
             .eq('date', getJSTDate())
-            .maybeSingle();
-          if (aLog) {
-            activeAttLog = aLog;
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (todayLogs && todayLogs.length > 0) {
+            activeAttLog = todayLogs[0];
           } else {
             const { data: unclosed } = await supabase
               .from('attendance_logs')

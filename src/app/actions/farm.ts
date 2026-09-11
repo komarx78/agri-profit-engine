@@ -298,16 +298,15 @@ export async function submitSalesLog(tenantId: string, logData: any) {
 export async function getTodayAttendance(tenantId: string, workerId: string, date: string) {
   try {
     const supabase = createAdminClient();
-    const { data, error } = await supabase.from('attendance_logs')
+    const { data: todayLogs } = await supabase.from('attendance_logs')
       .select('*')
       .eq('worker_id', workerId)
       .eq('date', date)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
 
-    if (data) {
-      return { success: true, data };
+    if (todayLogs && todayLogs.length > 0) {
+      return { success: true, data: todayLogs[0] };
     }
 
     // 当日の打刻がない場合、未退勤ログ（直近の未退勤打刻）を検索
@@ -316,10 +315,9 @@ export async function getTodayAttendance(tenantId: string, workerId: string, dat
       .eq('worker_id', workerId)
       .is('clock_out', null)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
 
-    return { success: true, data: unclosed || null };
+    return { success: true, data: (unclosed && unclosed.length > 0) ? unclosed[0] : null };
   } catch (err: any) {
     console.error('getTodayAttendance error:', err);
     return { success: false, data: null };
@@ -336,6 +334,18 @@ export async function submitAttendance(tenantId: string, workerId: string, actio
       if (!resolvedUserId || resolvedUserId === 'null' || resolvedUserId === 'undefined') {
         const { data: w } = await supabase.from('workers').select('user_id').eq('id', workerId).maybeSingle();
         if (w?.user_id) resolvedUserId = w.user_id;
+      }
+
+      // 🛡️ 二重出勤防止ガード（連打や通信ラグによる重複レコード作成を物理遮断）
+      const { data: existingToday } = await supabase.from('attendance_logs')
+        .select('*')
+        .eq('worker_id', workerId)
+        .eq('date', date)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (existingToday && existingToday.length > 0) {
+        return { success: true, data: existingToday[0] };
       }
 
       const { data, error } = await supabase.from('attendance_logs').insert([{
