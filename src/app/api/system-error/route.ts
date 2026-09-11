@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+// Supabase クライアント生成（検証済みの Anon Key を優先使用。RLSにより安全にアクセス可能）
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  return createClient(url, key, {
+    auth: { persistSession: false }
+  });
+}
 
 // 送信先メールアドレス（我が君のアカウント）
 const ALERT_EMAIL = process.env.ALERT_EMAIL_RECIPIENT || 'koma@ggmc.secret.jp';
@@ -31,34 +37,29 @@ export async function POST(req: Request) {
 
     // 1. Supabase の system_error_logs テーブルへ保存
     let savedLog: any = null;
-    if (supabaseUrl && supabaseKey) {
-      try {
-        const supabase = createClient(supabaseUrl, supabaseKey, {
-          auth: { persistSession: false }
-        });
+    try {
+      const supabase = getSupabase();
+      const { data, error } = await supabase.from('system_error_logs').insert([{
+        tenant_id,
+        company_name,
+        worker_id,
+        worker_name,
+        error_level,
+        error_category,
+        error_message,
+        error_stack,
+        device_info,
+        page_url,
+        created_at: new Date().toISOString()
+      }]).select().single();
 
-        const { data, error } = await supabase.from('system_error_logs').insert([{
-          tenant_id,
-          company_name,
-          worker_id,
-          worker_name,
-          error_level,
-          error_category,
-          error_message,
-          error_stack,
-          device_info,
-          page_url,
-          created_at: new Date().toISOString()
-        }]).select().single();
-
-        if (!error && data) {
-          savedLog = data;
-        } else if (error) {
-          console.warn('system_error_logs insert warning:', error.message);
-        }
-      } catch (dbErr) {
-        console.warn('DB logging failed:', dbErr);
+      if (!error && data) {
+        savedLog = data;
+      } else if (error) {
+        console.warn('system_error_logs insert warning:', error.message);
       }
+    } catch (dbErr) {
+      console.warn('DB logging failed:', dbErr);
     }
 
     // 2. 外部通知（メール / LINE / Webhook）の発火
@@ -85,14 +86,7 @@ export async function POST(req: Request) {
 // ログ取得API（スーパー管理者画面用）
 export async function GET(req: Request) {
   try {
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ success: true, logs: [], message: 'Supabase credentials not configured' });
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: { persistSession: false }
-    });
-
+    const supabase = getSupabase();
     const { data, error } = await supabase
       .from('system_error_logs')
       .select('*')
@@ -101,11 +95,14 @@ export async function GET(req: Request) {
 
     if (error) {
       console.warn('GET /api/system-error error:', error.message);
-      // テーブルがまだ作られていない場合でも画面をクラッシュさせない
+      // テーブルが本当に存在しない（PGRST205等）場合のみ tableReady: false とする
+      const isMissingTable = error.code === 'PGRST205' || 
+                             error.message.includes('relation') || 
+                             error.message.includes('does not exist');
       return NextResponse.json({ 
         success: true, 
         logs: [], 
-        tableReady: false, 
+        tableReady: !isMissingTable, 
         error: error.message 
       });
     }
@@ -117,7 +114,7 @@ export async function GET(req: Request) {
     });
   } catch (err: any) {
     console.error('GET /api/system-error failed:', err);
-    return NextResponse.json({ success: false, logs: [], error: err.message }, { status: 500 });
+    return NextResponse.json({ success: false, logs: [], tableReady: true, error: err.message }, { status: 500 });
   }
 }
 
@@ -131,14 +128,7 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'Missing log id' }, { status: 400 });
     }
 
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: { persistSession: false }
-    });
-
+    const supabase = getSupabase();
     const updateData: any = {
       is_resolved: !!is_resolved,
       resolved_at: is_resolved ? new Date().toISOString() : null,
