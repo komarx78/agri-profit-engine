@@ -155,7 +155,7 @@ export async function PATCH(req: Request) {
 
 // 管理者へのメール・LINE通知実行ヘルパー
 async function sendAdminNotification(info: {
-  toEmail: string;
+  toEmail?: string;
   companyName: string;
   workerName: string;
   category: string;
@@ -163,6 +163,33 @@ async function sendAdminNotification(info: {
   pageUrl: string;
   time: string;
 }) {
+  // 1. DBから通知設定マスタを動的にロード
+  let targetEmails = info.toEmail || ALERT_EMAIL;
+  let targetWebhook = process.env.ADMIN_ALERT_WEBHOOK_URL || '';
+  let isEmailEnabled = true;
+
+  try {
+    const supabase = getSupabase();
+    const { data: notifSetting } = await supabase
+      .from('system_notification_settings')
+      .select('*')
+      .eq('id', 'default_setting')
+      .maybeSingle();
+
+    if (notifSetting) {
+      if (notifSetting.alert_emails) targetEmails = notifSetting.alert_emails;
+      if (notifSetting.webhook_url) targetWebhook = notifSetting.webhook_url;
+      if (notifSetting.is_email_enabled === false) isEmailEnabled = false;
+    }
+  } catch (dbErr) {
+    console.warn('Failed to load notification settings from DB:', dbErr);
+  }
+
+  if (!isEmailEnabled) {
+    console.log('メール通知は設定マスタにより無効化されています。');
+    return;
+  }
+
   const title = `🚨【現場エラー検知】${info.companyName} (${info.workerName})`;
   const content = `
 【発生日時】: ${info.time}
@@ -177,18 +204,18 @@ ${info.pageUrl}
 
 ----------------------------------------
 ※このメールは農業収益エンジンの現場監視システムより自動送信されています。
-スーパー管理者画面（/super-admin/logs）から詳細ログとスタックトレースを確認できます。
+送信先設定: ${targetEmails}
+スーパー管理者画面（/super-admin/logs）から詳細ログと対応ステータスを管理できます。
   `.trim();
 
-  // A. GAS (Google Apps Script) Webhook または Resend API が設定されている場合
-  const webhookUrl = process.env.ADMIN_ALERT_WEBHOOK_URL;
-  if (webhookUrl) {
+  // A. GAS (Google Apps Script) Webhook または カスタムWebhook が設定されている場合
+  if (targetWebhook) {
     try {
-      await fetch(webhookUrl, {
+      await fetch(targetWebhook, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to: info.toEmail,
+          to: targetEmails,
           subject: title,
           body: content
         })
@@ -198,23 +225,25 @@ ${info.pageUrl}
     }
   }
 
+
   // B. Resend API Key がある場合は直接メール送信
   const resendKey = process.env.RESEND_API_KEY;
   if (resendKey) {
     try {
+      const emailsArr = targetEmails.split(',').map((e: string) => e.trim()).filter(Boolean);
       await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${resendKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: 'AgriEngine Alert <onboarding@resend.dev>',
-          to: [info.toEmail],
-          subject: title,
-          text: content
-        })
-      });
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${resendKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: 'AgriEngine Alert <onboarding@resend.dev>',
+            to: emailsArr.length > 0 ? emailsArr : [ALERT_EMAIL],
+            subject: title,
+            text: content
+          })
+        });
     } catch (e) {
       console.warn('Resend mail failed:', e);
     }

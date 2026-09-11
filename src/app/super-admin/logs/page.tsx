@@ -4,7 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Activity, AlertTriangle, Terminal, Clock, RefreshCw, 
   X, CheckCircle2, Copy, ShieldAlert, Cpu, Server, Database,
-  ArrowRight, FileCode2, Check, ExternalLink
+  ArrowRight, FileCode2, Check, ExternalLink, Mail, Send,
+  Settings2, ChevronDown, ChevronUp, Code2, Sparkles
 } from 'lucide-react';
 
 interface SystemLog {
@@ -31,6 +32,92 @@ export default function SuperAdminLogsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [tableReady, setTableReady] = useState(true);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
+  // 📧 アラート通知先設定マスタステート
+  const [alertEmails, setAlertEmails] = useState('koma@ggmc.secret.jp');
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [isEmailEnabled, setIsEmailEnabled] = useState(true);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(true);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
+  const [isTestingNotification, setIsTestingNotification] = useState(false);
+  const [testResultMsg, setTestResultMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [showGasGuide, setShowGasGuide] = useState(false);
+  const [gasCopied, setGasCopied] = useState(false);
+
+  // 通知設定マスタの取得
+  const fetchNotificationSettings = useCallback(async () => {
+    try {
+      const res = await fetch('/api/system-notification');
+      const data = await res.json();
+      if (data.success && data.settings) {
+        setAlertEmails(data.settings.alert_emails || 'koma@ggmc.secret.jp');
+        setWebhookUrl(data.settings.webhook_url || '');
+        setIsEmailEnabled(data.settings.is_email_enabled !== false);
+      }
+    } catch (e) {
+      console.warn('Fetch notification settings failed:', e);
+    }
+  }, []);
+
+  // 設定保存ハンドラー
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingSettings(true);
+    setSaveSuccessMsg('');
+    try {
+      const res = await fetch('/api/system-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          alert_emails: alertEmails,
+          webhook_url: webhookUrl,
+          is_email_enabled: isEmailEnabled
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSaveSuccessMsg('通知設定を実DBに保存しました！');
+        setTimeout(() => setSaveSuccessMsg(''), 3000);
+      } else {
+        alert('保存に失敗しました: ' + data.error);
+      }
+    } catch (e: any) {
+      alert('通信エラーが発生しました: ' + e.message);
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  // テスト通知送信ハンドラー
+  const handleTestNotification = async () => {
+    setIsTestingNotification(true);
+    setTestResultMsg(null);
+    try {
+      const res = await fetch('/api/system-notification/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toEmails: alertEmails,
+          webhookUrl: webhookUrl
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTestResultMsg({
+          text: data.message || 'テスト通知リクエストを送信しました！',
+          ok: data.hasExternalSender
+        });
+      } else {
+        setTestResultMsg({ text: '送信失敗: ' + data.error, ok: false });
+      }
+    } catch (e: any) {
+      setTestResultMsg({ text: '送信エラー: ' + e.message, ok: false });
+    } finally {
+      setIsTestingNotification(false);
+    }
+  };
+
 
   // 経過時間のフォーマット
   const formatTimeAgo = (isoString?: string) => {
@@ -107,7 +194,8 @@ export default function SuperAdminLogsPage() {
 
   useEffect(() => {
     fetchLogs();
-  }, [fetchLogs]);
+    fetchNotificationSettings();
+  }, [fetchLogs, fetchNotificationSettings]);
 
   const handleRefresh = () => {
     fetchLogs();
@@ -165,6 +253,201 @@ export default function SuperAdminLogsPage() {
           <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-emerald-400' : ''}`} /> 
           ログを最新に更新
         </button>
+      </div>
+
+      {/* 📧 現場エラー通知先設定マスタ（周瑜の洗練デザイン） */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl overflow-hidden backdrop-blur-sm transition-all">
+        {/* パネルヘッダー（開閉可能） */}
+        <div 
+          onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+          className="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between cursor-pointer hover:bg-slate-850 transition-colors"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <Mail className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-white flex items-center gap-2">
+                アラート通知先設定マスタ
+                <span className="text-[11px] font-normal px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                  実DB連動
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                現場で打刻エラーや認証障害が発生した際の送信先メールアドレス・配信方法を管理します。
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 font-mono">
+              <span className="text-slate-500">配信先:</span>
+              <span className="text-indigo-300 font-bold max-w-[200px] truncate">{alertEmails}</span>
+            </div>
+            <button
+              type="button"
+              className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+            >
+              {isSettingsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* 開閉コンテンツ */}
+        {isSettingsOpen && (
+          <form onSubmit={handleSaveSettings} className="p-5 space-y-4 bg-slate-950/50">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* 通知先メールアドレス */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-indigo-400" />
+                  通知先メールアドレス（複数指定時はカンマ区切り）
+                </label>
+                <input
+                  type="text"
+                  value={alertEmails}
+                  onChange={(e) => setAlertEmails(e.target.value)}
+                  placeholder="koma@ggmc.secret.jp, sub@ggmc.secret.jp"
+                  className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors font-mono"
+                  required
+                />
+                <p className="text-[11px] text-slate-500">
+                  ※現場端末でエラー検知時、このアドレス宛に即時メールが送信されます。
+                </p>
+              </div>
+
+              {/* メール送信エンジン（GAS Webhook URL） */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <Send className="w-3.5 h-3.5 text-emerald-400" />
+                    メール送信エンジン（GAS Webhook URL）
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowGasGuide(!showGasGuide)}
+                    className="text-[11px] text-indigo-400 hover:underline flex items-center gap-1"
+                  >
+                    <Code2 className="w-3 h-3" />
+                    GASコードを表示
+                  </button>
+                </div>
+                <input
+                  type="url"
+                  value={webhookUrl}
+                  onChange={(e) => setWebhookUrl(e.target.value)}
+                  placeholder="https://script.google.com/macros/s/.../exec"
+                  className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+                />
+                <p className="text-[11px] text-slate-500">
+                  ※Google Apps Script の WebアプリURLを登録すると、Gmailから自動送信されます。
+                </p>
+              </div>
+            </div>
+
+            {/* GAS（Google Apps Script）コード案内アコーディオン */}
+            {showGasGuide && (
+              <div className="bg-slate-900 p-4 rounded-xl border border-indigo-500/30 space-y-2 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-indigo-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    GAS（Google Apps Script）配置用コード（コピーしてWebアプリとして公開）:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const code = `function doPost(e) {\n  try {\n    var data = JSON.parse(e.postData.contents);\n    var to = data.to || 'koma@ggmc.secret.jp';\n    var subject = data.subject || '【現場エラー検知】農業収益エンジン';\n    var body = data.body || '';\n    GmailApp.sendEmail(to, subject, body);\n    return ContentService.createTextOutput(JSON.stringify({ status: 'ok' })).setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.message })).setMimeType(ContentService.MimeType.JSON);\n  }\n}`;
+                      navigator.clipboard.writeText(code);
+                      setGasCopied(true);
+                      setTimeout(() => setGasCopied(false), 2000);
+                    }}
+                    className="text-xs text-slate-400 hover:text-white flex items-center gap-1 px-2.5 py-1 bg-slate-800 rounded-lg border border-slate-700"
+                  >
+                    <Copy className="w-3 h-3" />
+                    {gasCopied ? 'コピー完了！' : 'GASコードをコピー'}
+                  </button>
+                </div>
+                <pre className="text-[11px] font-mono text-emerald-400 bg-slate-950 p-3 rounded-lg overflow-x-auto whitespace-pre leading-relaxed">
+{`function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var to = data.to || 'koma@ggmc.secret.jp';
+    var subject = data.subject || '【現場エラー検知】農業収益エンジン';
+    var body = data.body || '';
+    GmailApp.sendEmail(to, subject, body);
+    return ContentService.createTextOutput(JSON.stringify({ status: 'ok' })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.message })).setMimeType(ContentService.MimeType.JSON);
+  }
+}`}
+                </pre>
+                <p className="text-[11px] text-slate-400">
+                  【公開手順】GASで「デプロイ」➔「新しいデプロイ」➔「ウェブアプリ」を選択し、アクセスできるユーザーを「全員」にしてデプロイしたURLを上記欄に貼り付けてください。
+                </p>
+              </div>
+            )}
+
+            {/* 操作ボタングループ */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/80">
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={isEmailEnabled}
+                    onChange={(e) => setIsEmailEnabled(e.target.checked)}
+                    className="rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-0 w-4 h-4"
+                  />
+                  エラー発生時の自動メール送信を有効にする
+                </label>
+                {saveSuccessMsg && (
+                  <span className="text-xs font-bold text-emerald-400 flex items-center gap-1 animate-in fade-in">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    {saveSuccessMsg}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleTestNotification}
+                  disabled={isTestingNotification}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-black border border-slate-700 transition-colors disabled:opacity-50"
+                >
+                  <Send className={`w-3.5 h-3.5 ${isTestingNotification ? 'animate-pulse text-indigo-400' : ''}`} />
+                  {isTestingNotification ? 'テスト送信中...' : '📩 テスト通知を送信'}
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isSavingSettings}
+                  className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black shadow-lg shadow-indigo-900/30 transition-all disabled:opacity-50"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  {isSavingSettings ? '保存中...' : '設定を保存する'}
+                </button>
+              </div>
+            </div>
+
+            {/* テスト通知の結果表示 */}
+            {testResultMsg && (
+              <div className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between gap-2 animate-in fade-in ${
+                testResultMsg.ok
+                  ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                  : 'bg-amber-950/40 border-amber-500/40 text-amber-300'
+              }`}>
+                <span>{testResultMsg.text}</span>
+                <button
+                  type="button"
+                  onClick={() => setTestResultMsg(null)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </form>
+        )}
       </div>
 
       {/* テーブル未配備時の案内バナー */}
