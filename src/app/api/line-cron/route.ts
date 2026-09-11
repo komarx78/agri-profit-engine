@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getJSTDate, getJSTTime } from '@/lib/dateUtils';
 
+// Next.js キャッシュによる古いデータ参照を100%防止
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 // Supabase client (検証済みのキーを優先使用)
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -28,12 +32,23 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-    const supabase = getSupabase();
-
     // JSTで今日の日付と時刻を安全に取得
     const todayStr = getJSTDate();
     const currentHourMin = getJSTTime(); // "17:30"
+
+    // 🚨【夜間帯（21:30〜翌朝06:30）の通知完全停止】
+    // 手動強制実行 (forceRun) でない限り、深夜・夜間の管理者へのLINE連打を物理遮断
+    const isNightTime = currentHourMin >= '21:30' || currentHourMin < '06:30';
+    if (isNightTime && !forceRun) {
+      return NextResponse.json({
+        status: 'success',
+        message: `夜間時間帯（21:30〜06:30、現在 ${currentHourMin}）のため、定期アラート通知を休止しています。`,
+        current_time: currentHourMin
+      }, { status: 200 });
+    }
+
+    const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+    const supabase = getSupabase();
 
     // 1. 全未退勤ログを取得
     let logQuery = supabase
@@ -151,8 +166,14 @@ export async function GET(req: Request) {
           continue;
         }
 
-        // 2. すでに通知済みのログ（memoに [LINE_ALERT_SENT] が記録されている場合）は絶対に再送しない！
-        if (log.memo && log.memo.includes('[LINE_ALERT_SENT]')) {
+        // 2. すでに通知済みのログ（memoに LINE_ALERT_SENT が記録されている場合）は絶対に再送しない！
+        // ※[LINE_ALERT_SENT:2026-09-11 18:30] 等の形式に対応し、同一日・同一スタッフへの1日1回送信を物理保証（憲法10条）
+        if (log.memo && (log.memo.includes('LINE_ALERT_SENT') || log.memo.includes('ALERT_SENT'))) {
+          continue;
+        }
+
+        // 3. 同一Cronバッチ内での同一スタッフ重複追加を物理遮断
+        if (unclockedStaffList.some(s => s.workerId === worker.id)) {
           continue;
         }
 
