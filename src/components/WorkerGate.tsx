@@ -177,8 +177,8 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
         }
       }
 
-      // 4. 万が一まだ0件の場合、主農園（佐原農園）のスタッフを直接フェッチして救済
-      if (workerList.length === 0) {
+      // 4. 万が一まだ0件の場合（※農園IDが未指定の場合のみ、主農園をフェッチして救済）
+      if (workerList.length === 0 && !targetOwnerId) {
         try {
           const { data: fallbackWorkers } = await supabase
             .from('workers')
@@ -241,9 +241,9 @@ export function WorkerGate({ onLogin }: WorkerGateProps) {
           ownerId = '';
         }
 
-        let paramFarmId = params.get('farm') || params.get('tenant');
+        let paramFarmId = params.get('farm') || params.get('tenant') || params.get('ownerId') || params.get('farmId') || params.get('tenant_id');
         if (!paramFarmId) {
-          const match = window.location.pathname.match(/\/portal\/([a-zA-Z0-9_-]+)/);
+          const match = window.location.pathname.match(/\/(?:portal|farm)\/([a-zA-Z0-9_-]+)/);
           if (match && match[1]) {
             paramFarmId = match[1];
           }

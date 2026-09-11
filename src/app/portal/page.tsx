@@ -311,11 +311,12 @@ function PortalContent() {
         let currentRole = 'worker';
         let profile = null;
 
-        // URLクエリパラメータ（?farm=xxx または ?tenant=xxx）および URLパス（/portal/[farmId]）の最優先取得
+        // URLクエリパラメータ（?farm=xxx または ?tenant=xxx, ?ownerId=xxx）および URLパス（/portal/[farmId]）の最優先取得
+        let urlRequestedFarmId = '';
         if (typeof window !== 'undefined') {
           try {
             const urlParams = new URLSearchParams(window.location.search);
-            let farmParam = urlParams.get('farm') || urlParams.get('tenant');
+            let farmParam = urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId');
             if (!farmParam) {
               const match = window.location.pathname.match(/\/portal\/([a-zA-Z0-9_-]+)/);
               if (match && match[1]) {
@@ -323,6 +324,7 @@ function PortalContent() {
               }
             }
             if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
+              urlRequestedFarmId = farmParam;
               localStorage.setItem('agri_owner_id', farmParam);
               ownerId = farmParam;
             }
@@ -350,6 +352,15 @@ function PortalContent() {
               return;
             }
 
+            // 🚨【マルチテナント物理防壁】URLで特定農園が指定されているのに、作業者の所属農園が異なる場合はパージ
+            if (urlRequestedFarmId && workerData.user_id && workerData.user_id !== urlRequestedFarmId) {
+              console.log('Switching farm: clearing mismatched cached worker from other farm');
+              try { localStorage.removeItem('agri_current_worker'); } catch (e) {}
+              setShowWorkerGate(true);
+              setIsLoading(false);
+              return;
+            }
+
             const isWorkerAdmin = workerData.role === 'admin';
             currentRole = isWorkerAdmin ? 'admin' : 'worker';
             setRole(isWorkerAdmin ? 'admin' : 'worker');
@@ -359,7 +370,7 @@ function PortalContent() {
             setShowWorkerGate(false);
 
             // 所属農園ID（user_id）の確定
-            ownerId = workerData.user_id || (session ? session.user.id : '') || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
+            ownerId = workerData.user_id || urlRequestedFarmId || (session ? session.user.id : '') || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
 
             // 旧キャッシュ対策：もしownerIdが空なら、自身(workerData.id)からDBを参照して農園IDを修復（1.5秒タイムアウト保護）
             if (!ownerId && workerData.id) {

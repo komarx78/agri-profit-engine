@@ -209,14 +209,17 @@ export async function GET(req: Request) {
         continue;
       }
 
+      // この農園専用の現場ポータルURL（他農園への誤遷移を物理遮断）
+      const farmPortalUrl = `https://agri-profit-engine.vercel.app/portal/${tenantId}`;
+
       // A. 未退勤スタッフ本人への個別LINEプッシュ（本人がLINE連携済みの場合）
       const workerPushResults: any[] = [];
       if (channelAccessToken) {
         for (const staff of unclockedStaffList) {
           if (staff.lineUserId) {
             const personalMsg = staff.isPastDate
-              ? `お疲れ様です！\n${staff.name} さんの【${staff.date}】の「退勤」がまだ打刻されておりません。\n\n現場ポータルより打刻の修正・確認をお願いいたします！\nhttps://agri-profit-engine.vercel.app/portal`
-              : `お疲れ様です！\n本日（${staff.date}）${staff.name} さんの「退勤」がまだ打刻されていません。\n（${staff.isOvertime ? '残業予定' : '定時退勤'}: ${staff.endTime} / 通知設定: ${staff.offsetMinutes}分後）\n\n本日の作業が終了している場合は、現場ポータルより退勤打刻をお願いいたします！🌱\nhttps://agri-profit-engine.vercel.app/portal`;
+              ? `お疲れ様です！\n${staff.name} さんの【${staff.date}】の「退勤」がまだ打刻されておりません。\n\n現場ポータルより打刻の修正・確認をお願いいたします！\n${farmPortalUrl}`
+              : `お疲れ様です！\n本日（${staff.date}）${staff.name} さんの「退勤」がまだ打刻されていません。\n（${staff.isOvertime ? '残業予定' : '定時退勤'}: ${staff.endTime} / 通知設定: ${staff.offsetMinutes}分後）\n\n本日の作業が終了している場合は、現場ポータルより退勤打刻をお願いいたします！🌱\n${farmPortalUrl}`;
 
             try {
               const pRes = await fetch('https://api.line.me/v2/bot/message/push', {
@@ -258,7 +261,7 @@ export async function GET(req: Request) {
       }
 
       const adminTitle = `【${companyName}】打刻忘れアラート: 未退勤スタッフ ${unclockedStaffList.length}名`;
-      const adminBody = `お疲れ様です。農業収益エンジン（勤怠監視）です。\n\n${companyName} において、以下のスタッフ（計 ${unclockedStaffList.length}名）の「退勤打刻」が完了しておりません。\n\n${summaryLines.join('\n')}\n\n現場ポータルまたは管理画面よりご確認の上、退勤打刻の案内または代理打刻をお願いいたします。\n現場ポータルURL:\nhttps://agri-profit-engine.vercel.app/portal`;
+      const adminBody = `お疲れ様です。農業収益エンジン（勤怠監視）です。\n\n${companyName} において、以下のスタッフ（計 ${unclockedStaffList.length}名）の「退勤打刻」が完了しておりません。\n\n${summaryLines.join('\n')}\n\n現場ポータルまたは管理画面よりご確認の上、退勤打刻の案内または代理打刻をお願いいたします。\n【${companyName}】現場ポータルURL:\n${farmPortalUrl}`;
 
       // 該当農園の農業管理者LINEへプッシュ送信！
       if (channelAccessToken && adminLineUserIds.length > 0) {
