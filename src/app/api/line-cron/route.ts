@@ -35,10 +35,10 @@ export async function GET(req: Request) {
     const todayStr = getJSTDate();
     const currentHourMin = getJSTTime(); // "17:30"
 
-    // 1. 全未退勤ログを取得（当日 ＋ 過去の未退勤打刻漏れ放置）
+    // 1. 全未退勤ログを取得
     let logQuery = supabase
       .from('attendance_logs')
-      .select('id, worker_id, user_id, date, clock_in, clock_out')
+      .select('id, worker_id, user_id, date, clock_in, clock_out, memo')
       .not('clock_in', 'is', null)
       .is('clock_out', null)
       .order('date', { ascending: false });
@@ -106,6 +106,7 @@ export async function GET(req: Request) {
     });
 
     const resultsByTenant: any[] = [];
+    const includePast = searchParams.get('include_past') === 'true';
 
     // 4. テナントごとに打刻忘れ判定＆農業管理者へ通知！
     for (const [tenantId, logs] of Object.entries(tenantLogsMap)) {
@@ -114,17 +115,18 @@ export async function GET(req: Request) {
 
       // 該当テナントの農業管理者たち（role=admin）
       const adminWorkers = tenantAdminWorkersMap[tenantId] || [];
-      // 管理者のLINE ID一覧
+      // 管理者のLINE ID一覧（ワーカーマスタ + 会社設定のadmin_line_user_id）
       const adminLineUserIds = adminWorkers
         .map(a => a.line_user_id)
         .filter(Boolean);
 
-      // KAPの場合で管理者LINE IDが未設定時のフォールバック
-      if (tenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' && !adminLineUserIds.includes('U89851b2fdeef65c8082a921727a56314')) {
-        adminLineUserIds.push('U89851b2fdeef65c8082a921727a56314');
+      if (compSetting?.admin_line_user_id && !adminLineUserIds.includes(compSetting.admin_line_user_id)) {
+        adminLineUserIds.push(compSetting.admin_line_user_id);
       }
 
       const unclockedStaffList: {
+        logId: string;
+        originalMemo: string;
         workerId: string;
         name: string;
         date: string;
@@ -142,6 +144,17 @@ export async function GET(req: Request) {
         if (!worker) continue;
 
         const isPastDate = log.date < todayStr;
+
+        // 🚨【多重送信・過去日スパムの完全物理遮断】
+        // 1. 過去日の打刻漏れは、明示的に include_past=true が指定されない限り、10分おきの定期cronでは絶対に送らない！
+        if (isPastDate && !includePast) {
+          continue;
+        }
+
+        // 2. すでに通知済みのログ（memoに [LINE_ALERT_SENT] が記録されている場合）は絶対に再送しない！
+        if (log.memo && log.memo.includes('[LINE_ALERT_SENT]')) {
+          continue;
+        }
 
         // 1. 基本退勤予定時刻を算出（定時退勤予定）
         let baseEndTime = '18:00';
@@ -169,22 +182,21 @@ export async function GET(req: Request) {
         // 3. 通知オフセット分数（定時または残業終了の◯分後、デフォルト30分）
         const offsetMinutes = Number(compSetting?.line_notification_offset_minutes) || 30;
 
-        // 4. 通知予定時刻（退勤時刻 + 30分）を正確に計算
+        // 4. 通知予定時刻（退勤時刻 + 30分）を分単位で安全に計算
         const [hours, minutes] = baseEndTime.split(':').map(Number);
-        const targetDateObj = new Date();
-        targetDateObj.setHours(hours || 18);
-        targetDateObj.setMinutes((minutes || 0) + offsetMinutes);
-        const targetHour = String(targetDateObj.getHours()).padStart(2, '0');
-        const targetMin = String(targetDateObj.getMinutes()).padStart(2, '0');
+        const totalTargetMinutes = (hours || 18) * 60 + (minutes || 0) + offsetMinutes;
+        const targetHour = String(Math.floor(totalTargetMinutes / 60) % 24).padStart(2, '0');
+        const targetMin = String(totalTargetMinutes % 60).padStart(2, '0');
         const targetTime = `${targetHour}:${targetMin}`;
 
         // 判定条件：
-        // 1. 過去日の打刻漏れ（昨日以前） ➔ 無条件にアラート対象！
-        // 2. 当日の打刻漏れ ➔ forceRun または 現在時刻 >= targetTime（退勤予定時刻＋30分後）の場合にアラート対象！
-        const shouldAlert = forceRun || isPastDate || (currentHourMin >= targetTime);
+        // forceRun または 現在時刻 >= targetTime（退勤予定時刻＋30分後）の場合にアラート対象！
+        const shouldAlert = forceRun || (currentHourMin >= targetTime);
 
         if (shouldAlert) {
           unclockedStaffList.push({
+            logId: log.id,
+            originalMemo: log.memo || '',
             workerId: worker.id,
             name: worker.name,
             date: log.date,
@@ -282,6 +294,22 @@ export async function GET(req: Request) {
           } catch (adminErr) {
             console.warn(`Admin LINE alert error for ${companyName}:`, adminErr);
           }
+        }
+      }
+
+      // C. 🚨【送信済みフラグの即時記録（次回10分後cronでの重複送信を完全遮断）】
+      for (const staff of unclockedStaffList) {
+        try {
+          const alertStamp = `[LINE_ALERT_SENT:${todayStr} ${currentHourMin}]`;
+          const updatedMemo = staff.originalMemo 
+            ? `${staff.originalMemo} ${alertStamp}`
+            : alertStamp;
+          await supabase
+            .from('attendance_logs')
+            .update({ memo: updatedMemo })
+            .eq('id', staff.logId);
+        } catch (uErr) {
+          console.warn(`Failed to set alert stamp for log ${staff.logId}:`, uErr);
         }
       }
 
