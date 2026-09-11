@@ -131,6 +131,8 @@ export async function GET(req: Request) {
         isPastDate: boolean;
         endTime: string;
         targetTime: string;
+        offsetMinutes: number;
+        isOvertime: boolean;
         lineLinked: boolean;
         lineUserId?: string | null;
       }[] = [];
@@ -141,7 +143,7 @@ export async function GET(req: Request) {
 
         const isPastDate = log.date < todayStr;
 
-        // 退勤予定時刻を算出
+        // 1. 基本退勤予定時刻を算出（定時退勤予定）
         let baseEndTime = '18:00';
         if (worker.standard_end_time) {
           baseEndTime = worker.standard_end_time.substring(0, 5);
@@ -150,29 +152,35 @@ export async function GET(req: Request) {
           if (matchedRule?.end_time) {
             baseEndTime = matchedRule.end_time.substring(0, 5);
           }
-        } else if (compSetting?.line_notification_time) {
-          baseEndTime = compSetting.line_notification_time.substring(0, 5);
         } else if (compSetting?.default_end_time) {
           baseEndTime = compSetting.default_end_time.substring(0, 5);
         }
 
-        // 残業申請があれば残業予定時刻を優先（当日の場合）
+        // 2. 残業申請があれば残業予定時刻を最優先！（当日の場合）
+        let isOvertime = false;
         if (!isPastDate) {
           const ot = otList.find(o => o.worker_id === worker.id);
           if (ot?.scheduled_end_time) {
             baseEndTime = ot.scheduled_end_time.substring(0, 5);
+            isOvertime = true;
           }
         }
 
-        // 通知予定時刻（退勤時刻）
-        let targetTime = baseEndTime;
-        if (compSetting?.line_notification_time) {
-          targetTime = compSetting.line_notification_time.substring(0, 5);
-        }
+        // 3. 通知オフセット分数（定時または残業終了の◯分後、デフォルト30分）
+        const offsetMinutes = Number(compSetting?.line_notification_offset_minutes) || 30;
+
+        // 4. 通知予定時刻（退勤時刻 + 30分）を正確に計算
+        const [hours, minutes] = baseEndTime.split(':').map(Number);
+        const targetDateObj = new Date();
+        targetDateObj.setHours(hours || 18);
+        targetDateObj.setMinutes((minutes || 0) + offsetMinutes);
+        const targetHour = String(targetDateObj.getHours()).padStart(2, '0');
+        const targetMin = String(targetDateObj.getMinutes()).padStart(2, '0');
+        const targetTime = `${targetHour}:${targetMin}`;
 
         // 判定条件：
         // 1. 過去日の打刻漏れ（昨日以前） ➔ 無条件にアラート対象！
-        // 2. 当日の打刻漏れ ➔ forceRun または 現在時刻 >= targetTime の場合にアラート対象！
+        // 2. 当日の打刻漏れ ➔ forceRun または 現在時刻 >= targetTime（退勤予定時刻＋30分後）の場合にアラート対象！
         const shouldAlert = forceRun || isPastDate || (currentHourMin >= targetTime);
 
         if (shouldAlert) {
@@ -183,6 +191,8 @@ export async function GET(req: Request) {
             isPastDate,
             endTime: baseEndTime,
             targetTime,
+            offsetMinutes,
+            isOvertime,
             lineLinked: !!worker.line_user_id,
             lineUserId: worker.line_user_id
           });
@@ -206,7 +216,7 @@ export async function GET(req: Request) {
           if (staff.lineUserId) {
             const personalMsg = staff.isPastDate
               ? `お疲れ様です！\n${staff.name} さんの【${staff.date}】の「退勤」がまだ打刻されておりません。\n\n現場ポータルより打刻の修正・確認をお願いいたします！\nhttps://agri-profit-engine.vercel.app/portal`
-              : `お疲れ様です！\n本日（${staff.date}）${staff.name} さんの「退勤」がまだ打刻されていません。\n（予定時刻: ${staff.endTime}）\n\n本日の作業が終了している場合は、現場ポータルより退勤打刻をお願いいたします！🌱\nhttps://agri-profit-engine.vercel.app/portal`;
+              : `お疲れ様です！\n本日（${staff.date}）${staff.name} さんの「退勤」がまだ打刻されていません。\n（${staff.isOvertime ? '残業予定' : '定時退勤'}: ${staff.endTime} / 通知設定: ${staff.offsetMinutes}分後）\n\n本日の作業が終了している場合は、現場ポータルより退勤打刻をお願いいたします！🌱\nhttps://agri-profit-engine.vercel.app/portal`;
 
             try {
               const pRes = await fetch('https://api.line.me/v2/bot/message/push', {
@@ -237,7 +247,7 @@ export async function GET(req: Request) {
       if (todayList.length > 0) {
         summaryLines.push('【本日の未退勤】');
         todayList.forEach(s => {
-          summaryLines.push(`・${s.name}（定時: ${s.endTime} / LINE: ${s.lineLinked ? '連携済' : '未連携'}）`);
+          summaryLines.push(`・${s.name}（${s.isOvertime ? '残業終了' : '定時'}: ${s.endTime} ➔ ${s.offsetMinutes}分超過 / LINE: ${s.lineLinked ? '連携済' : '未連携'}）`);
         });
       }
       if (pastList.length > 0) {
