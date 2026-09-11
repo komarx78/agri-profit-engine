@@ -42,27 +42,40 @@ import { useCompany } from '@/hooks/useCompany';
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { companyName } = useCompany();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [tenantId, setTenantId] = useState<string>('');
+  const { companyName } = useCompany(tenantId);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     async function checkAuth() {
-      // 1. Supabase Auth による正規管理者セッションのチェック
+      // 1. URLクエリから farm / tenant パラメータを検知
+      let urlFarm: string | null = null;
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        urlFarm = params.get('farm') || params.get('tenant') || params.get('farmId');
+      }
+
+      // 2. Supabase Auth による正規管理者セッションのチェック
       const { data: { session } } = await supabase.auth.getSession();
       if (session && session.user) {
         setTenantId(session.user.id);
+        if (typeof window !== 'undefined') {
+          try { localStorage.setItem('agri_owner_id', session.user.id); } catch (e) {}
+        }
         return;
       }
 
-      // 2. 現場スタッフ（PIN認証）の場合、明示的に管理者ロール (role === 'admin') を持つ場合のみ許可
+      // 3. 現場スタッフ（PIN認証）の場合、明示的に管理者ロール (role === 'admin') を持つ場合のみ許可
       const savedWorker = localStorage.getItem('agri_current_worker');
       if (savedWorker) {
         try {
           const workerData = JSON.parse(savedWorker);
           if (workerData.role === 'admin' && workerData.user_id) {
             setTenantId(workerData.user_id);
+            if (typeof window !== 'undefined') {
+              try { localStorage.setItem('agri_owner_id', workerData.user_id); } catch (e) {}
+            }
             return;
           }
         } catch (e) {
@@ -78,7 +91,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const handleCopyUrl = async () => {
     const url = tenantId 
-      ? `${window.location.origin}/portal?farm=${tenantId}`
+      ? `${window.location.origin}/portal/${tenantId}`
       : `${window.location.origin}/portal`;
     try {
       await navigator.clipboard.writeText(url);
@@ -251,14 +264,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {tenantId && (
             <>
               <Link 
-                href={`/portal?farm=${tenantId}`}
+                href={tenantId ? `/portal/${tenantId}` : '/portal'}
                 className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-blue-700 font-bold bg-blue-50 hover:bg-blue-100 transition-colors mb-2 shadow-sm"
               >
                 <Layout className="w-5 h-5 text-blue-600" />
                 現場ポータルへ行く
               </Link>
               <Link 
-                href="/work" 
+                href={tenantId ? `/work/${tenantId}` : '/work'} 
                 className="flex items-center gap-3 px-4 py-2 rounded-xl text-slate-600 font-bold hover:bg-slate-100 transition-colors"
               >
                 <Sprout className="w-5 h-5" />

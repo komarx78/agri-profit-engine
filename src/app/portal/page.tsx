@@ -2811,7 +2811,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             {/* 管理者モード時のみ管理者画面リンクを表示 */}
             {role === 'admin' && (
               <Link
-                href="/admin/cultivations"
+                href={activeFarmId ? `/admin/cultivations?farm=${activeFarmId}` : '/admin/cultivations'}
                 className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-sm shrink-0"
                 title={t('adminDashboardBtn', language)}
               >

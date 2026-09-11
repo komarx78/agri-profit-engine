@@ -1219,7 +1219,10 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
           <div className="flex items-center gap-1 flex-shrink-0">
             {currentUser.role === 'admin' && (
               <button
-                onClick={() => router.push('/admin/cultivations')}
+                onClick={() => {
+                  const targetFarm = workerTenantId || requestedFarmId;
+                  router.push(targetFarm ? `/admin/cultivations?farm=${targetFarm}` : '/admin/cultivations');
+                }}
                 className="flex items-center gap-1 px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 hover:text-white border border-emerald-500/40 rounded-lg text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"
                 title="農業司令塔へ"
               >
