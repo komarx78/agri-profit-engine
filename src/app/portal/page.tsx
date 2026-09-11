@@ -3030,7 +3030,10 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
 
               {/* 現場ポータル遷移ボタン */}
               <button 
-                onClick={() => router.push('/work')}
+                onClick={() => {
+                  const targetFarm = activeFarmId || requestedFarmId;
+                  router.push(targetFarm ? `/work/${targetFarm}` : '/work');
+                }}
                 className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm mb-4"
               >
                 {t('goToWorkPortal', language)} <ArrowRight className="w-4 h-4" />
@@ -3750,7 +3753,10 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
 
                                   <button
                                     type="button"
-                                    onClick={() => router.push('/work')}
+                                    onClick={() => {
+                                      const targetFarm = activeFarmId || requestedFarmId;
+                                      router.push(targetFarm ? `/work/${targetFarm}` : '/work');
+                                    }}
                                     className="py-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 active:scale-95 rounded-xl text-xs font-black transition-all border border-blue-100 flex items-center gap-1 shrink-0 cursor-pointer"
                                     title={t('goToWorkScreenTooltip', language)}
                                   >

@@ -108,10 +108,19 @@ function getWorkTypeEmoji(type: string): string {
   return '✨';
 }
 
-export default function WorkEntryPage() {
+export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: string } = {}) {
   const router = useRouter();
   const [workerTenantId, setWorkerTenantId] = useState<string | null>(() => {
+    if (requestedFarmId) return requestedFarmId;
     if (typeof window !== 'undefined') {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const farmParam = urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId');
+        if (farmParam) return farmParam;
+        const match = window.location.pathname.match(/\/(?:work|farm)\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) return match[1];
+      } catch (e) {}
+
       const savedUser = localStorage.getItem('agri_current_worker');
       if (savedUser) {
         try {
@@ -291,6 +300,8 @@ export default function WorkEntryPage() {
   useEffect(() => {
     setIsMounted(true);
 
+    let targetFarmParam = requestedFarmId || '';
+
     if (typeof window !== 'undefined') {
       try {
         const urlParams = new URLSearchParams(window.location.search);
@@ -301,9 +312,18 @@ export default function WorkEntryPage() {
           localStorage.removeItem('agri_owner_id');
         }
 
-        const farmParam = urlParams.get('farm') || urlParams.get('tenant');
+        const farmParam = requestedFarmId || urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId');
         if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
+          targetFarmParam = farmParam;
+          setWorkerTenantId(farmParam);
           localStorage.setItem('agri_owner_id', farmParam);
+        } else {
+          const match = window.location.pathname.match(/\/(?:work|farm)\/([a-zA-Z0-9_-]+)/);
+          if (match && match[1]) {
+            targetFarmParam = match[1];
+            setWorkerTenantId(match[1]);
+            localStorage.setItem('agri_owner_id', match[1]);
+          }
         }
       } catch (e) {
         console.warn('URL parsing error:', e);
@@ -319,6 +339,13 @@ export default function WorkEntryPage() {
       if (savedUser) {
         const parsed = JSON.parse(savedUser);
         if (parsed && parsed.id) {
+          // 🚨【マルチテナント物理防壁】もしURLで特定農園が指定されているのに、作業者の所属農園が異なる場合はパージ
+          if (targetFarmParam && parsed.user_id && parsed.user_id !== targetFarmParam) {
+            console.log('Switching farm: clearing mismatched cached worker in work page');
+            localStorage.removeItem('agri_current_worker');
+            setCurrentUser(null);
+            return;
+          }
           setCurrentUser(parsed);
         } else {
           localStorage.removeItem('agri_current_worker');
@@ -327,7 +354,7 @@ export default function WorkEntryPage() {
     } catch (e) {
       console.warn('Storage read error in work page:', e);
     }
-  }, []);
+  }, [requestedFarmId]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -1153,7 +1180,18 @@ export default function WorkEntryPage() {
       </div>
     );
   }
-  if (!currentUser) return <WorkerGate onLogin={(user) => setCurrentUser(user)} />;
+  if (!currentUser) return (
+    <WorkerGate 
+      farmId={workerTenantId || requestedFarmId || undefined}
+      onLogin={(user) => {
+        setCurrentUser(user);
+        if (user.user_id) {
+          setWorkerTenantId(user.user_id);
+          try { localStorage.setItem('agri_owner_id', user.user_id); } catch (e) {}
+        }
+      }} 
+    />
+  );
 
   return (
     <main className="min-h-screen bg-emerald-950 text-slate-100 font-sans pb-32">
@@ -1190,7 +1228,10 @@ export default function WorkEntryPage() {
               </button>
             )}
             <button
-              onClick={() => router.push('/portal')}
+              onClick={() => {
+                const targetFarm = workerTenantId || requestedFarmId;
+                router.push(targetFarm ? `/portal/${targetFarm}` : '/portal');
+              }}
               className="flex items-center gap-1 px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 hover:text-white border border-blue-500/40 rounded-lg text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"
               title="ポータル画面へ戻る"
             >
