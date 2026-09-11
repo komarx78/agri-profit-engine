@@ -356,7 +356,7 @@ export default function SuperAdminLogsPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      const code = `function doPost(e) {\n  try {\n    var data = JSON.parse(e.postData.contents);\n    var to = data.to || 'koma@ggmc.secret.jp';\n    var subject = data.subject || '【現場エラー検知】農業収益エンジン';\n    var body = data.body || '';\n    GmailApp.sendEmail(to, subject, body);\n    return ContentService.createTextOutput(JSON.stringify({ status: 'ok' })).setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.message })).setMimeType(ContentService.MimeType.JSON);\n  }\n}`;
+                      const code = `function doPost(e) {\n  try {\n    var data = JSON.parse(e.postData.contents);\n    var to = data.to || 'koma@ggmc.secret.jp';\n    var subject = data.subject || '【農業収益エンジン】現場エラー検知';\n    var body = data.body || '';\n    GmailApp.sendEmail(to, subject, body);\n    return ContentService.createTextOutput(JSON.stringify({ status: 'ok' })).setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.message })).setMimeType(ContentService.MimeType.JSON);\n  }\n}`;
                       navigator.clipboard.writeText(code);
                       setGasCopied(true);
                       setTimeout(() => setGasCopied(false), 2000);
@@ -372,7 +372,7 @@ export default function SuperAdminLogsPage() {
   try {
     var data = JSON.parse(e.postData.contents);
     var to = data.to || 'koma@ggmc.secret.jp';
-    var subject = data.subject || '【現場エラー検知】農業収益エンジン';
+    var subject = data.subject || '【農業収益エンジン】現場エラー検知';
     var body = data.body || '';
     GmailApp.sendEmail(to, subject, body);
     return ContentService.createTextOutput(JSON.stringify({ status: 'ok' })).setMimeType(ContentService.MimeType.JSON);

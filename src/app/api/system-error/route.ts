@@ -190,7 +190,7 @@ async function sendAdminNotification(info: {
     return;
   }
 
-  const title = `🚨【現場エラー検知】${info.companyName} (${info.workerName})`;
+  const title = `【農業収益エンジン】現場エラー検知: ${info.companyName} (${info.workerName})`;
   const content = `
 【発生日時】: ${info.time}
 【対象農園】: ${info.companyName}
@@ -218,7 +218,8 @@ ${info.pageUrl}
           to: targetEmails,
           subject: title,
           body: content
-        })
+        }),
+        redirect: 'follow'
       });
     } catch (e) {
       console.warn('Webhook mail failed:', e);

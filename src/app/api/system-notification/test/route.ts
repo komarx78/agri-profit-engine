@@ -9,7 +9,7 @@ export async function POST(req: Request) {
     const targetWebhook = webhookUrl || process.env.ADMIN_ALERT_WEBHOOK_URL;
     const nowJst = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
 
-    const title = '🔔【テスト通知】農業収益エンジン システム監視テスト';
+    const title = '【農業収益エンジン】テスト通知: システム監視疎通テスト';
     const message = [
       'これは農業収益エンジン（スーパー管理者コンソール）からのテスト通知です。',
       '',
@@ -30,6 +30,8 @@ export async function POST(req: Request) {
     };
 
     // 1. GAS Webhook または カスタムWebhook への送信
+    let webhookStatus: number | null = null;
+    let webhookErrorText = '';
     if (targetWebhook) {
       try {
         const res = await fetch(targetWebhook, {
@@ -40,11 +42,18 @@ export async function POST(req: Request) {
             subject: title,
             body: message,
             timestamp: nowJst
-          })
+          }),
+          redirect: 'follow'
         });
-        sendResult.webhookSent = res.ok;
+        webhookStatus = res.status;
+        if (res.ok) {
+          sendResult.webhookSent = true;
+        } else {
+          webhookErrorText = `HTTP ${res.status} ${res.statusText}`;
+        }
       } catch (webhookErr: any) {
         console.warn('Webhook test notification error:', webhookErr);
+        webhookErrorText = webhookErr.message;
       }
     }
 
@@ -96,16 +105,23 @@ export async function POST(req: Request) {
 
     const hasAnySuccess = sendResult.webhookSent || sendResult.resendSent || sendResult.lineSent;
 
+    let returnMessage = '';
+    if (hasAnySuccess) {
+      returnMessage = `テスト通知を送信しました（送信先: ${emailList}）`;
+    } else if (webhookStatus === 401 || webhookStatus === 403) {
+      returnMessage = `⚠️ GAS実行エラー (${webhookErrorText || '401/403'}): GASの「アクセスできるユーザー」を「全員」に設定してください。`;
+    } else if (targetWebhook) {
+      returnMessage = `⚠️ Webhook送信に失敗しました (${webhookErrorText || 'レスポンス異常'})。URLと設定をご確認ください。`;
+    } else {
+      returnMessage = '⚠️ メール送信エンジン（GAS Webhook URL等）が未設定です。URLを入力して保存してください。';
+    }
+
     return NextResponse.json({
       success: true,
       hasExternalSender: !!targetWebhook || !!resendKey || (!!lineToken && !!adminLineUserId),
       delivered: hasAnySuccess,
       details: sendResult,
-      message: hasAnySuccess 
-        ? `テスト通知を送信しました（送信先: ${emailList}）`
-        : targetWebhook
-          ? 'Webhookへ送信リクエストを送りました'
-          : '⚠️ メール送信エンジン（GAS Webhook URL等）が未設定です。URLを入力して保存してください。'
+      message: returnMessage
     });
   } catch (err: any) {
     console.error('Test notification API failed:', err);
