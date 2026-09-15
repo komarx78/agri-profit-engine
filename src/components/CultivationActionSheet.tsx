@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getJSTDate } from '@/lib/dateUtils';
 import Link from 'next/link';
 
 export interface CultivationTarget {
@@ -58,6 +59,12 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
   const [activeCategory, setActiveCategory] = useState<ActionCategory>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   // 自社登録農薬マスタリスト & 散布履歴
   const [farmPesticides, setFarmPesticides] = useState<any[]>([]);
@@ -88,7 +95,7 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
   const [pesticideFamicData, setPesticideFamicData] = useState<any>(null);
 
   // 共通フォームステート
-  const [formDate, setFormDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [formDate, setFormDate] = useState<string>(() => getJSTDate());
   const [durationMinutes, setDurationMinutes] = useState<string>('60');
   const [durationMode, setDurationMode] = useState<'total_proportional' | 'uniform'>('total_proportional');
   const [memo, setMemo] = useState<string>('');
@@ -2183,6 +2190,12 @@ export const CultivationActionSheet: React.FC<CultivationActionSheetProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-[9999] bg-slate-900 border border-emerald-500 text-white px-4 py-2.5 rounded-xl shadow-2xl text-xs font-bold flex items-center gap-2">
+          <span>✨</span>
+          <span>{toastMessage}</span>
         </div>
       )}
     </>

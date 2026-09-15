@@ -6,6 +6,7 @@ import { HelpTooltip } from '@/components/HelpTooltip';
 import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft, Coffee, Briefcase, FlaskConical, Wheat, Truck } from 'lucide-react';
 import Papa from 'papaparse';
 import { autoTranslateMasterData } from '@/app/actions/translate';
+import { getCurrentTenantId } from '@/lib/tenant';
 
 type MasterType = 'materials' | 'pesticides' | 'fertilizers' | 'sales_prices' | 'crops' | 'fields' | 'workers' | 'departments' | 'sales_channels';
 
@@ -58,8 +59,7 @@ export default function MastersPage() {
   const fetchMasters = async () => {
     try {
       setIsLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : null);
+      const userId = await getCurrentTenantId();
       
       if (!userId) {
         // セッションが切れている場合はログイン画面へ
@@ -207,13 +207,13 @@ export default function MastersPage() {
         dataToSave.category = '肥料費';
       }
 
-      // セッションからユーザーID (テナントID) を取得してセット
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session && session.user) {
+      // テナントIDを取得してセット
+      const tenantId = await getCurrentTenantId();
+      if (tenantId) {
         if (table === 'departments') {
-          dataToSave.tenant_id = session.user.id;
+          dataToSave.tenant_id = tenantId;
         } else {
-          dataToSave.user_id = session.user.id;
+          dataToSave.user_id = tenantId;
         }
       }
 
@@ -235,7 +235,7 @@ export default function MastersPage() {
         if (!existsInChannels) {
           await supabase.from('sales_channels').insert([{ 
             name: dataToSave.channel_name,
-            user_id: session?.user?.id 
+            user_id: tenantId 
           }]);
         }
         delete dataToSave.isCustomChannel;
@@ -246,7 +246,11 @@ export default function MastersPage() {
       let savedData: any = null;
       
       if (editingItem) {
-        const { data, error } = await supabase.from(table).update(dataToSave).eq('id', editingItem.id).select();
+        let updateQuery = supabase.from(table).update(dataToSave).eq('id', editingItem.id);
+        if (tenantId) {
+          updateQuery = (table === 'departments') ? updateQuery.eq('tenant_id', tenantId) : updateQuery.eq('user_id', tenantId);
+        }
+        const { data, error } = await updateQuery.select();
         if (error) {
           console.warn('Update failed with multilang, retrying with fallback:', error);
           // 多言語カラムを除去してリトライ
@@ -257,7 +261,11 @@ export default function MastersPage() {
           delete fallbackData.name_zh;
           delete fallbackData.name_si;
           delete fallbackData.name_km;
-          const { data: retryData, error: retryErr } = await supabase.from(table).update(fallbackData).eq('id', editingItem.id).select();
+          let retryQuery = supabase.from(table).update(fallbackData).eq('id', editingItem.id);
+          if (tenantId) {
+            retryQuery = (table === 'departments') ? retryQuery.eq('tenant_id', tenantId) : retryQuery.eq('user_id', tenantId);
+          }
+          const { data: retryData, error: retryErr } = await retryQuery.select();
           if (retryErr) throw retryErr;
           savedData = retryData;
         } else {
@@ -331,7 +339,13 @@ export default function MastersPage() {
     
     try {
       setUploadStatus({ type: 'info', message: '削除中...' });
-      const { error } = await supabase.from(type).delete().eq('id', id);
+      const tenantId = await getCurrentTenantId();
+      const table = (type === 'pesticides' || type === 'fertilizers') ? 'materials' : type;
+      let deleteQuery = supabase.from(table).delete().eq('id', id);
+      if (tenantId) {
+        deleteQuery = (table === 'departments') ? deleteQuery.eq('tenant_id', tenantId) : deleteQuery.eq('user_id', tenantId);
+      }
+      const { error } = await deleteQuery;
       if (error) throw error;
       
       setUploadStatus({ type: 'success', message: '削除しました' });
@@ -351,6 +365,9 @@ export default function MastersPage() {
     
     setIsCopying(true);
     try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error('テナントIDが特定できません');
+
       // コピー元のデータを取得
       const sourceData = salesPrices.filter(sp => sp.channel_name === copySource);
       if (sourceData.length === 0) {
@@ -359,6 +376,7 @@ export default function MastersPage() {
 
       // コピー先のデータを作成
       const insertData = sourceData.map(sp => ({
+        user_id: tenantId,
         crop_name: sp.crop_name,
         channel_name: copyTarget,
         price_per_unit: sp.price_per_unit
@@ -371,7 +389,10 @@ export default function MastersPage() {
       // もし sales_channels に存在しなければ自動登録
       const existsInChannels = channels.some(ch => ch.name === copyTarget);
       if (!existsInChannels) {
-        await supabase.from('sales_channels').insert([{ name: copyTarget }]);
+        await supabase.from('sales_channels').insert([{ 
+          name: copyTarget,
+          user_id: tenantId
+        }]);
       }
 
       setUploadStatus({ type: 'success', message: `${copyTarget} として一括追加しました！` });
@@ -399,11 +420,15 @@ export default function MastersPage() {
       skipEmptyLines: true,
       complete: async (results) => {
         try {
+          const tenantId = await getCurrentTenantId();
+          if (!tenantId) throw new Error('テナントIDが特定できません');
+
           const data = results.data;
           let insertData = [];
 
           if (type === 'materials') {
             insertData = data.map((row: any) => ({
+              user_id: tenantId,
               name: row['資材名'] || row.name,
               category: row['カテゴリ'] || row.category || '未設定',
               specification: row['規格'] || row.specification || null,
@@ -414,6 +439,7 @@ export default function MastersPage() {
             if (error) throw error;
           } else if (type === 'sales_prices') {
             insertData = data.map((row: any) => ({
+              user_id: tenantId,
               crop_name: row['作目名'] || row.crop_name,
               channel_name: row['販路名'] || row.channel_name,
               price_per_unit: parseFloat(row['単価']) || parseFloat(row.price) || 0
@@ -421,21 +447,23 @@ export default function MastersPage() {
             const { error } = await supabase.from('sales_prices').insert(insertData);
             if (error) throw error;
           } else if (type === 'crops') {
-            insertData = data.map((row: any) => ({ name: row['作目名'] || row.name }));
+            insertData = data.map((row: any) => ({ 
+              user_id: tenantId,
+              name: row['作目名'] || row.name 
+            }));
             const { error } = await supabase.from('crops').insert(insertData);
             if (error) throw error;
           } else if (type === 'fields') {
             insertData = data.map((row: any) => ({ 
+              user_id: tenantId,
               name: row['圃場名'] || row.name,
               area_size: parseFloat(row['面積(a)']) || parseFloat(row.area_size) || null
             }));
             const { error } = await supabase.from('fields').insert(insertData);
             if (error) throw error;
           } else if (type === 'workers') {
-            const { data: { session } } = await supabase.auth.getSession();
-            const userId = session?.user?.id;
             insertData = data.map((row: any) => ({
-              user_id: userId,
+              user_id: tenantId,
               name: row['作業者名'] || row.name,
               hourly_wage: parseFloat(row['時給']) || parseFloat(row.hourly_wage) || 1000,
               pin_code: String(row['暗証番号'] || row.pin_code || '0000').padStart(4, '0').slice(0,4)

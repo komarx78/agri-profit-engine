@@ -27,19 +27,27 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
+  const pathname = request.nextUrl.pathname
+
+  // ⚡ 現場ポータル・作業画面等は外部認証チェックを完全バイパス（0ms即座に応答し、現場通信ハングを100%遮断）
+  if (
+    pathname.startsWith('/portal') ||
+    pathname.startsWith('/work') ||
+    pathname.startsWith('/share') ||
+    pathname.startsWith('/farm') ||
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/manuals')
+  ) {
+    return supabaseResponse
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const pathname = request.nextUrl.pathname
-
   // 公開ルート（現場作業員・PIN管理者・未認証アクセス許可ルート・PWAマニフェスト）の判定
   const isPublicRoute =
     pathname.startsWith('/login') ||
-    pathname.startsWith('/portal') ||
-    pathname.startsWith('/work') ||
-    pathname.startsWith('/share') ||
-    pathname.startsWith('/api') ||
     pathname.startsWith('/admin') ||
     pathname.startsWith('/sales-management') ||
     pathname.startsWith('/accounting-management') ||

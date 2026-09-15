@@ -73,6 +73,7 @@ export default function PesticideCheckPage() {
   // 自社農薬マスタ（materials）に登録済みの農薬名リスト
   const [registeredMasterNames, setRegisteredMasterNames] = useState<string[]>([]);
   const [isRegisteringMaster, setIsRegisteringMaster] = useState<string | null>(null);
+  const [tenantId, setTenantId] = useState<string>('');
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -88,14 +89,15 @@ export default function PesticideCheckPage() {
   useEffect(() => {
     const fetchMasterPesticides = async () => {
       try {
-        const tenantId = await getCurrentTenantId();
+        const tId = await getCurrentTenantId();
+        if (tId) setTenantId(tId);
         let query = supabase
           .from('materials')
           .select('name')
           .or("category.eq.農薬費,material_type.eq.pesticide");
 
-        if (tenantId) {
-          query = query.eq('user_id', tenantId);
+        if (tId) {
+          query = query.eq('user_id', tId);
         }
 
         const { data, error } = await query;
@@ -313,7 +315,10 @@ export default function PesticideCheckPage() {
       <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-40">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/" className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors">
+            <Link 
+              href={tenantId ? `/portal/${tenantId}` : '/'} 
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
+            >
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div className="w-9 h-9 bg-emerald-500/20 border border-emerald-500/40 rounded-xl flex items-center justify-center">

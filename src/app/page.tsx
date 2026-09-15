@@ -2,17 +2,25 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 
-export default async function RootPage() {
-  const headersList = await headers();
-  const userAgent = headersList.get('user-agent') || '';
-  const isMobile = /iphone|ipad|ipod|android|mobile/i.test(userAgent);
-
-  // スマホ・タブレットからのアクセス時は、現場ポータル (/portal) へ即時リダイレクト
-  if (isMobile) {
-    redirect('/portal');
+export default async function RootPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const sp = searchParams ? await searchParams : {};
+  const queryString = new URLSearchParams();
+  if (sp) {
+    Object.entries(sp).forEach(([key, val]) => {
+      if (typeof val === 'string') {
+        queryString.set(key, val);
+      } else if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'string') {
+        queryString.set(key, val[0]);
+      }
+    });
   }
 
-  // PCからのアクセス時はポータルまたは管理画面へリダイレクト
-  redirect('/portal');
+  const qs = queryString.toString();
+  const target = qs ? `/portal?${qs}` : '/portal';
+  redirect(target);
 }
 

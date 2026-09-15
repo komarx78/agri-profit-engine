@@ -79,7 +79,7 @@ export default function ManualDetailPage() {
   };
 
   const startEditing = (n: Narration) => {
-    setEditingId(n.id);
+    setEditingId(n.id || null);
     setEditStart(n.start_time.toString());
     setEditEnd(n.end_time.toString());
     setEditJa(n.script_ja);
@@ -312,7 +312,7 @@ export default function ManualDetailPage() {
                         <span className="text-xs font-black bg-slate-100 text-slate-600 px-2 py-1 rounded">
                           {n.start_time}s - {n.end_time}s
                         </span>
-                        <button onClick={(e) => { e.stopPropagation(); deleteNarration(n.id); }} className="text-slate-400 hover:text-red-500">
+                        <button onClick={(e) => { e.stopPropagation(); if (n.id) deleteNarration(n.id); }} className="text-slate-400 hover:text-red-500">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>

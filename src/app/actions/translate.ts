@@ -60,8 +60,8 @@ export async function translateSingleText(text: string, targetLang: string): Pro
     };
     const langName = langNames[targetLang] || targetLang;
 
-    const prompt = `Translate the following Japanese agricultural work task title into ${langName}.
-Return ONLY the translated short title without quotes, explanations, or punctuation.
+    const prompt = `Translate the following Japanese agricultural work task title or work instruction note into ${langName}.
+Return ONLY the translated short text without quotes, explanations, or punctuation.
 
 Japanese: "${trimmed}"`;
 

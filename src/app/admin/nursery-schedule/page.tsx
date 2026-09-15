@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getJSTDate } from '@/lib/dateUtils';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Table, Sprout, Save, Loader2, Info, Paintbrush, Eraser, ChevronLeft, ChevronRight, Calculator, Calendar, RefreshCw, X, ChevronDown, Filter } from 'lucide-react';
 
@@ -17,12 +18,7 @@ const formatToMD = (date: Date) => {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 };
 
-const formatToYYYYMMDD = (date: Date) => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-};
+const formatToYYYYMMDD = (date: Date) => getJSTDate(date);
 
 type TaskType = 'sowing' | 'potting' | 'planting';
 
@@ -152,12 +148,14 @@ export default function NurserySchedulePage() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      const tenantId = await getCurrentTenantId();
       const newSchedules = schedules.filter(s => s.isNew);
       const existingSchedules = schedules.filter(s => !s.isNew);
 
       if (newSchedules.length > 0) {
         const inserts = newSchedules.map(({ isNew, loss_rate, schedule_data, ...rest }) => ({
           ...rest,
+          user_id: tenantId || null,
           schedule_data: {
             ...schedule_data,
             _loss_rate: Number(loss_rate) || 0
@@ -173,12 +171,18 @@ export default function NurserySchedulePage() {
           _loss_rate: Number(schedule.loss_rate) || 0
         };
 
-        const { error } = await supabase.from('nursery_schedules_v2')
+        let updateQuery = supabase.from('nursery_schedules_v2')
           .update({
             sown_quantity: schedule.sown_quantity,
             schedule_data: scheduleDataWithMeta
           })
           .eq('id', schedule.id);
+
+        if (tenantId) {
+          updateQuery = updateQuery.eq('user_id', tenantId);
+        }
+
+        const { error } = await updateQuery;
         if (error) throw error;
       }
 

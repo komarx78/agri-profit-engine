@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { 
   Calendar as CalendarIcon, Clock, CheckCircle2, Inbox, 
@@ -13,55 +13,60 @@ import {
   FileSpreadsheet, Store, Calculator, Database, Camera, ExternalLink, HelpCircle,
   Truck, Scissors, Sliders, Check, Languages, Wand2, Edit3, Save, RotateCcw,
   FlaskConical, History, CheckSquare, BarChart3, Users, Settings, Building,
-  ChevronDown, ChevronUp, Eye
+  ChevronDown, ChevronUp, Eye, Activity, Filter, CalendarDays, Crown,
+  Maximize2, Search
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import VideoPlayerWithSubtitles, { Narration, TrimRange } from '@/components/VideoPlayerWithSubtitles';
-import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode } from '@/lib/i18n';
+import { t, getTranslatedName, getTranslatedWorkType, getWeekdayName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
-import { getPortalTasks } from '@/app/actions/farm';
+import { getPortalTasks, completePortalTask, reopenPortalTask, submitAttendance, submitLeaveRequest, getWorkerLeaveRequests } from '@/app/actions/farm';
+import { reportSystemError } from '@/lib/errorReporter';
 import { translateSingleText } from '@/app/actions/translate';
-import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
+import { PwaBottomBanner } from '@/components/PwaInstallPrompt';
 import Link from 'next/link';
+import { getJSTDate, getJSTTime, formatDisplayTime, parseTimeToMinutes, getAttendancePeriod, getDateListBetween } from '@/lib/dateUtils';
 
 const CalendarWrapper = dynamic(() => import('@/components/CalendarWrapper'), { 
   ssr: false, 
   loading: () => <div className="h-[600px] flex items-center justify-center"><div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div> 
 });
 
-// 日本時間のYYYY-MM-DDを取得
-const getJSTDate = () => {
-  const d = new Date();
-  d.setHours(d.getHours() + 9);
-  return d.toISOString().split('T')[0];
-};
-const getJSTTime = () => {
-  const d = new Date();
-  d.setHours(d.getHours() + 9);
-  return d.toISOString().split('T')[1].substring(0, 5);
-};
-
-export default function PortalPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-      </div>
-    }>
-      <PortalContent />
-    </Suspense>
-  );
+function getCropEmoji(name: string): string {
+  if (!name) return '🌱';
+  const n = name.toLowerCase();
+  if (n.includes('トマト') || n.includes('tomato')) return '🍅';
+  if (n.includes('ナス') || n.includes('なす') || n.includes('eggplant')) return '🍆';
+  if (n.includes('にんじん') || n.includes('ニンジン') || n.includes('carrot')) return '🥕';
+  if (n.includes('ピーマン') || n.includes('pepper')) return '🫑';
+  if (n.includes('きゅうり') || n.includes('キュウリ') || n.includes('cucumber')) return '🥒';
+  if (n.includes('いちご') || n.includes('イチゴ') || n.includes('strawberry')) return '🍓';
+  if (n.includes('白菜') || n.includes('キャベツ') || n.includes('レタス') || n.includes('cabbage') || n.includes('lettuce')) return '🥬';
+  if (n.includes('枝豆') || n.includes('大豆') || n.includes('bean') || n.includes('edamame')) return '🫛';
+  if (n.includes('とうもろこし') || n.includes('コーン') || n.includes('corn')) return '🌽';
+  if (n.includes('芋') || n.includes('イモ') || n.includes('potato')) return '🥔';
+  if (n.includes('ねぎ') || n.includes('ネギ') || n.includes('onion')) return '🧅';
+  if (n.includes('モロヘイヤ') || n.includes('ほうれん草') || n.includes('小松菜')) return '🌿';
+  if (n.includes('大根') || n.includes('ダイコン') || n.includes('radish')) return '🥢';
+  if (n.includes('スイカ') || n.includes('watermelon')) return '🍉';
+  if (n.includes('メロン') || n.includes('melon')) return '🍈';
+  if (n.includes('米') || n.includes('稲') || n.includes('rice')) return '🌾';
+  return '🌱';
 }
 
-function PortalContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+export default function PortalPage({ requestedFarmId }: { requestedFarmId?: string } = {}) {
+  return <PortalContent requestedFarmId={requestedFarmId} />;
+}
 
-  const [isLoading, setIsLoading] = useState(true);
+function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
+  const router = useRouter();
+
+  const [isLoading, setIsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [workerProfile, setWorkerProfile] = useState<any>(null);
   const [role, setRole] = useState<'admin' | 'worker'>('worker');
   const [companyName, setCompanyName] = useState<string>('会社名');
+  const [activeFarmId, setActiveFarmId] = useState<string>(requestedFarmId || '');
   const [language, setLanguage] = useState<LanguageCode>('ja');
   
   // Data States
@@ -70,7 +75,7 @@ function PortalContent() {
   const [pendingApprovals, setPendingApprovals] = useState<any[]>([]);
   const [boardPosts, setBoardPosts] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<any>(null);
-  const [showWorkerGate, setShowWorkerGate] = useState(false);
+  const [showWorkerGate, setShowWorkerGate] = useState(true);
   const [showBoardModal, setShowBoardModal] = useState(false);
   const [allBoardPosts, setAllBoardPosts] = useState<any[]>([]);
   const [boardFilter, setBoardFilter] = useState<'all' | 'work' | 'life' | 'general'>('all');
@@ -130,6 +135,52 @@ function PortalContent() {
     }));
   }, [trimRangesInput]);
 
+  // 🕒 個人用・月次タイムカード用ステート
+  const [showTimecardModal, setShowTimecardModal] = useState(false);
+  const [timecardMonth, setTimecardMonth] = useState<string>(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [closingDay, setClosingDay] = useState<number>(0);
+  const [paymentDayRule, setPaymentDayRule] = useState<string>('翌月25日払い');
+  const [monthlyLogs, setMonthlyLogs] = useState<any[]>([]);
+  const [isLoadingMonthly, setIsLoadingMonthly] = useState(false);
+  const [currentMonthSummary, setCurrentMonthSummary] = useState<{
+    workDays: number;
+    totalMinutes: number;
+    overtimeMinutes: number;
+  }>({ workDays: 0, totalMinutes: 0, overtimeMinutes: 0 });
+
+  // 👥 チーム稼働状況 & 作業日報まとめ用ステート
+  const [activePortalTab, setActivePortalTab] = useState<'status' | 'reports' | 'calendar' | 'tasks'>('status');
+  
+  // 📋 本日のやることリスト（ToDo）用ステート
+  const [todoFilter, setTodoFilter] = useState<'all' | 'mine' | 'done'>('all');
+  const [completingTask, setCompletingTask] = useState<any | null>(null);
+  const [taskDurationMinutes, setTaskDurationMinutes] = useState<number>(60);
+  const [taskHarvestAmount, setTaskHarvestAmount] = useState<string>('');
+  const [taskMemo, setTaskMemo] = useState<string>('');
+  const [isSubmittingTaskComplete, setIsSubmittingTaskComplete] = useState<boolean>(false);
+  const [reportDate, setReportDate] = useState<string>(() => getJSTDate());
+  const [reportPeriod, setReportPeriod] = useState<'day' | 'week' | 'month' | 'custom'>('day');
+  const [customStartDate, setCustomStartDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    return d.toISOString().substring(0, 10);
+  });
+  const [customEndDate, setCustomEndDate] = useState<string>(() => getJSTDate());
+  const [reportGroupBy, setReportGroupBy] = useState<'timeline' | 'field' | 'crop' | 'worker'>('timeline');
+  const [dailyWorkLogs, setDailyWorkLogs] = useState<any[]>([]);
+  const [teamAttendanceLogs, setTeamAttendanceLogs] = useState<any[]>([]);
+  const [isLoadingDailyData, setIsLoadingDailyData] = useState(false);
+  const [selectedWorkerFilter, setSelectedWorkerFilter] = useState<string>('all');
+  const [selectedFieldFilter, setSelectedFieldFilter] = useState<string>('all');
+  const [selectedCropFilter, setSelectedCropFilter] = useState<string>('all');
+  const [reportSearchKeyword, setReportSearchKeyword] = useState<string>('');
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [allFields, setAllFields] = useState<any[]>([]);
+  const [allCrops, setAllCrops] = useState<any[]>([]);
+
   // 言語切り替えハンドラー
   const handleLanguageChange = (newLang: LanguageCode) => {
     setLanguage(newLang);
@@ -138,9 +189,9 @@ function PortalContent() {
     }
   };
 
-  // 自由入力タスクタイトルのリアルタイム自動翻訳
+  // 自由入力タスクタイトル・作業指示・日報メモのリアルタイム自動翻訳
   useEffect(() => {
-    if (language === 'ja' || tasks.length === 0) {
+    if (language === 'ja' || (tasks.length === 0 && dailyWorkLogs.length === 0)) {
       return;
     }
 
@@ -152,6 +203,20 @@ function PortalContent() {
         if (title) {
           untranslated.push(title);
         }
+        const note = t.notes || t.memo || '';
+        const clean = note
+          .replace(/【👑現場責任者】\n?/, '')
+          .replace(/【👑現場リーダー:[^】]+】\n?/, '')
+          .trim();
+        if (clean) {
+          untranslated.push(clean);
+        }
+      });
+
+      dailyWorkLogs.forEach(w => {
+        const title = w.task_title || w.work_type;
+        if (title) untranslated.push(title);
+        if (w.memo) untranslated.push(w.memo);
       });
 
       if (untranslated.length === 0) return;
@@ -180,7 +245,7 @@ function PortalContent() {
     return () => {
       isMounted = false;
     };
-  }, [language, tasks]);
+  }, [language, tasks, dailyWorkLogs]);
 
   // 有給・休暇関連ステート
   const [leaveBalance, setLeaveBalance] = useState<{ carryover: number; balance: number; total: number } | null>(null);
@@ -198,247 +263,1579 @@ function PortalContent() {
   });
 
   useEffect(() => {
+    // 3.5秒で何があってもスピナーを強制解除する脱出タイマー
+    const failsafeTimer = setTimeout(() => {
+      setIsLoading(false);
+    }, 3500);
+
     const init = async () => {
       try {
         // 保存された言語設定の復元
         if (typeof window !== 'undefined') {
-          const savedLang = localStorage.getItem('agri_language') as LanguageCode;
-          if (savedLang && ['ja', 'en', 'vi', 'id', 'zh', 'si', 'km'].includes(savedLang)) {
-            setLanguage(savedLang);
-          }
+          try {
+            const savedLang = localStorage.getItem('agri_language') as LanguageCode;
+            if (savedLang && ['ja', 'en', 'vi', 'id', 'zh', 'si', 'km'].includes(savedLang)) {
+              setLanguage(savedLang);
+            }
+          } catch (e) {}
         }
 
-        const { data: { session } } = await supabase.auth.getSession();
+        // リセットクエリ（?reset=1 または ?clear=1）の検知：壊れた古いキャッシュを即座に破棄
+        if (typeof window !== 'undefined') {
+          try {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('reset') === '1' || urlParams.get('clear') === '1') {
+              try {
+                localStorage.removeItem('agri_current_worker');
+                localStorage.removeItem('agri_owner_id');
+                localStorage.removeItem('agri_cached_company_name');
+              } catch (e) {}
+              setShowWorkerGate(true);
+              // resetパラメータをURLから静かに除去して次回以降の誤爆を防止（farmパラメータは維持）
+              urlParams.delete('reset');
+              urlParams.delete('clear');
+              const remainingQuery = urlParams.toString();
+              const newUrl = window.location.pathname + (remainingQuery ? `?${remainingQuery}` : '');
+              window.history.replaceState({}, '', newUrl);
+            }
+          } catch (urlE) {}
+        }
+
+        // 1. セッションチェック（1.2秒タイムアウト保護で現場未ログイン端末のハング防止）
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutSession = new Promise<{ data: { session: any } }>((resolve) =>
+          setTimeout(() => resolve({ data: { session: null } }), 1200)
+        );
+        const { data: { session } } = await Promise.race([sessionPromise, timeoutSession]);
         
         let ownerId = '';
         let currentRole = 'worker';
         let profile = null;
 
-        // URLクエリパラメータ（?farm=xxx または ?tenant=xxx）の最優先取得
+        // URLクエリパラメータ（?farm=xxx または ?tenant=xxx, ?ownerId=xxx）および URLパス（/portal/[farmId]）の最優先取得
+        let urlRequestedFarmId = requestedFarmId || '';
         if (typeof window !== 'undefined') {
-          const urlParams = new URLSearchParams(window.location.search);
-          const farmParam = urlParams.get('farm') || urlParams.get('tenant');
-          if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
-            localStorage.setItem('agri_owner_id', farmParam);
-            router.replace(`/farm/${farmParam}`);
-            return;
-          }
+          try {
+            const urlParams = new URLSearchParams(window.location.search);
+            let farmParam = requestedFarmId || urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId');
+            if (!farmParam) {
+              const match = window.location.pathname.match(/\/portal\/([a-zA-Z0-9_-]+)/);
+              if (match && match[1]) {
+                farmParam = match[1];
+              }
+            }
+            if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
+              urlRequestedFarmId = farmParam;
+              setActiveFarmId(farmParam);
+              localStorage.setItem('agri_owner_id', farmParam);
+              ownerId = farmParam;
+            }
+          } catch (e) {}
         }
 
-        // 1. 現場作業者情報（agri_current_worker）を最優先で確認
-        const savedUser = typeof window !== 'undefined' ? localStorage.getItem('agri_current_worker') : null;
+        // 1. 現場作業者情報（agri_current_worker）を最優先で確認（0ms即座にUI復元）
+        let savedUser: string | null = null;
+        if (typeof window !== 'undefined') {
+          try {
+            savedUser = localStorage.getItem('agri_current_worker');
+          } catch (e) {
+            console.warn('localStorage read error:', e);
+          }
+        }
 
         if (savedUser) {
           try {
             const workerData = JSON.parse(savedUser);
+            if (!workerData || !workerData.id) {
+              // 壊れた作業者データの場合はパージしてWorkerGateへ
+              try { localStorage.removeItem('agri_current_worker'); } catch (e) {}
+              setShowWorkerGate(true);
+              setIsLoading(false);
+              return;
+            }
+
+            // 🚨【マルチテナント物理防壁】URLで特定農園が指定されているのに、作業者の所属農園が異なる場合はパージ
+            if (urlRequestedFarmId && workerData.user_id && workerData.user_id !== urlRequestedFarmId) {
+              console.log('Switching farm: clearing mismatched cached worker from other farm');
+              try { localStorage.removeItem('agri_current_worker'); } catch (e) {}
+              setShowWorkerGate(true);
+              setIsLoading(false);
+              return;
+            }
+
             const isWorkerAdmin = workerData.role === 'admin';
             currentRole = isWorkerAdmin ? 'admin' : 'worker';
             setRole(isWorkerAdmin ? 'admin' : 'worker');
             profile = workerData;
             setWorkerProfile(workerData);
             setCurrentUser(workerData);
+            setShowWorkerGate(false);
 
             // 所属農園ID（user_id）の確定
-            ownerId = workerData.user_id || (session ? session.user.id : '') || localStorage.getItem('agri_owner_id') || '';
+            ownerId = workerData.user_id || urlRequestedFarmId || (session ? session.user.id : '') || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
 
-            // 旧キャッシュ対策：もしownerIdが空なら、自身(workerData.id)からDBを参照して農園IDを修復
+            // 旧キャッシュ対策：もしownerIdが空なら、自身(workerData.id)からDBを参照して農園IDを修復（1.5秒タイムアウト保護）
             if (!ownerId && workerData.id) {
-              const { data: wRecord } = await supabase.from('workers').select('user_id').eq('id', workerData.id).maybeSingle();
-              if (wRecord && wRecord.user_id) {
-                ownerId = wRecord.user_id;
-              }
-            }
-
-            if (ownerId) {
-              localStorage.setItem('agri_owner_id', ownerId);
-            }
-
-            // 会社名の取得
-            if (ownerId) {
-              const { data: companyData } = await supabase.from('company_settings').select('company_name').eq('user_id', ownerId).maybeSingle();
-              if (companyData && companyData.company_name) {
-                setCompanyName(companyData.company_name);
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem(`agri_company_${ownerId}`, companyData.company_name);
-                  localStorage.removeItem('agri_cached_company_name');
+              try {
+                const wPromise = supabase.from('workers').select('user_id').eq('id', workerData.id).maybeSingle();
+                const wTimeout = new Promise<any>((resolve) => setTimeout(() => resolve({ data: null }), 1500));
+                const { data: wRecord } = await Promise.race([wPromise, wTimeout]);
+                if (wRecord && wRecord.user_id) {
+                  ownerId = wRecord.user_id;
                 }
-              } else {
-                setCompanyName('');
-              }
+              } catch (e) {}
+            }
+
+            if (!ownerId) {
+              // 所属農園が特定できない場合は他社への誤フォールバックを遮断し、農園選択へ誘導
+              try { localStorage.removeItem('agri_current_worker'); } catch (e2) {}
+              setShowWorkerGate(true);
+              setIsLoading(false);
+              return;
+            }
+
+            if (ownerId && typeof window !== 'undefined') {
+              try { localStorage.setItem('agri_owner_id', ownerId); } catch (e) {}
             }
           } catch (e) {
             console.error('Failed to parse saved worker:', e);
+            try { localStorage.removeItem('agri_current_worker'); } catch (e2) {}
+            setShowWorkerGate(true);
+            setIsLoading(false);
+            return;
           }
         } else if (session) {
-          // 2. 現場作業者が未選択で、Supabase Auth セッションがある場合は管理者として起動
-          ownerId = session.user.id;
-          localStorage.setItem('agri_owner_id', ownerId);
-
-          const { data: companyData } = await supabase.from('company_settings').select('company_name').eq('user_id', ownerId).maybeSingle();
-          if (companyData && companyData.company_name) {
-            setCompanyName(companyData.company_name);
+          // 2. 現場作業者が未選択で、Supabase Auth セッションがある場合
+          // 🚨【マルチテナント物理防壁】もしURLで特定農園が指定されているのに、セッションのユーザーIDと一致しない場合（別農園のAdminセッションがブラウザに残っている場合）
+          // 管理者として自動ログインさせず、URLで指定された農園の WorkerGate を表示する！
+          if (urlRequestedFarmId && session.user.id !== urlRequestedFarmId) {
+            console.log('Session user is from another farm; showing WorkerGate for requested farm:', urlRequestedFarmId);
+            ownerId = urlRequestedFarmId;
             if (typeof window !== 'undefined') {
-              localStorage.setItem(`agri_company_${ownerId}`, companyData.company_name);
-              localStorage.removeItem('agri_cached_company_name');
+              try { localStorage.setItem('agri_owner_id', urlRequestedFarmId); } catch (e) {}
             }
-          } else {
-            setCompanyName('');
+            setShowWorkerGate(true);
+            setIsLoading(false);
+            return;
           }
-
+          ownerId = session.user.id;
+          if (typeof window !== 'undefined') {
+            try { localStorage.setItem('agri_owner_id', ownerId); } catch (e) {}
+          }
           currentRole = 'admin';
           setRole('admin');
           setCurrentUser({ name: '管理者', name_en: 'Admin', role: 'admin' });
+          setShowWorkerGate(false);
         } else {
           // 3. 作業者もセッションもない場合は WorkerGate（選択画面）を表示
-          setShowWorkerGate(true);
+          // ※もし init() の完了前に WorkerGate 側で onLogin されていたら上書きしない
+          setShowWorkerGate(prev => {
+            const hasWorker = typeof window !== 'undefined' && localStorage.getItem('agri_current_worker');
+            return hasWorker ? false : true;
+          });
           setIsLoading(false);
           return;
         }
 
-        await fetchPortalData(ownerId, currentRole, profile);
+        // 会社設定（会社名・勤怠締日・給与支払日）の解決
+        let resolvedClosing = 0;
+        let resolvedPayment = '翌月25日払い';
+        if (typeof window !== 'undefined') {
+          try {
+            const cachedComp = (ownerId ? localStorage.getItem(`agri_company_${ownerId}`) : null) || localStorage.getItem('agri_cached_company_name');
+            if (cachedComp) {
+              setCompanyName(cachedComp);
+            }
+            const localClosing = (ownerId ? localStorage.getItem(`agri_attendance_closing_day_${ownerId}`) : null) || localStorage.getItem('agri_attendance_closing_day');
+            if (localClosing !== null && localClosing !== undefined && localClosing !== '') {
+              resolvedClosing = Number(localClosing);
+            }
+            const localPayment = (ownerId ? localStorage.getItem(`agri_payment_day_rule_${ownerId}`) : null) || localStorage.getItem('agri_payment_day_rule');
+            if (localPayment) {
+              resolvedPayment = localPayment;
+            }
+          } catch (e) {}
+        }
+
+        if (ownerId) {
+          try {
+            const compPromise = supabase
+              .from('company_settings')
+              .select('company_name, attendance_closing_day, payment_day_rule, attendance_rules')
+              .eq('user_id', ownerId)
+              .maybeSingle();
+            const compTimeout = new Promise<any>((resolve) => setTimeout(() => resolve({ data: null }), 1500));
+            const { data: companyData } = await Promise.race([compPromise, compTimeout]);
+
+            if (companyData) {
+              if (companyData.company_name) {
+                setCompanyName(companyData.company_name);
+                if (typeof window !== 'undefined') {
+                  try {
+                    localStorage.setItem(`agri_company_${ownerId}`, companyData.company_name);
+                    localStorage.removeItem('agri_cached_company_name');
+                  } catch (e) {}
+                }
+              }
+              if (companyData.attendance_closing_day !== undefined && companyData.attendance_closing_day !== null) {
+                const dbClosing = Number(companyData.attendance_closing_day);
+                if (dbClosing > 0) {
+                  resolvedClosing = dbClosing;
+                }
+              }
+              // JSONBバックアップからの復元
+              if (resolvedClosing === 0 && companyData.attendance_rules && Array.isArray(companyData.attendance_rules)) {
+                const meta = companyData.attendance_rules.find((r: any) => r.__metadata);
+                if (meta?.closing_day) {
+                  resolvedClosing = Number(meta.closing_day);
+                }
+              }
+              if (typeof window !== 'undefined') {
+                try {
+                  localStorage.setItem(`agri_attendance_closing_day_${ownerId}`, String(resolvedClosing));
+                  localStorage.setItem('agri_attendance_closing_day', String(resolvedClosing));
+                } catch (e) {}
+              }
+
+              if (companyData.payment_day_rule) {
+                resolvedPayment = companyData.payment_day_rule;
+                if (typeof window !== 'undefined') {
+                  try {
+                    localStorage.setItem(`agri_payment_day_rule_${ownerId}`, companyData.payment_day_rule);
+                    localStorage.setItem('agri_payment_day_rule', companyData.payment_day_rule);
+                  } catch (e) {}
+                }
+              }
+            }
+          } catch (compErr) {
+            console.warn('portal company_settings fetch warning:', compErr);
+          }
+        }
+
+        setClosingDay(resolvedClosing);
+        setPaymentDayRule(resolvedPayment);
+
+        // fetchPortalData に 2.0秒タイムアウト保護を追加（通信待機による無限ローディングを物理遮断）
+        const fetchPromise = fetchPortalData(ownerId, currentRole, profile, resolvedClosing);
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 2000));
+        await Promise.race([fetchPromise, timeoutPromise]);
 
         // URLクエリに manual=1 または openManual=true があればマニュアルモーダルを開く
         if (typeof window !== 'undefined') {
-          const params = new URLSearchParams(window.location.search);
-          if (params.get('manual') || params.get('openManual')) {
-            handleOpenManualModal('video');
-          }
+          try {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('manual') || params.get('openManual')) {
+              handleOpenManualModal('video');
+            }
+          } catch (e) {}
         }
       } catch (err) {
         console.error(err);
       } finally {
         setIsLoading(false);
+        clearTimeout(failsafeTimer);
       }
     };
     init();
+
+    return () => clearTimeout(failsafeTimer);
   }, [router]);
 
-  const fetchPortalData = async (userId: string, currentRole: string, profile: any) => {
-    const today = getJSTDate();
+  // 🕒 個人タイムカード：対象月の勤怠データ取得（全社締日サイクル連動）
+  const fetchWorkerMonthlyAttendance = async (workerId: string, monthStr: string, overrideClosingDay?: number) => {
+    if (!workerId || !monthStr) return;
+    setIsLoadingMonthly(true);
+    try {
+      const activeClosingDay = overrideClosingDay !== undefined ? overrideClosingDay : closingDay;
+      const [y, m] = monthStr.split('-').map(Number);
+      const period = getAttendancePeriod(y, m, activeClosingDay);
+      const startDate = period.startDate;
+      const endDate = period.endDate;
 
-    // 1. タスク (カレンダー用: サーバーアクション経由でRLSを回避し確実に取得)
-    const targetUserId = userId;
-    const taskRes = await getPortalTasks(targetUserId);
-    if (taskRes.success && taskRes.data && taskRes.data.length > 0) {
-      setTasks(taskRes.data);
-    } else {
-      // クライアント側でもフォールバック試行
-      const { data: taskData } = await supabase.from('work_logs')
-        .select('*, crops(*), fields(*), workers(*)')
-        .eq('user_id', targetUserId)
-        .eq('status', 'planned')
-        .order('work_date', { ascending: true });
-      if (taskData) setTasks(taskData);
-    }
-
-    // 2. 承認待ち (現場スタッフが完了報告した作業: status='completed' かつ approval_status='pending')
-    if (currentRole === 'admin') {
-      const { data: appData } = await supabase.from('work_logs')
-        .select('id, task_title, work_date, workers(name)')
-        .eq('user_id', userId)
-        .eq('status', 'completed')
-        .eq('approval_status', 'pending');
-      if (appData) setPendingApprovals(appData);
-    }
-
-    // 3. 掲示板最新3件 (自社テナントのみ)
-    if (targetUserId) {
-      const { data: boardData } = await supabase.from('board_posts')
-        .select('*')
-        .eq('user_id', targetUserId)
-        .order('created_at', { ascending: false })
-        .limit(3);
-      if (boardData) setBoardPosts(boardData);
-    } else {
-      setBoardPosts([]);
-    }
-
-    // 4. 今日の打刻状態
-    const workerId = profile ? profile.id : userId;
-    if (workerId) {
-      const { data: aLog } = await supabase.from('attendance_logs')
+      const { data, error } = await supabase
+        .from('attendance_logs')
         .select('*')
         .eq('worker_id', workerId)
-        .eq('date', today)
-        .maybeSingle();
-      if (aLog) setAttendance(aLog);
-    }
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date', { ascending: true });
 
-    // 5. 有給休暇・残高と申請履歴の取得 (自農園のワーカーのみ厳格に取得)
-    try {
-      const { data: wList } = await supabase
-        .from('workers')
-        .select('id, name, type, employment_type, paid_leave_carryover, paid_leave_balance')
-        .eq('user_id', targetUserId)
-        .order('name');
+      if (error) {
+        console.error('Failed to fetch monthly attendance:', error);
+        return;
+      }
 
-      if (wList) {
-        setAllWorkers(wList);
-        
-        // ログイン中のワーカーを探す
-        let targetWorker = null;
-        if (profile && profile.id) {
-          targetWorker = wList.find(w => w.id === profile.id);
-        } else if (wList.length > 0) {
-          targetWorker = wList[0]; // 管理者でワーカー紐付けがない場合は自農園の最初のスタッフを参考表示
+      const logs = data || [];
+      setMonthlyLogs(logs);
+
+      // 当月サマリーの計算
+      let days = 0;
+      let totalMins = 0;
+      let overMins = 0;
+
+      logs.forEach(log => {
+        if (log.clock_in) {
+          days += 1;
         }
+        if (log.clock_in && log.clock_out) {
+          try {
+            const inTotal = parseTimeToMinutes(log.clock_in);
+            const outTotal = parseTimeToMinutes(log.clock_out);
+            if (inTotal !== null && outTotal !== null) {
+              let diff = outTotal >= inTotal ? (outTotal - inTotal) : (outTotal + 1440 - inTotal);
+              const breakTime = Number(log.total_break_minutes) || Number(log.break_minutes) || Number(log.actual_rest_minutes) || 0;
+              const workMins = Math.max(0, diff - breakTime);
+              totalMins += workMins;
+              if (workMins > 480) {
+                overMins += (workMins - 480);
+              }
+            }
+          } catch (e) {}
+        }
+      });
 
-        if (targetWorker) {
-          const wType = targetWorker.type || targetWorker.employment_type;
-          if (wType) {
-            setWorkerProfile((prev: any) => ({ ...prev, type: wType, employment_type: wType }));
-            setCurrentUser((prev: any) => ({ ...prev, type: wType, employment_type: wType }));
+      const todayMonth = new Date().toISOString().substring(0, 7);
+      if (monthStr === todayMonth) {
+        setCurrentMonthSummary({
+          workDays: days,
+          totalMinutes: totalMins,
+          overtimeMinutes: overMins
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoadingMonthly(false);
+    }
+  };
+
+  const handlePrevMonth = () => {
+    const [y, m] = timecardMonth.split('-').map(Number);
+    const prevDate = new Date(y, m - 2, 1);
+    const newMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+    setTimecardMonth(newMonth);
+    const targetWorkerId = workerProfile?.id || currentUser?.id;
+    if (targetWorkerId) {
+      fetchWorkerMonthlyAttendance(targetWorkerId, newMonth);
+    }
+  };
+
+  const handleNextMonth = () => {
+    const [y, m] = timecardMonth.split('-').map(Number);
+    const nextDate = new Date(y, m, 1);
+    const newMonth = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`;
+    setTimecardMonth(newMonth);
+    const targetWorkerId = workerProfile?.id || currentUser?.id;
+    if (targetWorkerId) {
+      fetchWorkerMonthlyAttendance(targetWorkerId, newMonth);
+    }
+  };
+
+  // 当月のカレンダー日数（全社締日サイクル期間）を生成し、ログとマッピング
+  const timecardDaysList = useMemo(() => {
+    const [y, m] = timecardMonth.split('-').map(Number);
+    const period = getAttendancePeriod(y, m, closingDay);
+    const dateList = getDateListBetween(period.startDate, period.endDate);
+    const list: any[] = [];
+
+    const logMap = new Map<string, any>();
+    monthlyLogs.forEach(log => {
+      if (log.date) logMap.set(log.date, log);
+    });
+
+    dateList.forEach(dateStr => {
+      const d = new Date(dateStr);
+      const day = d.getDate();
+      const dayOfWeek = d.getDay();
+      const log = logMap.get(dateStr);
+
+      // 休暇申請（leaveRequests）との照合（他人の申請は絶対に照合しない）
+      const targetWorkerId = workerProfile?.id || currentUser?.id;
+      const matchedLeave = leaveRequests.find(req => {
+        if (!req.start_date) return false;
+        if (targetWorkerId && req.worker_id && req.worker_id !== targetWorkerId) return false;
+        const start = req.start_date;
+        const end = req.end_date || req.start_date;
+        return dateStr >= start && dateStr <= end;
+      });
+
+      let workMinutes = 0;
+      let breakMins = 0;
+      let isOvertime = false;
+
+      if (log && log.clock_in && log.clock_out) {
+        try {
+          const inTot = parseTimeToMinutes(log.clock_in);
+          const outTot = parseTimeToMinutes(log.clock_out);
+          if (inTot !== null && outTot !== null) {
+            let diff = outTot >= inTot ? (outTot - inTot) : (outTot + 1440 - inTot);
+            breakMins = Number(log.total_break_minutes) || Number(log.break_minutes) || Number(log.actual_rest_minutes) || 0;
+            workMinutes = Math.max(0, diff - breakMins);
+            if (workMinutes > 480) isOvertime = true;
+          }
+        } catch (e) {}
+      }
+
+      list.push({
+        day,
+        dateStr,
+        dayOfWeek,
+        dayOfWeekName: getWeekdayName(dayOfWeek, language),
+        log: log || null,
+        workMinutes,
+        breakMins,
+        isOvertime,
+        matchedLeave
+      });
+    });
+
+    return list;
+  }, [timecardMonth, monthlyLogs, leaveRequests, language, closingDay]);
+
+  // タイムカードの日付から直接有給申請を開くハンドラー
+  const handleOpenLeaveModalForDate = (dateStr: string) => {
+    const targetId = workerProfile?.id || currentUser?.id || (allWorkers && allWorkers[0]?.id) || '';
+    setLeaveForm(prev => ({
+      ...prev,
+      start_date: dateStr,
+      end_date: dateStr,
+      worker_id: targetId || prev.worker_id
+    }));
+    setShowLeaveModal(true);
+  };
+
+  // 選択中の月の統計サマリー
+  const selectedMonthStats = useMemo(() => {
+    let days = 0;
+    let totalMins = 0;
+    let overMins = 0;
+    let totalBreak = 0;
+
+    timecardDaysList.forEach(item => {
+      if (item.log && item.log.clock_in) {
+        days += 1;
+        totalMins += item.workMinutes;
+        totalBreak += item.breakMins;
+        if (item.workMinutes > 480) {
+          overMins += (item.workMinutes - 480);
+        }
+      }
+    });
+
+    return {
+      workDays: days,
+      totalHours: Math.floor(totalMins / 60),
+      totalMinsRemainder: totalMins % 60,
+      overtimeHours: Math.floor(overMins / 60),
+      overtimeMinsRemainder: overMins % 60,
+      totalBreakMins: totalBreak
+    };
+  }, [timecardDaysList]);
+
+  const fetchPortalData = async (userId: string, currentRole: string, profile: any, overrideClosingDay?: number) => {
+    if (!userId) return;
+    try {
+      const today = getJSTDate();
+
+      // 1. タスク (カレンダー用: サーバーアクション経由でRLSを回避し確実に取得)
+      const targetUserId = userId;
+      try {
+        const taskRes = await getPortalTasks(targetUserId);
+        if (taskRes.success && taskRes.data && taskRes.data.length > 0) {
+          setTasks(taskRes.data);
+        } else {
+          // クライアント側でもフォールバック試行
+          const { data: taskData } = await supabase.from('work_logs')
+            .select('*, crops(*), fields(*), workers(*)')
+            .eq('user_id', targetUserId)
+            .eq('status', 'planned')
+            .order('work_date', { ascending: true });
+          if (taskData) setTasks(taskData);
+        }
+      } catch (tErr) {
+        console.warn('Task fetch error:', tErr);
+      }
+
+      // 2. 承認待ち (現場スタッフが完了報告した作業: status='completed' かつ approval_status='pending')
+      if (currentRole === 'admin') {
+        try {
+          const { data: appData } = await supabase.from('work_logs')
+            .select('id, task_title, work_date, workers(name)')
+            .eq('user_id', userId)
+            .eq('status', 'completed')
+            .eq('approval_status', 'pending');
+          if (appData) setPendingApprovals(appData);
+        } catch (aErr) {
+          console.warn('Approvals fetch error:', aErr);
+        }
+      }
+
+      // 3. 掲示板最新3件 (自社テナントのみ)
+      if (targetUserId) {
+        try {
+          const { data: boardData } = await supabase.from('board_posts')
+            .select('*')
+            .eq('user_id', targetUserId)
+            .order('created_at', { ascending: false })
+            .limit(3);
+          if (boardData) setBoardPosts(boardData);
+        } catch (bErr) {
+          console.warn('Board fetch error:', bErr);
+        }
+      } else {
+        setBoardPosts([]);
+      }
+
+      // 4. 今日の打刻状態（当日の打刻、なければ未退勤ログ）
+      const workerId = profile ? profile.id : userId;
+      if (workerId) {
+        try {
+          let matchedLog = null;
+          const { data: todayLogs } = await supabase.from('attendance_logs')
+            .select('*')
+            .eq('worker_id', workerId)
+            .eq('date', today)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (todayLogs && todayLogs.length > 0) {
+            matchedLog = todayLogs[0];
+          } else {
+            const { data: unclosed } = await supabase.from('attendance_logs')
+              .select('*')
+              .eq('worker_id', workerId)
+              .is('clock_out', null)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            if (unclosed && unclosed.length > 0) matchedLog = unclosed[0];
+          }
+          if (matchedLog) setAttendance(matchedLog);
+          // 当月の個人勤怠集計データを取得
+          fetchWorkerMonthlyAttendance(workerId, timecardMonth, overrideClosingDay);
+        } catch (attErr) {
+          console.warn('Attendance fetch error:', attErr);
+        }
+      }
+
+      // 5. 有給休暇・残高と申請履歴の取得 (自農園のワーカーのみ厳格に取得)
+      try {
+        let targetWorker: any = null;
+        const { data: wList } = await supabase
+          .from('workers')
+          .select('id, name, role, type, employment_type, paid_leave_carryover, paid_leave_balance')
+          .eq('user_id', targetUserId)
+          .order('name');
+
+        if (wList) {
+          setAllWorkers(wList);
+          
+          // ログイン中のワーカーを探す（他人のデータを勝手に割り当てない）
+          if (profile && profile.id) {
+            targetWorker = wList.find(w => w.id === profile.id) || null;
+          } else if (currentRole === 'admin') {
+            // 管理者の場合、管理者自身のワーカーレコードがあればそれを探す
+            targetWorker = wList.find(w => w.role === 'admin' || w.name === '管理者') || null;
           }
 
-          const c = Number(targetWorker.paid_leave_carryover) || 0;
-          const b = Number(targetWorker.paid_leave_balance) || 0;
-          setLeaveBalance({ carryover: c, balance: b, total: c + b });
-          setLeaveForm(prev => ({ ...prev, worker_id: targetWorker.id }));
+          if (targetWorker) {
+            const wType = targetWorker.type || targetWorker.employment_type;
+            setWorkerProfile(targetWorker);
+            if (wType) {
+              setWorkerProfile((prev: any) => ({ ...prev, ...targetWorker, type: wType, employment_type: wType }));
+              setCurrentUser((prev: any) => ({ ...prev, ...targetWorker, type: wType, employment_type: wType }));
+            }
+
+            const c = Number(targetWorker.paid_leave_carryover) || 0;
+            const b = Number(targetWorker.paid_leave_balance) || 0;
+            setLeaveBalance({ carryover: c, balance: b, total: c + b });
+            setLeaveForm(prev => ({ ...prev, worker_id: targetWorker.id }));
+          } else {
+            // 本人ワーカーが紐付いていない場合は他人の有給を誤表示しない
+            setLeaveBalance(null);
+            if (!profile) setWorkerProfile(null);
+          }
+        }
+
+        // 直近の休暇申請履歴（本人以外の他人の申請データを100%混入させない）
+        const activeWorkerId = targetWorker?.id || (profile && profile.id);
+        if (activeWorkerId) {
+          const reqRes = await getWorkerLeaveRequests(targetUserId, activeWorkerId);
+          if (reqRes.success && reqRes.data) {
+            setLeaveRequests(reqRes.data);
+          } else {
+            // フォールバック
+            const { data: reqData } = await supabase
+              .from('leave_requests')
+              .select('*, workers!inner(name, user_id)')
+              .eq('worker_id', activeWorkerId)
+              .order('created_at', { ascending: false })
+              .limit(50);
+            if (reqData) setLeaveRequests(reqData);
+          }
+        } else {
+          setLeaveRequests([]);
+        }
+        // 6. チーム稼働状況 & 作業日報データの初期取得
+        fetchDailyTeamData(targetUserId, reportDate);
+      } catch (err) {
+        console.error('Error loading leave data:', err);
+      }
+    } catch (globalFetchErr) {
+      console.error('fetchPortalData fatal warning:', globalFetchErr);
+    }
+  };
+
+  // 👥 チーム稼働状況 & 作業日報データの取得
+  const fetchDailyTeamData = async (
+    targetUserId: string,
+    targetDate: string,
+    period: 'day' | 'week' | 'month' | 'custom' = reportPeriod,
+    cStart: string = customStartDate,
+    cEnd: string = customEndDate
+  ) => {
+    if (!targetUserId) return;
+    setIsLoadingDailyData(true);
+    try {
+      // 1. 指定日（または本日）の全社打刻ログ
+      const { data: attData } = await supabase
+        .from('attendance_logs')
+        .select('*')
+        .eq('user_id', targetUserId)
+        .eq('date', targetDate);
+
+      // 未退勤ログ（日付跨ぎ等）も取得してマージ
+      const { data: unclosedAtt } = await supabase
+        .from('attendance_logs')
+        .select('*')
+        .eq('user_id', targetUserId)
+        .is('clock_out', null);
+
+      const mergedAttMap = new Map<string, any>();
+      (attData || []).forEach(a => mergedAttMap.set(a.worker_id, a));
+      (unclosedAtt || []).forEach(a => {
+        if (!mergedAttMap.has(a.worker_id)) {
+          mergedAttMap.set(a.worker_id, a);
+        }
+      });
+      setTeamAttendanceLogs(Array.from(mergedAttMap.values()));
+
+      // 圃場・作物マスタの取得
+      try {
+        const [fRes, cRes] = await Promise.all([
+          supabase.from('fields').select('id, name').eq('user_id', targetUserId).order('name'),
+          supabase.from('crops').select('id, name').eq('user_id', targetUserId).order('name')
+        ]);
+        if (fRes.data) setAllFields(fRes.data);
+        if (cRes.data) setAllCrops(cRes.data);
+      } catch (e) {
+        console.warn('fields/crops fetch error:', e);
+      }
+
+      // 2. 期間に応じた日付範囲の計算
+      let startDate = targetDate;
+      let endDate = targetDate;
+
+      if (period === 'week') {
+        const endD = new Date(targetDate);
+        const startD = new Date(targetDate);
+        startD.setDate(startD.getDate() - 6);
+        startDate = startD.toISOString().substring(0, 10);
+        endDate = endD.toISOString().substring(0, 10);
+      } else if (period === 'month') {
+        const endD = new Date(targetDate);
+        const startD = new Date(targetDate);
+        startD.setDate(startD.getDate() - 29);
+        startDate = startD.toISOString().substring(0, 10);
+        endDate = endD.toISOString().substring(0, 10);
+      } else if (period === 'custom') {
+        startDate = cStart || targetDate;
+        endDate = cEnd || targetDate;
+      }
+
+      // 3. 全社作業ログ（work_logs）の範囲取得
+      let workQuery = supabase
+        .from('work_logs')
+        .select('*, crops(id, name), fields(id, name), workers(id, name, role)')
+        .eq('user_id', targetUserId);
+
+      if (startDate === endDate) {
+        workQuery = workQuery.eq('work_date', startDate);
+      } else {
+        workQuery = workQuery.gte('work_date', startDate).lte('work_date', endDate);
+      }
+
+      const { data: workData } = await workQuery
+        .order('work_date', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      if (workData) {
+        setDailyWorkLogs(workData);
+      }
+    } catch (err) {
+      console.error('fetchDailyTeamData error:', err);
+    } finally {
+      setIsLoadingDailyData(false);
+    }
+  };
+
+  // 日付または期間設定変更時の自動再取得
+  useEffect(() => {
+    const targetUserId = currentUser?.user_id || currentUser?.id;
+    if (targetUserId && reportDate) {
+      fetchDailyTeamData(targetUserId, reportDate, reportPeriod, customStartDate, customEndDate);
+    }
+  }, [reportDate, reportPeriod, customStartDate, customEndDate, currentUser]);
+
+  // 👥 チームリアルタイム稼働状況（全スタッフの現在のステータスと最新作業）
+  const teamLiveStatusList = useMemo(() => {
+    if (!allWorkers || allWorkers.length === 0) return [];
+
+    return allWorkers.map(worker => {
+      // 1. 本日の勤怠ログ
+      const att = teamAttendanceLogs.find(a => a.worker_id === worker.id);
+      
+      // 2. 本日の作業ログ一覧
+      const workerLogs = dailyWorkLogs.filter(w => w.worker_id === worker.id);
+      // 最新の作業
+      const latestWork = workerLogs.length > 0 ? workerLogs[0] : null;
+      // 本日の合計作業時間（分）
+      const totalMinutes = workerLogs.reduce((acc, w) => acc + (Number(w.duration_minutes) || 0), 0);
+
+      // 3. ステータス判定
+      let status: 'working' | 'break' | 'left' | 'off' = 'off';
+      let statusLabel = t('live_notClockedIn', language);
+      let statusColor = 'bg-slate-100 text-slate-500 border-slate-200';
+      let statusDot = 'bg-slate-400';
+
+      if (att && att.clock_in && !att.clock_out) {
+        if (att.break_start_time && !att.break_end_time) {
+          status = 'break';
+          statusLabel = t('live_onBreak', language);
+          statusColor = 'bg-amber-50 text-amber-700 border-amber-300';
+          statusDot = 'bg-amber-500 animate-pulse';
+        } else {
+          status = 'working';
+          statusLabel = t('live_activeNow', language);
+          statusColor = 'bg-emerald-50 text-emerald-700 border-emerald-300';
+          statusDot = 'bg-emerald-500 animate-pulse';
+        }
+      } else if (att && att.clock_out) {
+        status = 'left';
+        statusLabel = t('live_clockedOut', language);
+        statusColor = 'bg-slate-100 text-slate-600 border-slate-300';
+        statusDot = 'bg-slate-400';
+      }
+
+      return {
+        worker,
+        att,
+        latestWork,
+        allLogsCount: workerLogs.length,
+        totalMinutes,
+        status,
+        statusLabel,
+        statusColor,
+        statusDot
+      };
+    });
+  }, [allWorkers, teamAttendanceLogs, dailyWorkLogs, language]);
+
+  // リアルタイム稼働中・休憩中・退勤済の集計
+  const currentlyWorkingCount = useMemo(() => {
+    return teamLiveStatusList.filter(s => s.status === 'working').length;
+  }, [teamLiveStatusList]);
+
+  const onBreakCount = useMemo(() => {
+    return teamLiveStatusList.filter(s => s.status === 'break').length;
+  }, [teamLiveStatusList]);
+
+  const clockedOutCount = useMemo(() => {
+    return teamLiveStatusList.filter(s => s.status === 'left').length;
+  }, [teamLiveStatusList]);
+
+  const notClockedInCount = useMemo(() => {
+    return teamLiveStatusList.filter(s => s.status === 'off').length;
+  }, [teamLiveStatusList]);
+
+  // 絞り込み後の作業ログ（作業者・圃場・作物・キーワード）
+  const filteredWorkLogs = useMemo(() => {
+    return dailyWorkLogs.filter(log => {
+      // 作業者フィルタ
+      if (selectedWorkerFilter !== 'all' && log.worker_id !== selectedWorkerFilter) {
+        return false;
+      }
+      // 圃場フィルタ
+      if (selectedFieldFilter !== 'all') {
+        if (selectedFieldFilter === 'none' && log.field_id) return false;
+        if (selectedFieldFilter !== 'none' && log.field_id !== selectedFieldFilter) return false;
+      }
+      // 作物フィルタ
+      if (selectedCropFilter !== 'all') {
+        if (selectedCropFilter === 'none' && log.crop_id) return false;
+        if (selectedCropFilter !== 'none' && log.crop_id !== selectedCropFilter) return false;
+      }
+      // キーワード検索
+      if (reportSearchKeyword.trim()) {
+        const kw = reportSearchKeyword.toLowerCase();
+        const matchTitle = (log.task_title || '').toLowerCase().includes(kw);
+        const matchType = (log.work_type || '').toLowerCase().includes(kw);
+        const matchMemo = (log.memo || '').toLowerCase().includes(kw);
+        const matchWorker = (log.workers?.name || '').toLowerCase().includes(kw);
+        const matchField = (log.fields?.name || '').toLowerCase().includes(kw);
+        const matchCrop = (log.crops?.name || '').toLowerCase().includes(kw);
+        if (!matchTitle && !matchType && !matchMemo && !matchWorker && !matchField && !matchCrop) {
+          return false;
         }
       }
+      return true;
+    });
+  }, [dailyWorkLogs, selectedWorkerFilter, selectedFieldFilter, selectedCropFilter, reportSearchKeyword]);
 
-      // 直近の休暇申請履歴
-      let reqQuery = supabase
+  // 📋 作業日報サマリー統計（絞り込み後ベース）
+  const dailyReportStats = useMemo(() => {
+    const totalMinutes = filteredWorkLogs.reduce((acc, w) => acc + (Number(w.duration_minutes) || 0), 0);
+    const totalHours = Math.floor(totalMinutes / 60);
+    const remainderMinutes = totalMinutes % 60;
+    const completedTasksCount = filteredWorkLogs.length;
+
+    // ユニークスタッフ数
+    const uniqueWorkerIds = new Set(filteredWorkLogs.map(w => w.worker_id).filter(Boolean));
+
+    // 作業種別ごとの集計
+    const workTypeMap: Record<string, number> = {};
+    filteredWorkLogs.forEach(w => {
+      const type = w.work_type || 'その他';
+      workTypeMap[type] = (workTypeMap[type] || 0) + (Number(w.duration_minutes) || 0);
+    });
+
+    return {
+      activeStaffCount: uniqueWorkerIds.size || teamAttendanceLogs.filter(a => a.clock_in).length,
+      totalMinutes,
+      totalHours,
+      remainderMinutes,
+      completedTasksCount,
+      workTypeMap
+    };
+  }, [filteredWorkLogs, teamAttendanceLogs]);
+
+  // グループ化データ（タイムライン / 圃場別 / 作物別 / 人別）
+  const groupedWorkLogs = useMemo(() => {
+    if (reportGroupBy === 'timeline') {
+      // 日付ごとにグルーピング
+      const dateMap: Record<string, any[]> = {};
+      filteredWorkLogs.forEach(log => {
+        const d = log.work_date || '日付未設定';
+        if (!dateMap[d]) dateMap[d] = [];
+        dateMap[d].push(log);
+      });
+      // 降順ソート
+      return Object.entries(dateMap)
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([groupKey, logs]) => {
+          const groupMinutes = logs.reduce((sum, l) => sum + (Number(l.duration_minutes) || 0), 0);
+          return {
+            groupKey,
+            groupTitle: groupKey,
+            groupSub: `${logs.length}${t('report_itemsCount', language)} ・ ${Math.floor(groupMinutes / 60)}h ${groupMinutes % 60}m`,
+            logs,
+            totalMinutes: groupMinutes,
+            badgeColor: 'bg-blue-100 text-blue-800 border-blue-200'
+          };
+        });
+    } else if (reportGroupBy === 'field') {
+      // 圃場ごとにグルーピング
+      const fieldMap: Record<string, { name: string; logs: any[] }> = {};
+      filteredWorkLogs.forEach(log => {
+        const fId = log.field_id || 'unassigned';
+        const fName = log.fields?.name || '🏡 未指定の圃場';
+        if (!fieldMap[fId]) fieldMap[fId] = { name: fName, logs: [] };
+        fieldMap[fId].logs.push(log);
+      });
+      return Object.entries(fieldMap)
+        .sort((a, b) => b[1].logs.length - a[1].logs.length)
+        .map(([groupKey, { name, logs }]) => {
+          const groupMinutes = logs.reduce((sum, l) => sum + (Number(l.duration_minutes) || 0), 0);
+          return {
+            groupKey,
+            groupTitle: name,
+            groupSub: `${logs.length}${t('report_itemsCount', language)} ・ ${Math.floor(groupMinutes / 60)}h ${groupMinutes % 60}m`,
+            logs,
+            totalMinutes: groupMinutes,
+            badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200'
+          };
+        });
+    } else if (reportGroupBy === 'crop') {
+      // 作物ごとにグルーピング
+      const cropMap: Record<string, { name: string; logs: any[] }> = {};
+      filteredWorkLogs.forEach(log => {
+        const cId = log.crop_id || 'unassigned';
+        const cName = log.crops?.name || '🌱 未指定の作物';
+        if (!cropMap[cId]) cropMap[cId] = { name: cName, logs: [] };
+        cropMap[cId].logs.push(log);
+      });
+      return Object.entries(cropMap)
+        .sort((a, b) => b[1].logs.length - a[1].logs.length)
+        .map(([groupKey, { name, logs }]) => {
+          const groupMinutes = logs.reduce((sum, l) => sum + (Number(l.duration_minutes) || 0), 0);
+          return {
+            groupKey,
+            groupTitle: name,
+            groupSub: `${logs.length}${t('report_itemsCount', language)} ・ ${Math.floor(groupMinutes / 60)}h ${groupMinutes % 60}m`,
+            logs,
+            totalMinutes: groupMinutes,
+            badgeColor: 'bg-amber-100 text-amber-800 border-amber-200'
+          };
+        });
+    } else {
+      // 人別（作業者別）にグルーピング
+      const workerMap: Record<string, { name: string; logs: any[] }> = {};
+      filteredWorkLogs.forEach(log => {
+        const wId = log.worker_id || 'unassigned';
+        const wName = log.workers?.name || '👤 未設定スタッフ';
+        if (!workerMap[wId]) workerMap[wId] = { name: wName, logs: [] };
+        workerMap[wId].logs.push(log);
+      });
+      return Object.entries(workerMap)
+        .sort((a, b) => b[1].logs.length - a[1].logs.length)
+        .map(([groupKey, { name, logs }]) => {
+          const groupMinutes = logs.reduce((sum, l) => sum + (Number(l.duration_minutes) || 0), 0);
+          return {
+            groupKey,
+            groupTitle: name,
+            groupSub: `${logs.length}${t('report_itemsCount', language)} ・ ${Math.floor(groupMinutes / 60)}h ${groupMinutes % 60}m`,
+            logs,
+            totalMinutes: groupMinutes,
+            badgeColor: 'bg-purple-100 text-purple-800 border-purple-200'
+          };
+        });
+    }
+  }, [filteredWorkLogs, reportGroupBy]);
+
+  // 📋 作業日報まとめ（多軸・タイムライン統合ビューワー）描画関数
+  const renderWorkReportsViewer = (isFullscreen: boolean) => {
+    return (
+      <div className="space-y-4">
+        {/* 1. 上部コントロールバー：タイトル ＆ 全画面展開ボタン */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-blue-600" />
+              <h2 className="text-base sm:text-lg font-black text-slate-800">
+                {t('report_title', language)}
+              </h2>
+              {isFullscreen && (
+                <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-black rounded-full border border-blue-200">
+                  {t('report_fullscreenBadge', language)}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              {t('report_headerSubtitle', language)}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* 更新ボタン */}
+            <button
+              type="button"
+              onClick={() => {
+                const targetUserId = currentUser?.user_id || currentUser?.id;
+                if (targetUserId) {
+                  fetchDailyTeamData(targetUserId, reportDate, reportPeriod, customStartDate, customEndDate);
+                }
+              }}
+              disabled={isLoadingDailyData}
+              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+              title={t('report_refreshBtn', language)}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingDailyData ? 'animate-spin text-blue-600' : ''}`} />
+              <span className="hidden sm:inline">{t('report_refreshBtn', language)}</span>
+            </button>
+
+            {/* 全画面切り替えボタン（インライン時のみ） */}
+            {!isFullscreen && (
+              <button
+                type="button"
+                onClick={() => setShowReportModal(true)}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span>{t('report_fullscreenBtn', language)}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 2. 期間選択バー（本日 / 直近7日 / 直近30日 / 期間指定） */}
+        <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className="text-[11px] font-black text-slate-500 flex items-center gap-1">
+              <CalendarDays className="w-3.5 h-3.5 text-blue-600" />
+              <span>{t('report_periodLabel', language)}</span>
+            </span>
+
+            {/* 期間切替ピルボタン */}
+            <div className="flex items-center gap-1 p-1 bg-white border border-slate-200 rounded-xl shadow-2xs overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setReportPeriod('day')}
+                className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                  reportPeriod === 'day'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {t('report_periodDay', language)}
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportPeriod('week')}
+                className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                  reportPeriod === 'week'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {t('report_periodWeek', language)}
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportPeriod('month')}
+                className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                  reportPeriod === 'month'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {t('report_periodMonth', language)}
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportPeriod('custom')}
+                className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                  reportPeriod === 'custom'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {t('report_periodCustom', language)}
+              </button>
+            </div>
+          </div>
+
+          {/* 期間詳細ナビゲーション */}
+          {reportPeriod === 'day' && (
+            <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-200/60">
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date(reportDate);
+                  d.setDate(d.getDate() - 1);
+                  setReportDate(d.toISOString().substring(0, 10));
+                }}
+                className="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+              >
+                {t('report_prevDay', language)}
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportDate(getJSTDate())}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-colors cursor-pointer shadow-2xs ${
+                  reportDate === getJSTDate()
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white border border-slate-200 hover:bg-slate-100 text-slate-700'
+                }`}
+              >
+                {t('report_today', language)}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date(reportDate);
+                  d.setDate(d.getDate() + 1);
+                  setReportDate(d.toISOString().substring(0, 10));
+                }}
+                className="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+              >
+                {t('report_nextDay', language)}
+              </button>
+              <input
+                type="date"
+                value={reportDate}
+                onChange={(e) => setReportDate(e.target.value)}
+                className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none shadow-2xs cursor-pointer"
+              />
+            </div>
+          )}
+
+          {reportPeriod === 'week' && (
+            <div className="text-xs font-bold text-blue-700 pt-1 border-t border-slate-200/60 flex items-center gap-1.5">
+              <span>{t('report_periodShowing', language)}</span>
+              <span className="font-black bg-blue-100/80 px-2 py-0.5 rounded-md">
+                {(() => {
+                  const startD = new Date(reportDate);
+                  startD.setDate(startD.getDate() - 6);
+                  return `${startD.toISOString().substring(0, 10)} 〜 ${reportDate} (7${t('report_daysCount', language)})`;
+                })()}
+              </span>
+            </div>
+          )}
+
+          {reportPeriod === 'month' && (
+            <div className="text-xs font-bold text-blue-700 pt-1 border-t border-slate-200/60 flex items-center gap-1.5">
+              <span>{t('report_periodShowing', language)}</span>
+              <span className="font-black bg-blue-100/80 px-2 py-0.5 rounded-md">
+                {(() => {
+                  const startD = new Date(reportDate);
+                  startD.setDate(startD.getDate() - 29);
+                  return `${startD.toISOString().substring(0, 10)} 〜 ${reportDate} (30${t('report_daysCount', language)})`;
+                })()}
+              </span>
+            </div>
+          )}
+
+          {reportPeriod === 'custom' && (
+            <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-slate-200/60 text-xs font-bold text-slate-700">
+              <span>{t('report_periodStart', language)}</span>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none shadow-2xs cursor-pointer"
+              />
+              <span>{t('report_periodEnd', language)}</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none shadow-2xs cursor-pointer"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* 3. 4大集計・表示軸切替タブ（📋 タイムライン / 🏡 圃場別 / 🌱 作物別 / 👤 人別） */}
+        <div className="bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200 flex items-center gap-1.5 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setReportGroupBy('timeline')}
+            className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              reportGroupBy === 'timeline'
+                ? 'bg-white text-blue-700 shadow-sm border border-slate-200'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Clock className="w-4 h-4 text-blue-600" />
+            <span>{t('report_tabTimeline', language)}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setReportGroupBy('field')}
+            className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              reportGroupBy === 'field'
+                ? 'bg-white text-emerald-700 shadow-sm border border-slate-200'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <MapPin className="w-4 h-4 text-emerald-600" />
+            <span>{t('report_tabField', language)}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setReportGroupBy('crop')}
+            className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              reportGroupBy === 'crop'
+                ? 'bg-white text-amber-700 shadow-sm border border-slate-200'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Sprout className="w-4 h-4 text-amber-600" />
+            <span>{t('report_tabCrop', language)}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setReportGroupBy('worker')}
+            className={`flex-1 min-w-[120px] py-2 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              reportGroupBy === 'worker'
+                ? 'bg-white text-purple-700 shadow-sm border border-slate-200'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Users className="w-4 h-4 text-purple-600" />
+            <span>{t('report_tabWorker', language)}</span>
+          </button>
+        </div>
+
+        {/* 4. 多軸絞り込みフィルター ＆ 検索バー */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
+          {/* 作業者 */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 block">{t('report_filterWorkerLabel', language)}</span>
+            <select
+              value={selectedWorkerFilter}
+              onChange={(e) => setSelectedWorkerFilter(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none shadow-2xs cursor-pointer truncate"
+            >
+              <option value="all">{t('report_allWorkersOption', language)} ({dailyWorkLogs.length}{t('report_itemsCount', language)})</option>
+              {allWorkers.map(w => {
+                const count = dailyWorkLogs.filter(log => log.worker_id === w.id).length;
+                return (
+                  <option key={w.id} value={w.id}>
+                    {w.name} ({count}{t('report_itemsCount', language)})
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {/* 圃場 */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 block">{t('report_filterFieldLabel', language)}</span>
+            <select
+              value={selectedFieldFilter}
+              onChange={(e) => setSelectedFieldFilter(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none shadow-2xs cursor-pointer truncate"
+            >
+              <option value="all">{t('report_allFieldsOption', language)}</option>
+              {allFields.map(f => {
+                const count = dailyWorkLogs.filter(log => log.field_id === f.id).length;
+                return (
+                  <option key={f.id} value={f.id}>
+                    {getTranslatedName(f, language)} ({count}{t('report_itemsCount', language)})
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {/* 作物 */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 block">{t('report_filterCropLabel', language)}</span>
+            <select
+              value={selectedCropFilter}
+              onChange={(e) => setSelectedCropFilter(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none shadow-2xs cursor-pointer truncate"
+            >
+              <option value="all">{t('report_allCropsOption', language)}</option>
+              {allCrops.map(c => {
+                const count = dailyWorkLogs.filter(log => log.crop_id === c.id).length;
+                return (
+                  <option key={c.id} value={c.id}>
+                    {getTranslatedName(c, language)} ({count}{t('report_itemsCount', language)})
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {/* キーワード検索 */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-black text-slate-500 block">{t('report_searchLabel', language)}</span>
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={reportSearchKeyword}
+                onChange={(e) => setReportSearchKeyword(e.target.value)}
+                placeholder={t('report_searchPlaceholder', language)}
+                className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none shadow-2xs"
+              />
+              {reportSearchKeyword && (
+                <button
+                  type="button"
+                  onClick={() => setReportSearchKeyword('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* フィルターリセット */}
+        {(selectedWorkerFilter !== 'all' || selectedFieldFilter !== 'all' || selectedCropFilter !== 'all' || reportSearchKeyword) && (
+          <div className="flex items-center justify-between text-xs bg-amber-50 border border-amber-200/80 rounded-xl px-3 py-1.5 text-amber-800">
+            <span>{t('report_filterActiveNotice', language).replace('{count}', String(filteredWorkLogs.length))}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedWorkerFilter('all');
+                setSelectedFieldFilter('all');
+                setSelectedCropFilter('all');
+                setReportSearchKeyword('');
+              }}
+              className="text-amber-900 font-bold underline cursor-pointer"
+            >
+              {t('report_resetFilterBtn', language)}
+            </button>
+          </div>
+        )}
+
+        {/* 5. 3大サマリーカード */}
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="p-3 sm:p-4 bg-blue-50/70 border border-blue-200/80 rounded-2xl">
+            <span className="text-[10px] sm:text-xs font-bold text-blue-700 block truncate">
+              {t('report_statsStaffCount', language)}
+            </span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-lg sm:text-2xl font-black text-blue-950">
+                {dailyReportStats.activeStaffCount}
+              </span>
+              <span className="text-[11px] text-blue-700 font-bold">
+                {t('peopleActiveUnit', language)}
+              </span>
+            </div>
+          </div>
+
+          <div className="p-3 sm:p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl">
+            <span className="text-[10px] sm:text-xs font-bold text-emerald-700 block truncate">
+              {t('report_statsTotalHours', language)}
+            </span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-lg sm:text-2xl font-black text-emerald-950">
+                {dailyReportStats.totalHours}
+              </span>
+              <span className="text-[11px] text-emerald-700 font-bold">
+                {t('tc_hours', language)}{dailyReportStats.remainderMinutes}{t('tc_minutes', language)}
+              </span>
+            </div>
+          </div>
+
+          <div className="p-3 sm:p-4 bg-purple-50/70 border border-purple-200/80 rounded-2xl">
+            <span className="text-[10px] sm:text-xs font-bold text-purple-700 block truncate">
+              {t('report_statsTaskCount', language)}
+            </span>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-lg sm:text-2xl font-black text-purple-950">
+                {dailyReportStats.completedTasksCount}
+              </span>
+              <span className="text-[11px] text-purple-700 font-bold">
+                {t('report_itemsCount', language)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 作業種別の内訳タグ */}
+        {Object.keys(dailyReportStats.workTypeMap).length > 0 && (
+          <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2">
+            <span className="text-[11px] font-bold text-slate-500 block">{t('report_breakdownTitle', language)}</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {Object.entries(dailyReportStats.workTypeMap)
+                .sort((a, b) => b[1] - a[1])
+                .map(([type, mins]) => (
+                  <span 
+                    key={type}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 shadow-2xs"
+                  >
+                    <span>{getTranslatedWorkType(type, language)}</span>
+                    <span className="font-black text-blue-600">{Math.floor(mins / 60)}h{mins % 60}m</span>
+                  </span>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* 6. グループ化カード一覧 */}
+        <div className="space-y-4 pt-1">
+          {isLoadingDailyData ? (
+            <div className="py-12 text-center text-slate-400">
+              <Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600 mb-2" />
+              <p className="text-xs font-bold">{t('report_loadingLogs', language)}</p>
+            </div>
+          ) : filteredWorkLogs.length === 0 ? (
+            <div className="py-12 text-center bg-slate-50 border border-slate-200/60 rounded-3xl p-6">
+              <FileText className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+              <p className="text-sm font-bold text-slate-600">{t('report_noLogsFound', language)}</p>
+              <p className="text-xs text-slate-400 mt-1">{t('report_noLogsFoundSub', language)}</p>
+            </div>
+          ) : (
+            groupedWorkLogs.map((group) => (
+              <div
+                key={group.groupKey}
+                className="bg-slate-50/70 border border-slate-200/90 rounded-2xl p-3 sm:p-4 space-y-2.5 shadow-2xs"
+              >
+                {/* グループヘッダー */}
+                <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-200/80 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-sm sm:text-base text-slate-900">
+                      {group.groupTitle}
+                    </span>
+                  </div>
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-black border shadow-2xs ${group.badgeColor}`}>
+                    {group.groupSub}
+                  </span>
+                </div>
+
+                {/* グループ内の作業カード一覧 */}
+                <div className="space-y-2">
+                  {group.logs.map((log: any) => (
+                    <div
+                      key={log.id}
+                      className="bg-white p-3 sm:p-3.5 rounded-xl border border-slate-200/80 shadow-2xs hover:border-blue-300 transition-all space-y-1.5"
+                    >
+                      {/* 上段：作業者・作業種別バッジ・作業時間 */}
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-xs shadow-2xs">
+                            {log.workers?.name ? log.workers.name.charAt(0) : '作'}
+                          </div>
+                          <span className="font-black text-xs sm:text-sm text-slate-800">
+                            {log.workers?.name || t('report_workerFallback', language)}
+                          </span>
+                          {log.memo?.includes('【👑現場責任者】') && (
+                            <span className="px-1.5 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 text-[9px] font-black rounded-full flex items-center gap-0.5 shadow-2xs border border-amber-400">
+                              <Crown className="w-2.5 h-2.5 fill-amber-950" />
+                              <span>{t('report_leaderCrown', language)}</span>
+                            </span>
+                          )}
+                          {log.memo?.includes('【👑現場リーダー:') && (
+                            <span className="px-1.5 py-0.5 bg-amber-50 text-amber-800 text-[9px] font-bold rounded-md flex items-center gap-0.5 border border-amber-200">
+                              <Crown className="w-2.5 h-2.5 text-amber-600" />
+                              <span>{log.memo.match(/【👑現場リーダー:\s*([^】]+)】/)?.[1]}</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 text-blue-800 font-black rounded-md text-[11px]">
+                            {getTranslatedWorkType(log.work_type, language)}
+                          </span>
+                          <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            ⏱️ {log.duration_minutes ? `${Math.floor(log.duration_minutes / 60)}h ${log.duration_minutes % 60}m` : `0${t('tc_minutes', language)}`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 中段：作目・圃場・日付・数量タグ */}
+                      <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-600 pt-0.5">
+                        {reportGroupBy !== 'timeline' && log.work_date && (
+                          <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-md font-bold text-slate-700">
+                            <span>📅</span>
+                            <span>{log.work_date}</span>
+                          </span>
+                        )}
+                        {log.crops?.name && (
+                          <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-md font-bold text-slate-700">
+                            <span>🌱</span>
+                            <span>{getTranslatedName(log.crops, language)}</span>
+                          </span>
+                        )}
+                        {log.fields?.name && (
+                          <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-md font-bold text-slate-700">
+                            <span>🏡</span>
+                            <span>{getTranslatedName(log.fields, language)}</span>
+                          </span>
+                        )}
+                        {log.material_quantity && (
+                          <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md font-black">
+                            <span>📦</span>
+                            <span>{log.material_quantity} {log.material_unit || ''}</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* 下段：メモ */}
+                      {(() => {
+                        const cleanLogMemo = log.memo
+                          ?.replace(/【👑現場責任者】\n?/, '')
+                          ?.replace(/【👑現場リーダー:[^】]+】\n?/, '')
+                          ?.trim();
+                        if (!cleanLogMemo) return null;
+                        return (
+                          <div className="text-[11px] text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                            <span className="font-bold text-slate-400 mr-1">💬 {t('report_memo', language)}</span>
+                            <span>{cleanLogMemo}</span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // 管理者による特定スタッフのポータル・タイムカード表示切替
+  const handleSelectWorkerForAdmin = async (selectedWorkerId: string) => {
+    if (!selectedWorkerId) {
+      setWorkerProfile(null);
+      setLeaveBalance(null);
+      setLeaveRequests([]);
+      setAttendance(null);
+      return;
+    }
+    const targetWorker = allWorkers.find(w => w.id === selectedWorkerId);
+    if (!targetWorker) return;
+
+    const wType = targetWorker.type || targetWorker.employment_type;
+    setWorkerProfile({ ...targetWorker, type: wType, employment_type: wType });
+
+    const c = Number(targetWorker.paid_leave_carryover) || 0;
+    const b = Number(targetWorker.paid_leave_balance) || 0;
+    setLeaveBalance({ carryover: c, balance: b, total: c + b });
+    setLeaveForm(prev => ({ ...prev, worker_id: targetWorker.id }));
+
+    // そのスタッフの打刻状態取得
+    const today = getJSTDate();
+    const { data: aLog } = await supabase.from('attendance_logs')
+      .select('*')
+      .eq('worker_id', targetWorker.id)
+      .eq('date', today)
+      .maybeSingle();
+    setAttendance(aLog || null);
+
+    // そのスタッフのタイムカード・月次集計取得
+    fetchWorkerMonthlyAttendance(targetWorker.id, timecardMonth);
+
+    // そのスタッフ本人の有給申請履歴取得
+    const reqRes = await getWorkerLeaveRequests(targetWorker.user_id || '', targetWorker.id);
+    if (reqRes.success && reqRes.data) {
+      setLeaveRequests(reqRes.data);
+    } else {
+      const { data: reqData } = await supabase
         .from('leave_requests')
         .select('*, workers!inner(name, user_id)')
-        .eq('workers.user_id', targetUserId)
+        .eq('worker_id', targetWorker.id)
         .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (profile && profile.id) {
-        reqQuery = reqQuery.eq('worker_id', profile.id);
-      }
-
-      const { data: reqData } = await reqQuery;
-      if (reqData) setLeaveRequests(reqData);
-    } catch (err) {
-      console.error('Error loading leave data:', err);
+        .limit(50);
+      setLeaveRequests(reqData || []);
     }
   };
 
   // 有給休暇の申請送信
   const handleSubmitLeaveRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!leaveForm.worker_id) {
-      alert('従業員を選択してください');
+    const targetWorkerId = leaveForm.worker_id || workerProfile?.id || currentUser?.id;
+    if (!targetWorkerId) {
+      alert(t('leave_selectWorkerPrompt', language));
       return;
     }
     setIsSubmittingLeave(true);
     try {
       const isAutoApprove = role === 'admin';
-      const { error } = await supabase.from('leave_requests').insert([{
-        worker_id: leaveForm.worker_id,
-        type: leaveForm.type,
-        start_date: leaveForm.start_date,
-        end_date: leaveForm.end_date,
-        reason: leaveForm.reason || '私用のため',
-        status: isAutoApprove ? '承認' : '申請中'
-      }]);
+      const targetTenantId = workerProfile?.user_id || currentUser?.user_id || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
+      
+      const res = await submitLeaveRequest(
+        targetTenantId,
+        targetWorkerId,
+        leaveForm.type,
+        leaveForm.start_date,
+        leaveForm.end_date,
+        leaveForm.reason || '私用のため',
+        isAutoApprove
+      );
 
-      if (error) throw error;
+      if (!res.success) {
+        throw new Error(res.error || '送信に失敗しました');
+      }
 
       setShowLeaveModal(false);
-      setLeaveToast(`有給休暇の申請（${leaveForm.start_date}）を送信しました！`);
+      setLeaveToast(t('leave_submittedToast', language));
       setTimeout(() => setLeaveToast(null), 4000);
 
       // データ再取得
@@ -446,8 +1843,8 @@ function PortalContent() {
       const ownerId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
       await fetchPortalData(ownerId, role, workerProfile);
     } catch (err: any) {
-      console.error(err);
-      alert('有給申請に失敗しました: ' + err.message);
+      console.error('有給申請エラー:', err);
+      alert('有給申請に失敗しました: ' + (err.message || '通信エラー'));
     } finally {
       setIsSubmittingLeave(false);
     }
@@ -1106,30 +2503,79 @@ function PortalContent() {
       return;
     }
     const workerId = workerProfile.id;
-    const tenantUserId = workerProfile.user_id || (currentUser as any)?.user_id || localStorage.getItem('agri_owner_id') || null;
+
+    let tenantUserId = workerProfile.user_id || (currentUser as any)?.user_id || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : null);
+    if (!tenantUserId && workerId) {
+      const { data: wRec } = await supabase.from('workers').select('user_id').eq('id', workerId).maybeSingle();
+      if (wRec?.user_id) {
+        tenantUserId = wRec.user_id;
+      }
+    }
 
     try {
       if (type === 'in') {
-        const payload: any = {
-          worker_id: workerId,
-          date: today,
-          clock_in: nowIso
-        };
-        if (tenantUserId) payload.user_id = tenantUserId;
-
-        const { data, error } = await supabase.from('attendance_logs').insert([payload]).select().single();
-        if (error) throw error;
-        setAttendance(data);
+        const res = await submitAttendance(tenantUserId || '', workerId, 'clock_in', null, today, nowIso, null, null);
+        if (res.success && res.data) {
+          setAttendance(res.data);
+          fetchWorkerMonthlyAttendance(workerId, timecardMonth);
+        } else {
+          reportSystemError({
+            category: 'attendance',
+            message: `出勤打刻失敗: ${res.error || '通信エラー'}`,
+            workerId,
+            workerName: workerProfile?.name,
+            companyName
+          });
+          alert('打刻に失敗しました: ' + (res.error || '通信エラー'));
+        }
       } else {
-        if (!attendance) return;
-        const { data, error } = await supabase.from('attendance_logs').update({
-          clock_out: nowIso
-        }).eq('id', attendance.id).select().single();
-        if (error) throw error;
-        setAttendance(data);
+        let targetAtt = attendance;
+        if (!targetAtt) {
+          const { data: unclosed } = await supabase.from('attendance_logs')
+            .select('*')
+            .eq('worker_id', workerId)
+            .is('clock_out', null)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (unclosed && unclosed.length > 0) targetAtt = unclosed[0];
+        }
+        if (!targetAtt) {
+          reportSystemError({
+            category: 'attendance',
+            message: '退勤打刻失敗: 出勤記録が見つかりませんでした',
+            workerId,
+            workerName: workerProfile?.name,
+            companyName
+          });
+          alert('出勤記録が見つかりませんでした。出勤打刻を行ってください。');
+          return;
+        }
+
+        const res = await submitAttendance(tenantUserId || '', workerId, 'clock_out', targetAtt.id, today, nowIso, null, null);
+        if (res.success && res.data) {
+          setAttendance(res.data);
+          fetchWorkerMonthlyAttendance(workerId, timecardMonth);
+        } else {
+          reportSystemError({
+            category: 'attendance',
+            message: `退勤打刻失敗: ${res.error || '通信エラー'}`,
+            workerId,
+            workerName: workerProfile?.name,
+            companyName
+          });
+          alert('打刻に失敗しました: ' + (res.error || '通信エラー'));
+        }
       }
     } catch (err: any) {
       console.error('打刻エラー詳細:', err);
+      reportSystemError({
+        category: 'attendance',
+        message: `打刻例外エラー (${type === 'in' ? '出勤' : '退勤'}): ${err?.message || '通信エラー'}`,
+        error: err,
+        workerId,
+        workerName: workerProfile?.name,
+        companyName
+      });
       alert('打刻に失敗しました: ' + (err.message || '通信エラー'));
     }
   };
@@ -1143,20 +2589,124 @@ function PortalContent() {
     setShowWorkerGate(true);
   };
 
-  if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-10 h-10 text-blue-500 animate-spin" /></div>;
-  }
+  // 📋 本日のやることリスト（Today's ToDo）の抽出・集計
+  const todayStr = useMemo(() => getJSTDate(), []);
+  const myWorkerId = useMemo(() => workerProfile?.id || currentUser?.id, [workerProfile, currentUser]);
 
-  if (showWorkerGate) {
-    return (
-      <WorkerGate 
-        onLogin={(user) => {
-          setShowWorkerGate(false);
-          window.location.reload();
-        }} 
-      />
-    );
-  }
+  const todayTasks = useMemo(() => {
+    return tasks.filter((t: any) => t.work_date === todayStr);
+  }, [tasks, todayStr]);
+
+  const filteredTodayTasks = useMemo(() => {
+    return todayTasks.filter((t: any) => {
+      const isCompleted = t.status === 'completed';
+      if (todoFilter === 'done') return isCompleted;
+      if (todoFilter === 'mine') {
+        const isMine = !t.worker_id || t.worker_id === myWorkerId;
+        return isMine && !isCompleted;
+      }
+      return true;
+    }).sort((a: any, b: any) => {
+      const aDone = a.status === 'completed' ? 1 : 0;
+      const bDone = b.status === 'completed' ? 1 : 0;
+      if (aDone !== bDone) return aDone - bDone;
+      return (a.step_order || 1) - (b.step_order || 1);
+    });
+  }, [todayTasks, todoFilter, myWorkerId]);
+
+  const todayTasksProgress = useMemo(() => {
+    const total = todayTasks.length;
+    const completed = todayTasks.filter((t: any) => t.status === 'completed').length;
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { total, completed, percent };
+  }, [todayTasks]);
+
+  // タスク完了モーダルを開く
+  const handleOpenCompleteModal = (task: any) => {
+    setCompletingTask(task);
+    setTaskDurationMinutes(task.duration_minutes || 60);
+    setTaskHarvestAmount(task.harvest_amount ? String(task.harvest_amount) : '');
+    setTaskMemo(task.memo || '');
+  };
+
+  // タスク完了日報の保存
+  const handleSaveCompleteTask = async () => {
+    if (!completingTask) return;
+    setIsSubmittingTaskComplete(true);
+    const tenantId = workerProfile?.user_id || currentUser?.user_id || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
+    
+    try {
+      const res = await completePortalTask(tenantId, completingTask.id, {
+        durationMinutes: taskDurationMinutes,
+        harvestAmount: taskHarvestAmount ? Number(taskHarvestAmount) : undefined,
+        memo: taskMemo,
+        workerId: myWorkerId
+      });
+
+      if (res.success) {
+        setTasks(prev => prev.map(t => t.id === completingTask.id ? { 
+          ...t, 
+          status: 'completed', 
+          duration_minutes: taskDurationMinutes, 
+          harvest_amount: taskHarvestAmount ? Number(taskHarvestAmount) : null, 
+          memo: taskMemo 
+        } : t));
+        setCompletingTask(null);
+        if (tenantId) {
+          fetchPortalData(tenantId, role, workerProfile, closingDay);
+          fetchDailyTeamData(tenantId, reportDate, reportPeriod, customStartDate, customEndDate);
+        }
+      } else {
+        alert('完了保存に失敗しました: ' + (res.error || 'エラー'));
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert('エラーが発生しました: ' + e.message);
+    } finally {
+      setIsSubmittingTaskComplete(false);
+    }
+  };
+
+  // クイック完了（モーダル開かず即完了）
+  const handleQuickCompleteTask = async (task: any) => {
+    const tenantId = workerProfile?.user_id || currentUser?.user_id || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
+    try {
+      const res = await completePortalTask(tenantId, task.id, {
+        durationMinutes: task.duration_minutes || 60,
+        workerId: myWorkerId
+      });
+      if (res.success) {
+        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'completed' } : t));
+        if (tenantId) {
+          fetchPortalData(tenantId, role, workerProfile, closingDay);
+          fetchDailyTeamData(tenantId, reportDate, reportPeriod, customStartDate, customEndDate);
+        }
+      } else {
+        alert('完了処理に失敗しました: ' + (res.error || 'エラー'));
+      }
+    } catch (e: any) {
+      alert('エラーが発生しました: ' + e.message);
+    }
+  };
+
+  // 未完了に戻す（予定への復帰）
+  const handleReopenTask = async (task: any) => {
+    const tenantId = workerProfile?.user_id || currentUser?.user_id || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
+    try {
+      const res = await reopenPortalTask(tenantId, task.id);
+      if (res.success) {
+        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'planned', approval_status: null } : t));
+        if (tenantId) {
+          fetchPortalData(tenantId, role, workerProfile, closingDay);
+          fetchDailyTeamData(tenantId, reportDate, reportPeriod, customStartDate, customEndDate);
+        }
+      } else {
+        alert('予定への復帰に失敗しました: ' + (res.error || 'エラー'));
+      }
+    } catch (e: any) {
+      alert('エラーが発生しました: ' + e.message);
+    }
+  };
 
   const calendarEvents = tasks.map(t => {
     let wObj = t.workers;
@@ -1196,6 +2746,43 @@ function PortalContent() {
   const hasClockedIn = attendance && attendance.clock_in;
   const hasClockedOut = attendance && attendance.clock_out;
 
+  // ⚡ ログイン中ユーザーがいない場合は、白画面スピナーで待たせず直ちに現場ログイン画面を表示！
+  if (showWorkerGate || !currentUser) {
+    return (
+      <WorkerGate 
+        farmId={activeFarmId || requestedFarmId}
+        onLogin={async (user) => {
+          setShowWorkerGate(false);
+          setCurrentUser(user);
+          setWorkerProfile(user);
+          const isWorkerAdmin = user.role === 'admin';
+          setRole(isWorkerAdmin ? 'admin' : 'worker');
+          setIsLoading(false);
+
+          const activeOwnerId = user.user_id || activeFarmId || requestedFarmId || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
+          if (activeOwnerId) {
+            fetchPortalData(activeOwnerId, isWorkerAdmin ? 'admin' : 'worker', user, closingDay).catch((err) => {
+              console.warn('Background portal fetch error:', err);
+            });
+          }
+        }} 
+      />
+    );
+  }
+
+  // ログイン済みユーザーがいる場合のみ、ポータル内部データ取得中のスピナーを許可
+  if (isLoading && currentUser) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4 gap-4">
+        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+        <div className="text-center">
+          <p className="text-sm font-bold text-slate-700">現場ポータルを読み込み中...</p>
+          <p className="text-xs text-slate-400 mt-1">通信状況により数秒かかる場合があります</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 font-sans">
       
@@ -1224,12 +2811,12 @@ function PortalContent() {
             {/* 管理者モード時のみ管理者画面リンクを表示 */}
             {role === 'admin' && (
               <Link
-                href="/admin/cultivations"
+                href={activeFarmId ? `/admin/cultivations?farm=${activeFarmId}` : '/admin/cultivations'}
                 className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-sm shrink-0"
-                title="管理者システム（作付け・地図・分析等）へ行く"
+                title={t('adminDashboardBtn', language)}
               >
                 <Building className="w-4 h-4 shrink-0" />
-                <span>🏢 管理者画面へ</span>
+                <span>{t('adminDashboardBtn', language)}</span>
               </Link>
             )}
 
@@ -1248,9 +2835,6 @@ function PortalContent() {
                 ))}
               </select>
             </div>
-
-            {/* 📱 PWAホーム画面追加ガイドボタン */}
-            <PwaInstallPrompt />
 
             {/* ログアウト */}
             <button 
@@ -1281,19 +2865,41 @@ function PortalContent() {
 
               {/* ログインユーザー ウェルカムバナー */}
               {currentUser && (
-                <div className="mb-4 bg-emerald-50/80 border border-emerald-200/80 p-3 rounded-2xl flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black text-xs shadow-xs">
-                      {currentUser.name ? currentUser.name.charAt(0) : 'ユ'}
+                <div className="mb-4 bg-emerald-50/80 border border-emerald-200/80 p-3 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black text-xs shadow-xs">
+                        {workerProfile?.name ? workerProfile.name.charAt(0) : (currentUser.name ? currentUser.name.charAt(0) : 'ユ')}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-emerald-700">{t('currentWorkerLabel', language)}</p>
+                        <p className="text-sm font-black text-slate-800">
+                          {workerProfile ? getTranslatedName(workerProfile, language) : getTranslatedName(currentUser, language)}
+                          {t('workerHonorific', language)}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-emerald-700">{t('currentWorkerLabel', language)}</p>
-                      <p className="text-sm font-black text-slate-800">{getTranslatedName(currentUser, language)}{t('workerHonorific', language)}</p>
-                    </div>
+                    <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg">
+                      {role === 'admin' ? t('adminMode', language) : t('workerMode', language)}
+                    </span>
                   </div>
-                  <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg">
-                    {role === 'admin' ? t('adminMode', language) : t('workerMode', language)}
-                  </span>
+
+                  {/* 管理者モード時のみ、確認対象スタッフを明示的に切り替え可能 */}
+                  {role === 'admin' && allWorkers.length > 0 && (
+                    <div className="pt-2 border-t border-emerald-200/60 flex items-center justify-between gap-2 text-xs">
+                      <span className="text-[10px] font-bold text-slate-500 whitespace-nowrap">{t('selectViewingStaff', language)}</span>
+                      <select
+                        value={workerProfile?.id || ''}
+                        onChange={(e) => handleSelectWorkerForAdmin(e.target.value)}
+                        className="bg-white border border-emerald-300 text-slate-800 text-xs font-bold rounded-lg px-2 py-1 outline-none shadow-xs w-full max-w-[200px] cursor-pointer"
+                      >
+                        <option value="">{t('selectPlaceholder', language)}</option>
+                        {allWorkers.map((w: any) => (
+                          <option key={w.id} value={w.id}>{w.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1330,9 +2936,104 @@ function PortalContent() {
                 </button>
               </div>
 
+              {/* 🕒 今月の勤務実績サマリー ＆ タイムカード明細ボタン */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 mb-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] font-black text-slate-600 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-blue-600" />
+                      {t('tc_currentMonthSummary', language)}
+                    </span>
+                    {closingDay > 0 && (
+                      <span className="text-[10px] font-black text-blue-700 bg-blue-100/70 border border-blue-200 px-1.5 py-0.5 rounded-md">
+                        {closingDay}日締め
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const todayMonth = new Date().toISOString().substring(0, 7);
+                      setTimecardMonth(todayMonth);
+                      const targetWorkerId = workerProfile?.id || currentUser?.id;
+                      if (targetWorkerId) {
+                        fetchWorkerMonthlyAttendance(targetWorkerId, todayMonth);
+                      }
+                      setShowTimecardModal(true);
+                    }}
+                    className="text-[11px] font-black text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 shadow-xs cursor-pointer"
+                  >
+                    <span>{t('tc_openDetails', language)}</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-xs">
+                    <span className="text-[10px] font-bold text-slate-400 block">{t('tc_workDays', language)}</span>
+                    <div className="flex items-baseline gap-1 mt-0.5">
+                      <span className="text-lg font-black text-slate-800">{currentMonthSummary.workDays}</span>
+                      <span className="text-[10px] font-bold text-slate-500">{t('daysUnit', language)}</span>
+                    </div>
+                  </div>
+                  <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-xs">
+                    <span className="text-[10px] font-bold text-slate-400 block">{t('tc_totalWorkTime', language)}</span>
+                    <div className="flex items-baseline gap-1 mt-0.5">
+                      <span className="text-lg font-black text-blue-600">
+                        {Math.floor(currentMonthSummary.totalMinutes / 60)}
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-500">
+                        {t('tc_hours', language)}{currentMonthSummary.totalMinutes % 60}{t('tc_minutes', language)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 👥 農場の今（稼働状況クイックサマリー） */}
+              <div 
+                onClick={() => setActivePortalTab('status')}
+                className="mb-4 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-slate-50 border border-emerald-200/80 rounded-2xl p-3 shadow-xs cursor-pointer hover:border-emerald-400 hover:shadow-md transition-all active:scale-[0.99] group"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                    </span>
+                    <span className="text-xs font-black text-slate-800 flex items-center gap-1">
+                      {t('tabTeamLive', language)}
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-black text-emerald-700 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                    {t('viewDetails', language)} <ArrowRight className="w-3.5 h-3.5" />
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs font-bold text-slate-600 bg-white/80 backdrop-blur-xs p-2 rounded-xl border border-emerald-100">
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span className="text-slate-500 text-[10px]">{t('live_activeNow', language)}:</span>
+                    <span className="text-emerald-700 font-black">{currentlyWorkingCount}{t('peopleCountUnit', language)}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <span className="text-slate-500 text-[10px]">{t('live_onBreak', language)}:</span>
+                    <span className="text-amber-700 font-black">{onBreakCount}{t('peopleCountUnit', language)}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                    <span className="text-slate-500 text-[10px]">{t('live_clockedOut', language)}:</span>
+                    <span className="text-slate-700 font-black">{clockedOutCount}{t('peopleCountUnit', language)}</span>
+                  </div>
+                </div>
+              </div>
+
               {/* 現場ポータル遷移ボタン */}
               <button 
-                onClick={() => router.push('/work')}
+                onClick={() => {
+                  const targetFarm = activeFarmId || requestedFarmId;
+                  router.push(targetFarm ? `/work/${targetFarm}` : '/work');
+                }}
                 className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm mb-4"
               >
                 {t('goToWorkPortal', language)} <ArrowRight className="w-4 h-4" />
@@ -1420,6 +3121,217 @@ function PortalContent() {
               })()}
             </div>
 
+            {/* 📋 本日のやることリスト（Today's ToDo） */}
+            <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200 relative overflow-hidden space-y-4">
+              {/* カードヘッダー */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
+                    <CheckSquare className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                      {t('todo_title', language)}
+                    </h2>
+                    <p className="text-[10px] font-bold text-slate-400">
+                      {t('todo_sub', language)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 進捗バッジ */}
+                <span className={`text-[11px] font-black px-2.5 py-1 rounded-xl border flex items-center gap-1 shrink-0 ${
+                  todayTasksProgress.total > 0 && todayTasksProgress.completed === todayTasksProgress.total
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                }`}>
+                  <span>{todayTasksProgress.completed} / {todayTasksProgress.total}</span>
+                  <span className="text-[10px] font-bold text-slate-500">完了</span>
+                </span>
+              </div>
+
+              {/* 進捗プログレスバー */}
+              {todayTasksProgress.total > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
+                    <span>{t('todo_progress', language)}</span>
+                    <span className="font-black text-emerald-700">{todayTasksProgress.percent}%</span>
+                  </div>
+                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
+                      style={{ width: `${todayTasksProgress.percent}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* フィルターピル */}
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setTodoFilter('all')}
+                  className={`flex-1 py-1 px-2 rounded-lg font-bold transition-colors text-[11px] ${
+                    todoFilter === 'all' ? 'bg-white text-slate-800 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {t('todo_filterAll', language)} ({todayTasks.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTodoFilter('mine')}
+                  className={`flex-1 py-1 px-2 rounded-lg font-bold transition-colors text-[11px] ${
+                    todoFilter === 'mine' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {t('todo_filterMine', language)} ({todayTasks.filter(t => (!t.worker_id || t.worker_id === myWorkerId) && t.status !== 'completed').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTodoFilter('done')}
+                  className={`flex-1 py-1 px-2 rounded-lg font-bold transition-colors text-[11px] ${
+                    todoFilter === 'done' ? 'bg-white text-blue-700 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {t('todo_filterDone', language)} ({todayTasks.filter(t => t.status === 'completed').length})
+                </button>
+              </div>
+
+              {/* 全件完了のお祝いバナー */}
+              {todayTasksProgress.total > 0 && todayTasksProgress.completed === todayTasksProgress.total && todoFilter !== 'done' && (
+                <div className="p-3 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-200 rounded-2xl text-center space-y-1">
+                  <p className="text-xs font-black text-emerald-800">
+                    {t('todo_allDone', language)}
+                  </p>
+                </div>
+              )}
+
+              {/* タスクリスト一覧 */}
+              <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+                {filteredTodayTasks.length === 0 ? (
+                  <div className="p-6 text-center text-xs font-bold text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <CheckCircle2 className="w-8 h-8 text-slate-300 mx-auto mb-1.5" />
+                    <p>{t('todo_noTasks', language)}</p>
+                  </div>
+                ) : (
+                  filteredTodayTasks.map((task: any) => {
+                    const isCompleted = task.status === 'completed';
+                    const isMine = !task.worker_id || task.worker_id === myWorkerId;
+                    const cropEmoji = getCropEmoji(task.crops?.name || '');
+                    const rawTitle = task.task_title || task.work_type || '作業';
+                    const langKey = `task_title_${language}`;
+                    const dbTitle = task[langKey] || (language !== 'en' && language !== 'ja' ? task.task_title_en : null);
+                    const taskTitle = language === 'ja' ? rawTitle : (dbTitle || dynamicTranslations[rawTitle] || getTranslatedWorkType(rawTitle, language));
+
+                    return (
+                      <div 
+                        key={task.id}
+                        className={`p-3.5 rounded-2xl border transition-all space-y-2.5 ${
+                          isCompleted 
+                            ? 'bg-slate-50/80 border-slate-200 opacity-75' 
+                            : isMine
+                            ? 'bg-emerald-50/40 border-emerald-200 hover:border-emerald-300 shadow-xs'
+                            : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
+                        }`}
+                      >
+                        {/* 上段：タイトル & 担当バッジ */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-sm">{cropEmoji}</span>
+                              <span className={`font-black text-sm tracking-tight ${isCompleted ? 'text-slate-500 line-through' : 'text-slate-800'}`}>
+                                {taskTitle}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* 担当バッジ */}
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg shrink-0 ${
+                            isMine 
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                              : task.workers?.name
+                              ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                              : 'bg-blue-50 text-blue-700 border border-blue-200'
+                          }`}>
+                            {isMine 
+                              ? t('todo_myTasks', language) 
+                              : (task.workers ? getTranslatedName(task.workers, language) : t('todo_teamTasks', language))
+                            }
+                          </span>
+                        </div>
+
+                        {/* 中段：圃場・作物・時間帯メタデータ */}
+                        <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                          {task.fields?.name && (
+                            <span className="px-2 py-0.5 bg-white border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                              🏡 {getTranslatedName(task.fields, language)}
+                            </span>
+                          )}
+                          {task.crops?.name && (
+                            <span className="px-2 py-0.5 bg-white border border-slate-200 rounded-md text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                              🌱 {getTranslatedName(task.crops, language)}
+                            </span>
+                          )}
+                          {task.time_slot && (
+                            <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-md text-[11px] font-bold flex items-center gap-1">
+                              ⏰ {task.time_slot}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* 指示メモ・特記事項 */}
+                        {task.memo && (
+                          <p className="text-[11px] text-slate-600 bg-white/90 p-2 rounded-xl border border-slate-100 italic">
+                            💬 {language === 'ja' ? task.memo : (dynamicTranslations[task.memo] || task.memo)}
+                          </p>
+                        )}
+
+                        {/* 下段：アクションボタン */}
+                        <div className="pt-1 flex items-center justify-between gap-2">
+                          {isCompleted ? (
+                            <div className="flex items-center justify-between w-full">
+                              <span className="text-xs font-black text-emerald-700 flex items-center gap-1">
+                                <CheckCircle className="w-3.5 h-3.5" /> {t('tc_completed', language)}
+                                {task.duration_minutes ? ` (${task.duration_minutes}${t('minute', language)})` : ''}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleReopenTask(task)}
+                                className="text-[10px] font-bold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                              >
+                                {t('todo_reopenBtn', language)}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 w-full">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCompleteModal(task)}
+                                className="flex-1 py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>{t('todo_reportAndComplete', language)}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleQuickCompleteTask(task)}
+                                className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-95 rounded-xl text-xs font-black transition-all border border-slate-200 flex items-center gap-1 shrink-0 cursor-pointer"
+                                title="ワンタップで完了"
+                              >
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>{t('todo_completeBtn', language)}</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
             {/* マニュアル動画 */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
               <div className="flex items-center justify-between mb-4">
@@ -1475,7 +3387,7 @@ function PortalContent() {
                 </div>
                 
                 <button 
-                  onClick={() => router.push('/admin/approvals')}
+                  onClick={() => router.push(activeFarmId ? `/admin/approvals?farm=${activeFarmId}` : '/admin/approvals')}
                   className="w-full py-2.5 text-sm font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200"
                 >
                   {t('seeAll', language)}
@@ -1526,36 +3438,792 @@ function PortalContent() {
             
           </div>
 
-          {/* 右側カラム カレンダー */}
-          <div className="lg:col-span-8">
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 h-full min-h-[600px]">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
-                  <CalendarIcon className="w-6 h-6 text-emerald-500" /> {t('scheduleTasks', language)}
-                </h2>
-                {role === 'admin' && (
-                  <button 
-                    onClick={() => router.push('/admin/tasks')}
-                    className="text-sm font-bold bg-slate-800 text-white px-4 py-2 rounded-xl hover:bg-slate-700 transition-colors"
-                  >
-                    {t('createTask', language)}
-                  </button>
+          {/* 右側カラム：3大機能タブ（👥 農場の今・稼働状況 / 📋 作業日報まとめ / 📅 スケジュール） */}
+          <div className="lg:col-span-8 space-y-4">
+            
+            {/* タブナビゲーション */}
+            <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-1.5 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setActivePortalTab('tasks')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+                  activePortalTab === 'tasks'
+                    ? 'bg-emerald-600 text-white shadow-sm scale-[1.01]'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <CheckSquare className="w-4 h-4" />
+                <span>{t('tabTasks', language)}</span>
+                {todayTasksProgress.total > 0 && (
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+                    activePortalTab === 'tasks' ? 'bg-emerald-500 text-white' : 'bg-emerald-100 text-emerald-800'
+                  }`}>
+                    {todayTasksProgress.total - todayTasksProgress.completed > 0 
+                      ? `${todayTasksProgress.total - todayTasksProgress.completed}件` 
+                      : '完了'}
+                  </span>
                 )}
-              </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActivePortalTab('status')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+                  activePortalTab === 'status'
+                    ? 'bg-slate-800 text-white shadow-sm scale-[1.01]'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>{t('tabTeamLive', language)}</span>
+                {currentlyWorkingCount > 0 && (
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+                    activePortalTab === 'status' ? 'bg-emerald-500 text-white' : 'bg-emerald-100 text-emerald-800'
+                  }`}>
+                    {currentlyWorkingCount}名
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActivePortalTab('reports')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+                  activePortalTab === 'reports'
+                    ? 'bg-blue-600 text-white shadow-sm scale-[1.01]'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                <span>{t('tabWorkReports', language)}</span>
+                {dailyWorkLogs.length > 0 && (
+                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+                    activePortalTab === 'reports' ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-800'
+                  }`}>
+                    {dailyWorkLogs.length}件
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActivePortalTab('calendar')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+                  activePortalTab === 'calendar'
+                    ? 'bg-slate-800 text-white shadow-sm scale-[1.01]'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <CalendarIcon className="w-4 h-4" />
+                <span>{t('tabSchedule', language)}</span>
+              </button>
+            </div>
+
+            {/* タブコンテンツ本体 */}
+            <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200 min-h-[600px]">
               
-              <CalendarWrapper 
-                events={calendarEvents} 
-                t={t} 
-                language={language}
-                currentWorkerId={workerProfile?.id}
-                currentWorkerName={currentUser?.name}
-                allWorkers={allWorkers}
-              />
-              
+              {/* ⓪ 📋 本日のやることボード（Today's ToDo Board） */}
+              {activePortalTab === 'tasks' && (
+                <div className="space-y-6">
+                  {/* ヘッダー＆進捗バー */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                    <div>
+                      <h2 className="text-base sm:text-lg font-black text-slate-800 flex items-center gap-2">
+                        <CheckSquare className="w-5 h-5 text-emerald-600" />
+                        <span>{t('todo_title', language)}</span>
+                        <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">
+                          {todayStr}
+                        </span>
+                      </h2>
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">
+                        {t('todo_sub', language)}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* フィルターピル */}
+                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setTodoFilter('all')}
+                          className={`py-1 px-3 rounded-lg font-bold transition-colors ${
+                            todoFilter === 'all' ? 'bg-white text-slate-800 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          {t('todo_filterAll', language)} ({todayTasks.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTodoFilter('mine')}
+                          className={`py-1 px-3 rounded-lg font-bold transition-colors ${
+                            todoFilter === 'mine' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          {t('todo_filterMine', language)} ({todayTasks.filter(t => (!t.worker_id || t.worker_id === myWorkerId) && t.status !== 'completed').length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTodoFilter('done')}
+                          className={`py-1 px-3 rounded-lg font-bold transition-colors ${
+                            todoFilter === 'done' ? 'bg-white text-blue-700 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          {t('todo_filterDone', language)} ({todayTasks.filter(t => t.status === 'completed').length})
+                        </button>
+                      </div>
+
+                      {role === 'admin' && (
+                        <button
+                          type="button"
+                          onClick={() => router.push(activeFarmId ? `/admin/tasks?farm=${activeFarmId}` : '/admin/tasks')}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black transition-colors border border-slate-200 cursor-pointer"
+                        >
+                          <span>🗓️ {t('manageAllTasks', language)}</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 進捗サマリーカード */}
+                  <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-slate-50 p-4 rounded-2xl border border-emerald-200/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-black">
+                      <span className="text-slate-700 flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-emerald-600" />
+                        <span>{t('todo_progress', language)}: {todayTasksProgress.completed} / {todayTasksProgress.total}{t('tasksCompletedCount', language)}</span>
+                      </span>
+                      <span className="text-emerald-700 text-sm font-black">{todayTasksProgress.percent}%</span>
+                    </div>
+                    <div className="w-full bg-white rounded-full h-3 overflow-hidden border border-emerald-100 p-0.5">
+                      <div 
+                        className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
+                        style={{ width: `${todayTasksProgress.percent}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 全件完了お祝い */}
+                  {todayTasksProgress.total > 0 && todayTasksProgress.completed === todayTasksProgress.total && todoFilter !== 'done' && (
+                    <div className="p-6 bg-gradient-to-r from-emerald-500/15 to-teal-500/15 border-2 border-emerald-300 rounded-3xl text-center space-y-2">
+                      <div className="text-3xl">🎉</div>
+                      <h3 className="text-base font-black text-emerald-900">
+                        {t('todo_allDone', language)}
+                      </h3>
+                      <p className="text-xs text-emerald-700 font-bold">
+                        {t('todo_allDoneSub', language)}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* タスクカードグリッド */}
+                  {filteredTodayTasks.length === 0 ? (
+                    <div className="p-12 text-center text-slate-400 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 space-y-2">
+                      <CheckCircle2 className="w-12 h-12 text-slate-300 mx-auto" />
+                      <p className="font-bold text-sm text-slate-600">{t('todo_noTasks', language)}</p>
+                      <p className="text-xs text-slate-400">{t('todo_noTasksSub', language)}</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {filteredTodayTasks.map((task: any) => {
+                        const isCompleted = task.status === 'completed';
+                        const isMine = !task.worker_id || task.worker_id === myWorkerId;
+                        const cropEmoji = getCropEmoji(task.crops?.name || '');
+                        const rawTitle = task.task_title || task.work_type || '作業';
+                        const langKey = `task_title_${language}`;
+                        const dbTitle = task[langKey] || (language !== 'en' && language !== 'ja' ? task.task_title_en : null);
+                        const taskTitle = language === 'ja' ? rawTitle : (dbTitle || dynamicTranslations[rawTitle] || getTranslatedWorkType(rawTitle, language));
+
+                        return (
+                          <div
+                            key={task.id}
+                            className={`p-5 rounded-3xl border transition-all space-y-3.5 ${
+                              isCompleted
+                                ? 'bg-slate-50/70 border-slate-200 opacity-80'
+                                : isMine
+                                ? 'bg-gradient-to-br from-emerald-50/50 via-white to-teal-50/30 border-emerald-200 hover:border-emerald-400 shadow-sm'
+                                : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                            }`}
+                          >
+                            {/* 上段：タイトル＆担当者 */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="space-y-1 min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xl">{cropEmoji}</span>
+                                  <h3 className={`font-black text-base tracking-tight ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                                    {taskTitle}
+                                  </h3>
+                                </div>
+                              </div>
+
+                              {/* 担当バッジ */}
+                              <span className={`text-xs font-black px-2.5 py-1 rounded-xl shrink-0 flex items-center gap-1 ${
+                                isMine
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-xs'
+                                  : task.workers?.name
+                                  ? 'bg-slate-100 text-slate-700 border border-slate-200'
+                                  : 'bg-blue-50 text-blue-700 border border-blue-200'
+                              }`}>
+                                {isMine
+                                  ? t('todo_myTasks', language)
+                                  : (task.workers ? getTranslatedName(task.workers, language) : t('todo_teamTasks', language))
+                                }
+                              </span>
+                            </div>
+
+                            {/* 中段：メタ情報（圃場・作物・予定時間帯） */}
+                            <div className="flex items-center gap-2 flex-wrap text-xs">
+                              {task.fields?.name && (
+                                <span className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg font-bold text-slate-700 flex items-center gap-1 shadow-xs">
+                                  🏡 {getTranslatedName(task.fields, language)}
+                                </span>
+                              )}
+                              {task.crops?.name && (
+                                <span className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg font-bold text-slate-700 flex items-center gap-1 shadow-xs">
+                                  🌱 {getTranslatedName(task.crops, language)}
+                                </span>
+                              )}
+                              {task.time_slot && (
+                                <span className="px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg font-bold flex items-center gap-1">
+                                  ⏰ {task.time_slot}
+                                </span>
+                              )}
+                              {task.duration_minutes ? (
+                                <span className="px-2.5 py-1 bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-bold">
+                                  ⌛ {t('plannedEst', language)}: {task.duration_minutes}{t('minute', language)}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {/* 指示メモ・特記事項 */}
+                            {task.memo && (
+                              <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-1">
+                                <span className="text-[10px] font-bold text-slate-400 block">{t('instructionsNotes', language)}:</span>
+                                <p className="font-medium whitespace-pre-wrap">{language === 'ja' ? task.memo : (dynamicTranslations[task.memo] || task.memo)}</p>
+                              </div>
+                            )}
+
+                            {/* 下段：アクションボタン */}
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                              {isCompleted ? (
+                                <div className="flex items-center justify-between w-full">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                                      <CheckCircle className="w-4 h-4" /> {t('tc_completed', language)}
+                                    </span>
+                                    {task.duration_minutes ? (
+                                      <span className="text-xs font-bold text-slate-500">
+                                        {t('actualResult', language)}: {task.duration_minutes}{t('minute', language)}
+                                      </span>
+                                    ) : null}
+                                    {task.harvest_amount ? (
+                                      <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-100">
+                                        {t('harvestLabel', language)}: {task.harvest_amount}
+                                      </span>
+                                    ) : null}
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReopenTask(task)}
+                                    className="text-xs font-bold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
+                                  >
+                                    {t('todo_reopenBtn', language)}
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 w-full">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenCompleteModal(task)}
+                                    className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                                  >
+                                    <Edit3 className="w-4 h-4" />
+                                    <span>{t('todo_reportAndComplete', language)}</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleQuickCompleteTask(task)}
+                                    className="py-2 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-95 rounded-xl text-xs font-black transition-all border border-slate-200 flex items-center gap-1 shrink-0 cursor-pointer"
+                                    title={t('todo_quickCompleteTooltip', language)}
+                                  >
+                                    <Check className="w-4 h-4 text-emerald-600" />
+                                    <span>{t('todo_completeBtn', language)}</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const targetFarm = activeFarmId || requestedFarmId;
+                                      router.push(targetFarm ? `/work/${targetFarm}` : '/work');
+                                    }}
+                                    className="py-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 active:scale-95 rounded-xl text-xs font-black transition-all border border-blue-100 flex items-center gap-1 shrink-0 cursor-pointer"
+                                    title={t('goToWorkScreenTooltip', language)}
+                                  >
+                                    <ArrowRight className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ① 👥 農場リアルタイム稼働状況（全員の今） */}
+              {activePortalTab === 'status' && (
+                <div className="space-y-4">
+                  {/* ヘッダー＆更新バー */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                    <div>
+                      <h2 className="text-base sm:text-lg font-black text-slate-800 flex items-center gap-2">
+                        <Users className="w-5 h-5 text-emerald-600" />
+                        <span>{t('live_title', language)}</span>
+                        <span className="text-xs font-normal text-slate-400">({allWorkers.length}{t('registeredCountSuffix', language)})</span>
+                      </h2>
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">
+                        {t('live_sub', language)}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const targetUserId = currentUser?.user_id || currentUser?.id;
+                          if (targetUserId) fetchDailyTeamData(targetUserId, reportDate);
+                        }}
+                        disabled={isLoadingDailyData}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 active:scale-95 rounded-xl transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${isLoadingDailyData ? 'animate-spin' : ''}`} />
+                        <span>{t('live_refresh', language)}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 稼働状況サマリーバッジ一覧 */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="p-3 bg-emerald-50/80 border border-emerald-200/80 rounded-2xl flex items-center justify-between">
+                      <div>
+                        <span className="text-[11px] font-bold text-emerald-700 block">{t('live_activeNow', language)}</span>
+                        <span className="text-xl font-black text-emerald-950">{currentlyWorkingCount} <span className="text-xs font-normal text-emerald-700">{t('report_peopleCount', language)}</span></span>
+                      </div>
+                      <div className="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-black shadow-xs">
+                        🟢
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-2xl flex items-center justify-between">
+                      <div>
+                        <span className="text-[11px] font-bold text-amber-700 block">{t('live_onBreak', language)}</span>
+                        <span className="text-xl font-black text-amber-950">{onBreakCount} <span className="text-xs font-normal text-amber-700">{t('report_peopleCount', language)}</span></span>
+                      </div>
+                      <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black shadow-xs">
+                        🟡
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-slate-100/80 border border-slate-200 rounded-2xl flex items-center justify-between">
+                      <div>
+                        <span className="text-[11px] font-bold text-slate-600 block">{t('live_clockedOut', language)}</span>
+                        <span className="text-xl font-black text-slate-800">{clockedOutCount} <span className="text-xs font-normal text-slate-500">{t('report_peopleCount', language)}</span></span>
+                      </div>
+                      <div className="w-8 h-8 rounded-xl bg-slate-400 text-white flex items-center justify-center font-black shadow-xs">
+                        ⚪
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-slate-50 border border-slate-200/60 rounded-2xl flex items-center justify-between">
+                      <div>
+                        <span className="text-[11px] font-bold text-slate-400 block">{t('live_notClockedIn', language)}</span>
+                        <span className="text-xl font-black text-slate-500">{notClockedInCount} <span className="text-xs font-normal text-slate-400">{t('report_peopleCount', language)}</span></span>
+                      </div>
+                      <div className="w-8 h-8 rounded-xl bg-slate-200 text-slate-500 flex items-center justify-center font-black">
+                        💤
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 全スタッフカード一覧 */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                    {teamLiveStatusList.map(item => {
+                      const isMe = (workerProfile?.id === item.worker.id) || (currentUser?.id === item.worker.id);
+                      return (
+                        <div 
+                          key={item.worker.id}
+                          className={`p-4 rounded-2xl border transition-all shadow-xs space-y-3 ${
+                            item.status === 'working' 
+                              ? 'bg-emerald-50/30 border-emerald-200 hover:border-emerald-300' 
+                              : item.status === 'break'
+                              ? 'bg-amber-50/30 border-amber-200 hover:border-amber-300'
+                              : 'bg-slate-50/50 border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          {/* 上段：アバター・名前・ステータスバッジ */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-white font-black text-sm shadow-xs shrink-0 ${
+                                item.status === 'working' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' :
+                                item.status === 'break' ? 'bg-gradient-to-br from-amber-400 to-orange-500' :
+                                item.status === 'left' ? 'bg-slate-400' : 'bg-slate-300'
+                              }`}>
+                                {item.worker.name ? item.worker.name.charAt(0) : '無'}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-black text-sm text-slate-800 truncate">
+                                    {getTranslatedName(item.worker, language)}
+                                  </span>
+                                  {isMe && (
+                                    <span className="text-[10px] font-black px-1.5 py-0.2 bg-blue-100 text-blue-700 rounded-md">
+                                      {t('cal_meTag', language)}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] font-bold text-slate-400">
+                                  {item.worker.role || item.worker.type || item.worker.employment_type || 'スタッフ'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* ステータスバッジ */}
+                            <div className={`px-2.5 py-1 rounded-xl text-xs font-black border flex items-center gap-1.5 shrink-0 ${item.statusColor}`}>
+                              <span className={`w-2 h-2 rounded-full ${item.statusDot}`}></span>
+                              <span>{item.statusLabel}</span>
+                            </div>
+                          </div>
+
+                          {/* 中段：出勤・退勤時刻＆本日合計時間 */}
+                          <div className="grid grid-cols-2 gap-2 text-xs bg-white/90 p-2.5 rounded-xl border border-slate-100">
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] font-bold text-slate-400 block">{t('clockTimeTitle', language)}</span>
+                              <span className="font-black text-slate-700">
+                                {item.att?.clock_in ? (
+                                  <>
+                                    {formatDisplayTime(item.att.clock_in)}
+                                    {item.att.clock_out ? ` 〜 ${formatDisplayTime(item.att.clock_out)}` : ` 〜 ${t('tc_working', language)}`}
+                                  </>
+                                ) : (
+                                  <span className="text-slate-400">{t('notClockedInShort', language)}</span>
+                                )}
+                              </span>
+                            </div>
+                            <div className="space-y-0.5 text-right">
+                              <span className="text-[10px] font-bold text-slate-400 block">{t('live_todayTotalWork', language)}</span>
+                              <span className="font-black text-emerald-700">
+                                {Math.floor(item.totalMinutes / 60)}{t('tc_hours', language)}{item.totalMinutes % 60}{t('tc_minutes', language)}
+                                <span className="text-[10px] text-slate-400 font-normal ml-1">({item.allLogsCount}{t('report_itemsCount', language)})</span>
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* 下段：現在の作業／直近の作業内容 */}
+                          <div className="text-xs p-2.5 rounded-xl bg-slate-900/5 border border-slate-200/60 space-y-1">
+                            <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                              <Briefcase className="w-3 h-3 text-emerald-600" />
+                              <span>{t('live_currentWork', language)}:</span>
+                            </span>
+
+                            {item.latestWork ? (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="px-2 py-0.5 bg-emerald-600 text-white rounded-md text-[11px] font-black">
+                                    {getTranslatedWorkType(item.latestWork.work_type, language)}
+                                  </span>
+                                  {item.latestWork.crops?.name && (
+                                    <span className="px-2 py-0.5 bg-white border border-slate-200 text-slate-700 rounded-md text-[11px] font-bold">
+                                      🌱 {getTranslatedName(item.latestWork.crops, language)}
+                                    </span>
+                                  )}
+                                  {item.latestWork.fields?.name && (
+                                    <span className="px-2 py-0.5 bg-white border border-slate-200 text-slate-700 rounded-md text-[11px] font-bold">
+                                      🏡 {getTranslatedName(item.latestWork.fields, language)}
+                                    </span>
+                                  )}
+                                  <span className="text-[11px] font-black text-slate-600 ml-auto">
+                                    {item.latestWork.duration_minutes}{t('minute', language)}
+                                  </span>
+                                </div>
+
+                                {item.latestWork.memo && (
+                                  <p className="text-[11px] text-slate-600 bg-white/80 p-1.5 rounded-lg border border-slate-100 italic truncate">
+                                    💬 {language === 'ja' ? item.latestWork.memo : (dynamicTranslations[item.latestWork.memo] || item.latestWork.memo)}
+                                  </p>
+                                )}
+                              </div>
+                            ) : item.status === 'working' ? (
+                              <p className="text-[11px] font-bold text-emerald-700">
+                                🌱 {t('live_noRecordYet', language)}
+                              </p>
+                            ) : item.status === 'break' ? (
+                              <p className="text-[11px] font-bold text-amber-700">
+                                {t('live_onBreakClocked', language)}
+                              </p>
+                            ) : (
+                              <p className="text-[11px] text-slate-400">
+                                {t('live_noWorkRecordsToday', language)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ② 📋 作業日報まとめ（多軸・タイムライン統合ビューワー） */}
+              {activePortalTab === 'reports' && renderWorkReportsViewer(false)}
+
+              {/* ③ 📅 スケジュール・タスク（カレンダー） */}
+              {activePortalTab === 'calendar' && (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                      <CalendarIcon className="w-6 h-6 text-emerald-500" /> {t('scheduleTasks', language)}
+                    </h2>
+                    {role === 'admin' && (
+                      <button 
+                        onClick={() => router.push(activeFarmId ? `/admin/tasks?farm=${activeFarmId}` : '/admin/tasks')}
+                        className="text-sm font-bold bg-slate-800 text-white px-4 py-2 rounded-xl hover:bg-slate-700 transition-colors cursor-pointer shadow-xs"
+                      >
+                        {t('createTask', language)}
+                      </button>
+                    )}
+                  </div>
+                  
+                  <CalendarWrapper 
+                    events={calendarEvents} 
+                    t={t} 
+                    language={language}
+                    currentWorkerId={workerProfile?.id}
+                    currentWorkerName={currentUser?.name}
+                    allWorkers={allWorkers}
+                  />
+                </div>
+              )}
+
             </div>
           </div>
         </div>
       </main>
+
+      {/* 📝 タスク完了・クイック日報入力モーダル */}
+      {completingTask && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[110] flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+            
+            {/* モーダルヘッダー */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-white">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-emerald-600 text-white rounded-2xl shadow-xs">
+                  <CheckSquare className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-800">
+                    {t('todo_quickModalTitle', language)}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-bold">
+                    作業実績を入力してワンタップで完了・日報化します
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCompletingTask(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* モーダル本文 */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-sm">
+              
+              {/* 対象作業のサマリーカード */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">{getCropEmoji(completingTask.crops?.name || '')}</span>
+                  <span className="font-black text-slate-800 text-base">
+                    {completingTask.task_title || completingTask.work_type || '作業'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap text-xs">
+                  {completingTask.fields?.name && (
+                    <span className="px-2 py-0.5 bg-white border border-slate-200 rounded-md font-bold text-slate-700">
+                      🏡 {getTranslatedName(completingTask.fields, language)}
+                    </span>
+                  )}
+                  {completingTask.crops?.name && (
+                    <span className="px-2 py-0.5 bg-white border border-slate-200 rounded-md font-bold text-slate-700">
+                      🌱 {getTranslatedName(completingTask.crops, language)}
+                    </span>
+                  )}
+                  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md font-bold">
+                    📅 {completingTask.work_date}
+                  </span>
+                </div>
+              </div>
+
+              {/* 作業時間（分）入力 */}
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-700 block">
+                  {t('todo_durationLabel', language)}
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="1440"
+                    value={taskDurationMinutes}
+                    onChange={(e) => setTaskDurationMinutes(Math.max(1, parseInt(e.target.value) || 0))}
+                    className="w-32 px-3.5 py-2.5 rounded-xl border border-slate-200 text-base font-black text-slate-800 focus:border-emerald-500 focus:outline-none text-center bg-white shadow-xs"
+                  />
+                  <span className="text-xs font-bold text-slate-500">分 ({Math.floor(taskDurationMinutes / 60)}時間 {taskDurationMinutes % 60}分)</span>
+                </div>
+
+                {/* プリセットボタングループ */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                  {[30, 45, 60, 90, 120, 180].map((mins) => (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => setTaskDurationMinutes(mins)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        taskDurationMinutes === mins
+                          ? 'bg-emerald-600 text-white font-black shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {mins}分
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setTaskDurationMinutes(prev => prev + 15)}
+                    className="px-2.5 py-1 rounded-lg text-xs font-black bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 cursor-pointer"
+                  >
+                    +15分
+                  </button>
+                </div>
+              </div>
+
+              {/* 収穫量・数量（任意） */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-slate-700 block">
+                  {t('todo_harvestLabel', language)} <span className="text-[10px] text-slate-400 font-normal">（収穫作業時など）</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  placeholder="例: 25.5 (kg / 箱)"
+                  value={taskHarvestAmount}
+                  onChange={(e) => setTaskHarvestAmount(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 focus:border-emerald-500 focus:outline-none bg-white shadow-xs"
+                />
+              </div>
+
+              {/* メモ・ひとこと報告 */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-slate-700 block">
+                  {t('todo_memoLabel', language)}
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="例: 雨天のため15分早めに終了。特に病害虫の発生なし。"
+                  value={taskMemo}
+                  onChange={(e) => setTaskMemo(e.target.value)}
+                  className="w-full p-3 rounded-xl border border-slate-200 text-xs font-medium text-slate-800 focus:border-emerald-500 focus:outline-none bg-white resize-none shadow-xs"
+                />
+              </div>
+            </div>
+
+            {/* モーダルフッター */}
+            <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setCompletingTask(null)}
+                disabled={isSubmittingTaskComplete}
+                className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-800 bg-white hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer"
+              >
+                キャンセル
+              </button>
+              
+              <button
+                type="button"
+                onClick={handleSaveCompleteTask}
+                disabled={isSubmittingTaskComplete}
+                className="px-5 py-2.5 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isSubmittingTaskComplete ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>保存中...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>{t('todo_submitBtn', language)}</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* 📋 フルスクリーン作業日報 専用ビューワーモーダル */}
+      {showReportModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex flex-col animate-in fade-in duration-200">
+          {/* フルスクリーン上部ナビゲーションバー */}
+          <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-8 shadow-sm shrink-0">
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setShowReportModal(false)}
+                className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors flex items-center gap-1.5 font-bold text-sm cursor-pointer"
+              >
+                <ArrowLeft className="w-5 h-5" />
+                <span className="hidden sm:inline">ポータルに戻る</span>
+              </button>
+              <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-blue-100 text-blue-600 rounded-xl">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h1 className="font-black text-slate-800 text-base sm:text-lg leading-none">
+                    作業日報 専用ビューワー
+                  </h1>
+                  <span className="text-[11px] sm:text-xs font-bold text-slate-400">
+                    全スタッフの作業記録・タイムライン・圃場別/作物別集計
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowReportModal(false)}
+              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              title="閉じる"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </header>
+
+          {/* モーダルコンテンツ本体 */}
+          <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-100/70">
+            <div className="max-w-6xl mx-auto bg-white rounded-3xl p-4 sm:p-8 shadow-sm border border-slate-200">
+              {renderWorkReportsViewer(true)}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* フルスクリーン社内掲示板モーダル */}
       {showBoardModal && (
@@ -1829,7 +4497,7 @@ function PortalContent() {
 
       {/* 🏖️ 有給申請モーダル */}
       {showLeaveModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in">
+        <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-5 animate-in zoom-in-95">
             
             {/* ヘッダー */}
@@ -1839,8 +4507,8 @@ function PortalContent() {
                   <Coffee className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-slate-800">有給・休暇の申請</h3>
-                  <p className="text-[10px] text-slate-400 font-bold">希望日と理由を入力して送信してください</p>
+                  <h3 className="text-base font-black text-slate-800">{t('leave_modalTitle', language)}</h3>
+                  <p className="text-[10px] text-slate-400 font-bold">{t('leave_modalSub', language)}</p>
                 </div>
               </div>
               <button
@@ -1855,42 +4523,28 @@ function PortalContent() {
             {/* 有給残日数サマリー */}
             {leaveBalance && (
               <div className="bg-amber-50/80 border border-amber-200 p-3 rounded-2xl flex items-center justify-between text-xs">
-                <span className="font-bold text-amber-800">現在の利用可能残日数:</span>
-                <span className="font-black text-amber-700 text-sm">残り {leaveBalance.total}日</span>
+                <span className="font-bold text-amber-800">{t('leave_availableDays', language)}:</span>
+                <span className="font-black text-amber-700 text-sm">{t('leave_daysRemaining', language).replace('{days}', String(leaveBalance.total))}</span>
               </div>
             )}
 
             {/* 申請フォーム */}
             <form onSubmit={handleSubmitLeaveRequest} className="space-y-4">
-              {/* 従業員選択（管理者の場合、またはスタッフ名表示） */}
-              {role === 'admin' ? (
-                <div>
-                  <label className="block text-xs font-black text-slate-700 mb-1.5">
-                    申請する従業員 <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={leaveForm.worker_id}
-                    onChange={e => setLeaveForm({ ...leaveForm, worker_id: e.target.value })}
-                    required
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500 focus:bg-white"
-                  >
-                    <option value="">従業員を選択してください</option>
-                    {allWorkers.map(w => (
-                      <option key={w.id} value={w.id}>{w.name}（残: {Number(w.paid_leave_carryover || 0) + Number(w.paid_leave_balance || 0)}日）</option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 flex items-center justify-between">
-                  <span>申請者:</span>
-                  <span className="font-black text-slate-800">{currentUser ? getTranslatedName(currentUser, language) : '現場スタッフ'}</span>
-                </div>
-              )}
+              {/* 申請者表示（個人ポータルなので他人は選択させず本人に完全固定） */}
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-xs font-bold text-slate-600 flex items-center justify-between">
+                <span>{t('leave_applicant', language)}</span>
+                <span className="font-black text-slate-800 text-sm">
+                  {(() => {
+                    const currentWorker = allWorkers.find(w => w.id === leaveForm.worker_id) || workerProfile || currentUser;
+                    return currentWorker ? getTranslatedName(currentWorker, language) : '現場スタッフ';
+                  })()}
+                </span>
+              </div>
 
               {/* 休暇種別 */}
               <div>
                 <label className="block text-xs font-black text-slate-700 mb-1.5">
-                  休暇の種類 <span className="text-rose-500">*</span>
+                  {t('leave_leaveType', language)} <span className="text-rose-500">*</span>
                 </label>
                 <select
                   value={leaveForm.type}
@@ -1898,11 +4552,11 @@ function PortalContent() {
                   required
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500 focus:bg-white"
                 >
-                  <option value="有給休暇">有給休暇（全休・1日）</option>
-                  <option value="午前半休">午前半休（0.5日）</option>
-                  <option value="午後半休">午後半休（0.5日）</option>
-                  <option value="特別休暇">特別休暇（慶弔・リフレッシュ等）</option>
-                  <option value="欠勤">欠勤</option>
+                  <option value="有給休暇">{t('leave_typeFull', language)}</option>
+                  <option value="午前半休">{t('leave_typeAm', language)}</option>
+                  <option value="午後半休">{t('leave_typePm', language)}</option>
+                  <option value="特別休暇">{t('leave_typeSpecial', language)}</option>
+                  <option value="欠勤">{t('leave_typeAbsence', language)}</option>
                 </select>
               </div>
 
@@ -1910,7 +4564,7 @@ function PortalContent() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-black text-slate-700 mb-1.5">
-                    開始日 <span className="text-rose-500">*</span>
+                    {t('leave_startDate', language)} <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="date"
@@ -1922,7 +4576,7 @@ function PortalContent() {
                 </div>
                 <div>
                   <label className="block text-xs font-black text-slate-700 mb-1.5">
-                    終了日 <span className="text-rose-500">*</span>
+                    {t('leave_endDate', language)} <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="date"
@@ -1938,13 +4592,13 @@ function PortalContent() {
               {/* 申請理由 */}
               <div>
                 <label className="block text-xs font-black text-slate-700 mb-1.5">
-                  申請理由・備考 <span className="text-slate-400 font-normal">(任意)</span>
+                  {t('leave_reasonLabel', language)} <span className="text-slate-400 font-normal">{t('leave_optional', language)}</span>
                 </label>
                 <textarea
                   rows={2}
                   value={leaveForm.reason}
                   onChange={e => setLeaveForm({ ...leaveForm, reason: e.target.value })}
-                  placeholder="例: 私用のため、通院のため、家庭の事情など"
+                  placeholder={t('leave_reasonPlaceholder', language)}
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
                 />
               </div>
@@ -1956,7 +4610,7 @@ function PortalContent() {
                   onClick={() => setShowLeaveModal(false)}
                   className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
                 >
-                  キャンセル
+                  {t('leave_cancel', language)}
                 </button>
                 <button
                   type="submit"
@@ -1964,7 +4618,7 @@ function PortalContent() {
                   className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-95 disabled:bg-slate-200 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
                 >
                   {isSubmittingLeave ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  <span>{role === 'admin' ? '有給を登録する' : '申請を送信する'}</span>
+                  <span>{t('leave_submitBtn', language)}</span>
                 </button>
               </div>
             </form>
@@ -1975,7 +4629,7 @@ function PortalContent() {
 
       {/* トースト通知 */}
       {leaveToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-emerald-700 text-white px-5 py-3 rounded-2xl shadow-xl font-black text-xs flex items-center gap-2 animate-in slide-in-from-bottom">
+        <div className="fixed bottom-6 right-6 z-[160] bg-emerald-700 text-white px-5 py-3 rounded-2xl shadow-xl font-black text-xs flex items-center gap-2 animate-in slide-in-from-bottom">
           <CheckCircle className="w-4 h-4 text-emerald-300" />
           <span>{leaveToast}</span>
         </div>
@@ -3380,6 +6034,336 @@ function PortalContent() {
         </div>
       )}
 
+      {/* 🕒 個人用・月次タイムカードモーダル（多言語翻訳 ＆ 有給申請連動対応） */}
+      {showTimecardModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[120] flex flex-col animate-in fade-in duration-200 text-slate-800">
+          
+          {/* モーダル上部ヘッダー */}
+          <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3 sm:px-8 shadow-sm flex-shrink-0">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100 shrink-0">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="font-black text-slate-900 text-xs sm:text-base leading-none flex items-center gap-2 truncate">
+                  <span>{t('tc_title', language)}</span>
+                  <span className="text-[11px] sm:text-xs bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-lg border border-slate-200 shrink-0">
+                    {workerProfile?.name || currentUser?.name || '作業者'}
+                  </span>
+                </h1>
+                <p className="text-[10px] text-slate-400 mt-1 font-bold hidden sm:block">
+                  {t('tc_subtitle', language)}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {/* 言語切り替えセレクター */}
+              <div className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-xl border border-slate-200">
+                <Languages className="w-3.5 h-3.5 text-slate-500" />
+                <select
+                  value={language}
+                  onChange={(e) => handleLanguageChange(e.target.value as LanguageCode)}
+                  className="bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                >
+                  {LANGUAGES.map(l => (
+                    <option key={l.code} value={l.code}>{l.flag} {l.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 有給休暇申請ボタン（派遣スタッフ以外） */}
+              {(() => {
+                const targetId = workerProfile?.id || currentUser?.id;
+                const currentFromList = allWorkers.find(w => w.id === targetId);
+                const isDispatch = (
+                  currentUser?.type === '派遣' || 
+                  currentUser?.employment_type === '派遣' || 
+                  workerProfile?.type === '派遣' || 
+                  workerProfile?.employment_type === '派遣' ||
+                  currentFromList?.type === '派遣' ||
+                  currentFromList?.employment_type === '派遣' ||
+                  currentUser?.name?.includes('派遣') ||
+                  workerProfile?.name?.includes('派遣')
+                );
+
+                if (isDispatch) return null;
+
+                return (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetId = workerProfile?.id || currentUser?.id;
+                      setLeaveForm(prev => ({
+                        ...prev,
+                        worker_id: targetId || prev.worker_id
+                      }));
+                      setShowLeaveModal(true);
+                    }}
+                    className="px-2.5 sm:px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-black rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer shrink-0"
+                    title={t('tc_requestLeaveBtn', language)}
+                  >
+                    <Coffee className="w-3.5 h-3.5" />
+                    <span className="hidden md:inline">{t('tc_requestLeaveBtn', language)}</span>
+                    <span className="md:hidden">{t('tc_requestLeaveBtnShort', language)}</span>
+                  </button>
+                );
+              })()}
+
+              <button
+                onClick={() => {
+                  const targetWorkerId = workerProfile?.id || currentUser?.id;
+                  if (targetWorkerId) {
+                    fetchWorkerMonthlyAttendance(targetWorkerId, timecardMonth);
+                  }
+                }}
+                disabled={isLoadingMonthly}
+                className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer"
+                title={t('tc_refresh', language)}
+              >
+                <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${isLoadingMonthly ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={() => setShowTimecardModal(false)}
+                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+            </div>
+          </header>
+
+          {/* モーダルメインコンテンツエリア */}
+          <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-100">
+            <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6">
+              
+              {/* 月選択コントローラー ＆ サマリーカード */}
+              <div className="bg-white rounded-3xl p-4 sm:p-6 border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={handlePrevMonth}
+                    className="px-3 sm:px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black rounded-xl transition-colors flex items-center gap-1 active:scale-95 cursor-pointer"
+                  >
+                    <span>{t('tc_prevMonth', language)}</span>
+                  </button>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-1.5 sm:gap-2 text-center">
+                    <div className="flex items-center gap-1.5">
+                      <CalendarIcon className="w-4 h-4 text-blue-600" />
+                      <span className="text-base sm:text-lg font-black text-slate-900 tracking-tight font-mono">
+                        {timecardMonth.split('-')[0]} / {timecardMonth.split('-')[1]}
+                      </span>
+                    </div>
+                    {(() => {
+                      const [y, m] = timecardMonth.split('-').map(Number);
+                      const p = getAttendancePeriod(y, m, closingDay);
+                      return (
+                        <span className="text-[11px] font-black text-indigo-700 bg-indigo-50 border border-indigo-200/70 px-2 py-0.5 rounded-lg">
+                          集計期間: {p.label}
+                        </span>
+                      );
+                    })()}
+                  </div>
+
+                  <button
+                    onClick={handleNextMonth}
+                    className="px-3 sm:px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black rounded-xl transition-colors flex items-center gap-1 active:scale-95 cursor-pointer"
+                  >
+                    <span>{t('tc_nextMonth', language)}</span>
+                  </button>
+                </div>
+
+                {/* 4連統計指標カード */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 pt-1">
+                  <div className="bg-blue-50/70 border border-blue-100 p-3 sm:p-4 rounded-2xl">
+                    <span className="text-[10px] sm:text-xs font-black text-blue-700 block mb-1">🏃‍♂️ {t('tc_workDays', language)}</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xl sm:text-2xl font-black text-blue-900">{selectedMonthStats.workDays}</span>
+                      <span className="text-xs font-bold text-blue-700">{t('daysUnit', language)}</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-emerald-50/70 border border-emerald-100 p-3 sm:p-4 rounded-2xl">
+                    <span className="text-[10px] sm:text-xs font-black text-emerald-700 block mb-1">⏱️ {t('tc_totalWorkTime', language)}</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xl sm:text-2xl font-black text-emerald-900">{selectedMonthStats.totalHours}</span>
+                      <span className="text-xs font-bold text-emerald-700">{t('tc_hours', language)}{selectedMonthStats.totalMinsRemainder}{t('tc_minutes', language)}</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-50/70 border border-amber-100 p-3 sm:p-4 rounded-2xl">
+                    <span className="text-[10px] sm:text-xs font-black text-amber-700 block mb-1">🔥 {t('tc_overtime', language)}</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xl sm:text-2xl font-black text-amber-900">{selectedMonthStats.overtimeHours}</span>
+                      <span className="text-xs font-bold text-amber-700">{t('tc_hours', language)}{selectedMonthStats.overtimeMinsRemainder}{t('tc_minutes', language)}</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-purple-50/70 border border-purple-100 p-3 sm:p-4 rounded-2xl">
+                    <span className="text-[10px] sm:text-xs font-black text-purple-700 block mb-1">☕ {t('tc_totalBreak', language)}</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xl sm:text-2xl font-black text-purple-900">{Math.floor(selectedMonthStats.totalBreakMins / 60)}</span>
+                      <span className="text-xs font-bold text-purple-700">{t('tc_hours', language)}{selectedMonthStats.totalBreakMins % 60}{t('tc_minutes', language)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 日別タイムカード明細テーブル */}
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-4 sm:px-6 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="font-black text-slate-800 text-xs sm:text-sm flex items-center gap-2">
+                    <span>{t('tc_dailyDetails', language)}</span>
+                  </h3>
+                  {isLoadingMonthly && (
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-blue-600">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Loading...</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-black text-[11px] uppercase tracking-wider">
+                        <th className="py-3 px-3 sm:px-4">{t('tc_date', language)}</th>
+                        <th className="py-3 px-2 sm:px-3 text-center">{t('tc_clockIn', language)}</th>
+                        <th className="py-3 px-2 sm:px-3 text-center">{t('tc_clockOut', language)}</th>
+                        <th className="py-3 px-2 sm:px-3 text-center">{t('tc_break', language)}</th>
+                        <th className="py-3 px-2 sm:px-4 text-right">{t('tc_workHours', language)}</th>
+                        <th className="py-3 px-3 sm:px-4 text-center">{t('tc_status', language)}</th>
+                        <th className="py-3 px-2 sm:px-3 text-center">{t('tc_colApply', language)}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {timecardDaysList.map((item) => {
+                        const hasIn = item.log && !!item.log.clock_in;
+                        const hasOut = item.log && !!item.log.clock_out;
+                        const isSunday = item.dayOfWeek === 0;
+                        const isSaturday = item.dayOfWeek === 6;
+                        const isLeave = !!item.matchedLeave;
+                        const isLeaveApproved = isLeave && item.matchedLeave.status === '承認';
+
+                        return (
+                          <tr 
+                            key={item.dateStr}
+                            className={`hover:bg-slate-50/80 transition-colors ${
+                              isLeaveApproved
+                                ? 'bg-amber-50/40'
+                                : hasIn 
+                                ? 'bg-white' 
+                                : (isSunday ? 'bg-rose-50/20' : isSaturday ? 'bg-blue-50/20' : '')
+                            }`}
+                          >
+                            <td className="py-2.5 sm:py-3 px-3 sm:px-4 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5 sm:gap-2">
+                                <span className="font-mono font-black text-slate-900 text-xs sm:text-sm">
+                                  {closingDay > 0 ? (
+                                    <span className="inline-flex items-baseline">
+                                      <span className="text-[10px] text-slate-400 font-bold">{Number(item.dateStr.split('-')[1])}/</span>
+                                      <span>{item.day}</span>
+                                    </span>
+                                  ) : (
+                                    item.day
+                                  )}
+                                </span>
+                                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
+                                  isSunday 
+                                    ? 'bg-rose-100 text-rose-700' 
+                                    : isSaturday 
+                                    ? 'bg-blue-100 text-blue-700' 
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                  ({item.dayOfWeekName})
+                                </span>
+                              </div>
+                            </td>
+
+                            <td className="py-2.5 sm:py-3 px-2 sm:px-3 text-center font-mono font-bold text-xs sm:text-sm text-slate-800 whitespace-nowrap">
+                              {hasIn ? formatDisplayTime(item.log.clock_in) : <span className="text-slate-300">-</span>}
+                            </td>
+
+                            <td className="py-2.5 sm:py-3 px-2 sm:px-3 text-center font-mono font-bold text-xs sm:text-sm text-slate-800 whitespace-nowrap">
+                              {hasOut ? (
+                                formatDisplayTime(item.log.clock_out)
+                              ) : hasIn ? (
+                                <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 animate-pulse">
+                                  {t('tc_working', language)}
+                                </span>
+                              ) : (
+                                <span className="text-slate-300">-</span>
+                              )}
+                            </td>
+
+                            <td className="py-2.5 sm:py-3 px-2 sm:px-3 text-center font-mono text-xs text-slate-500 whitespace-nowrap">
+                              {hasIn && item.breakMins > 0 ? `${item.breakMins}${t('tc_minutes', language)}` : <span className="text-slate-300">-</span>}
+                            </td>
+
+                            <td className="py-2.5 sm:py-3 px-2 sm:px-4 text-right whitespace-nowrap">
+                              {item.workMinutes > 0 ? (
+                                <span className={`font-mono font-black text-xs sm:text-sm ${
+                                  item.isOvertime ? 'text-amber-600 font-black' : 'text-slate-900'
+                                }`}>
+                                  {Math.floor(item.workMinutes / 60)}{t('tc_hours', language)}{item.workMinutes % 60}{t('tc_minutes', language)}
+                                </span>
+                              ) : (
+                                <span className="text-slate-300 font-mono">-</span>
+                              )}
+                            </td>
+
+                            <td className="py-2.5 sm:py-3 px-3 sm:px-4 text-center whitespace-nowrap">
+                              {isLeave ? (
+                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                                  isLeaveApproved 
+                                    ? 'bg-amber-100 text-amber-800 border-amber-300' 
+                                    : 'bg-amber-50 text-amber-600 border-amber-200'
+                                }`}>
+                                  {isLeaveApproved ? t('tc_leaveApproved', language) : t('tc_leavePending', language)}
+                                </span>
+                              ) : hasOut ? (
+                                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  {t('tc_completed', language)}
+                                </span>
+                              ) : hasIn ? (
+                                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                  {t('tc_working', language)}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-medium text-slate-300">
+                                  -
+                                </span>
+                              )}
+                            </td>
+
+                            {/* 日付指定の休暇申請アクション */}
+                            <td className="py-2.5 sm:py-3 px-2 sm:px-3 text-center whitespace-nowrap">
+                              {!isLeave && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenLeaveModalForDate(item.dateStr)}
+                                  className="text-[10px] font-bold text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/60 px-2 py-0.5 rounded-lg transition-all cursor-pointer active:scale-95"
+                                  title={`${item.dateStr}${t('tc_applyForDate', language)}`}
+                                >
+                                  {t('tc_applyLeave', language)}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* 📱 ページの最下部に配置するアプリ化案内バナー（画面に被らない安全配置） */}
+      <PwaBottomBanner language={language} />
     </div>
   );
 }

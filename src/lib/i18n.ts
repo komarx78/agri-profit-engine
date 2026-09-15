@@ -66,6 +66,77 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   cal_you: { ja: 'あなた', en: 'You', vi: 'Bạn', id: 'Anda', zh: '你', si: 'ඔබ', km: 'អ្នក' },
   cal_meTag: { ja: '(自分)', en: '(You)', vi: '(Bạn)', id: '(Anda)', zh: '(自己)', si: '(ඔබ)', km: '(ខ្លួនឯង)' },
   
+  // 👥 チーム稼働状況 & 作業日報まとめ
+  tabSchedule: { ja: '📅 スケジュール', en: '📅 Schedule', vi: '📅 Lịch trình', id: '📅 Jadwal', zh: '📅 日程安排', si: '📅 කාලසටහන', km: '📅 កាលវិភាគ' },
+  tabTeamLive: { ja: '👥 農場の今（稼働状況）', en: '👥 Farm Live', vi: '👥 Trạng thái nhóm', id: '👥 Status Tim', zh: '👥 农场实时（团队状态）', si: '👥 සජීවී තත්ත්වය', km: '👥 ស្ថានភាពក្រុម' },
+  tabWorkReports: { ja: '📋 作業日報まとめ', en: '📋 Work Reports', vi: '📋 Báo cáo công việc', id: '📋 Ringkasan Laporan', zh: '📋 今日工作日报', si: '📋 දෛනික වැඩ වාර්තාව', km: '📋 របាយការណ៍ការងារ' },
+  tabTasks: { ja: '📋 本日のやること', en: "📋 Today's ToDo", vi: '📋 Việc hôm nay', id: '📋 Tugas Hari Ini', zh: '📋 今日待办', si: '📋 අද කළ යුතු දේ', km: '📋 កិច្ចការថ្ងៃនេះ' },
+
+  // 本日のやることリスト（ToDo）
+  todo_title: { ja: '本日のやることリスト', en: "Today's ToDo List", vi: 'Danh sách việc hôm nay', id: 'Daftar Tugas Hari Ini', zh: '今日待办事项', si: 'අද කළ යුතු දේ ලැයිස්තුව', km: 'បញ្ជីកិច្ចការថ្ងៃនេះ' },
+  todo_sub: { ja: '本日あなたやチームに予定されている作業一覧です', en: "Tasks scheduled for you and team today", vi: 'Danh sách công việc dự kiến cho bạn và đội hôm nay', id: 'Daftar tugas Anda dan tim hari ini', zh: '今日为您和团队安排的工作', si: 'අද ඔබ සහ කණ්ඩායම සඳහා නියමිත කාර්යයන්', km: 'កិច្ចការដែលបានគ្រោងទុកសម្រាប់អ្នកនិងក្រុមថ្ងៃនេះ' },
+  todo_myTasks: { ja: '👤 あなた担当', en: '👤 Assigned to you', vi: '👤 Giao cho bạn', id: '👤 Tugas Anda', zh: '👤 您的任务', si: '👤 ඔබට පැවරූ', km: '👤 ប្រគល់ឱ្យអ្នក' },
+  todo_teamTasks: { ja: '👥 全体作業', en: '👥 Team / All', vi: '👥 Toàn đội', id: '👥 Semua / Tim', zh: '👥 全体作业', si: '👥 සියලු දෙනා', km: '👥 ក្រុមទាំងមូល' },
+  todo_filterAll: { ja: 'すべて', en: 'All', vi: 'Tất cả', id: 'Semua', zh: '全部', si: 'සියල්ල', km: 'ទាំងអស់' },
+  todo_filterMine: { ja: '自分宛て', en: 'My Tasks', vi: 'Của tôi', id: 'Tugas Saya', zh: '我的任务', si: 'මගේ', km: 'របស់ខ្ញុំ' },
+  todo_filterDone: { ja: '完了済', en: 'Completed', vi: 'Đã xong', id: 'Selesai', zh: '已完成', si: 'අවසන්', km: 'បានបញ្ចប់' },
+  todo_completeBtn: { ja: '完了', en: 'Done', vi: 'Xong', id: 'Selesai', zh: '完成', si: 'අවසන්', km: 'បញ្ចប់' },
+  todo_reportAndComplete: { ja: '📝 日報を入力して完了', en: '📝 Report & Complete', vi: '📝 Báo cáo & Xong', id: '📝 Lapor & Selesai', zh: '📝 填写日报并完成', si: '📝 වාර්තා කර අවසන්', km: '📝 រាយការណ៍ & បញ្ចប់' },
+  todo_startWork: { ja: '🚀 作業を開始', en: '🚀 Start Work', vi: '🚀 Bắt đầu làm', id: '🚀 Mulai Kerja', zh: '🚀 开始作业', si: '🚀 ආරම්භ කරන්න', km: '🚀 ចាប់ផ្តើម' },
+  todo_reopenBtn: { ja: '↩️ 予定に戻す', en: '↩️ Reopen', vi: '↩️ Mở lại', id: '↩️ Buka Kembali', zh: '↩️ 重新开启', si: '↩️ නැවත විවෘත කරන්න', km: '↩️ បើកឡើងវិញ' },
+  todo_allDone: { ja: '🎉 本日の予定作業はすべて完了しました！お疲れ様でした！', en: '🎉 All scheduled tasks for today are completed! Great job!', vi: '🎉 Tất cả công việc hôm nay đã hoàn thành! Làm tốt lắm!', id: '🎉 Semua tugas hari ini telah selesai! Kerja bagus!', zh: '🎉 今日预定作业已全部完成！辛苦了！', si: '🎉 අද නියමිත සියලු කාර්යයන් අවසන්! ස්තූතියි!', km: '🎉 កិច្ចការគ្រោងទុកថ្ងៃនេះបានបញ្ចប់ទាំងអស់!' },
+  todo_noTasks: { ja: '本日予定されている作業はありません', en: 'No tasks scheduled for today', vi: 'Không có công việc nào được lên lịch hôm nay', id: 'Tidak ada tugas yang dijadwalkan hari ini', zh: '今日暂无安排的作业', si: 'අද නියමිත කාර්යයන් නොමැත', km: 'មិនមានកិច្ចការគ្រោងទុកសម្រាប់ថ្ងៃនេះទេ' },
+  todo_progress: { ja: '本日の進捗', en: "Today's Progress", vi: 'Tiến độ hôm nay', id: 'Kemajuan Hari Ini', zh: '今日进度', si: 'අද ප්‍රගතිය', km: 'វឌ្ឍនភាពថ្ងៃនេះ' },
+  todo_quickModalTitle: { ja: '作業完了日報のクイック入力', en: 'Quick Work Report & Complete', vi: 'Báo cáo công việc nhanh & Hoàn thành', id: 'Laporan Kerja Cepat & Selesai', zh: '快速填报工作日报并完成', si: 'ඉක්මන් වැඩ වාර්තාව සහ අවසන් කිරීම', km: 'រាយការណ៍ការងាររហ័ស & បញ្ចប់' },
+  todo_durationLabel: { ja: '実働時間 (分):', en: 'Work Duration (min):', vi: 'Thời gian làm việc (phút):', id: 'Durasi Kerja (menit):', zh: '实际工时 (分钟):', si: 'වැඩ කළ කාලය (මිනිත්තු):', km: 'រយៈពេលធ្វើការ (នាទី):' },
+  todo_harvestLabel: { ja: '収穫量・数量:', en: 'Harvest / Quantity:', vi: 'Sản lượng thu hoạch / Số lượng:', id: 'Hasil Panen / Jumlah:', zh: '采收量 / 数量:', si: 'අස්වැන්න / ප්‍රමාණය:', km: 'ទិន្នផល / បរិមាណ:' },
+  todo_memoLabel: { ja: 'メモ・ひとこと報告:', en: 'Memo / Notes:', vi: 'Ghi chú / Báo cáo ngắn:', id: 'Catatan Singkat:', zh: '备注 / 简短汇报:', si: 'සටහන / කෙටි වාර්තාව:', km: 'កំណត់ចំណាំ / របាយការណ៍ខ្លី:' },
+  todo_submitBtn: { ja: '✅ 完了して日報に登録', en: '✅ Complete & Save Report', vi: '✅ Hoàn thành & Lưu báo cáo', id: '✅ Selesaikan & Simpan', zh: '✅ 完成并登记到日报', si: '✅ අවසන් කර වාර්තාව සුරකින්න', km: '✅ បញ្ចប់ & រក្សាទុករបាយការណ៍' },
+
+  live_title: { ja: '農場リアルタイム稼働状況', en: 'Real-time Farm Activity', vi: 'Hoạt động nông trại thời gian thực', id: 'Aktivitas Pertanian Real-time', zh: '农场实时作业状况', si: 'තථ්‍ය කාලීන ගොවිපල ක්‍රියාකාරකම්', km: 'សកម្មភាពកសិដ្ឋានផ្ទាល់' },
+  live_sub: { ja: '農場全員が今どこで何をしているか一目でわかります', en: 'See where and what everyone is doing right now', vi: 'Xem mọi người đang làm gì và ở đâu ngay lúc này', id: 'Lihat apa yang sedang dilakukan semua orang sekarang', zh: '一目了然全体员工现在在哪里做什么', si: 'සැවොම මේ වන විට කුමක් කරන්නේදැයි බලන්න', km: 'មើលអ្វីដែលអ្នករាល់គ្នាកំពុងធ្វើនៅពេលនេះ' },
+  live_activeNow: { ja: '作業・勤務中', en: 'Working', vi: 'Đang làm việc', id: 'Sedang Bekerja', zh: '正在作业中', si: 'දැනට වැඩ කරයි', km: 'កំពុងធ្វើការ' },
+  live_onBreak: { ja: '休憩中', en: 'On Break', vi: 'Đang nghỉ ngơi', id: 'Sedang Istirahat', zh: '休息中', si: 'විවේක ගනිමින්', km: 'កំពុងសម្រាក' },
+  live_clockedOut: { ja: '退勤済', en: 'Clocked Out', vi: 'Đã tan làm', id: 'Sudah Pulang', zh: '已下班', si: 'වැඩ අවසන්', km: 'បានចេញ' },
+  live_notClockedIn: { ja: '未出勤', en: 'Not Clocked In', vi: 'Chưa vào ca', id: 'Belum Masuk', zh: '未出勤', si: 'පැමිණ නැත', km: 'មិនទាន់ចូល' },
+  live_currentWork: { ja: '現在の作業', en: 'Current Task', vi: 'Công việc hiện tại', id: 'Pekerjaan Saat Ini', zh: '当前作业', si: 'වත්මන් කාර්යය', km: 'ការងារបច្ចុប្បន្ន' },
+  live_noRecordYet: { ja: '作業未記録（待機・移動中）', en: 'No task recorded yet (Standby)', vi: 'Chưa ghi nhận công việc (Đang chờ)', id: 'Belum ada catatan tugas (Siaga)', zh: '暂无作业记录（待机/移动中）', si: 'තවම සටහන් කර නැත', km: 'មិនទាន់បានកត់ត្រាទេ' },
+  live_todayTotalWork: { ja: '本日累計', en: 'Today Total', vi: 'Tổng hôm nay', id: 'Total Hari Ini', zh: '今日累计', si: 'අද එකතුව', km: 'សរុបថ្ងៃនេះ' },
+  live_clockInTime: { ja: '出勤', en: 'In', vi: 'Vào', id: 'Masuk', zh: '出勤', si: 'පැමිණීම', km: 'ចូល' },
+  live_clockOutTime: { ja: '退勤', en: 'Out', vi: 'Ra', id: 'Pulang', zh: '退勤', si: 'පිටවීම', km: 'ចេញ' },
+  live_refresh: { ja: '更新', en: 'Refresh', vi: 'Làm mới', id: 'Segarkan', zh: '刷新', si: 'යාවත්කාලීන කරන්න', km: 'ផ្ទុកឡើងវិញ' },
+  live_onBreakClocked: { ja: '休憩中です（打刻中）', en: 'On Break (Clocked In)', vi: 'Đang nghỉ ngơi (Đang chấm công)', id: 'Sedang Istirahat (Tercatat Absen)', zh: '休息中（已打卡）', si: 'විවේකයේ (සටහන් කර ඇත)', km: 'កំពុងសម្រាក (បានកត់ត្រា)' },
+  live_noWorkRecordsToday: { ja: '本日の作業記録はありません', en: 'No work records today', vi: 'Không có ghi nhận công việc hôm nay', id: 'Tidak ada catatan kerja hari ini', zh: '今日暂无作业记录', si: 'අද වැඩ වාර්තා නොමැත', km: 'គ្មានកំណត់ត្រាការងារថ្ងៃនេះទេ' },
+  clockTimeTitle: { ja: '打刻時間', en: 'Time Logs', vi: 'Thời gian chấm công', id: 'Waktu Absen', zh: '打卡时间', si: 'සටහන් වේලාව', km: 'ម៉ោងកត់ត្រា' },
+  notClockedInShort: { ja: '未打刻', en: 'Not Clocked', vi: 'Chưa chấm', id: 'Belum Absen', zh: '未打卡', si: 'සටහන් නැත', km: 'មិនទាន់កត់ត្រា' },
+  registeredCountSuffix: { ja: '名登録', en: ' registered', vi: ' đã đăng ký', id: ' terdaftar', zh: '人已注册', si: ' ලියාපදිංචි කර ඇත', km: ' បានចុះឈ្មោះ' },
+  manageAllTasks: { ja: '全体タスク管理', en: 'All Tasks Management', vi: 'Quản lý toàn bộ nhiệm vụ', id: 'Kelola Semua Tugas', zh: '全局任务管理', si: 'සියලු කාර්යයන් කළමනාකරණය', km: 'ការគ្រប់គ្រងកិច្ចការទាំងអស់' },
+  tasksCompletedCount: { ja: '件完了', en: ' completed', vi: ' đã hoàn thành', id: ' selesai', zh: '项已完成', si: ' අවසන්', km: ' បានបញ្ចប់' },
+  todo_allDoneSub: { ja: '本日の予定作業はすべて報告済みです。ゆっくりお休みいただくか、追加の作業があれば管理画面で追加してください。', en: 'All scheduled tasks for today have been reported. Please take a rest, or add more tasks from admin dashboard.', vi: 'Tất cả công việc dự kiến hôm nay đã được báo cáo. Bạn có thể nghỉ ngơi, hoặc thêm công việc mới từ trang quản trị.', id: 'Semua tugas terjadwal hari ini telah dilaporkan. Silakan beristirahat, atau tambahkan tugas dari dasbor admin.', zh: '今日所有计划作业均已汇报完毕。请好好休息，或在管理端添加新作业。', si: 'අද දින සැලසුම් කළ සියලුම වැඩ වාර්තා කර ඇත. කරුණාකර විවේක ගන්න, නැතහොත් පරිපාලක පුවරුවෙන් අමතර වැඩ එක් කරන්න.', km: 'ការងារដែលបានកំណត់ពេលសម្រាប់ថ្ងៃនេះត្រូវបានរាយការណ៍ទាំងអស់។ សូមសម្រាក ឬបន្ថែមការងារពីផ្ទាំងគ្រប់គ្រង។' },
+  todo_noTasksSub: { ja: '管理画面から作業スケジュールを登録すると、ここに自動で表示されます。', en: 'Tasks registered from admin dashboard will automatically appear here.', vi: 'Công việc được đăng ký từ trang quản trị sẽ tự động xuất hiện ở đây.', id: 'Tugas yang didaftarkan dari dasbor admin akan otomatis muncul di sini.', zh: '在管理端登记的作业计划将自动显示于此处。', si: 'පරිපාලක පුවරුවෙන් ලියාපදිංචි කළ කාර්යයන් ස්වයංක්‍රීයව මෙහි දිස්වනු ඇත.', km: 'កិច្ចការដែលបានចុះឈ្មោះពីផ្ទាំងគ្រប់គ្រងនឹងបង្ហាញនៅទីនេះដោយស្វ័យប្រវត្តិ។' },
+  todo_quickCompleteTooltip: { ja: 'ワンタップで完了にする', en: 'Quick complete in one tap', vi: 'Hoàn thành nhanh bằng một lần chạm', id: 'Selesaikan cepat dengan satu ketukan', zh: '一键快速完成', si: 'එක් තට්ටු කිරීමකින් ඉක්මනින් සම්පූර්ණ කරන්න', km: 'បញ្ចប់រហ័សដោយចុចតែម្តង' },
+  goToWorkScreenTooltip: { ja: '現場作業画面（GPS/タイマー）へ', en: 'To Work Screen (GPS / Timer)', vi: 'Đến màn hình làm việc (GPS / Đồng hồ)', id: 'Ke Layar Kerja (GPS / Timer)', zh: '前往作业打卡界面（GPS/计时器）', si: 'වැඩ තිරය වෙත (GPS / ටයිමර්)', km: 'ទៅកាន់អេក្រង់ការងារ (GPS / កម្មវិធីកំណត់ម៉ោង)' },
+
+  report_title: { ja: '作業日報まとめ', en: 'Daily Work Reports', vi: 'Tổng hợp báo cáo công việc', id: 'Ringkasan Laporan Kerja', zh: '工作日报汇总', si: 'දෛනික වැඩ වාර්තා එකතුව', km: 'សង្ខេបរបាយការណ៍ការងារ' },
+  report_sub: { ja: '全員の作業実績・時間・収穫量をまとめた活動記録です', en: "Summary of everyone's achievements, hours, and harvest", vi: 'Tổng hợp thành tích, thời gian và sản lượng thu hoạch của toàn đội ngũ', id: 'Ringkasan pencapaian, jam, dan hasil panen semua orang', zh: '汇总全员作业实绩、工时及采收量的活动记录', si: 'සැමගේ කාර්ය සාධන සාරාංශය', km: 'សង្ខេបការងារ ម៉ោង និងទិន្នផល' },
+  report_statsStaffCount: { ja: '出勤スタッフ', en: 'Working Staff', vi: 'Nhân viên đi làm', id: 'Staf Masuk', zh: '出勤员工', si: 'පැමිණි කාර්ය මණ්ඩලය', km: 'បុគ្គលិកធ្វើការ' },
+  report_statsTotalHours: { ja: '合計作業時間', en: 'Total Hours', vi: 'Tổng giờ làm', id: 'Total Jam Kerja', zh: '合计工时', si: 'සමස්ත පැය ගණන', km: 'ម៉ោងធ្វើការសរុប' },
+  report_statsTaskCount: { ja: '完了作業数', en: 'Completed Tasks', vi: 'Nhiệm vụ hoàn thành', id: 'Tugas Selesai', zh: '完成任务数', si: 'සම්පූර්ණ කළ කාර්යයන්', km: 'ការងារដែលបានបញ្ចប់' },
+  report_filterWorker: { ja: '作業者で絞込:', en: 'Filter Worker:', vi: 'Lọc theo nhân viên:', id: 'Filter Pekerja:', zh: '按作业人员筛选:', si: 'සේවකයා අනුව:', km: 'ត្រងតាមបុគ្គលិក:' },
+  report_allStaff: { ja: '全員を表示', en: 'All Staff', vi: 'Tất cả nhân viên', id: 'Semua Staf', zh: '显示全员', si: 'සියලු දෙනා', km: 'បុគ្គលិកទាំងអស់' },
+  report_noLogsToday: { ja: '指定された日付の作業日報はまだありません', en: 'No work reports found for this date', vi: 'Chưa có báo cáo công việc cho ngày này', id: 'Tidak ada laporan kerja untuk tanggal ini', zh: '指定日期暂无工作日报', si: 'මෙම දිනය සඳහා වාර්තා නොමැත', km: 'មិនទាន់មានរបាយការណ៍សម្រាប់កាលបរិច្ឆេទនេះទេ' },
+  report_field: { ja: '圃場:', en: 'Field:', vi: 'Khu đất:', id: 'Lahan:', zh: '地块:', si: 'ක්ෂේත්‍රය:', km: 'ដីស្រែ:' },
+  report_crop: { ja: '作目:', en: 'Crop:', vi: 'Cây trồng:', id: 'Tanaman:', zh: '作物:', si: 'බෝගය:', km: 'ដំណាំ:' },
+  report_duration: { ja: '時間:', en: 'Duration:', vi: 'Thời gian:', id: 'Durasi:', zh: '时长:', si: 'කාලය:', km: 'រយៈពេល:' },
+  report_materialQuantity: { ja: '数量:', en: 'Quantity:', vi: 'Số lượng:', id: 'Jumlah:', zh: '数量:', si: 'ප්‍රමාණය:', km: 'បរិមាណ:' },
+  report_memo: { ja: 'メモ:', en: 'Memo:', vi: 'Ghi chú:', id: 'Catatan:', zh: '备注:', si: 'සටහන:', km: 'កំណត់ចំណាំ:' },
+  report_prevDay: { ja: '◀ 前日', en: '◀ Prev Day', vi: '◀ Ngày trước', id: '◀ Hari Sebelumnya', zh: '◀ 前一天', si: '◀ පෙර දිනය', km: '◀ ថ្ងៃមុន' },
+  report_nextDay: { ja: '翌日 ▶', en: 'Next Day ▶', vi: 'Ngày sau ▶', id: 'Hari Berikutnya ▶', zh: '后一天 ▶', si: 'මීළඟ දිනය ▶', km: 'ថ្ងៃបន្ទាប់ ▶' },
+  report_today: { ja: '今日', en: 'Today', vi: 'Hôm nay', id: 'Hari Ini', zh: '今天', si: 'අද', km: 'ថ្ងៃនេះ' },
+  report_yesterday: { ja: '昨日', en: 'Yesterday', vi: 'Hôm qua', id: 'Kemarin', zh: '昨天', si: 'ඊයේ', km: 'ម្សិលមិញ' },
+  report_peopleCount: { ja: '人', en: ' people', vi: ' người', id: ' orang', zh: ' 人', si: ' දෙනෙක්', km: ' នាក់' },
+  report_itemsCount: { ja: '件', en: ' tasks', vi: ' việc', id: ' tugas', zh: ' 件', si: ' ක්', km: ' ករណី' },
+  
   // マニュアル・動画ガイドモーダル
   manual_backToPortal: { ja: 'ポータルへ戻る', en: 'Back to Portal', vi: 'Quay lại Portal', id: 'Kembali ke Portal', zh: '返回门户', si: 'ද්වාරය වෙත ආපසු', km: 'ត្រឡប់ទៅផតថល' },
   manual_modalTitle: { ja: 'マニュアル・動画ガイド', en: 'Manual & Video Guide', vi: 'Hướng dẫn sử dụng & Video', id: 'Panduan Manual & Video', zh: '操作手册与视频指南', si: 'අත්පොත සහ වීඩියෝ මාර්ගෝපදේශය', km: 'សៀវភៅណែនាំ និង វីដេអូណែនាំ' },
@@ -136,6 +207,332 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
     vi: 'Bất cứ điều gì bạn nhận thấy...',
     id: 'Apa pun yang Anda perhatikan...',
     zh: '您注意到的任何事情...' , si: 'මා දුටු දේ...', km: 'អ្វីដែលខ្ញុំបានកត់សម្គាល់ ...' },
+  
+  // GPS位置情報
+  gpsBlocked: {
+    ja: 'ブラウザでブロック中',
+    en: 'Blocked in browser',
+    vi: 'Bị chặn trên trình duyệt',
+    id: 'Diblokir di peramban',
+    zh: '浏览器中被阻止',
+    si: 'බ්‍රව්සරයේ අවහිර කර ඇත',
+    km: 'ត្រូវបានរារាំងក្នុងកម្មវិធីរុករក'
+  },
+  gpsSettingsBtn: {
+    ja: '設定方法',
+    en: 'How to Setup',
+    vi: 'Cách cài đặt',
+    id: 'Cara Pengaturan',
+    zh: '设置方法',
+    si: 'සැකසුම් ක්‍රමය',
+    km: 'វិធីកំណត់'
+  },
+  pwaInstallBtn: {
+    ja: '📱 アプリ化',
+    en: '📱 Install App',
+    vi: '📱 Cài ứng dụng',
+    id: '📱 Pasang Apl',
+    zh: '📱 安装应用',
+    si: '📱 යෙදුම ස්ථාපනය',
+    km: '📱 ដំឡើងកម្មវិធី'
+  },
+  pwaBannerTitle: {
+    ja: 'アグリ現場をアプリにする',
+    en: 'Install Agri App',
+    vi: 'Cài ứng dụng Nông trại',
+    id: 'Pasang Apl Lapangan',
+    zh: '将农业现场安装为应用',
+    si: 'කෘෂි ක්ෂේත්‍ර යෙදුම',
+    km: 'ដំឡើងកម្មវិធីកសិកម្ម'
+  },
+  pwaBannerSub: {
+    ja: 'ホーム画面に追加して全画面起動',
+    en: 'Add to Home Screen for fullscreen',
+    vi: 'Thêm vào màn hình chính để mở toàn màn hình',
+    id: 'Tambah ke Layar Utama untuk layar penuh',
+    zh: '添加到主屏幕以全屏启动',
+    si: 'මුල් තිරයට එක් කරන්න',
+    km: 'បន្ថែមទៅអេក្រង់ដើម'
+  },
+  pwaViewSteps: {
+    ja: '手順を見る',
+    en: 'How to',
+    vi: 'Xem cách làm',
+    id: 'Lihat Cara',
+    zh: '查看步骤',
+    si: 'පියවර බලන්න',
+    km: 'មើលជំហាន'
+  },
+  pwaModalTitle: {
+    ja: 'アグリ現場 をアプリ化',
+    en: 'Install Field App',
+    vi: 'Cài ứng dụng Hiện trường',
+    id: 'Pasang Apl Lapangan',
+    zh: '将农业现场安装为应用',
+    si: 'ක්ෂේත්‍ර යෙදුම ස්ථාපනය කරන්න',
+    km: 'ដំឡើងកម្មវិធីវាល'
+  },
+  pwaModalSub: {
+    ja: 'URLバーが消え、全画面でサクサク起動します',
+    en: 'No URL bar, runs smoothly in fullscreen',
+    vi: 'Không còn thanh URL, mở mượt mà toàn màn hình',
+    id: 'Bilah URL hilang, berjalan lancar layar penuh',
+    zh: '隐藏地址栏，全屏极速运行',
+    si: 'URL තීරුව නැත, සම්පූර්ණ තිරයෙන් වේගයෙන් ක්‍රියා කරයි',
+    km: 'គ្មានរបារ URL ដំណើរការយ៉ាងរលូនពេញអេក្រង់'
+  },
+  pwaLineWarning: {
+    ja: '⚠️ 現在LINEアプリ内で開かれています',
+    en: '⚠️ Currently opened inside LINE app',
+    vi: '⚠️ Hiện đang mở trong ứng dụng LINE',
+    id: '⚠️ Saat ini dibuka di aplikasi LINE',
+    zh: '⚠️ 当前在LINE应用内打开',
+    si: '⚠️ දැනට LINE යෙදුම තුළ විවෘත කර ඇත',
+    km: '⚠️ បច្ចុប្បន្នកំពុងបើកនៅក្នុងកម្មវិធី LINE'
+  },
+  pwaLineDesc: {
+    ja: 'LINE内ではホーム画面追加が制限されるため、右下の「︙」または共有アイコンから「Safariで開く（ブラウザで開く）」を選択してください。',
+    en: 'Adding to home screen is restricted in LINE. Please tap the menu or share icon and select "Open in Safari / Browser".',
+    vi: 'Thêm vào màn hình chính bị hạn chế trong LINE. Vui lòng nhấn biểu tượng chia sẻ và chọn "Mở bằng trình duyệt".',
+    id: 'Penambahan ke layar utama dibatasi di LINE. Silakan ketuk ikon menu/bagikan dan pilih "Buka di Peramban".',
+    zh: 'LINE内受限无法添加到主屏幕。请点击右下角“︙”或分享图标选择“在浏览器中打开”。',
+    si: 'LINE තුළ මුල් තිරයට එක් කිරීම සීමා කර ඇත. කරුණාකර "බ්‍රව්සරයෙන් විවෘත කරන්න" තෝරන්න.',
+    km: 'ការបន្ថែមទៅអេក្រង់ដើមត្រូវបានកំណត់ក្នុង LINE។ សូមចុច "បើកក្នុងកម្មវិធីរុករក"។'
+  },
+  pwaBenefit1: {
+    ja: 'ホーム画面から1タップで即起動',
+    en: '1-tap launch from home screen',
+    vi: '1 chạm khởi động từ màn hình chính',
+    id: 'Buka langsung dengan 1 ketukan dari layar utama',
+    zh: '主屏幕1键快捷启动',
+    si: 'මුල් තිරයෙන් එක් ක්ලික් එකකින් ආරම්භ කරන්න',
+    km: 'បើកដំណើរការដោយចុច 1 ដងពីអេក្រង់ដើម'
+  },
+  pwaBenefit2: {
+    ja: 'ブラウザの余計な枠がなく画面広々',
+    en: 'Spacious screen without browser bars',
+    vi: 'Màn hình rộng rãi không bị vướng khung',
+    id: 'Layar luas tanpa bingkai peramban',
+    zh: '无多余边框，界面更开阔',
+    si: 'බ්‍රව්සර් රාමු නොමැතිව පුළුල් තිරය',
+    km: 'អេក្រង់ធំទូលាយដោយគ្មានស៊ុម'
+  },
+  pwaBenefit3: {
+    ja: '現場での作業記録や打刻が超スムーズ',
+    en: 'Super smooth work logging & clock-in',
+    vi: 'Ghi chép và chấm công cực nhanh',
+    id: 'Pencatatan kerja & absensi sangat lancar',
+    zh: '现场记录与打卡更顺畅',
+    si: 'වැඩ සටහන් සහ පැමිණීම ඉතා පහසුය',
+    km: 'ការកត់ត្រាការងារ និង វត្តមានយ៉ាងរលូន'
+  },
+  pwaIosTitle: {
+    ja: '🍎 iPhone (Safari) での手順:',
+    en: '🍎 Steps for iPhone (Safari):',
+    vi: '🍎 Hướng dẫn cho iPhone (Safari):',
+    id: '🍎 Langkah untuk iPhone (Safari):',
+    zh: '🍎 iPhone (Safari) 操作步骤:',
+    si: '🍎 iPhone (Safari) පියවර:',
+    km: '🍎 ជំហានសម្រាប់ iPhone (Safari):'
+  },
+  pwaIosStep1: {
+    ja: 'Safari画面下の [共有ボタン] をタップ',
+    en: 'Tap the [Share button] at the bottom of Safari',
+    vi: 'Chạm vào [nút Chia sẻ] ở cuối màn hình Safari',
+    id: 'Ketuk [tombol Bagikan] di bagian bawah Safari',
+    zh: '点击Safari底部的 [分享按钮]',
+    si: 'Safari හි පහළ ඇති [බෙදාගැනීමේ බොත්තම] ඔබන්න',
+    km: 'ចុច [ប៊ូតុងចែករំលែក] នៅខាងក្រោម Safari'
+  },
+  pwaIosStep2: {
+    ja: 'メニュー内の [「ホーム画面に追加」] を選択して「追加」をタップ！',
+    en: 'Select ["Add to Home Screen"] and tap "Add"!',
+    vi: 'Chọn ["Thêm vào màn hình chính"] và chạm "Thêm"!',
+    id: 'Pilih ["Tambah ke Layar Utama"] lalu ketuk "Tambah"!',
+    zh: '选择 [“添加到主屏幕”] 并点击“添加”！',
+    si: '["මුල් තිරයට එක් කරන්න"] තෝරා "එක් කරන්න" ඔබන්න!',
+    km: 'ជ្រើសរើស ["បន្ថែមទៅអេក្រង់ដើម"] ហើយចុច "បន្ថែម"!'
+  },
+  pwaAndroidTitle: {
+    ja: '🤖 Android / Chrome での手順:',
+    en: '🤖 Steps for Android / Chrome:',
+    vi: '🤖 Hướng dẫn cho Android / Chrome:',
+    id: '🤖 Langkah untuk Android / Chrome:',
+    zh: '🤖 Android / Chrome 操作步骤:',
+    si: '🤖 Android / Chrome පියවර:',
+    km: '🤖 ជំហានសម្រាប់ Android / Chrome:'
+  },
+  pwaAndroidOneTap: {
+    ja: '今すぐワンタップでインストール',
+    en: 'Install with 1 Tap Now',
+    vi: 'Cài đặt ngay với 1 chạm',
+    id: 'Pasang Sekarang dengan 1 Ketukan',
+    zh: '立即一键安装',
+    si: 'දැන්ම එක් ක්ලික් එකකින් ස්ථාපනය කරන්න',
+    km: 'ដំឡើងឥឡូវនេះដោយចុច 1 ដង'
+  },
+  pwaAndroidStep1: {
+    ja: 'Chrome右上のメニュー（︙）をタップ',
+    en: 'Tap menu (︙) at top right of Chrome',
+    vi: 'Chạm menu (︙) ở góc trên bên phải Chrome',
+    id: 'Ketuk menu (︙) di kanan atas Chrome',
+    zh: '点击Chrome右上角菜单 (︙)',
+    si: 'Chrome හි ඉහළ දකුණු මෙනුව (︙) ඔබන්න',
+    km: 'ចុចម៉ឺនុយ (︙) នៅខាងស្តាំខាងលើនៃ Chrome'
+  },
+  pwaAndroidStep2: {
+    ja: '「アプリをインストール」 または 「ホーム画面に追加」 を選択！',
+    en: 'Select "Install app" or "Add to Home screen"!',
+    vi: 'Chọn "Cài đặt ứng dụng" hoặc "Thêm vào màn hình chính"!',
+    id: 'Pilih "Pasang aplikasi" atau "Tambah ke Layar Utama"!',
+    zh: '选择“安装应用”或“添加到主屏幕”！',
+    si: '"යෙදුම ස්ථාපනය කරන්න" හෝ "මුල් තිරයට එක් කරන්න" තෝරන්න!',
+    km: 'ជ្រើសរើស "ដំឡើងកម្មវិធី" ឬ "បន្ថែមទៅអេក្រង់ដើម"!'
+  },
+  pwaCloseBtn: {
+    ja: '閉じる',
+    en: 'Close',
+    vi: 'Đóng',
+    id: 'Tutup',
+    zh: '关闭',
+    si: 'වසා දමන්න',
+    km: 'បិទ'
+  },
+  gpsDenied: {
+    ja: '位置情報が拒否されています',
+    en: 'Location access denied',
+    vi: 'Truy cập vị trí bị từ chối',
+    id: 'Akses lokasi ditolak',
+    zh: '位置信息已被拒绝',
+    si: 'ස්ථාන ප්‍රවේශය ප්‍රතික්ෂේප කර ඇත',
+    km: 'ការចូលប្រើទីតាំងត្រូវបានបដិសេធ'
+  },
+  gpsBlockedWarning: {
+    ja: '⚠️ 位置情報がブロックされています',
+    en: '⚠️ Location is blocked',
+    vi: '⚠️ Vị trí đang bị chặn',
+    id: '⚠️ Lokasi diblokir',
+    zh: '⚠️ 位置信息被阻止',
+    si: '⚠️ ස්ථානය අවහිර කර ඇත',
+    km: '⚠️ ទីតាំងត្រូវបានរារាំង'
+  },
+  gpsNoSignal: {
+    ja: 'GPS電波を受信できません',
+    en: 'Cannot receive GPS signal',
+    vi: 'Không thể nhận tín hiệu GPS',
+    id: 'Tidak dapat sinyal GPS',
+    zh: '无法接收GPS信号',
+    si: 'GPS සංඥා ලබා ගත නොහැක',
+    km: 'មិនអាចទទួលសញ្ញា GPS បានទេ'
+  },
+  gpsTimeout: {
+    ja: 'GPS取得タイムアウト',
+    en: 'GPS request timed out',
+    vi: 'Hết thời gian chờ GPS',
+    id: 'Waktu tunggu GPS habis',
+    zh: 'GPS获取超时',
+    si: 'GPS කාලය ඉකුත් විය',
+    km: 'ការទាញយក GPS បានផុតកំណត់'
+  },
+  gpsManualOff: {
+    ja: '位置情報OFF (手動設定)',
+    en: 'GPS OFF (Manual)',
+    vi: 'Tắt GPS (Thủ công)',
+    id: 'GPS MATI (Manual)',
+    zh: 'GPS已关闭 (手动)',
+    si: 'GPS අක්‍රියයි (අතින්)',
+    km: 'បិទ GPS (ដោយដៃ)'
+  },
+  gpsMeasuring: {
+    ja: 'GPS測位中...',
+    en: 'Locating GPS...',
+    vi: 'Đang định vị GPS...',
+    id: 'Mencari GPS...',
+    zh: '正在进行GPS定位...',
+    si: 'GPS ස්ථානගත වෙමින්...',
+    km: 'កំពុងកំណត់ទីតាំង GPS...'
+  },
+  gpsAcquiring: {
+    ja: '現在地取得中...',
+    en: 'Acquiring location...',
+    vi: 'Đang lấy vị trí...',
+    id: 'Mendapatkan lokasi...',
+    zh: '正在获取当前位置...',
+    si: 'වත්මන් ස්ථානය ලබා ගනිමින්...',
+    km: 'កំពុងទាញយកទីតាំង...'
+  },
+  gpsRefreshTooltip: {
+    ja: '現在地を再測位する',
+    en: 'Refresh current location',
+    vi: 'Định vị lại vị trí hiện tại',
+    id: 'Perbarui lokasi saat ini',
+    zh: '重新获取当前位置',
+    si: 'වත්මන් ස්ථානය නැවත ලබා ගන්න',
+    km: 'កំណត់ទីតាំងឡើងវិញ'
+  },
+  gpsHelpTooltip: {
+    ja: '位置情報の設定・トラブル解決手順',
+    en: 'GPS Settings & Troubleshooting',
+    vi: 'Cài đặt GPS & Hướng dẫn khắc phục sự cố',
+    id: 'Pengaturan GPS & Pemecahan Masalah',
+    zh: 'GPS设置与故障排除指南',
+    si: 'GPS සැකසුම් සහ දෝශ නිරාකරණය',
+    km: 'ការកំណត់ GPS និង ការដោះស្រាយបញ្ហា'
+  },
+  gpsGuideTitle: {
+    ja: '位置情報の許可・設定ガイド',
+    en: 'GPS Permission & Setup Guide',
+    vi: 'Hướng dẫn cho phép & cài đặt vị trí (GPS)',
+    id: 'Panduan Izin & Pengaturan Lokasi (GPS)',
+    zh: '位置信息允许与设置指南',
+    si: 'ස්ථාන අවසරය සහ සැකසුම් මාර්ගෝපදේශය',
+    km: 'ការអនុញ្ញាត និង ការណែនាំកំណត់ទីតាំង (GPS)'
+  },
+  gpsGuideSub: {
+    ja: 'ブラウザの設定で位置情報を「許可」にする手順',
+    en: 'Steps to allow location access in your browser',
+    vi: 'Các bước để cho phép truy cập vị trí trong trình duyệt',
+    id: 'Langkah mengizinkan akses lokasi di peramban',
+    zh: '在浏览器设置中将位置信息设为“允许”的步骤',
+    si: 'බ්‍රව්සර් සැකසුම් තුළ ස්ථාන ප්‍රවේශයට ඉඩ දීමේ පියවර',
+    km: 'ជំហានដើម្បីអនុញ្ញាតការចូលប្រើទីតាំងនៅក្នុងកម្មវិធីរុករក'
+  },
+  gpsGuideBlockedBanner: {
+    ja: '位置情報が「ブロック中（OFF）」になっています',
+    en: 'Location access is currently blocked (OFF)',
+    vi: 'Truy cập vị trí hiện đang bị chặn (TẮT)',
+    id: 'Akses lokasi saat ini diblokir (MATI)',
+    zh: '位置信息访问当前已被阻止 (关闭)',
+    si: 'ස්ථාන ප්‍රවේශය දැනට අවහිර කර ඇත (අක්‍රියයි)',
+    km: 'ការចូលប្រើទីតាំងបច្ចុប្បន្នត្រូវបានរារាំង (បិទ)'
+  },
+  gpsGuideBlockedDesc: {
+    ja: '初回アクセス時に「許可しない」を選んだ場合、ブラウザの仕様により自動では再確認されません。以下の手順で許可に変更してください。',
+    en: 'If you selected "Deny" initially, your browser will not prompt again automatically. Please follow these steps to enable it.',
+    vi: 'Nếu bạn đã chọn "Từ chối" lúc đầu, trình duyệt sẽ không hỏi lại tự động. Vui lòng làm theo các bước dưới đây để bật.',
+    id: 'Jika Anda memilih "Tolak" pada awalnya, peramban tidak akan menanyakan lagi secara otomatis. Silakan ikuti langkah di bawah untuk mengaktifkannya.',
+    zh: '如果初次访问时选择了“不允许”，由于浏览器限制将不会自动再次弹出确认。请按照以下步骤更改为允许。',
+    si: 'ඔබ මුලින් "ඉඩ නොදෙන්න" තෝරා ගත්තේ නම්, බ්‍රව්සරය ස්වයංක්‍රීයව නැවත නොඅසනු ඇත. කරුණාකර පහත පියවර අනුගමනය කරන්න.',
+    km: 'ប្រសិនបើអ្នកបានជ្រើសរើស "មិនអនុញ្ញាត" នៅពេលដំបូង កម្មវិធីរុករកនឹងមិនសួរឡើងវិញដោយស្វ័យប្រវត្តិទេ។ សូមអនុវត្តតាមជំហានខាងក្រោមដើម្បីបើកវា។'
+  },
+  gpsGuideRetryBtn: {
+    ja: '設定完了！今すぐ位置情報を再取得する',
+    en: 'Done! Refresh location now',
+    vi: 'Đã cài đặt xong! Lấy lại vị trí ngay',
+    id: 'Selesai! Perbarui lokasi sekarang',
+    zh: '设置完成！立即重新获取位置信息',
+    si: 'සැකසීම අවසන්! දැන්ම ස්ථානය නැවත ලබා ගන්න',
+    km: 'បានកំណត់រួចរាល់! យកទីតាំងឡើងវិញឥឡូវនេះ'
+  },
+  gpsGuideRetrying: {
+    ja: '位置情報を再測位中...',
+    en: 'Locating GPS position...',
+    vi: 'Đang định vị lại vị trí GPS...',
+    id: 'Mencari posisi GPS...',
+    zh: '正在重新定位GPS...',
+    si: 'ස්ථානය නැවත ලබා ගනිමින්...',
+    km: 'កំពុងកំណត់ទីតាំង GPS ឡើងវិញ...'
+  },
   
   // 現場アプリ - タブ・入力
   tabTimer: { ja: 'タイマー記録',
@@ -265,11 +662,6 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   memoSectionLabel: { ja: 'メモ', en: 'Memo', vi: 'Ghi chú', id: 'Catatan', zh: '备注', si: 'සටහන', km: 'កំណត់ចំណាំ' },
 
   // カレンダー・スケジュール
-  cal_allEvents: { ja: '全員の予定', en: "Everyone's Schedule", vi: 'Lịch của tất cả', id: 'Jadwal Semua', zh: '全员日程', si: 'සැමගේ කාලසටහන', km: 'កាលវិភាគទាំងអស់' },
-  cal_myTasksOnly: { ja: '担当タスクのみ', en: 'My Tasks Only', vi: 'Chỉ nhiệm vụ của tôi', id: 'Hanya Tugas Saya', zh: '仅我的任务', si: 'මගේ කාර්යයන් පමණි', km: 'កិច្ចការរបស់ខ្ញុំតែប៉ុណ្ណោះ' },
-  cal_targetWorker: { ja: '担当者表示:', en: 'Worker Filter:', vi: 'Lọc theo người:', id: 'Filter Pekerja:', zh: '按人员筛选:', si: 'සේවක පෙරහන:', km: 'តម្រងបុគ្គលិក:' },
-  cal_allStaffOption: { ja: '全員', en: 'All Staff', vi: 'Tất cả nhân viên', id: 'Semua Staf', zh: '全员', si: 'සියලුම සේවකයින්', km: 'បុគ្គលិកទាំងអស់' },
-  cal_highlighting: { ja: 'をハイライト中', en: 'highlighted', vi: 'đang được đánh dấu', id: 'sedang disorot', zh: '高亮显示中', si: 'උද්දීපනය කර ඇත', km: 'កំពុងរំលេច' },
   cal_dailyScheduleDetail: { ja: '1日のスケジュール詳細', en: "Day's Schedule Details", vi: 'Chi tiết lịch trình trong ngày', id: 'Detail Jadwal Harian', zh: '当日日程详情', si: 'දවසේ කාලසටහන විස්තර', km: 'សេចក្តីលម្អិតកាលវិភាគប្រចាំថ្ងៃ' },
   cal_noTasksThisDay: { ja: 'この日のタスク・予定はありません', en: 'No tasks or events on this day', vi: 'Không có nhiệm vụ hoặc sự kiện nào trong ngày này', id: 'Tidak ada tugas atau acara pada hari ini', zh: '本日没有任务或日程', si: 'මෙම දිනයේ කාර්යයන් හෝ සිදුවීම් නොමැත', km: 'មិនមានកិច្ចការ ឬ ព្រឹត្តិការណ៍នៅថ្ងៃនេះទេ' },
   cal_scheduledBadge: { ja: '予定', en: 'Scheduled', vi: 'Dự kiến', id: 'Terjadwal', zh: '计划', si: 'සැලසුම් කර ඇත', km: 'បានកំណត់ពេល' },
@@ -366,6 +758,32 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
    , si: 'ඇතුළු වීම අසාර්ථක විය.', km: 'ការចូលបានបរាជ័យ។' },
   loginAndStart: { ja: 'ログインして作業開始', en: 'Login & Start Work', vi: 'Đăng nhập & Bắt đầu làm việc', id: 'Login & Mulai Kerja', zh: '登录并开始工作'
    , si: 'ලොග් වෙලා වැඩ පටන් ගන්න', km: 'ចូលហើយចាប់ផ្តើមធ្វើការ' },
+  adminRole: { ja: '管理', en: 'Admin', vi: 'Quản lý', id: 'Admin', zh: '管理', si: 'පරිපාලක', km: 'អ្នកគ្រប់គ្រង' },
+  noWorkersFound: { ja: '作業者が見つかりません。', en: 'No workers found.', vi: 'Không tìm thấy nhân viên.', id: 'Pekerja tidak ditemukan.', zh: '未找到作业人员。', si: 'සේවකයන් හමු නොවීය.', km: 'រកមិនឃើញបុគ្គលិកទេ។' },
+  orSelectFromList: { ja: 'またはリストから選択:', en: 'Or select from list:', vi: 'Hoặc chọn từ danh sách:', id: 'Atau pilih dari daftar:', zh: '或从列表中选择:', si: 'හෝ ලැයිස්තුවෙන් තෝරන්න:', km: 'ឬជ្រើសរើសពីបញ្ជី៖' },
+  reselectName: { ja: 'お名前を選び直す', en: 'Choose another name', vi: 'Chọn lại tên', id: 'Pilih nama lain', zh: '重新选择姓名', si: 'නම නැවත තෝරන්න', km: 'ជ្រើសរើសឈ្មោះឡើងវិញ' },
+  tapKeypadPrompt: { ja: '画面のテンキーをタップしてください', en: 'Tap the keypad on screen', vi: 'Vui lòng chạm bàn phím số trên màn hình', id: 'Ketuk keypad pada layar', zh: '请在屏幕上点击数字键盘', si: 'තිරයේ ඇති යතුරු පුවරුව තට්ටු කරන්න', km: 'សូមចុចលើបន្ទះលេខលើអេក្រង់' },
+  tapNamePrompt: { ja: '👇 あなたのお名前をタップしてください', en: '👇 Please tap your name', vi: '👇 Vui lòng chạm vào tên của bạn', id: '👇 Silakan ketuk nama Anda', zh: '👇 请点击您的名字', si: '👇 කරුණාකර ඔබගේ නම තට්ටු කරන්න', km: '👇 សូមចុចលើឈ្មោះរបស់អ្នក' },
+  autoFill: { ja: '自動入力', en: 'Auto Fill', vi: 'Tự động nhập', id: 'Isi Otomatis', zh: '自动填入', si: 'ස්වයංක්‍රීයව පුරවන්න', km: 'បំពេញស្វ័យប្រវត្តិ' },
+  keypadBackspace: { ja: '戻る', en: 'Back', vi: 'Xóa', id: 'Hapus', zh: '退格', si: 'ආපසු', km: 'ថយក្រោយ' },
+  switchFarm: { ja: '別の農園に切り替える', en: 'Switch Farm', vi: 'Chuyển sang trang trại khác', id: 'Ganti Pertanian', zh: '切换至其他农场', si: 'වෙනත් ගොවිපලකට මාරු වන්න', km: 'ប្តូរទៅកសិដ្ឋានផ្សេង' },
+  adminLoginLink: { ja: '管理者アカウントでログインする', en: 'Login with Admin Account', vi: 'Đăng nhập bằng tài khoản Quản trị viên', id: 'Masuk dengan Akun Admin', zh: '使用管理员账号登录', si: 'පරිපාලක ගිණුමෙන් ඇතුල් වන්න', km: 'ចូលដោយគណនីអ្នកគ្រប់គ្រង' },
+  resetTerminalLink: { ja: '画面が固まる・更新されない場合はここをタップ（端末初期化）', en: 'Tap here if screen freezes or does not update (Reset device)', vi: 'Nhấn vào đây nếu màn hình bị đơ / không cập nhật (Đặt lại thiết bị)', id: 'Ketuk di sini jika layar macet atau tidak terbarui (Reset perangkat)', zh: '若画面卡顿或未更新请点击此处（设备初始化）', si: 'තිරය හිරවුවහොත් මෙහි තට්ටු කරන්න (උපාංගය යළි සකසන්න)', km: 'ចុចត្រង់នេះប្រសិនបើអេក្រង់គាំង ឬមិនអាប់ដេត (កំណត់ឧបករណ៍ឡើងវិញ)' },
+  showPin: { ja: '数字を表示', en: 'Show PIN', vi: 'Hiện mã PIN', id: 'Tampilkan PIN', zh: '显示数字', si: 'PIN පෙන්වන්න', km: 'បង្ហាញលេខ PIN' },
+  hidePin: { ja: '非表示', en: 'Hide PIN', vi: 'Ẩn mã PIN', id: 'Sembunyikan PIN', zh: '隐藏数字', si: 'PIN සඟවන්න', km: 'លាក់លេខ PIN' },
+  farmIdPrompt: { ja: '管理者から案内された農園ID（UUIDまたは専用コード）を入力してください。', en: 'Please enter the Farm ID (UUID or code) provided by your admin.', vi: 'Vui lòng nhập Mã trang trại do quản trị viên cung cấp.', id: 'Silakan masukkan ID Pertanian yang diberikan oleh admin.', zh: '请输入管理员提供的农场ID（UUID或专属代码）。', si: 'පරිපාලක විසින් ලබා දුන් ගොවිපල ID ඇතුලත් කරන්න.', km: 'សូមបញ្ចូលលេខសម្គាល់កសិដ្ឋានដែលបានផ្តល់ដោយអ្នកគ្រប់គ្រង។' },
+  enterFarmPortalBtn: { ja: '農園ポータルへ入る', en: 'Enter Farm Portal', vi: 'Vào cổng thông tin trang trại', id: 'Masuk ke Portal Pertanian', zh: '进入农场门户', si: 'ගොවිපල ද්වාරයට ඇතුල් වන්න', km: 'ចូលទៅកាន់វិបផតថលកសិដ្ឋាន' },
+  farmOwnerGuide: { ja: '農園のオーナー・管理者の方はこちら', en: 'For farm owners & administrators, click here', vi: 'Dành cho Chủ sở hữu / Quản lý trang trại', id: 'Untuk pemilik & pengelola pertanian, klik di sini', zh: '农场主及管理者请点击此处', si: 'ගොවිපල හිමිකරුවන් සහ පරිපාලකයින් සඳහා මෙතැනින්', km: 'សម្រាប់ម្ចាស់កសិដ្ឋាន និងអ្នកគ្រប់គ្រង សូមចុចត្រង់នេះ' },
+  adminLoginBtnWithUrl: { ja: '👨‍💼 管理者ログイン（専用URL発行）', en: '👨‍💼 Admin Login (Generate Dedicated URL)', vi: '👨‍💼 Đăng nhập quản trị viên (Tạo URL riêng)', id: '👨‍💼 Login Admin (Buat URL Khusus)', zh: '👨‍💼 管理员登录（生成专属URL）', si: '👨‍💼 පරිපාලක පිවිසුම (URL උත්පාදනය)', km: '👨‍💼 ចូលជាអ្នកគ្រប់គ្រង (បង្កើត URL ជាក់លាក់)' },
+  lineBrowserAlertTitle: { ja: '⚠️ LINEアプリ内で開かれています', en: '⚠️ Opened in LINE app', vi: '⚠️ Đang mở trong ứng dụng LINE', id: '⚠️ Dibuka di aplikasi LINE', zh: '⚠️ 正在LINE应用中打开', si: '⚠️ LINE යෙදුම තුළ විවෘත කර ඇත', km: '⚠️ បានបើកនៅក្នុងកម្មវិធី LINE' },
+  lineBrowserAlertSub: { ja: '右下の「…」から「ブラウザで開く」を選ぶとより快適に動作します。', en: 'Tap "..." at bottom right and choose "Open in Browser" for best experience.', vi: 'Chạm vào "..." ở góc dưới bên phải và chọn "Mở bằng trình duyệt" để có trải nghiệm tốt hơn.', id: 'Ketuk "..." di kanan bawah dan pilih "Buka di Browser" untuk pengalaman terbaik.', zh: '点击右下角“…”并选择“在浏览器中打开”以获得更佳体验。', si: 'හොඳම අත්දැකීම සඳහා පහළ දකුණේ "..." තට්ටු කර "බ්‍රව්සරයේ විවෘත කරන්න" තෝරන්න.', km: 'ចុច "..." នៅខាងស្តាំខាងក្រោម ហើយជ្រើសរើស "បើកក្នុងកម្មវិធីរុករក" ដើម្បីទទួលបានបទពិសោធន៍ល្អបំផុត។' },
+  farmPortalConnect: { ja: '農園ポータルの接続', en: 'Connect to Farm Portal', vi: 'Kết nối với Cổng thông tin trang trại', id: 'Sambungkan ke Portal Pertanian', zh: '连接农场门户', si: 'ගොවිපල ද්වාරයට සම්බන්ධ වන්න', km: 'ភ្ជាប់ទៅកាន់វិបផតថលកសិដ្ឋាន' },
+  farmPortalConnectSub: { ja: '本画面は各農園ごとに発行される専用URLまたはQRコードからアクセスしてご利用ください。', en: 'Please access via dedicated URL or QR code provided by your farm.', vi: 'Vui lòng truy cập qua URL chuyên dụng hoặc mã QR do trang trại cung cấp.', id: 'Silakan akses melalui URL khusus atau kode QR yang diberikan oleh pertanian Anda.', zh: '请通过农场提供的专属URL或二维码访问本页面。', si: 'කරුණාකර ඔබගේ ගොවිපල විසින් සපයන ලද විශේෂිත URL හෝ QR කේතය හරහා පිවිසෙන්න.', km: 'សូមចូលប្រើតាមរយៈ URL ជាក់លាក់ ឬកូដ QR ដែលផ្តល់ដោយកសិដ្ឋានរបស់អ្នក។' },
+  connectFarmWithCode: { ja: '🔑 農園コード・IDを入力して接続', en: '🔑 Enter Farm Code / ID to connect', vi: '🔑 Nhập Mã trang trại / ID để kết nối', id: '🔑 Masukkan Kode / ID Pertanian untuk terhubung', zh: '🔑 输入农场代码/ID进行连接', si: '🔑 සම්බන්ධ වීමට ගොවිපල කේතය / ID ඇතුලත් කරන්න', km: '🔑 បញ្ចូលលេខកូដកសិដ្ឋាន / ID ដើម្បីភ្ជាប់' },
+  noWorkersInFarm: { ja: 'この農園に登録された作業者が見つかりません。\n管理者画面からスタッフを登録するか、別の農園を選択してください。', en: 'No workers found for this farm.\nPlease register staff from admin dashboard or switch farm.', vi: 'Không tìm thấy nhân viên nào cho trang trại này.\nVui lòng đăng ký nhân viên từ trang quản trị hoặc đổi trang trại.', id: 'Tidak ada pekerja yang ditemukan untuk pertanian ini.\nSilakan daftarkan staf dari dasbor admin atau ganti pertanian.', zh: '该农场未登记任何作业人员。\n请在管理端添加员工或切换到其他农场。', si: 'මෙම ගොවිපල සඳහා සේවකයින් හමු නොවීය.\nකරුණාකර පරිපාලක පුවරුවෙන් කාර්ය මණ්ඩලය ලියාපදිංචි කරන්න හෝ ගොවිපල මාරු කරන්න.', km: 'រកមិនឃើញបុគ្គលិកសម្រាប់កសិដ្ឋាននេះទេ។\nសូមចុះឈ្មោះបុគ្គលិកពីផ្ទាំងគ្រប់គ្រង ឬប្តូរកសិដ្ឋាន។' },
+  pinHintDefault: { ja: '※初期設定「0000」をお試しください。', en: '* Please try default PIN "0000".', vi: '* Vui lòng thử mã PIN mặc định "0000".', id: '* Silakan coba PIN default "0000".', zh: '* 请尝试默认密码“0000”。', si: '* කරුණාකර පෙරනිමි PIN "0000" උත්සාහ කරන්න.', km: '* សូមសាកល្បងលេខសម្ងាត់លំនាំដើម "0000"។' },
+  pinHintBirthday: { ja: '※誕生日4桁（例: 0129）をお試しください。', en: '* Please try 4-digit birthday (e.g. 0129).', vi: '* Vui lòng thử 4 chữ số ngày sinh (ví dụ: 0129).', id: '* Silakan coba 4 digit tanggal lahir (cth: 0129).', zh: '* 请尝试4位生日（例：0129）。', si: '* කරුණාකර ඉලක්කම් 4ක උපන් දිනය (උදා: 0129) උත්සාහ කරන්න.', km: '* សូមសាកល្បងថ្ងៃខែឆ្នាំកំណើត ៤ ខ្ទង់ (ឧ. 0129)។' },
+  inputPinNumber: { ja: '（入力: {pin}）', en: ' (Entered: {pin})', vi: ' (Đã nhập: {pin})', id: ' (Dimasukkan: {pin})', zh: '（输入: {pin}）', si: ' (ඇතුලත් කළ: {pin})', km: ' (បានបញ្ចូល: {pin})' },
   
   // 作業内容（固定）
   '収穫': { ja: '収穫', en: 'Harvest', vi: 'Thu hoạch', id: 'Panen', zh: '收获'
@@ -384,6 +802,14 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   , si: 'වල් නෙලීම', km: 'ការកាត់ស្មៅ' },
   '片付け・メンテ': { ja: '片付け・メンテ', en: 'Cleanup / Maintenance', vi: 'Dọn dẹp / Bảo trì', id: 'Pembersihan / Perawatan', zh: '清理/维护'
   , si: 'පිරිසිදු කිරීම / නඩත්තු කිරීම', km: 'ការសម្អាត / ការថែទាំ' },
+  // テスト用作業名・キーワード
+  'テスト': { ja: 'テスト', en: 'Test', vi: 'Kiểm tra (Test)', id: 'Uji Coba', zh: '测试', si: 'පරීක්ෂණය', km: 'ការសាកល្បង' },
+  'テスト1': { ja: 'テスト1', en: 'Test 1', vi: 'Kiểm tra 1', id: 'Uji Coba 1', zh: '测试1', si: 'පරීක්ෂණය 1', km: 'ការសាកល្បង 1' },
+  'テスト2': { ja: 'テスト2', en: 'Test 2', vi: 'Kiểm tra 2', id: 'Uji Coba 2', zh: '测试2', si: 'පරීක්ෂණය 2', km: 'ការសាកល្បង 2' },
+  'テスト3': { ja: 'テスト3', en: 'Test 3', vi: 'Kiểm tra 3', id: 'Uji Coba 3', zh: '测试3', si: 'පරීක්ෂණය 3', km: 'ការសាកល្បង 3' },
+  'テスト4': { ja: 'テスト4', en: 'Test 4', vi: 'Kiểm tra 4', id: 'Uji Coba 4', zh: '测试4', si: 'පරීක්ෂණය 4', km: 'ការសាកល្បង 4' },
+  'テスト5': { ja: 'テスト5', en: 'Test 5', vi: 'Kiểm tra 5', id: 'Uji Coba 5', zh: '测试5', si: 'පරීක්ෂණය 5', km: 'ការសាកល្បង 5' },
+  'searchCropPlaceholder': { ja: '🔍 作目を絞り込み...', en: '🔍 Filter crops...', vi: '🔍 Lọc cây trồng...', id: '🔍 Saring tanaman...', zh: '🔍 筛选作物...', si: '🔍 බෝග පෙරහන් කරන්න...', km: '🔍 ត្រងដំណាំ...' },
   // 勤怠関連の新規追加分
   attendance: { ja: '勤怠打刻', en: 'Attendance', vi: 'Chấm công', id: 'Kehadiran', zh: '考勤打卡' , si: 'පැමිණීම', km: 'ការចូលរួម' },
   realtimeRecord: { ja: 'リアルタイム記録', en: 'Realtime Record', vi: 'Ghi thời gian thực', id: 'Rekam Waktu Nyata', zh: '实时记录' , si: 'තත්‍ය කාලීන වාර්තාව', km: 'កំណត់ត្រាពេលវេលាពិត' },
@@ -430,17 +856,219 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   boardFilterGeneral: { ja: 'その他', en: 'Other', vi: 'Khác', id: 'Lainnya', zh: '其他', si: 'වෙනත්', km: 'ផ្សេងៗ' },
   boardSend: { ja: '送信', en: 'Send', vi: 'Gửi', id: 'Kirim', zh: '发送', si: 'යවන්න', km: 'បញ្ជូន' },
   boardDelete: { ja: '削除', en: 'Delete', vi: 'Xóa', id: 'Hapus', zh: '删除', si: 'මකන්න', km: 'លុប' },
-  boardNoPosts: { ja: '表示する投稿がありません', en: 'No posts to display', vi: 'Không có bài đăng nào để hiển thị', id: 'Tidak ada postingan untuk ditampilkan', zh: '没有要显示的帖子', si: 'පෙන්වීමට පළ කිරීම් නොමැත', km: 'មិនមានការបង្ហោះដើម្បីបង្ហាញទេ' }
+  boardNoPosts: { ja: '表示する投稿がありません', en: 'No posts to display', vi: 'Không có bài đăng nào để hiển thị', id: 'Tidak ada postingan untuk ditampilkan', zh: '没有要显示的帖子', si: 'පෙන්වීමට පළ කිරීම් නොමැත', km: 'មិនមានការបង្ហោះដើម្បីបង្ហាញទេ' },
+  
+  // タイムカード関連
+  tc_title: { ja: '月次タイムカード明細', en: 'Monthly Timecard', vi: 'Bảng chấm công hàng tháng', id: 'Kartu Jam Kerja Bulanan', zh: '月度打卡考勤明细', si: 'මාසික පැමිණීම් වාර්තාව', km: 'កំណត់ត្រាវត្តមានប្រចាំខែ' },
+  tc_subtitle: { ja: '日々の出退勤打刻と労働時間の集計実績です', en: 'Daily attendance logs & work hour summary', vi: 'Nhật ký chấm công và tổng hợp giờ làm việc hàng ngày', id: 'Log kehadiran harian & ringkasan jam kerja', zh: '每日考勤打卡与工作时间汇总记录', si: 'දෛනික පැමිණීම් සහ වැඩ කරන පැය සාරාංශය', km: 'កំណត់ត្រាវត្តមាន និង សង្ខេបម៉ោងធ្វើការប្រចាំថ្ងៃ' },
+  tc_workDays: { ja: '出勤日数', en: 'Work Days', vi: 'Số ngày làm việc', id: 'Hari Kerja', zh: '出勤天数', si: 'වැඩ කළ දින', km: 'ចំនួនថ្ងៃធ្វើការ' },
+  tc_totalWorkTime: { ja: '総実働時間', en: 'Total Work Time', vi: 'Tổng thời gian làm việc', id: 'Total Jam Kerja', zh: '总实际工时', si: 'සමස්ත වැඩ කරන කාලය', km: 'ម៉ោងធ្វើការសរុប' },
+  tc_overtime: { ja: '残業時間(8h超)', en: 'Overtime (>8h)', vi: 'Tăng ca (>8h)', id: 'Lembur (>8j)', zh: '加班时间(超8小时)', si: 'අතිකාල (>පැය 8)', km: 'ថែមម៉ោង (>8ម៉ោង)' },
+  tc_totalBreak: { ja: '合計休憩時間', en: 'Total Break', vi: 'Tổng giờ nghỉ', id: 'Total Istirahat', zh: '合计休息时间', si: 'විවේක කාලය', km: 'ម៉ោងសម្រាកសរុប' },
+  tc_dailyDetails: { ja: '日別打刻明細', en: 'Daily Records', vi: 'Chi tiết theo ngày', id: 'Rincian Harian', zh: '每日打卡明细', si: 'දෛනික වාර්තාව', km: 'ព័ត៌មានលម្អិតប្រចាំថ្ងៃ' },
+  tc_date: { ja: '日付', en: 'Date', vi: 'Ngày', id: 'Tanggal', zh: '日期', si: 'දිනය', km: 'កាលបរិច្ឆេទ' },
+  tc_clockIn: { ja: '出勤', en: 'In', vi: 'Vào', id: 'Masuk', zh: '上班', si: 'පැමිණීම', km: 'ចូល' },
+  tc_clockOut: { ja: '退勤', en: 'Out', vi: 'Ra', id: 'Pulang', zh: '下班', si: 'පිටවීම', km: 'ចេញ' },
+  tc_break: { ja: '休憩', en: 'Break', vi: 'Nghỉ', id: 'Istirahat', zh: '休息', si: 'විවේකය', km: 'សម្រាក' },
+  tc_workHours: { ja: '実労働時間', en: 'Work Hours', vi: 'Giờ làm', id: 'Jam Kerja', zh: '实际工时', si: 'වැඩ කළ පැය', km: 'ម៉ោងធ្វើការ' },
+  tc_status: { ja: '状態', en: 'Status', vi: 'Trạng thái', id: 'Status', zh: '状态', si: 'තත්ත්වය', km: 'ស្ថានភាព' },
+  tc_completed: { ja: '完了', en: 'Done', vi: 'Hoàn thành', id: 'Selesai', zh: '完成', si: 'අවසන්', km: 'រួចរាល់' },
+  tc_working: { ja: '勤務中', en: 'Working', vi: 'Đang làm', id: 'Bekerja', zh: '上班中', si: 'වැඩ කරමින්', km: 'កំពុងធ្វើការ' },
+  tc_requestLeaveBtn: { ja: '🏖️ 有給・休暇を申請する', en: '🏖️ Request Leave', vi: '🏖️ Xin nghỉ phép', id: '🏖️ Ajukan Cuti', zh: '🏖️ 申请休假', si: '🏖️ නිවාඩු ඉල්ලන්න', km: '🏖️ ស្នើសុំឈប់សម្រាក' },
+  tc_leaveApproved: { ja: '有給(承認)', en: 'Leave (Approved)', vi: 'Nghỉ phép (Đã duyệt)', id: 'Cuti (Disetujui)', zh: '带薪假(已批准)', si: 'නිවාඩු (අනුමතයි)', km: 'ឈប់សម្រាក (អនុម័ត)' },
+  tc_leavePending: { ja: '有給(申請中)', en: 'Leave (Pending)', vi: 'Nghỉ phép (Chờ duyệt)', id: 'Cuti (Menunggu)', zh: '带薪假(申请中)', si: 'නිවාඩු (අනුමැතිය සඳහා)', km: 'ឈប់សម្រាក (កំពុងរង់ចាំ)' },
+  tc_prevMonth: { ja: '◀ 前月', en: '◀ Prev', vi: '◀ Tháng trước', id: '◀ Bln Lalu', zh: '◀ 上个月', si: '◀ පෙර මාසය', km: '◀ ខែមុន' },
+  tc_nextMonth: { ja: '翌月 ▶', en: 'Next ▶', vi: 'Tháng sau ▶', id: 'Bln Depan ▶', zh: '下个月 ▶', si: 'මීළඟ මාසය ▶', km: 'ខែបន្ទាប់ ▶' },
+  tc_hours: { ja: '時間', en: 'h ', vi: 'h ', id: 'j ', zh: '小时', si: 'පැය ', km: 'ម៉ោង ' },
+  tc_minutes: { ja: '分', en: 'm', vi: 'p', id: 'm', zh: '分', si: 'මිනිත්තු', km: 'នាទី' },
+  tc_currentMonthSummary: { ja: '今月の勤務実績（当月累計）', en: 'Current Month Summary', vi: 'Tổng kết tháng này', id: 'Ringkasan Bulan Ini', zh: '本月出勤汇总', si: 'මෙම මාසයේ සාරාංශය', km: 'សង្ខេបខែនេះ' },
+  tc_openDetails: { ja: 'タイムカード明細', en: 'Timecard Details', vi: 'Chi tiết bảng công', id: 'Rincian Kartu Jam', zh: '打卡明细', si: 'වාර්තා විස්තර', km: 'ព័ត៌មានលម្អិត' },
+  tc_colApply: { ja: '申請', en: 'Apply', vi: 'Yêu cầu', id: 'Ajukan', zh: '申请', si: 'අයදුම්', km: 'ពាក្យស្នើសុំ' },
+  tc_applyLeave: { ja: '+ 休暇申請', en: '+ Leave', vi: '+ Xin nghỉ', id: '+ Cuti', zh: '+ 请假', si: '+ නිවාඩු', km: '+ ស្នើសុំឈប់' },
+  tc_requestLeaveBtnShort: { ja: '有給申請', en: 'Leave', vi: 'Xin nghỉ', id: 'Cuti', zh: '请假', si: 'නිවාඩු', km: 'សុំឈប់' },
+  tc_refresh: { ja: '最新情報に更新', en: 'Refresh data', vi: 'Làm mới dữ liệu', id: 'Perbarui data', zh: '刷新数据', si: 'යාවත්කාලීන කරන්න', km: 'ធ្វើបច្ចុប្បន្នភាព' },
+  tc_applyForDate: { ja: 'の休暇を申請', en: ' - Request leave', vi: ' - Xin nghỉ phép', id: ' - Ajukan cuti', zh: ' 的休假申请', si: ' නිවාඩු ඉල්ලීම', km: ' - ស្នើសុំឈប់សម្រាក' },
+
+  // 有給・休暇申請モーダル用
+  leave_modalTitle: { ja: '有給・休暇の申請', en: 'Request Paid Leave / Day Off', vi: 'Đăng ký nghỉ phép / nghỉ ngày', id: 'Pengajuan Cuti / Libur', zh: '申请带薪假/休假', si: 'වැටුප් සහිත නිවාඩු ඉල්ලීම', km: 'ពាក្យស្នើសុំឈប់សម្រាក' },
+  leave_modalSub: { ja: '希望日と理由を入力して送信してください', en: 'Please enter desired date and reason to submit', vi: 'Vui lòng nhập ngày mong muốn và lý do để gửi', id: 'Silakan masukkan tanggal yang diinginkan dan alasan', zh: '请输入期望日期和理由并提交', si: 'කරුණාකර දිනය සහ හේතුව ඇතුළත් කරන්න', km: 'សូមបញ្ចូលកាលបរិច្ឆេទ និងមូលហេតុដែលចង់បាន' },
+  leave_applicant: { ja: '申請者:', en: 'Applicant:', vi: 'Người nộp đơn:', id: 'Pemohon:', zh: '申请人:', si: 'අයදුම්කරු:', km: 'អ្នកស្នើសុំ:' },
+  leave_selectWorker: { ja: '申請する従業員', en: 'Select Employee', vi: 'Chọn nhân viên', id: 'Pilih Karyawan', zh: '选择员工', si: 'සේවකයා තෝරන්න', km: 'ជ្រើសរើសបុគ្គលិក' },
+  leave_selectWorkerPrompt: { ja: '従業員を選択してください', en: 'Please select an employee', vi: 'Vui lòng chọn nhân viên', id: 'Silakan pilih karyawan', zh: '请选择员工', si: 'කරුණාකර සේවකයෙකු තෝරන්න', km: 'សូមជ្រើសរើសបុគ្គលិកម្នាក់' },
+  leave_remainingDaysLabel: { ja: '残: ', en: 'Rem: ', vi: 'Còn: ', id: 'Sisa: ', zh: '余: ', si: 'ඉතිරි: ', km: 'នៅសល់: ' },
+  leave_daysRemaining: { ja: '残り {days}日', en: '{days} days remaining', vi: 'Còn lại {days} ngày', id: 'Tersisa {days} hari', zh: '剩余 {days} 天', si: 'දින {days}ක් ඉතිරියි', km: 'នៅសល់ {days} ថ្ងៃ' },
+  leave_leaveType: { ja: '休暇の種類', en: 'Leave Type', vi: 'Loại nghỉ phép', id: 'Jenis Cuti', zh: '假期种类', si: 'නිවාඩු වර්ගය', km: 'ប្រភេទនៃការឈប់សម្រាក' },
+  leave_typeFull: { ja: '有給休暇（全休・1日）', en: 'Paid Leave (Full Day)', vi: 'Nghỉ phép có lương (Cả ngày)', id: 'Cuti Berbayar (Seharian)', zh: '带薪休假（全天）', si: 'වැටුප් සහිත නිවාඩු (දවසම)', km: 'ឈប់សម្រាកមានប្រាក់ខែ (ពេញមួយថ្ងៃ)' },
+  leave_typeAm: { ja: '午前半休（0.5日）', en: 'Morning Half-day (0.5 day)', vi: 'Nghỉ nửa ngày sáng (0.5 ngày)', id: 'Setengah Hari Pagi (0.5 hari)', zh: '上午半天假（0.5天）', si: 'උදෑසන අර්ධ නිවාඩු (දින 0.5)', km: 'ឈប់សម្រាកពេលព្រឹក (០.៥ ថ្ងៃ)' },
+  leave_typePm: { ja: '午後半休（0.5日）', en: 'Afternoon Half-day (0.5 day)', vi: 'Nghỉ nửa ngày chiều (0.5 ngày)', id: 'Setengah Hari Siang (0.5 hari)', zh: '下午半天假（0.5天）', si: 'සවස අර්ධ නිවාඩු (දින 0.5)', km: 'ឈប់សម្រាកពេលរសៀល (០.៥ ថ្ងៃ)' },
+  leave_typeSpecial: { ja: '特別休暇（慶弔・リフレッシュ等）', en: 'Special Leave', vi: 'Nghỉ phép đặc biệt', id: 'Cuti Khusus', zh: '特别休假', si: 'විශේෂ නිවාඩු', km: 'ការឈប់សម្រាកពិសេស' },
+  leave_typeAbsence: { ja: '欠勤', en: 'Absence', vi: 'Nghỉ không lương / Vắng mặt', id: 'Izin / Tidak Masuk', zh: '缺勤', si: 'වැඩට නොපැමිණීම', km: 'អវត្តមាន' },
+  leave_startDate: { ja: '開始日', en: 'Start Date', vi: 'Ngày bắt đầu', id: 'Tanggal Mulai', zh: '开始日期', si: 'ආරම්භක දිනය', km: 'កាលបរិច្ឆេទចាប់ផ្តើម' },
+  leave_endDate: { ja: '終了日', en: 'End Date', vi: 'Ngày kết thúc', id: 'Tanggal Selesai', zh: '结束日期', si: 'අවසන් දිනය', km: 'កាលបរិច្ឆេទបញ្ចប់' },
+  leave_reasonLabel: { ja: '申請理由・備考', en: 'Reason / Remarks', vi: 'Lý do / Ghi chú', id: 'Alasan / Keterangan', zh: '申请理由/备注', si: 'හේතුව / සටහන්', km: 'មូលហេតុ / កំណត់ចំណាំ' },
+  leave_optional: { ja: '(任意)', en: '(Optional)', vi: '(Tùy chọn)', id: '(Opsional)', zh: '(选填)', si: '(විකල්ප)', km: '(ជាជម្រើស)' },
+  leave_reasonPlaceholder: { ja: '例: 私用のため、通院のため、家庭の事情など', en: 'e.g. Personal reasons, hospital visit, family matter', vi: 'vd: Việc cá nhân, đi khám bệnh, việc gia đình', id: 'cth: Keperluan pribadi, ke dokter, urusan keluarga', zh: '例: 私事、就医、家庭原因等', si: 'උදා: පෞද්ගලික හේතු, රෝහල් ගතවීම', km: 'ឧ. មូលហេតុផ្ទាល់ខ្លួន ទៅពេទ្យ រឿងគ្រួសារ' },
+  leave_cancel: { ja: 'キャンセル', en: 'Cancel', vi: 'Hủy', id: 'Batal', zh: '取消', si: 'අවලංගු කරන්න', km: 'បោះបង់' },
+  leave_submitBtn: { ja: '申請を送信する', en: 'Submit Request', vi: 'Gửi đơn xin phép', id: 'Kirim Pengajuan', zh: '提交申请', si: 'ඉල්ලීම යවන්න', km: 'បញ្ជូនពាក្យស្នើសុំ' },
+  leave_registerBtn: { ja: '有給を登録する', en: 'Register Leave', vi: 'Đăng ký nghỉ phép', id: 'Daftarkan Cuti', zh: '登记休假', si: 'නිවාඩු ලියාපදිංචි කරන්න', km: 'ចុះឈ្មោះឈប់សម្រាក' },
+  leave_submittedToast: { ja: '有給休暇の申請を送信しました！', en: 'Leave request submitted successfully!', vi: 'Đã gửi đơn xin nghỉ phép thành công!', id: 'Pengajuan cuti berhasil dikirim!', zh: '请假申请已提交！', si: 'නිවාඩු ඉල්ලීම සාර්ථකව යවන ලදී!', km: 'ពាក្យស្នើសុំឈប់សម្រាកត្រូវបានបញ្ជូនដោយជោគជ័យ!' },
+  adminDashboardBtn: { ja: '🏢 管理者画面へ', en: '🏢 To Admin', vi: '🏢 Đến trang quản trị', id: '🏢 Ke Halaman Admin', zh: '🏢 前往管理端', si: '🏢 පරිපාලක වෙත', km: '🏢 ទៅកាន់អ្នកគ្រប់គ្រង' },
+  selectViewingStaff: { ja: '👁️ 表示スタッフ:', en: '👁️ Viewing Staff:', vi: '👁️ Nhân viên hiển thị:', id: '👁️ Tampilkan Staf:', zh: '👁️ 查看员工:', si: '👁️ පෙන්වන සේවකයා:', km: '👁️ បុគ្គលិកបង្ហាញ:' },
+  viewDetails: { ja: '詳細を見る', en: 'View Details', vi: 'Xem chi tiết', id: 'Lihat Detail', zh: '查看详情', si: 'විස්තර බලන්න', km: 'មើលព័ត៌មានលម្អិត' },
+  peopleActiveUnit: { ja: '名稼働', en: ' active', vi: ' đang làm', id: ' aktif', zh: '人出勤', si: ' සක්‍රීයයි', km: ' នាក់ធ្វើការ' },
+  peopleCountUnit: { ja: '名', en: '', vi: '', id: '', zh: '人', si: '', km: ' នាក់' },
+  report_headerSubtitle: { ja: '日を追って確認できるタイムライン・圃場別・作物別・人別集計', en: 'Timeline, field, crop, and worker daily aggregated logs', vi: 'Dòng thời gian, tổng hợp theo khu đất, cây trồng và nhân viên', id: 'Lacak garis waktu harian, per lahan, tanaman, dan pekerja', zh: '按日时间轴、地块、作物及人员汇总活动记录', si: 'කාලරාමුව, ක්ෂේත්‍රය, බෝගය සහ සේවක දෛනික එකතුව', km: 'តាមដានពេលវេលាប្រចាំថ្ងៃ សង្ខេបតាមដីស្រែ ដំណាំ និងបុគ្គលិក' },
+  report_refreshBtn: { ja: '更新', en: 'Refresh', vi: 'Làm mới', id: 'Segarkan', zh: '刷新', si: 'යාවත්කාලීන', km: 'ផ្ទុកឡើងវិញ' },
+  report_fullscreenBtn: { ja: '全画面で開く', en: 'Fullscreen', vi: 'Toàn màn hình', id: 'Layar Penuh', zh: '全屏打开', si: 'සම්පූර්ණ තිරය', km: 'បើកពេញអេក្រង់' },
+  report_periodLabel: { ja: '表示期間:', en: 'Period:', vi: 'Khoảng thời gian:', id: 'Periode:', zh: '显示期间:', si: 'කාල සීමාව:', km: 'រយៈពេលបង្ហាញ:' },
+  report_periodDay: { ja: '📅 本日（単日）', en: '📅 Today', vi: '📅 Hôm nay', id: '📅 Hari Ini', zh: '📅 今天（单日）', si: '📅 අද දිනය', km: '📅 ថ្ងៃនេះ (១ថ្ងៃ)' },
+  report_periodWeek: { ja: '📆 直近7日間', en: '📆 Last 7 Days', vi: '📆 7 ngày qua', id: '📆 7 Hari Terakhir', zh: '📆 最近7天', si: '📆 පසුගිය දින 7', km: '📆 ៧ ថ្ងៃចុងក្រោយ' },
+  report_periodMonth: { ja: '🗓️ 直近30日間', en: '🗓️ Last 30 Days', vi: '🗓️ 30 ngày qua', id: '🗓️ 30 Hari Terakhir', zh: '🗓️ 最近30天', si: '🗓️ පසුගිය දින 30', km: '🗓️ ៣០ ថ្ងៃចុងក្រោយ' },
+  report_periodCustom: { ja: '⚙️ 期間指定', en: '⚙️ Custom Range', vi: '⚙️ Tùy chọn ngày', id: '⚙️ Rentang Kustom', zh: '⚙️ 自定义期间', si: '⚙️ අභිරුචි පරාසය', km: '⚙️ កំណត់កាលបរិច្ឆេទ' },
+  report_tabTimeline: { ja: '📋 タイムライン (日別)', en: '📋 Timeline (Daily)', vi: '📋 Dòng thời gian (Ngày)', id: '📋 Garis Waktu (Harian)', zh: '📋 时间轴（按日）', si: '📋 කාලරාමුව (දෛනික)', km: '📋 បន្ទាត់ពេលវេលា (ប្រចាំថ្ងៃ)' },
+  report_tabField: { ja: '🏡 圃場別まとめ', en: '🏡 By Field', vi: '🏡 Theo khu đất', id: '🏡 Ringkasan Lahan', zh: '🏡 按地块汇总', si: '🏡 ක්ෂේත්‍ර අනුව', km: '🏡 សង្ខេបតាមដីស្រែ' },
+  report_tabCrop: { ja: '🌱 作物別まとめ', en: '🌱 By Crop', vi: '🌱 Theo cây trồng', id: '🌱 Ringkasan Tanaman', zh: '🌱 按作物汇总', si: '🌱 බෝග අනුව', km: '🌱 សង្ខេបតាមដំណាំ' },
+  report_tabWorker: { ja: '👤 人別まとめ', en: '👤 By Worker', vi: '👤 Theo nhân viên', id: '👤 Ringkasan Pekerja', zh: '👤 按人员汇总', si: '👤 සේවකයන් අනුව', km: '👤 សង្ខេបតាមបុគ្គលិក' },
+  report_filterWorkerLabel: { ja: '👤 作業スタッフ:', en: '👤 Worker:', vi: '👤 Nhân viên:', id: '👤 Pekerja:', zh: '👤 作业人员:', si: '👤 සේවකයා:', km: '👤 បុគ្គលិកធ្វើការ:' },
+  report_allWorkersOption: { ja: '全スタッフ', en: 'All Staff', vi: 'Tất cả nhân viên', id: 'Semua Staf', zh: '全体员工', si: 'සියලු සේවකයින්', km: 'បុគ្គលិកទាំងអស់' },
+  report_filterFieldLabel: { ja: '🏡 圃場:', en: '🏡 Field:', vi: '🏡 Khu đất:', id: '🏡 Lahan:', zh: '🏡 地块:', si: '🏡 ක්ෂේත්‍රය:', km: '🏡 ដីស្រែ:' },
+  report_allFieldsOption: { ja: 'すべての圃場', en: 'All Fields', vi: 'Tất cả khu đất', id: 'Semua Lahan', zh: '所有地块', si: 'සියලු ක්ෂේත්‍ර', km: 'ដីស្រែទាំងអស់' },
+  report_filterCropLabel: { ja: '🌱 作物:', en: '🌱 Crop:', vi: '🌱 Cây trồng:', id: '🌱 Tanaman:', zh: '🌱 作物:', si: '🌱 බෝගය:', km: '🌱 ដំណាំ:' },
+  report_allCropsOption: { ja: 'すべての作物', en: 'All Crops', vi: 'Tất cả cây trồng', id: 'Semua Tanaman', zh: '所有作物', si: 'සියලු බෝග', km: 'ដំណាំទាំងអស់' },
+  report_searchLabel: { ja: '🔍 キーワード検索:', en: '🔍 Keyword Search:', vi: '🔍 Tìm từ khóa:', id: '🔍 Cari Kata Kunci:', zh: '🔍 关键词搜索:', si: '🔍 මූල පද සෙවීම:', km: '🔍 ស្វែងរកពាក្យគន្លឹះ:' },
+  report_searchPlaceholder: { ja: '作業名・メモ等...', en: 'Task, memo, etc...', vi: 'Tên việc, ghi chú...', id: 'Nama tugas, catatan...', zh: '作业名称、备注等...', si: 'කාර්යය, සටහන්...', km: 'ឈ្មោះការងារ, កំណត់ចំណាំ...' },
+  report_breakdownTitle: { ja: '作業内訳 (時間順):', en: 'Breakdown (by time):', vi: 'Phân tích công việc (theo giờ):', id: 'Rincian Kerja (berdasarkan waktu):', zh: '作业明细（按时长）:', si: 'වැඩ බිඳවැටීම (කාලය අනුව):', km: 'ការវិភាគការងារ (តាមម៉ោង):' },
+  report_filterActiveNotice: { ja: '絞り込み適用中（{count}件表示中）', en: 'Filters active ({count} items shown)', vi: 'Đang áp dụng bộ lọc ({count} mục)', id: 'Filter aktif ({count} item)', zh: '已应用筛选（显示 {count} 条）', si: 'පෙරහන් සක්‍රීයයි ({count} ක්)', km: 'កំពុងអនុវត្តតម្រង (បង្ហាញ {count} ករណី)' },
+  report_resetFilterBtn: { ja: '条件をリセット', en: 'Reset Filters', vi: 'Đặt lại bộ lọc', id: 'Atur Ulang Filter', zh: '重置筛选条件', si: 'පෙරහන් යළි සකසන්න', km: 'កំណត់តម្រងឡើងវិញ' },
+  report_periodShowing: { ja: '📅 表示中:', en: '📅 Showing:', vi: '📅 Đang hiển thị:', id: '📅 Menampilkan:', zh: '📅 正在显示:', si: '📅 පෙන්වයි:', km: '📅 កំពុងបង្ហាញ:' },
+  report_periodStart: { ja: '開始:', en: 'Start:', vi: 'Bắt đầu:', id: 'Mulai:', zh: '开始:', si: 'ආරම්භය:', km: 'ចាប់ផ្តើម:' },
+  report_periodEnd: { ja: '〜 終了:', en: '〜 End:', vi: '〜 Kết thúc:', id: '〜 Selesai:', zh: '〜 结束:', si: '〜 අවසානය:', km: '〜 បញ្ចប់:' },
+  report_fullscreenBadge: { ja: '全画面ビュー', en: 'Fullscreen View', vi: 'Chế độ toàn màn hình', id: 'Tampilan Layar Penuh', zh: '全屏视图', si: 'සම්පූර්ණ තිරය', km: 'ទិដ្ឋភាពពេញអេក្រង់' },
+  report_daysCount: { ja: '日間', en: ' days', vi: ' ngày', id: ' hari', zh: '天', si: ' දින', km: ' ថ្ងៃ' },
+  report_loadingLogs: { ja: '作業日報を読み込み中...', en: 'Loading work reports...', vi: 'Đang tải báo cáo công việc...', id: 'Memuat laporan kerja...', zh: '正在加载工作日报...', si: 'වාර්තා පූරණය වෙමින් පවතී...', km: 'កំពុងផ្ទុករបាយការណ៍ការងារ...' },
+  report_noLogsFound: { ja: '作業日報が見つかりません', en: 'No work reports found', vi: 'Không tìm thấy báo cáo công việc', id: 'Tidak ada laporan kerja', zh: '未找到工作日报', si: 'වැඩ වාර්තා හමු නොවීය', km: 'រកមិនឃើញរបាយការណ៍ការងារទេ' },
+  report_noLogsFoundSub: { ja: '表示期間や絞り込み条件を変更してお試しください', en: 'Please change the date range or filters', vi: 'Vui lòng thay đổi khoảng thời gian hoặc bộ lọc', id: 'Silakan ubah rentang tanggal atau filter', zh: '请更改日期范围或筛选条件后重试', si: 'කරුණාකර දින පරාසය හෝ පෙරහන් වෙනස් කරන්න', km: 'សូមផ្លាស់ប្តូរជួរកាលបរិច្ឆេទ ឬតម្រង' },
+  report_leaderCrown: { ja: '責任者', en: 'Leader', vi: 'Trưởng nhóm', id: 'Pemimpin', zh: '负责人', si: 'නායක', km: 'ប្រធាន' },
+  report_workerFallback: { ja: '作業スタッフ', en: 'Staff', vi: 'Nhân viên', id: 'Staf', zh: '作业员工', si: 'සේවකයා', km: 'បុគ្គលិក' },
+
+  // タスク・リーダー関連
+  task_leaderCrown: { ja: '👑 現場責任者', en: '👑 Field Leader', vi: '👑 Trưởng nhóm', id: '👑 Penanggung Jawab', zh: '👑 现场负责人', si: '👑 ක්ෂේත්‍ර නායක', km: '👑 ប្រធានការដ្ឋាន' },
+  task_leaderLabel: { ja: 'リーダー', en: 'Leader', vi: 'Trưởng nhóm', id: 'Pemimpin', zh: '领班', si: 'නායක', km: 'មេដឹកនាំ' },
+  task_youAreLeader: { ja: '👑 あなたが本日の現場責任者（リーダー）です！', en: "👑 You are today's field leader!", vi: '👑 Bạn là trưởng nhóm hiện trường hôm nay!', id: '👑 Anda adalah pemimpin lapangan hari ini!', zh: '👑 您是今日现场负责人（组长）！', si: '👑 ඔබ අද දින ක්ෂේත්‍ර නායකයා වේ!', km: '👑 អ្នកជាប្រធានការដ្ឋានថ្ងៃនេះ!' },
+  task_leaderInstruction: { ja: '安全確認・人員配置・指示進行をお願いします', en: 'Please conduct safety checks, staff allocation, and instructions', vi: 'Vui lòng kiểm tra an toàn, bố trí nhân sự và tiến hành chỉ đạo', id: 'Harap periksa keselamatan, penempatan staf, dan instruksi', zh: '请进行安全确认、人员调配与作业指导', si: 'කරුණාකර ආරක්ෂාව තහවුරු කිරීම සහ කාර්යමණ්ඩල මෙහෙයවීම සිදුකරන්න', km: 'សូមពិនិត្យមើលសុវត្ថិភាព ការបែងចែកបុគ្គលិក និងការណែនាំ' },
+  task_todayLeaderIs: { ja: '本日の現場リーダー: ', en: "Today's Field Leader: ", vi: 'Trưởng nhóm hôm nay: ', id: 'Pemimpin Lapangan Hari Ini: ', zh: '今日现场负责人: ', si: 'අද ක්ෂේත්‍ර නායක: ', km: 'ប្រធានការដ្ឋានថ្ងៃនេះ៖ ' },
+  sanSuffix: { ja: ' さん', en: '', vi: '', id: '', zh: '', si: '', km: '' },
+
+  // 残業申請モーダル関連
+  overtimeRejected: { ja: '【本日】残業申請 却下', en: '[Today] Overtime Request Rejected', vi: '[Hôm nay] Đăng ký tăng ca bị từ chối', id: '[Hari ini] Pengajuan Lembur Ditolak', zh: '【今日】加班申请已拒绝', si: '[අද] අතිකාල ඉල්ලීම ප්‍රතික්ෂේප විය', km: '[ថ្ងៃនេះ] សំណើសុំធ្វើការថែមម៉ោងត្រូវបានបដិសេធ' },
+  applyOvertimeBtn: { ja: '残業を申請する', en: 'Request Overtime', vi: 'Đăng ký làm thêm giờ', id: 'Ajukan Lembur', zh: '申请加班', si: 'අතිකාල ඉල්ලන්න', km: 'ស្នើសុំធ្វើការថែមម៉ោង' },
+  overtime_modalTitle: { ja: '残業の申請', en: 'Overtime Request', vi: 'Đăng ký làm thêm giờ', id: 'Pengajuan Lembur', zh: '加班申请', si: 'අතිකාල ඉල්ලීම', km: 'ពាក្យស្នើសុំថែមម៉ោង' },
+  overtime_dateLabel: { ja: '残業する日付', en: 'Overtime Date', vi: 'Ngày tăng ca', id: 'Tanggal Lembur', zh: '加班日期', si: 'අතිකාල දිනය', km: 'កាលបរិច្ឆេទថែមម៉ោង' },
+  overtime_endTimeLabel: { ja: '残業終了(予定)時刻', en: 'Scheduled End Time', vi: 'Giờ kết thúc dự kiến', id: 'Waktu Selesai (Rencana)', zh: '预计结束时间', si: 'අවසන් වන වේලාව', km: 'ម៉ោងបញ្ចប់ (គ្រោង)' },
+  overtime_lineNote: { ja: '※承認されると、LINEの退勤忘れアラートは「この予定時刻の30分後」に自動で延長されます。', en: '* Once approved, LINE clock-out alert will be postponed to 30 mins after this scheduled time.', vi: '* Khi được duyệt, cảnh báo LINE sẽ được dời sang 30 phút sau thời gian dự kiến này.', id: '* Setelah disetujui, peringatan LINE akan diperpanjang otomatis hingga 30 menit setelah waktu ini.', zh: '* 批准后，LINE下班打卡提醒将自动推迟至该时间后30分钟。', si: '* අනුමත වූ පසු, LINE දැනුම්දීම මෙම වේලාවෙන් විනාඩි 30කට පසුව ස්වයංක්‍රීයව දිගු කෙරේ.', km: '* នៅពេលអនុម័ត ការជូនដំណឹង LINE នឹងត្រូវបានពន្យារពេល ៣០ នាទីបន្ទាប់ពីម៉ោងនេះ។' },
+  overtime_reasonLabel: { ja: '残業の理由・作業内容', en: 'Reason / Work Details', vi: 'Lý do / Nội dung công việc', id: 'Alasan / Rincian Pekerjaan', zh: '加班理由与作业内容', si: 'හේතුව / වැඩ විස්තරය', km: 'មូលហេតុ / ខ្លឹមសារការងារ' },
+  overtime_reasonPlaceholder: { ja: '例: トマトの収穫が長引いたため', en: 'e.g. Tomato harvesting took longer than expected', vi: 'vd: Thu hoạch cà chua kéo dài hơn dự kiến', id: 'cth: Panen tomat memakan waktu lebih lama', zh: '例: 番茄采收耗时延长', si: 'උදා: තක්කාලි අස්වැන්න වැඩි කාලයක් ගතවීම', km: 'ឧ. ការប្រមូលផលប៉េងប៉ោះចំណាយពេលយូរ' },
+  overtime_submitBtn: { ja: '申請する', en: 'Submit Request', vi: 'Gửi đơn', id: 'Kirim Pengajuan', zh: '提交申请', si: 'ඉල්ලුම් කරන්න', km: 'ដាក់ពាក្យ' },
+  sendingBtn: { ja: '送信中...', en: 'Sending...', vi: 'Đang gửi...', id: 'Mengirim...', zh: '正在提交...', si: 'යවමින් පවතී...', km: 'កំពុងផ្ញើ...' },
+
+  // 配達・収穫カレンダー関連
+  deliveryScheduleTitle: { ja: '配達・収穫予定', en: 'Delivery & Harvest Schedule', vi: 'Lịch giao hàng & thu hoạch', id: 'Jadwal Pengiriman & Panen', zh: '配送与收获计划', si: 'බෙදාහැරීම් සහ අස්වනු කාලසටහන', km: 'កាលវិភាគដឹកជញ្ជូន និងប្រមូលផល' },
+  deliveryScheduleSub: { ja: '明日・明後日の注文量と収穫目標', en: 'Order volumes & harvest targets for upcoming days', vi: 'Khối lượng đặt hàng & mục tiêu thu hoạch sắp tới', id: 'Volume pesanan & target panen mendatang', zh: '明日及近期订单量与收获目标', si: 'ඉදිරි ඇණවුම් සහ අස්වනු ඉලක්ක', km: 'បរិមាណបញ្ជាទិញ និងគោលដៅប្រមូលផល' },
+  orderCalendarBtn: { ja: '📊 注文カレンダー', en: '📊 Order Calendar', vi: '📊 Lịch đơn hàng', id: '📊 Kalender Pesanan', zh: '📊 订单日历', si: '📊 ඇණවුම් දිනදර්ශනය', km: '📊 ប្រតិទិនបញ្ជាទិញ' },
+  orderCountUnit: { ja: '件', en: ' orders', vi: ' đơn', id: ' pesanan', zh: '单', si: ' ඇණවුම්', km: ' ការបញ្ជាទិញ' },
+  harvestTargetTitleSuffix: { ja: 'の総収穫・出荷目標', en: ' Total Harvest Target', vi: ' Mục tiêu thu hoạch & xuất hàng', id: ' Target Total Panen & Kirim', zh: ' 总收获与出货目标', si: ' මුළු අස්වනු ඉලක්කය', km: ' គោលដៅប្រមូលផលសរុប' },
+  noOrdersForThisDay: { ja: 'この日の注文予定はありません', en: 'No orders scheduled for this day', vi: 'Không có đơn hàng nào vào ngày này', id: 'Tidak ada jadwal pesanan pada hari ini', zh: '本日没有排定订单', si: 'මෙම දිනයට ඇණවුම් නොමැත', km: 'មិនមានការបញ្ជាទិញសម្រាប់ថ្ងៃនេះទេ' },
+  noDeliveryForThisDaySuffix: { ja: 'の配達予定はありません', en: ' - No deliveries scheduled', vi: ' - Không có lịch giao hàng', id: ' - Tidak ada pengiriman', zh: ' 没有配送计划', si: ' - බෙදාහැරීම් නොමැත', km: ' - មិនមានការដឹកជញ្ជូនទេ' },
+  deliveredBadge: { ja: '✅ 納品済', en: '✅ Delivered', vi: '✅ Đã giao', id: '✅ Terkirim', zh: '✅ 已送达', si: '✅ භාර දෙන ලදී', km: '✅ បានដឹកជញ្ជូន' },
+  orderCalendarModalTitle: { ja: '注文・収穫カレンダー（直近1ヶ月対応）', en: 'Order & Harvest Calendar (Next 30 Days)', vi: 'Lịch đặt hàng & Thu hoạch (1 tháng tới)', id: 'Kalender Pesanan & Panen (1 Bulan)', zh: '订单与收获日历（支持未来1个月）', si: 'ඇණවුම් සහ අස්වනු දිනදර්ශනය (මාසයක් දක්වා)', km: 'ប្រតិទិនបញ្ជាទិញ និងប្រមូលផល (១ខែ)' },
+  prevWeekBtn: { ja: '◀ 前の週', en: '◀ Prev Week', vi: '◀ Tuần trước', id: '◀ Mgg Lalu', zh: '◀ 上一周', si: '◀ පෙර සතිය', km: '◀ សប្តាហ៍មុន' },
+  nextWeekBtn: { ja: '次の週 ▶', en: 'Next Week ▶', vi: 'Tuần sau ▶', id: 'Mgg Depan ▶', zh: '下一周 ▶', si: 'මීළඟ සතිය ▶', km: 'សប្តាហ៍ក្រោយ ▶' },
+  weekPillThisWeek: { ja: '今週', en: 'This Wk', vi: 'Tuần này', id: 'Mgg Ini', zh: '本周', si: 'මෙම සතිය', km: 'សប្តាហ៍នេះ' },
+  weekPillNextWeek: { ja: '来週 (+1)', en: 'Next Wk (+1)', vi: 'Tuần sau (+1)', id: 'Mgg Dpn (+1)', zh: '下周 (+1)', si: 'ලබන සතිය (+1)', km: 'សប្តាហ៍ក្រោយ (+1)' },
+  weekPillTwoWeeks: { ja: '再来週 (+2)', en: 'In 2 Wks (+2)', vi: '2 tuần tới (+2)', id: '2 Mgg Dpn (+2)', zh: '2周后 (+2)', si: 'සති 2කින් (+2)', km: '២ សប្តាហ៍ក្រោយ (+2)' },
+  weekPillThreeWeeks: { ja: '3週後 (+3)', en: 'In 3 Wks (+3)', vi: '3 tuần tới (+3)', id: '3 Mgg Dpn (+3)', zh: '3周后 (+3)', si: 'සති 3කින් (+3)', km: '៣ សប្តាហ៍ក្រោយ (+3)' },
+  weekPillFourWeeks: { ja: '4週後 (+4)', en: 'In 4 Wks (+4)', vi: '4 tuần tới (+4)', id: '4 Mgg Dpn (+4)', zh: '4周后 (+4)', si: 'සති 4කින් (+4)', km: '៤ សប្តាហ៍ក្រោយ (+4)' },
+  unshippedLabel: { ja: '未納品', en: 'Pending', vi: 'Chưa giao', id: 'Tertunda', zh: '未配送', si: 'නොබෙදූ', km: 'មិនទាន់ដឹក' },
+  noOrdersShort: { ja: '注文なし', en: 'No Orders', vi: 'Không có đơn', id: 'Tidak Ada', zh: '无订单', si: 'ඇණවුම් නැත', km: 'គ្មានការបញ្ជាទិញ' },
+  harvestTargetLabel: { ja: '収穫目標:', en: 'Harvest Target:', vi: 'Mục tiêu thu hoạch:', id: 'Target Panen:', zh: '收获目标:', si: 'අස්වනු ඉලක්කය:', km: 'គោលដៅប្រមូលផល៖' },
+  noScheduleLabel: { ja: '予定なし', en: 'No Events', vi: 'Không có lịch', id: 'Tidak ada jadwal', zh: '无安排', si: 'සැලසුම් නැත', km: 'គ្មានកាលវិភាគ' },
+  orderListTitle: { ja: '注文一覧', en: 'Order List', vi: 'Danh sách đơn hàng', id: 'Daftar Pesanan', zh: '订单列表', si: 'ඇණවුම් ලැයිස්තුව', km: 'បញ្ជីបញ្ជាទិញ' },
+  doneShort: { ja: '済', en: 'Done', vi: 'Xong', id: 'Selesai', zh: '已', si: 'අවසන්', km: 'រួច' },
+  undoneShort: { ja: '未', en: 'Pending', vi: 'Chưa', id: 'Belum', zh: '未', si: 'නැත', km: 'មិនទាន់' },
+  currentlySelected: { ja: '✓ 選択中', en: '✓ Selected', vi: '✓ Đang chọn', id: '✓ Terpilih', zh: '✓ 已选择', si: '✓ තෝරා ඇත', km: '✓ បានជ្រើសរើស' },
+  openThisDay: { ja: 'この日を開く', en: 'Open Date', vi: 'Xem ngày này', id: 'Buka Hari Ini', zh: '打开此日', si: 'මෙම දිනය විවෘත කරන්න', km: 'បើកថ្ងៃនេះ' },
+  orderCalendarGuideNote: { ja: '💡 各週を切り替えて直近1ヶ月先までの注文を確認でき、「この日を開く」で詳細へジャンプできます。', en: '💡 Switch weeks to view orders up to 1 month ahead, and click "Open Date" to see details.', vi: '💡 Chuyển tuần để xem đơn hàng tối đa 1 tháng tới, bấm "Xem ngày này" để xem chi tiết.', id: '💡 Beralih minggu untuk melihat pesanan hingga 1 bulan ke depan, klik "Buka Hari Ini" untuk rincian.', zh: '💡 可切换每周查看未来1个月内的订单，点击“打开此日”即可跳转至详情。', si: '💡 සති මාරු කර ඉදිරි මාසයක ඇණවුම් බලන්න, විස්තර බැලීමට "මෙම දිනය විවෘත කරන්න" ඔබන්න.', km: '💡 ប្តូរសប្តាហ៍ដើម្បីមើលការបញ្ជាទិញរហូតដល់ ១ ខែទៅមុខ ហើយចុច "បើកថ្ងៃនេះ" ដើម្បីមើលព័ត៌មានលម្អិត។' },
+
+  // 相対日付（短縮）
+  todayShort: { ja: '今日', en: 'Today', vi: 'Hôm nay', id: 'Hari ini', zh: '今天', si: 'අද', km: 'ថ្ងៃនេះ' },
+  tomorrowShort: { ja: '明日', en: 'Tomorrow', vi: 'Ngày mai', id: 'Besok', zh: '明天', si: 'හෙට', km: 'ថ្ងៃស្អែក' },
+  dayAfterTomorrowShort: { ja: '明後日', en: 'Day After', vi: 'Ngày kia', id: 'Lusa', zh: '后天', si: 'අනිද්දා', km: 'ខានស្អែក' },
+  threeDaysLaterShort: { ja: '3日後', en: 'In 3 Days', vi: '3 ngày sau', id: '3 hari lagi', zh: '3天后', si: 'දින 3කින්', km: '៣ ថ្ងៃក្រោយ' },
+
+  // アラート・その他
+  videoSizeLimitAlert: { ja: '動画のサイズは50MB以下にしてください。', en: 'Video size must be 50MB or less.', vi: 'Dung lượng video phải từ 50MB trở xuống.', id: 'Ukuran video harus 50MB atau kurang.', zh: '视频文件大小不能超过50MB。', si: 'වීඩියෝවේ ප්‍රමාණය 50MB හෝ ඊට අඩු විය යුතුය.', km: 'ទំហំវីដេអូត្រូវតែ 50MB ឬតិចជាងនេះ។' },
+  deleteConfirmPrefix: { ja: '独自作業「', en: 'Are you sure you want to delete custom task "', vi: 'Bạn có chắc muốn xóa công việc tùy chỉnh "', id: 'Yakin ingin menghapus pekerjaan khusus "', zh: '确定要从列表中删除自定义作业“', si: 'අභිරුචි කාර්යය මකා දැමීමට ඔබට විශ්වාසද "', km: 'តើអ្នកប្រាកដជាចង់លុបការងារផ្ទាល់ខ្លួន "' },
+  deleteConfirmSuffix: { ja: '」をリストから削除しますか？\n※この作業で保存された過去の記録は『片付け・メンテ』に名称統合されます。', en: '" from the list?\n* Past records with this task will be merged into "Cleanup / Maintenance".', vi: '" khỏi danh sách?\n* Các bản ghi cũ sẽ được đổi tên thành "Dọn dẹp / Bảo trì".', id: '" dari daftar?\n* Catatan lama akan digabungkan ke "Pembersihan / Perawatan".', zh: '”吗？\n※使用该作业保存的历史记录将自动合并至“清理/维护”。', si: '" ලැයිස්තුවෙන් ඉවත් කිරීමට අවශ්‍යද?\n* මෙම කාර්යයේ පෙර වාර්තා "පිරිසිදු කිරීම / නඩත්තු කිරීම" වෙත ඒකාබද්ධ කෙරේ.', km: '" ពីបញ្ជីឬទេ?\n* កំណត់ត្រាចាស់នឹងត្រូវបានបញ្ចូលទៅក្នុង "ការសម្អាត / ការថែទាំ"។' },
+  deleteWorkTypeTitle: { ja: 'この独自作業を削除', en: 'Delete this custom task', vi: 'Xóa công việc tùy chỉnh này', id: 'Hapus pekerjaan khusus ini', zh: '删除此自定义作业', si: 'මෙම අභිරුචි කාර්යය මකන්න', km: 'លុបការងារផ្ទាល់ខ្លួននេះ' },
+  deleteFailed: { ja: '削除に失敗しました', en: 'Failed to delete', vi: 'Xóa thất bại', id: 'Gagal menghapus', zh: '删除失败', si: 'මකා දැමීම අසාර්ථක විය', km: 'ការលុបបានបរាជ័យ' },
+  plannedEst: { ja: '予定', en: 'Est', vi: 'Dự kiến', id: 'Rencana', zh: '预计', si: 'සැලසුම්', km: 'គ្រោង' },
+  actualResult: { ja: '実績', en: 'Actual', vi: 'Thực tế', id: 'Aktual', zh: '实际', si: 'සැබෑ', km: 'ជាក់ស្តែង' },
+  harvestLabel: { ja: '収穫', en: 'Harvest', vi: 'Thu hoạch', id: 'Panen', zh: '收获', si: 'අස්වැන්න', km: 'ការប្រមូលផល' },
+
+  // 天気・気象
+  '晴れ': { ja: '晴れ', en: 'Sunny', vi: 'Nắng', id: 'Cerah', zh: '晴', si: 'හිරු එළිය', km: 'ស្រឡះ' },
+  '曇り': { ja: '曇り', en: 'Cloudy', vi: 'Nhiều mây', id: 'Berawan', zh: '多云', si: 'වලාකුළු සහිත', km: 'ពពកច្រើន' },
+  '雨': { ja: '雨', en: 'Rainy', vi: 'Mưa', id: 'Hujan', zh: '雨', si: 'වැසි', km: 'ភ្លៀង' },
+  '雪': { ja: '雪', en: 'Snowy', vi: 'Tuyết', id: 'Salju', zh: '雪', si: 'හිම', km: 'ព្រិល' },
+  '荒天': { ja: '荒天', en: 'Stormy', vi: 'Thời tiết xấu / Bão', id: 'Cuaca Buruk', zh: '暴风雨', si: 'කුණාටු සහිත', km: 'អាកាសធាតុអាក្រក់' },
+
+  // 住所・位置情報
+  addressUnknown: { ja: '住所不明', en: 'Unknown address', vi: 'Không rõ địa chỉ', id: 'Alamat tidak diketahui', zh: '未知地址', si: 'නොදන්නා ලිපිනය', km: 'អាសយដ្ឋានមិនស្គាល់' },
+  addressFailed: { ja: '住所取得失敗', en: 'Failed to get address', vi: 'Không lấy được địa chỉ', id: 'Gagal mendapatkan alamat', zh: '获取地址失败', si: 'ලිපිනය ලබා ගැනීමට නොහැකි විය', km: 'មិនអាចទទួលបានអាសយដ្ឋានទេ' },
+  gpsNotSupported: { ja: '位置情報非対応ブラウザ', en: 'Browser does not support GPS', vi: 'Trình duyệt không hỗ trợ GPS', id: 'Browser tidak mendukung GPS', zh: '浏览器不支持GPS定位', si: 'බ්‍රව්සරය GPS සඳහා සහය නොදක්වයි', km: 'កម្មវិធីរុករកមិនគាំទ្រ GPS ទេ' },
 };
 
-export function t(key: string, lang: LanguageCode = 'ja'): string {
-  if (!TRANSLATIONS[key]) {
-    console.warn(`Translation key missing: ${key}`);
-    return key;
-  }
-  return TRANSLATIONS[key][lang] || TRANSLATIONS[key]['en'] || TRANSLATIONS[key]['ja'] || key;
+export const WEEKDAY_NAMES: Record<LanguageCode, string[]> = {
+  ja: ['日', '月', '火', '水', '木', '金', '土'],
+  en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+  vi: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'],
+  id: ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'],
+  zh: ['日', '一', '二', '三', '四', '五', '六'],
+  si: ['ඉරි', 'සඳු', 'අඟ', 'බදා', 'බ්‍රහ', 'සිකු', 'සෙන'],
+  km: ['អា', 'ច', 'អ', 'ព', 'ព្រ', 'សុ', 'ស'],
+};
+
+export function getWeekdayName(dayIndex: number, lang: LanguageCode = 'ja'): string {
+  const list = WEEKDAY_NAMES[lang] || WEEKDAY_NAMES['ja'];
+  return list[dayIndex % 7] || '';
 }
 
+export function t(key: string, lang: LanguageCode = 'ja'): string {
+  if (!key) return '';
+  if (TRANSLATIONS[key]) {
+    const val = TRANSLATIONS[key][lang];
+    if (val !== undefined && val !== null) {
+      return val;
+    }
+    const jaVal = TRANSLATIONS[key]['ja'];
+    if (jaVal !== undefined && jaVal !== null) {
+      return jaVal;
+    }
+    const enVal = TRANSLATIONS[key]['en'];
+    if (enVal !== undefined && enVal !== null) {
+      return enVal;
+    }
+    return key;
+  }
+  if (lang === 'ja') return key;
+  const translated = getTranslatedWorkType(key, lang);
+  if (translated && translated !== key) {
+    return translated;
+  }
+  return key;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getTranslatedName(item: any, lang: LanguageCode = 'ja'): string {
   if (!item) return '';
   if (lang === 'ja') return item.name || '';
@@ -473,7 +1101,11 @@ export function getTranslatedWorkType(text: string, lang: LanguageCode = 'ja'): 
   // 2. 代表的な農作業用語・テスト・圃場・作目等のキーワード辞書
   const dict: Record<string, Record<string, string>> = {
     'テスト': { en: 'Test', vi: 'Kiểm tra (Test)', id: 'Uji Coba', zh: '测试', si: 'පරීක්ෂණය', km: 'ការសាកល្បង' },
+    'テスト1': { en: 'Test 1', vi: 'Kiểm tra 1', id: 'Uji Coba 1', zh: '测试1', si: 'පරීක්ෂණය 1', km: 'ការសាកល្បង 1' },
     'テスト2': { en: 'Test 2', vi: 'Kiểm tra 2', id: 'Uji Coba 2', zh: '测试2', si: 'පරීක්ෂණය 2', km: 'ការសាកល្បង 2' },
+    'テスト3': { en: 'Test 3', vi: 'Kiểm tra 3', id: 'Uji Coba 3', zh: '测试3', si: 'පරීක්ෂණය 3', km: 'ការសាកល្បង 3' },
+    'テスト4': { en: 'Test 4', vi: 'Kiểm tra 4', id: 'Uji Coba 4', zh: '测试4', si: 'පරීක්ෂණය 4', km: 'ការសាកល្បង 4' },
+    'テスト5': { en: 'Test 5', vi: 'Kiểm tra 5', id: 'Uji Coba 5', zh: '测试5', si: 'පරීක්ෂණය 5', km: 'ការសាកល្បង 5' },
     '作業': { en: 'Work', vi: 'Công việc', id: 'Pekerjaan', zh: '作业', si: 'වැඩ', km: 'ការងារ' },
     '播種': { en: 'Sowing', vi: 'Gieo hạt', id: 'Menabur', zh: '播种', si: 'බීජ වැපිරීම', km: 'ការសាបព្រោះ' },
     '定植': { en: 'Planting', vi: 'Trồng cây', id: 'Menanam', zh: '定植', si: 'පැල සිටුවීම', km: 'ការដាំកូនឈើ' },
@@ -503,6 +1135,14 @@ export function getTranslatedWorkType(text: string, lang: LanguageCode = 'ja'): 
     'ナス': { en: 'Eggplant', vi: 'Cà tím', id: 'Terong', zh: '茄子', si: 'වම්බටු', km: 'ត្រប់' },
     'なす': { en: 'Eggplant', vi: 'Cà tím', id: 'Terong', zh: '茄子', si: 'වම්බටු', km: 'ត្រប់' },
     'ピーマン': { en: 'Bell Pepper', vi: 'Ớt chuông xanh', id: 'Paprika Hijau', zh: '青椒', si: 'බෙල් පෙපර්', km: 'ម្ទេសប្លោក' },
+    'キャベツ': { en: 'Cabbage', vi: 'Bắp cải', id: 'Kubis', zh: '卷心菜', si: 'ගෝවා', km: 'ស្ពៃក្តោប' },
+    '白菜': { en: 'Chinese Cabbage', vi: 'Cải thảo', id: 'Sawi Putih', zh: '大白菜', si: 'චීන ගෝවා', km: 'ស្ពៃបូកគោ' },
+    'レタス': { en: 'Lettuce', vi: 'Xà lách', id: 'Selada', zh: '生菜', si: 'සලාද කොළ', km: 'សាឡាត់' },
+    'にんじん': { en: 'Carrot', vi: 'Cà rốt', id: 'Wortel', zh: '胡萝卜', si: 'කැරට්', km: 'ការ៉ុត' },
+    'ニンジン': { en: 'Carrot', vi: 'Cà rốt', id: 'Wortel', zh: '胡萝卜', si: 'කැරට්', km: 'ការ៉ុត' },
+    'ねぎ': { en: 'Green Onion', vi: 'Hành lá', id: 'Daun Bawang', zh: '葱', si: 'ලූණු කොළ', km: 'ខ្ទឹមបារាំងបៃតង' },
+    'ネギ': { en: 'Green Onion', vi: 'Hành lá', id: 'Daun Bawang', zh: '葱', si: 'ලූණු කොළ', km: 'ខ្ទឹមបារាំងបៃតង' },
+    '大根': { en: 'Radish', vi: 'Củ cải trắng', id: 'Lobak Putih', zh: '白萝卜', si: 'රාබු', km: 'ឆៃថាវ' },
     // 圃場・棟
     '露地': { en: 'Open Field', vi: 'Đất trống', id: 'Ladang Terbuka', zh: '露天田地', si: 'එළිමහන් ක්ෂේත්‍රය', km: 'វាលស្រែបើកចំហ' },
     'ハウス': { en: 'Greenhouse', vi: 'Nhà kính', id: 'Rumah Kaca', zh: '温室大棚', si: 'හරිතාගාරය', km: 'ផ្ទះកញ្ចក់' },
@@ -520,8 +1160,8 @@ export function getTranslatedWorkType(text: string, lang: LanguageCode = 'ja'): 
     return dict[text][lang];
   }
 
-  // テスト1, テスト 2 などの正規表現対応
-  const testMatch = text.match(/^テスト\s*([0-9０-９]+)$/);
+  // テスト1, テスト 2, Test 1 などの正規表現対応
+  const testMatch = text.match(/^(?:テスト|test)\s*([0-9０-９]+)$/i);
   if (testMatch) {
     const num = testMatch[1];
     const prefix = dict['テスト']?.[lang] || 'Test';

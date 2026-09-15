@@ -7,21 +7,26 @@ import {
   Truck, Layout, Home,
   Clock, MapPin, Sprout, CheckCircle2, User, Sparkles, Play, Square, Package, 
   History, LogOut, Loader2, AlertCircle, Coffee, LogIn, LogOut as LogOutIcon, Sun, CloudRain, Plus, X,
-  ImageIcon, FileText, Video, MessageSquare, Globe2, MessageCircle, Trash2
+  ImageIcon, FileText, Video, MessageSquare, Globe2, MessageCircle, Trash2,
+  RefreshCw, AlertTriangle, HelpCircle, Crown
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getB2BOrders, updateB2BOrderStatus } from '@/app/actions/b2b';
-import { getWorkerShareSettings } from '@/app/actions/farm';
+import { getWorkerShareSettings, submitAttendance } from '@/app/actions/farm';
 import { WorkerGate } from '@/components/WorkerGate';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
-import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode, UNITS, getTranslatedUnit } from '@/lib/i18n';
+import { PwaBottomBanner } from '@/components/PwaInstallPrompt';
+import { GpsGuideModal } from '@/components/GpsGuideModal';
+import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode, UNITS, getTranslatedUnit, getWeekdayName } from '@/lib/i18n';
+import { translateSingleText } from '@/app/actions/translate';
 import { useCompany } from '@/hooks/useCompany';
 import imageCompression from 'browser-image-compression';
+import { getJSTDate, getJSTDateWithOffset, formatDisplayTime } from '@/lib/dateUtils';
 
 interface MasterItem {
   id: string;
   name: string;
+  unit?: string;
   polygon_coordinates?: any;
 }
 
@@ -68,16 +73,54 @@ function isPointInPolygon(point: {lat: number, lng: number}, vs: {lat: number, l
   return inside;
 }
 
-const getJSTDate = () => {
-  const d = new Date();
-  d.setHours(d.getHours() + 9);
-  return d.toISOString().split('T')[0];
-};
+function getCropEmoji(name: string): string {
+  if (!name) return '🌱';
+  const n = name.toLowerCase();
+  if (n.includes('トマト') || n.includes('tomato')) return '🍅';
+  if (n.includes('ナス') || n.includes('なす') || n.includes('eggplant')) return '🍆';
+  if (n.includes('にんじん') || n.includes('ニンジン') || n.includes('carrot')) return '🥕';
+  if (n.includes('ピーマン') || n.includes('pepper')) return '🫑';
+  if (n.includes('きゅうり') || n.includes('キュウリ') || n.includes('cucumber')) return '🥒';
+  if (n.includes('いちご') || n.includes('イチゴ') || n.includes('strawberry')) return '🍓';
+  if (n.includes('白菜') || n.includes('キャベツ') || n.includes('レタス') || n.includes('cabbage') || n.includes('lettuce')) return '🥬';
+  if (n.includes('枝豆') || n.includes('大豆') || n.includes('bean') || n.includes('edamame')) return '🫛';
+  if (n.includes('とうもろこし') || n.includes('コーン') || n.includes('corn')) return '🌽';
+  if (n.includes('芋') || n.includes('イモ') || n.includes('potato')) return '🥔';
+  if (n.includes('ねぎ') || n.includes('ネギ') || n.includes('onion')) return '🧅';
+  if (n.includes('モロヘイヤ') || n.includes('ほうれん草') || n.includes('小松菜')) return '🌿';
+  if (n.includes('大根') || n.includes('ダイコン') || n.includes('radish')) return '🥢';
+  if (n.includes('スイカ') || n.includes('watermelon')) return '🍉';
+  if (n.includes('メロン') || n.includes('melon')) return '🍈';
+  if (n.includes('米') || n.includes('稲') || n.includes('rice')) return '🌾';
+  return '🌱';
+}
 
-export default function WorkEntryPage() {
+function getWorkTypeEmoji(type: string): string {
+  if (!type) return '🚜';
+  if (type.includes('収穫')) return '🧺';
+  if (type.includes('播種') || type.includes('種まき')) return '🌱';
+  if (type.includes('定植') || type.includes('苗植え')) return '🌿';
+  if (type.includes('水やり') || type.includes('潅水')) return '💧';
+  if (type.includes('肥料') || type.includes('農薬') || type.includes('防除') || type.includes('消毒') || type.includes('追肥')) return '🧪';
+  if (type.includes('草刈り') || type.includes('除草') || type.includes('草引き')) return '✂️';
+  if (type.includes('片付け') || type.includes('メンテ') || type.includes('掃除')) return '🧹';
+  if (type.includes('出荷') || type.includes('選別') || type.includes('袋詰め')) return '📦';
+  return '✨';
+}
+
+export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: string } = {}) {
   const router = useRouter();
   const [workerTenantId, setWorkerTenantId] = useState<string | null>(() => {
+    if (requestedFarmId) return requestedFarmId;
     if (typeof window !== 'undefined') {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const farmParam = urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId');
+        if (farmParam) return farmParam;
+        const match = window.location.pathname.match(/\/(?:work|farm)\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) return match[1];
+      } catch (e) {}
+
       const savedUser = localStorage.getItem('agri_current_worker');
       if (savedUser) {
         try {
@@ -116,10 +159,73 @@ export default function WorkEntryPage() {
   const [isSubmittingSales, setIsSubmittingSales] = useState(false);
   const [tasks, setTasks] = useState<any[]>([]);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<any | null>(null);
+  const [dynamicTranslations, setDynamicTranslations] = useState<{ [rawText: string]: string }>({});
+
+  // 自由入力タスクタイトル・指示メモの多言語自動翻訳
+  useEffect(() => {
+    if (language === 'ja' || tasks.length === 0) {
+      return;
+    }
+
+    let isMounted = true;
+    const translateTexts = async () => {
+      const untranslated: string[] = [];
+      tasks.forEach(t => {
+        const title = t.task_title || t.work_type;
+        if (title) untranslated.push(title);
+
+        const rawNote = t.notes || t.memo || '';
+        const clean = rawNote
+          .replace(/【👑現場責任者】\n?/, '')
+          .replace(/【👑現場リーダー:[^】]+】\n?/, '')
+          .trim();
+        if (clean) {
+          untranslated.push(clean);
+        }
+      });
+
+      if (untranslated.length === 0) return;
+
+      const uniqueList = Array.from(new Set(untranslated));
+      const newMap: Record<string, string> = {};
+
+      await Promise.all(
+        uniqueList.map(async (rawText) => {
+          try {
+            const trans = await translateSingleText(rawText, language);
+            if (trans) newMap[rawText] = trans;
+          } catch (e) {
+            console.error('Translation error in /work:', e);
+          }
+        })
+      );
+
+      if (isMounted) {
+        setDynamicTranslations(prev => ({ ...prev, ...newMap }));
+      }
+    };
+
+    translateTexts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [language, tasks]);
   const [attendanceLog, setAttendanceLog] = useState<any>(null);
   const [workerProfile, setWorkerProfile] = useState<any>(null);
   const [gpsStatus, setGpsStatus] = useState<string>('');
   const [currentAddress, setCurrentAddress] = useState<string>('');
+  
+  // GPS位置情報コントロール状態
+  const [isGpsEnabled, setIsGpsEnabled] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('agri_gps_enabled') !== 'false';
+    }
+    return true;
+  });
+  const [isGpsLoading, setIsGpsLoading] = useState<boolean>(false);
+  const [gpsPermissionState, setGpsPermissionState] = useState<'granted' | 'prompt' | 'denied' | 'unsupported' | 'unknown'>('unknown');
+  const [showGpsGuideModal, setShowGpsGuideModal] = useState<boolean>(false);
 
   // --- 掲示板用状態 ---
   const [boardPosts, setBoardPosts] = useState<any[]>([]);
@@ -129,6 +235,7 @@ export default function WorkEntryPage() {
 
   // フォーム状態
   const [selectedCrop, setSelectedCrop] = useState<string>('');
+  const [cropSearchQuery, setCropSearchQuery] = useState<string>('');
   const [selectedField, setSelectedField] = useState<string>('');
   const [workType, setWorkType] = useState<string>('');
   const [duration, setDuration] = useState<string>('');
@@ -193,26 +300,65 @@ export default function WorkEntryPage() {
   useEffect(() => {
     setIsMounted(true);
 
+    let targetFarmParam = requestedFarmId || '';
+
     if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      const farmParam = urlParams.get('farm') || urlParams.get('tenant');
-      if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
-        localStorage.setItem('agri_owner_id', farmParam);
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        // リセット指示があれば古いキャッシュをパージ
+        if (urlParams.get('reset') === '1' || urlParams.get('clear') === '1') {
+          localStorage.removeItem('agri_current_worker');
+          localStorage.removeItem('agri_owner_id');
+        }
+
+        const farmParam = requestedFarmId || urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId');
+        if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
+          targetFarmParam = farmParam;
+          setWorkerTenantId(farmParam);
+          localStorage.setItem('agri_owner_id', farmParam);
+        } else {
+          const match = window.location.pathname.match(/\/(?:work|farm)\/([a-zA-Z0-9_-]+)/);
+          if (match && match[1]) {
+            targetFarmParam = match[1];
+            setWorkerTenantId(match[1]);
+            localStorage.setItem('agri_owner_id', match[1]);
+          }
+        }
+      } catch (e) {
+        console.warn('URL parsing error:', e);
       }
     }
 
-    const savedUser = localStorage.getItem('agri_current_worker');
-    const savedLang = (localStorage.getItem('agri_language') || localStorage.getItem('agri_lang') || localStorage.getItem('agri_lang_sales')) as LanguageCode;
-    if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
-      setLanguage(savedLang as LanguageCode);
+    try {
+      const savedUser = localStorage.getItem('agri_current_worker');
+      const savedLang = (localStorage.getItem('agri_language') || localStorage.getItem('agri_lang') || localStorage.getItem('agri_lang_sales')) as LanguageCode;
+      if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
+        setLanguage(savedLang as LanguageCode);
+      }
+      if (savedUser) {
+        const parsed = JSON.parse(savedUser);
+        if (parsed && parsed.id) {
+          // 🚨【マルチテナント物理防壁】もしURLで特定農園が指定されているのに、作業者の所属農園が異なる場合はパージ
+          if (targetFarmParam && parsed.user_id && parsed.user_id !== targetFarmParam) {
+            console.log('Switching farm: clearing mismatched cached worker in work page');
+            localStorage.removeItem('agri_current_worker');
+            setCurrentUser(null);
+            return;
+          }
+          setCurrentUser(parsed);
+        } else {
+          localStorage.removeItem('agri_current_worker');
+        }
+      }
+    } catch (e) {
+      console.warn('Storage read error in work page:', e);
     }
-    if (savedUser) {
-      setCurrentUser(JSON.parse(savedUser));
-    }
-  }, []);
+  }, [requestedFarmId]);
 
   useEffect(() => {
     if (!currentUser) return;
+    const targetWorkerId = currentUser.id;
 
     async function fetchData() {
       try {
@@ -220,10 +366,10 @@ export default function WorkEntryPage() {
         const { data: wProfile } = await supabase
           .from('workers')
           .select('*')
-          .eq('id', currentUser.id)
+          .eq('id', targetWorkerId)
           .single();
 
-        const ownerId = wProfile?.user_id || (currentUser as any).user_id;
+        const ownerId = wProfile?.user_id || (currentUser as any)?.user_id;
         if (ownerId) {
           setWorkerTenantId(ownerId);
         }
@@ -263,7 +409,7 @@ export default function WorkEntryPage() {
           .select('*, crops(name), fields(name), workers(name)')
           .eq('status', 'planned')
           .eq('work_date', getJSTDate())
-          .eq('worker_id', currentUser.id);
+          .eq('worker_id', targetWorkerId);
         
         if (tData) {
           setTasks(tData);
@@ -275,14 +421,28 @@ export default function WorkEntryPage() {
         if (!cRes.error) setIsConnected(true);
 
         if (!cRes.error && currentUser) {
-          // 今日の打刻状態を取得
-          const { data: aLog } = await supabase
+          // 今日の打刻状態を取得（未退勤ログのフォールバック付き）
+          let activeAttLog = null;
+          const { data: todayLogs } = await supabase
             .from('attendance_logs')
             .select('*')
             .eq('worker_id', currentUser.id)
             .eq('date', getJSTDate())
-            .maybeSingle();
-          if (aLog) setAttendanceLog(aLog);
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (todayLogs && todayLogs.length > 0) {
+            activeAttLog = todayLogs[0];
+          } else {
+            const { data: unclosed } = await supabase
+              .from('attendance_logs')
+              .select('*')
+              .eq('worker_id', currentUser.id)
+              .is('clock_out', null)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            if (unclosed && unclosed.length > 0) activeAttLog = unclosed[0];
+          }
+          if (activeAttLog) setAttendanceLog(activeAttLog);
 
           // 今日の残業申請を取得
           const { data: oReq } = await supabase
@@ -338,8 +498,9 @@ export default function WorkEntryPage() {
             setCustomWorkTypes(cTypes);
           }
 
-          // 本日の勤怠ログ取得
+          // 本日の勤怠ログ取得（当日のログを優先、なければ未退勤ログ）
           const today = getJSTDate();
+          let matchedAttLog = null;
           const { data: attLogs } = await supabase
             .from('attendance_logs')
             .select('*')
@@ -349,7 +510,19 @@ export default function WorkEntryPage() {
             .limit(1);
           
           if (attLogs && attLogs.length > 0) {
-            setAttendanceLog(attLogs[0]);
+            matchedAttLog = attLogs[0];
+          } else {
+            const { data: unclosed } = await supabase
+              .from('attendance_logs')
+              .select('*')
+              .eq('worker_id', currentUser.id)
+              .is('clock_out', null)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            if (unclosed && unclosed.length > 0) matchedAttLog = unclosed[0];
+          }
+          if (matchedAttLog) {
+            setAttendanceLog(matchedAttLog);
           }
 
           // 掲示板データ取得
@@ -436,45 +609,128 @@ export default function WorkEntryPage() {
       }
     }
     fetchData();
-
-    // 初期マウント時にGPS住所を一度取得しておく
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(async (pos) => {
-        const addr = await fetchAddress(pos.coords.latitude, pos.coords.longitude);
-        setCurrentAddress(addr);
-      }, () => {
-        setCurrentAddress(t('locationOff', language));
-      });
-    }
-
   }, [currentUser?.id, language]); // languageを依存配列に追加
 
-  // GPSによる自動圃場選択
-  useEffect(() => {
-    if (activeTab === 'work' && fields.length > 0 && !selectedField && navigator.geolocation) {
-      setGpsStatus(t('gpsChecking', language));
-      navigator.geolocation.getCurrentPosition((pos) => {
-        const myPoint = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        let foundField = '';
-        for (const f of fields) {
-          if (f.polygon_coordinates && Array.isArray(f.polygon_coordinates)) {
-            if (isPointInPolygon(myPoint, f.polygon_coordinates)) {
-              foundField = f.name;
-              break;
+  // 📍 GPS位置情報の取得・再測位ロジック
+  const refreshGpsPosition = async (force: boolean = false): Promise<void> => {
+    if (typeof window === 'undefined') return;
+    if (!navigator.geolocation) {
+      setGpsPermissionState('unsupported');
+      setCurrentAddress(t('gpsNotSupported', language));
+      return;
+    }
+
+    const enabled = force ? true : isGpsEnabled;
+    if (!enabled) {
+      setCurrentAddress(t('gpsManualOff', language));
+      setGpsStatus('');
+      return;
+    }
+
+    setIsGpsLoading(true);
+
+    // Permission API による事前チェック（対応ブラウザのみ）
+    if (typeof navigator !== 'undefined' && 'permissions' in navigator && (navigator as any).permissions?.query) {
+      try {
+        const pStatus = await (navigator as any).permissions.query({ name: 'geolocation' });
+        setGpsPermissionState(pStatus.state);
+        pStatus.onchange = () => {
+          setGpsPermissionState(pStatus.state);
+        };
+      } catch (e) {}
+    }
+
+    return new Promise<void>((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          setGpsPermissionState('granted');
+          setIsGpsLoading(false);
+          const { latitude, longitude } = pos.coords;
+          try {
+            const addr = await fetchAddress(latitude, longitude);
+            setCurrentAddress(addr || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+          } catch (e) {
+            setCurrentAddress(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+          }
+
+          // 圃場判定（圃場リストが存在する場合）
+          if (fields.length > 0 && !selectedField) {
+            const myPoint = { lat: latitude, lng: longitude };
+            let foundField = '';
+            for (const f of fields) {
+              if (f.polygon_coordinates && Array.isArray(f.polygon_coordinates)) {
+                if (isPointInPolygon(myPoint, f.polygon_coordinates)) {
+                  foundField = f.name;
+                  break;
+                }
+              }
+            }
+            if (foundField) {
+              setSelectedField(foundField);
+              setGpsStatus(`${t('gpsAutoSelect', language)} ${foundField}`);
+            } else {
+              setGpsStatus(t('outOfField', language));
             }
           }
+          resolve();
+        },
+        (err) => {
+          setIsGpsLoading(false);
+          if (err.code === 1) { // PERMISSION_DENIED
+            setGpsPermissionState('denied');
+            setCurrentAddress(t('gpsBlockedWarning', language));
+            setGpsStatus(t('gpsDenied', language));
+          } else if (err.code === 2) { // POSITION_UNAVAILABLE
+            setCurrentAddress(t('gpsNoSignal', language));
+            setGpsStatus(t('gpsFailed', language));
+          } else if (err.code === 3) { // TIMEOUT
+            setCurrentAddress(t('gpsTimeout', language));
+            setGpsStatus(t('gpsFailed', language));
+          } else {
+            setCurrentAddress(t('locationOff', language));
+            setGpsStatus(t('gpsFailed', language));
+          }
+          resolve();
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 8000,
+          maximumAge: 30000
         }
-        if (foundField) {
-          setSelectedField(foundField);
-          setGpsStatus(`${t('gpsAutoSelect', language)} ${foundField}`);
-        } else {
-          setGpsStatus(t('outOfField', language));
-        }
-      }, () => {
-        setGpsStatus(t('gpsFailed', language));
-      });
+      );
+    });
+  };
+
+  // GPS オン/オフ切り替え
+  const toggleGps = () => {
+    const nextState = !isGpsEnabled;
+    setIsGpsEnabled(nextState);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('agri_gps_enabled', String(nextState));
     }
-  }, [activeTab, fields, language]);
+    if (nextState) {
+      refreshGpsPosition(true);
+    } else {
+      setCurrentAddress(t('gpsManualOff', language));
+      setGpsStatus('');
+    }
+  };
+
+  // マウント時および言語/ユーザー変更時のGPS自動取得
+  useEffect(() => {
+    if (isGpsEnabled) {
+      refreshGpsPosition();
+    } else {
+      setCurrentAddress(t('gpsManualOff', language));
+    }
+  }, [currentUser?.id, isGpsEnabled]);
+
+  // 作業タブ切り替え時、圃場未選択なら自動判定
+  useEffect(() => {
+    if (activeTab === 'work' && fields.length > 0 && !selectedField && isGpsEnabled) {
+      refreshGpsPosition();
+    }
+  }, [activeTab, fields.length]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -687,9 +943,11 @@ export default function WorkEntryPage() {
       let lat=0, lng=0;
       let weatherText = null, temp = null;
 
-      if (action === 'clock_in' && navigator.geolocation) {
+      if (action === 'clock_in' && isGpsEnabled && typeof navigator !== 'undefined' && navigator.geolocation) {
         try {
-          const pos = await new Promise<GeolocationPosition>((res, rej) => navigator.geolocation.getCurrentPosition(res, rej));
+          const pos = await new Promise<GeolocationPosition>((res, rej) => 
+            navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 5000, maximumAge: 30000 })
+          );
           lat = pos.coords.latitude;
           lng = pos.coords.longitude;
           const w = await fetchWeather(lat, lng);
@@ -701,38 +959,50 @@ export default function WorkEntryPage() {
       const now = new Date().toISOString();
       const today = getJSTDate();
 
-      if (action === 'clock_in') {
-        const { data, error } = await supabase.from('attendance_logs').insert([{
-          worker_id: currentUser.id,
-          date: today,
-          clock_in: now,
-          weather: weatherText,
-          temperature: temp
-        }]).select();
-        if (error) throw error;
-        setAttendanceLog(data[0]);
-      } else if (attendanceLog) {
-        const updates: any = {};
-        if (action === 'break_start') updates.break_start_time = now;
-        if (action === 'break_end') {
-          updates.break_end_time = now;
-          if (attendanceLog.break_start_time) {
-            const bStart = new Date(attendanceLog.break_start_time).getTime();
-            const bEnd = new Date(now).getTime();
-            const diffMins = Math.floor((bEnd - bStart) / 1000 / 60);
-            updates.total_break_minutes = (attendanceLog.total_break_minutes || 0) + diffMins;
-          }
+      // 所属農園のテナントID（user_id）を多重取得・フォールバック
+      let ownerId = workerProfile?.user_id || (currentUser as any)?.user_id || workerTenantId || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : null);
+      if (!ownerId && currentUser?.id) {
+        const { data: wRec } = await supabase.from('workers').select('user_id').eq('id', currentUser.id).maybeSingle();
+        if (wRec?.user_id) {
+          ownerId = wRec.user_id;
         }
-        if (action === 'clock_out') updates.clock_out = now;
+      }
 
-        const { data, error } = await supabase.from('attendance_logs').update(updates).eq('id', attendanceLog.id).select();
-        if (error) throw error;
-        setAttendanceLog(data[0]);
+      if (action === 'clock_in') {
+        const res = await submitAttendance(ownerId || '', currentUser.id, 'clock_in', null, today, now, weatherText, temp);
+        if (res.success && res.data) {
+          setAttendanceLog(res.data);
+        } else {
+          alert('打刻エラー: ' + (res.error || '通信エラーが発生しました'));
+        }
+      } else {
+        // attendanceLogが空の場合でも、未退勤ログを検索して退勤・休憩を可能にする
+        let targetLog = attendanceLog;
+        if (!targetLog) {
+          const { data: unclosed } = await supabase.from('attendance_logs')
+            .select('*')
+            .eq('worker_id', currentUser.id)
+            .is('clock_out', null)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (unclosed && unclosed.length > 0) targetLog = unclosed[0];
+        }
+
+        if (targetLog) {
+          const res = await submitAttendance(ownerId || '', currentUser.id, action, targetLog.id, today, now, weatherText, temp);
+          if (res.success && res.data) {
+            setAttendanceLog(res.data);
+          } else {
+            alert('打刻エラー: ' + (res.error || '通信エラーが発生しました'));
+          }
+        } else {
+          alert('出勤記録が見つかりませんでした。出勤打刻を行ってください。');
+        }
       }
       setIsSubmitting(false);
-    } catch(err) {
+    } catch(err: any) {
       console.error(err);
-      alert('打刻エラーが発生しました');
+      alert('打刻エラー: ' + (err.message || '通信エラーが発生しました'));
       setIsSubmitting(false);
     }
   };
@@ -752,9 +1022,11 @@ export default function WorkEntryPage() {
         const startTime = new Date().toISOString();
 
         let weatherText = null, temp = null;
-        if (navigator.geolocation) {
+        if (isGpsEnabled && typeof navigator !== 'undefined' && navigator.geolocation) {
           try {
-            const pos = await new Promise<GeolocationPosition>((res, rej) => navigator.geolocation.getCurrentPosition(res, rej));
+            const pos = await new Promise<GeolocationPosition>((res, rej) => 
+              navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 5000, maximumAge: 30000 })
+            );
             const w = await fetchWeather(pos.coords.latitude, pos.coords.longitude);
             weatherText = w.text;
             temp = w.temp;
@@ -894,8 +1166,32 @@ export default function WorkEntryPage() {
     }
   };
 
-  if (!isMounted) return <div className="min-h-screen bg-emerald-950 flex items-center justify-center text-emerald-500"><Loader2 className="w-8 h-8 animate-spin" /></div>;
-  if (!currentUser) return <WorkerGate onLogin={(user) => setCurrentUser(user)} />;
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-emerald-950 flex flex-col items-center justify-center p-4 text-emerald-500 gap-3">
+        <Loader2 className="w-8 h-8 animate-spin" />
+        <p className="text-xs text-emerald-400 font-bold">日報画面を起動中...</p>
+        <button
+          onClick={() => setIsMounted(true)}
+          className="text-xs text-emerald-300 underline font-medium"
+        >
+          画面が進まない場合はここをタップ
+        </button>
+      </div>
+    );
+  }
+  if (!currentUser) return (
+    <WorkerGate 
+      farmId={workerTenantId || requestedFarmId || undefined}
+      onLogin={(user) => {
+        setCurrentUser(user);
+        if (user.user_id) {
+          setWorkerTenantId(user.user_id);
+          try { localStorage.setItem('agri_owner_id', user.user_id); } catch (e) {}
+        }
+      }} 
+    />
+  );
 
   return (
     <main className="min-h-screen bg-emerald-950 text-slate-100 font-sans pb-32">
@@ -923,7 +1219,10 @@ export default function WorkEntryPage() {
           <div className="flex items-center gap-1 flex-shrink-0">
             {currentUser.role === 'admin' && (
               <button
-                onClick={() => router.push('/admin/cultivations')}
+                onClick={() => {
+                  const targetFarm = workerTenantId || requestedFarmId;
+                  router.push(targetFarm ? `/admin/cultivations?farm=${targetFarm}` : '/admin/cultivations');
+                }}
                 className="flex items-center gap-1 px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 hover:text-white border border-emerald-500/40 rounded-lg text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"
                 title="農業司令塔へ"
               >
@@ -932,7 +1231,10 @@ export default function WorkEntryPage() {
               </button>
             )}
             <button
-              onClick={() => router.push('/portal')}
+              onClick={() => {
+                const targetFarm = workerTenantId || requestedFarmId;
+                router.push(targetFarm ? `/portal/${targetFarm}` : '/portal');
+              }}
               className="flex items-center gap-1 px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 hover:text-white border border-blue-500/40 rounded-lg text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"
               title="ポータル画面へ戻る"
             >
@@ -955,7 +1257,6 @@ export default function WorkEntryPage() {
                 <option key={l.code} value={l.code}>{l.flag} {l.code.toUpperCase()}</option>
               ))}
             </select>
-            <PwaInstallPrompt />
             <button onClick={handleLogout} className="p-1 bg-emerald-900/80 text-emerald-400 rounded-lg hover:bg-emerald-800 transition-colors" title="ログアウト">
               <LogOut className="w-3.5 h-3.5" />
             </button>
@@ -993,10 +1294,83 @@ export default function WorkEntryPage() {
           </button>
         </div>
         
-        {/* GPS住所の表示 */}
-        <div className="max-w-md w-full mx-auto flex items-center justify-center gap-1 text-[10px] font-bold text-emerald-400 truncate">
-          <MapPin className="w-2.5 h-2.5 flex-shrink-0" />
-          <span className="truncate">{currentAddress}</span>
+        {/* 📍 GPS位置情報 コントロール ＆ ステータスバー */}
+        <div className="max-w-md w-full mx-auto flex items-center justify-between gap-2 px-2 py-1 bg-emerald-950/70 border border-emerald-800/60 rounded-xl text-[10px] font-bold">
+          
+          {/* 左側：ON/OFF スイッチ */}
+          <button
+            type="button"
+            onClick={toggleGps}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg font-black transition-all cursor-pointer select-none shrink-0 ${
+              isGpsEnabled 
+                ? 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-500' 
+                : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-white'
+            }`}
+            title={isGpsEnabled ? "GPS ON" : "GPS OFF"}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${isGpsEnabled ? 'bg-emerald-200 animate-pulse' : 'bg-slate-500'}`} />
+            <span>GPS {isGpsEnabled ? 'ON' : 'OFF'}</span>
+          </button>
+
+          {/* 中央：現在地住所またはステータス表示 */}
+          <div className="flex-1 min-w-0 flex items-center justify-center gap-1 truncate text-center">
+            {!isGpsEnabled ? (
+              <span className="text-slate-400 truncate">{t('gpsManualOff', language)}</span>
+            ) : isGpsLoading ? (
+              <span className="text-amber-300 flex items-center gap-1 truncate">
+                <RefreshCw className="w-2.5 h-2.5 animate-spin shrink-0 text-amber-400" />
+                <span>{t('gpsMeasuring', language)}</span>
+              </span>
+            ) : gpsPermissionState === 'denied' ? (
+              <span className="text-amber-300 flex items-center gap-1 truncate">
+                <AlertTriangle className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                <span className="truncate">{t('gpsBlocked', language)}</span>
+              </span>
+            ) : (
+              <span className="text-emerald-300 flex items-center gap-1 truncate">
+                <MapPin className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                <span className="truncate">{currentAddress || t('gpsAcquiring', language)}</span>
+              </span>
+            )}
+          </div>
+
+          {/* 右側：再取得ボタン または 設定ガイドボタン */}
+          <div className="flex items-center gap-1 shrink-0">
+            {isGpsEnabled && (
+              <>
+                {gpsPermissionState === 'denied' ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowGpsGuideModal(true)}
+                    className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[10px] font-black transition-all cursor-pointer whitespace-nowrap"
+                  >
+                    <span>{t('gpsSettingsBtn', language)}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => refreshGpsPosition(true)}
+                    disabled={isGpsLoading}
+                    className="p-1 hover:bg-emerald-800 text-emerald-300 hover:text-white rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                    title={t('gpsRefreshTooltip', language)}
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isGpsLoading ? 'animate-spin' : ''}`} />
+                  </button>
+                )}
+                
+                {/* 常時開けるヘルプアイコン */}
+                <button
+                  type="button"
+                  onClick={() => setShowGpsGuideModal(true)}
+                  className="p-1 text-emerald-400/60 hover:text-emerald-300 rounded-lg transition-colors cursor-pointer"
+                  title={t('gpsHelpTooltip', language)}
+                >
+                  <HelpCircle className="w-3 h-3" />
+                </button>
+              </>
+            )}
+          </div>
+
         </div>
       </header>
 
@@ -1025,7 +1399,10 @@ export default function WorkEntryPage() {
 
               {currentUser?.role === 'admin' && (
                 <button
-                  onClick={() => router.push('/admin/cultivations')}
+                  onClick={() => {
+                    const targetFarm = workerTenantId || requestedFarmId;
+                    router.push(targetFarm ? `/admin/cultivations?farm=${targetFarm}` : '/admin/cultivations');
+                  }}
                   className="text-[10px] text-emerald-300 hover:text-white bg-emerald-800/60 px-2 py-1 rounded-lg border border-emerald-700 font-bold transition-all"
                 >
                   {t('detailBtn', language)}
@@ -1084,7 +1461,7 @@ export default function WorkEntryPage() {
               {attendanceLog && attendanceLog.weather && (
                 <div className="flex items-center justify-center gap-2 text-emerald-200 text-sm font-bold bg-emerald-950/50 py-2 rounded-xl">
                   {attendanceLog.weather === '晴れ' ? <Sun className="w-4 h-4 text-amber-400" /> : <CloudRain className="w-4 h-4 text-blue-400" />}
-                  {t('weatherInfo', language)}: {attendanceLog.weather} ({attendanceLog.temperature}℃)
+                  {t('weatherInfo', language)}: {t(attendanceLog.weather, language) || attendanceLog.weather} ({attendanceLog.temperature}℃)
                 </div>
               )}
             </div>
@@ -1147,7 +1524,7 @@ export default function WorkEntryPage() {
               )}
               {overtimeStatus === 'rejected' && (
                 <div className="w-full py-3 bg-rose-500/20 text-rose-400 font-bold rounded-xl text-center border border-rose-500/30 flex items-center justify-center gap-2">
-                  <AlertCircle className="w-5 h-5" /> 【本日】残業申請 却下
+                  <AlertCircle className="w-5 h-5" /> {t('overtimeRejected', language)}
                 </div>
               )}
               
@@ -1158,7 +1535,7 @@ export default function WorkEntryPage() {
                 }}
                 className="w-full py-4 bg-amber-600 hover:bg-amber-500 text-white font-black rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
               >
-                <Clock className="w-5 h-5" /> 残業を申請する
+                <Clock className="w-5 h-5" /> {t('applyOvertimeBtn', language)}
               </button>
             </div>
 
@@ -1233,33 +1610,60 @@ export default function WorkEntryPage() {
                   <CheckCircle2 className="w-4 h-4" /> {t('todayTasksHeader', language)} ({tasks.length})
                 </h3>
                 <div className="space-y-2.5">
-                  {tasks.map(tTask => (
-                    <div 
-                      key={tTask.id} 
-                      onClick={() => setSelectedTaskDetail(tTask)}
-                      className="bg-emerald-900/50 hover:bg-emerald-900/80 border border-emerald-800/70 hover:border-emerald-500/50 p-3.5 rounded-2xl flex items-center justify-between gap-2 cursor-pointer transition-all active:scale-[0.99] shadow-sm group"
-                    >
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <div className="text-white font-black text-sm truncate flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                          <span>{getTranslatedWorkType(tTask.work_type || tTask.task_title || '一般作業', language)}</span>
+                  {tasks.map(tTask => {
+                    const taskMemo = tTask.notes || tTask.memo || '';
+                    const isLeader = taskMemo.includes('【👑現場責任者】');
+                    const leaderMatch = taskMemo.match(/【👑現場リーダー:\s*([^】]+)】/);
+                    const otherLeaderName = leaderMatch ? leaderMatch[1] : null;
+                    const cleanNote = taskMemo
+                      .replace(/【👑現場責任者】\n?/, '')
+                      .replace(/【👑現場リーダー:[^】]+】\n?/, '')
+                      .trim();
+
+                    return (
+                      <div 
+                        key={tTask.id} 
+                        onClick={() => setSelectedTaskDetail(tTask)}
+                        className={`border p-3.5 rounded-2xl flex items-center justify-between gap-2 cursor-pointer transition-all active:scale-[0.99] shadow-sm group ${
+                          isLeader 
+                            ? 'bg-gradient-to-r from-amber-950/70 to-emerald-950/80 hover:from-amber-950/90 hover:to-emerald-950 border-amber-500/60 ring-1 ring-amber-500/30' 
+                            : 'bg-emerald-900/50 hover:bg-emerald-900/80 border-emerald-800/70 hover:border-emerald-500/50'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="text-white font-black text-sm truncate flex items-center gap-2 flex-wrap">
+                            <span className={`w-2 h-2 rounded-full ${isLeader ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
+                            <span>{getTranslatedWorkType(tTask.work_type || tTask.task_title || '一般作業', language)}</span>
+                            {isLeader && (
+                              <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 text-[10px] font-black rounded-full flex items-center gap-1 shadow-xs">
+                                <Crown className="w-3 h-3 fill-amber-950" />
+                                <span>{t('task_leaderCrown', language)}</span>
+                              </span>
+                            )}
+                            {otherLeaderName && (
+                              <span className="px-1.5 py-0.5 bg-amber-900/60 text-amber-300 text-[10px] font-bold rounded-md flex items-center gap-0.5 border border-amber-700/50">
+                                <Crown className="w-2.5 h-2.5 text-amber-400" />
+                                <span>{t('task_leaderLabel', language)}: {otherLeaderName}</span>
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 text-xs font-bold text-emerald-300/80">
+                            {tTask.crops?.name && <span>🌱 {getTranslatedName(tTask.crops, language)}</span>}
+                            {tTask.fields?.name && <span>📍 {getTranslatedName(tTask.fields, language)}</span>}
+                          </div>
+                          {cleanNote && (
+                            <p className="text-[11px] text-emerald-200/60 truncate pl-4">
+                              💬 {language === 'ja' ? cleanNote : (dynamicTranslations[cleanNote] || cleanNote)}
+                            </p>
+                          )}
                         </div>
-                        <div className="flex items-center gap-3 text-xs font-bold text-emerald-300/80">
-                          {tTask.crops?.name && <span>🌱 {getTranslatedName(tTask.crops, language)}</span>}
-                          {tTask.fields?.name && <span>📍 {getTranslatedName(tTask.fields, language)}</span>}
+                        <div className="text-xs font-bold text-emerald-400 group-hover:text-white flex items-center gap-1 bg-emerald-950/60 px-2.5 py-1.5 rounded-xl border border-emerald-800 flex-shrink-0">
+                          <span>{t('detail', language)}</span>
+                          <ArrowRight className="w-3 h-3" />
                         </div>
-                        {tTask.notes && (
-                          <p className="text-[11px] text-emerald-200/60 truncate pl-4">
-                            💬 {tTask.notes}
-                          </p>
-                        )}
                       </div>
-                      <div className="text-xs font-bold text-emerald-400 group-hover:text-white flex items-center gap-1 bg-emerald-950/60 px-2.5 py-1.5 rounded-xl border border-emerald-800 flex-shrink-0">
-                        <span>{t('detail', language)}</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1288,35 +1692,158 @@ export default function WorkEntryPage() {
                 </select>
               </section>
 
-              <div className="grid grid-cols-2 gap-4">
-                <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2 mb-2.5"><Sprout className="w-4 h-4" />{t('crop', language)}</h2>
-                  <div className="flex flex-col gap-2">
-                    {crops.map(c => (
-                      <button key={c.id} type="button" onClick={() => setSelectedCrop(c.name)} className={`py-2 px-1 rounded-lg font-bold text-xs border ${selectedCrop === c.name ? 'bg-emerald-500 text-emerald-950 border-emerald-300' : 'bg-emerald-950/60 text-slate-300 border-emerald-800'}`}>{getTranslatedName(c, language)}</button>
-                    ))}
+              {/* 🌱 作目選択セクション (アグリハブ型 横3〜4列グリッド ＆ アイコン表示) */}
+              <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
+                    <Sprout className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>{t('crop', language)}</span>
+                  </h2>
+                  
+                  {/* 選択中の作目バッジ */}
+                  {selectedCrop && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-500/20 border border-emerald-500/40 rounded-full text-xs font-black text-emerald-300">
+                      <span>{getCropEmoji(selectedCrop)}</span>
+                      <span className="truncate max-w-[120px]">
+                        {getTranslatedName(crops.find(c => c.name === selectedCrop) || { name: selectedCrop }, language)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCrop('')}
+                        className="text-emerald-400 hover:text-white ml-0.5 cursor-pointer"
+                        title="選択解除"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* 作目が多数ある場合の検索フィルター */}
+                {crops.length > 9 && (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={cropSearchQuery}
+                      onChange={(e) => setCropSearchQuery(e.target.value)}
+                      placeholder={t('searchCropPlaceholder', language)}
+                      className="w-full bg-emerald-950/60 border border-emerald-800/60 text-white rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-emerald-500 placeholder:text-emerald-500/50"
+                    />
+                    {cropSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setCropSearchQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
-                </section>
-                <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2 mb-2.5"><Sparkles className="w-4 h-4" />{t('workType', language)}</h2>
-                  <div className="flex flex-col gap-2">
-                    {workTypes.map(w => (
-                      <button key={`default-${w}`} type="button" onClick={() => setWorkType(w)} className={`py-2 px-1 rounded-lg font-bold text-xs border transition-all ${workType === w ? 'bg-amber-500 text-amber-950 border-amber-300' : 'bg-emerald-950/60 text-slate-300 border-emerald-800'}`}>{t(w, language)}</button>
-                    ))}
-                    {customWorkTypes.map(cw => (
-                      <div key={`custom-${cw}`} className="relative flex group">
-                        <button 
-                          type="button" 
-                          onClick={() => setWorkType(cw)} 
-                          className={`flex-1 py-2 px-1 rounded-lg font-bold text-xs border transition-all flex items-center justify-center gap-1 ${workType === cw ? 'bg-amber-500 text-amber-950 border-amber-300' : 'bg-emerald-900/20 text-emerald-200 border-emerald-700/50'}`}
+                )}
+
+                {/* 横3〜4列の均等グリッド配置 */}
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {crops
+                    .filter(c => {
+                      if (!cropSearchQuery.trim()) return true;
+                      const q = cropSearchQuery.toLowerCase();
+                      const name = (c.name || '').toLowerCase();
+                      const trans = getTranslatedName(c, language).toLowerCase();
+                      return name.includes(q) || trans.includes(q);
+                    })
+                    .map(c => {
+                      const isSelected = selectedCrop === c.name;
+                      const emoji = getCropEmoji(c.name);
+                      const translatedName = getTranslatedName(c, language);
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setSelectedCrop(isSelected ? '' : c.name)}
+                          className={`min-h-[46px] p-2 rounded-xl font-black text-xs transition-all flex flex-col items-center justify-center text-center gap-0.5 select-none active:scale-95 cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-500 text-emerald-950 border-2 border-emerald-300 shadow-md ring-2 ring-emerald-400/40 scale-[1.02]'
+                              : 'bg-emerald-950/70 hover:bg-emerald-900/80 text-slate-200 border border-emerald-800/60 hover:border-emerald-600'
+                          }`}
                         >
-                          <Sparkles className="w-3 h-3 text-amber-500/70" /> {cw}
+                          <span className="text-base leading-none">{emoji}</span>
+                          <span className="truncate max-w-full leading-tight">{translatedName}</span>
+                        </button>
+                      );
+                    })}
+                </div>
+              </section>
+
+              {/* ✨ 作業内容選択セクション (アグリハブ型 横3〜4列グリッド ＆ ピクトグラム表示) */}
+              <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>{t('workType', language)}</span>
+                  </h2>
+
+                  {/* 選択中の作業バッジ */}
+                  {workType && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-500/20 border border-amber-500/40 rounded-full text-xs font-black text-amber-300">
+                      <span>{getWorkTypeEmoji(workType)}</span>
+                      <span className="truncate max-w-[120px]">{getTranslatedWorkType(workType, language) || t(workType, language)}</span>
+                      <button
+                        type="button"
+                        onClick={() => setWorkType('')}
+                        className="text-amber-400 hover:text-white ml-0.5 cursor-pointer"
+                        title="選択解除"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* 横3〜4列の均等グリッド配置 */}
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {/* 標準作業 */}
+                  {workTypes.map(w => {
+                    const isSelected = workType === w;
+                    const emoji = getWorkTypeEmoji(w);
+                    return (
+                      <button
+                        key={`default-${w}`}
+                        type="button"
+                        onClick={() => setWorkType(isSelected ? '' : w)}
+                        className={`min-h-[46px] p-2 rounded-xl font-black text-xs transition-all flex flex-col items-center justify-center text-center gap-0.5 select-none active:scale-95 cursor-pointer ${
+                          isSelected
+                            ? 'bg-amber-500 text-amber-950 border-2 border-amber-300 shadow-md ring-2 ring-amber-400/40 scale-[1.02]'
+                            : 'bg-emerald-950/70 hover:bg-emerald-900/80 text-slate-200 border border-emerald-800/60 hover:border-emerald-600'
+                        }`}
+                      >
+                        <span className="text-base leading-none">{emoji}</span>
+                        <span className="truncate max-w-full leading-tight">{getTranslatedWorkType(w, language) || t(w, language)}</span>
+                      </button>
+                    );
+                  })}
+
+                  {/* 独自作業 */}
+                  {customWorkTypes.map(cw => {
+                    const isSelected = workType === cw;
+                    return (
+                      <div key={`custom-${cw}`} className="relative group">
+                        <button
+                          type="button"
+                          onClick={() => setWorkType(isSelected ? '' : cw)}
+                          className={`w-full min-h-[46px] p-2 rounded-xl font-black text-xs transition-all flex flex-col items-center justify-center text-center gap-0.5 select-none active:scale-95 cursor-pointer ${
+                            isSelected
+                              ? 'bg-amber-500 text-amber-950 border-2 border-amber-300 shadow-md ring-2 ring-amber-400/40 scale-[1.02]'
+                              : 'bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-200 border border-emerald-700/60'
+                          }`}
+                        >
+                          <span className="text-base leading-none">{getWorkTypeEmoji(cw)}</span>
+                          <span className="truncate max-w-full leading-tight">{getTranslatedWorkType(cw, language) || t(cw, language) || cw}</span>
                         </button>
                         <button
                           type="button"
                           onClick={async (e) => {
                             e.stopPropagation();
-                            if (confirm(`独自作業「${cw}」をリストから削除しますか？\n※この作業で保存された過去の記録は『片付け・メンテ』に名称統合されます。`)) {
+                            if (confirm(`${t('deleteConfirmPrefix', language)}${getTranslatedWorkType(cw, language) || cw}${t('deleteConfirmSuffix', language)}`)) {
                               setIsSubmitting(true);
                               try {
                                 const { data: farmWorkers } = await supabase.from('workers').select('id').eq('user_id', workerProfile?.user_id);
@@ -1325,61 +1852,63 @@ export default function WorkEntryPage() {
                                 setCustomWorkTypes(customWorkTypes.filter(t => t !== cw));
                                 if (workType === cw) setWorkType('');
                               } catch(err) {
-                                alert('削除に失敗しました');
+                                alert(t('deleteFailed', language));
                               } finally {
                                 setIsSubmitting(false);
                               }
                             }
                           }}
-                          className="absolute right-1 top-1/2 -translate-y-1/2 p-2 text-emerald-500 hover:text-red-400 hover:bg-red-500/10 rounded-full transition-colors opacity-70 hover:opacity-100"
-                          title="この独自作業を削除"
+                          className="absolute -top-1.5 -right-1.5 p-1 bg-slate-800 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-full shadow border border-slate-600 transition-colors opacity-80 hover:opacity-100 cursor-pointer"
+                          title={t('deleteWorkTypeTitle', language)}
                         >
                           <X className="w-3 h-3" />
                         </button>
                       </div>
-                    ))}
+                    );
+                  })}
+
+                  {/* ＋ 新規作業追加タイル */}
+                  <button
+                    key="add-new-btn"
+                    type="button"
+                    onClick={() => setIsAddingWorkType(!isAddingWorkType)}
+                    className="min-h-[46px] p-2 rounded-xl font-black text-xs border-2 border-dashed border-emerald-500/50 text-emerald-300 bg-emerald-950/40 hover:bg-emerald-900/40 flex flex-col items-center justify-center text-center gap-0.5 transition-all cursor-pointer active:scale-95"
+                  >
+                    <Plus className="w-4 h-4 text-emerald-400" />
+                    <span className="truncate max-w-full leading-tight">{t('addNewWorkType', language)}</span>
+                  </button>
+                </div>
+
+                {/* 新規作業追加入力欄 */}
+                {isAddingWorkType && (
+                  <div className="pt-2 flex gap-2 animate-in slide-in-from-top-2">
+                    <input
+                      type="text"
+                      value={newWorkType}
+                      onChange={(e) => setNewWorkType(e.target.value)}
+                      placeholder={t('enterWorkTypePlaceholder', language)}
+                      className="flex-1 bg-emerald-950/80 border border-emerald-700 text-white rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-emerald-500"
+                    />
                     <button
-                      key="add-new-btn"
                       type="button"
-                      onClick={() => setIsAddingWorkType(!isAddingWorkType)}
-                      className="py-2 px-1 rounded-lg font-bold text-xs border border-dashed border-emerald-500/50 text-emerald-400 hover:bg-emerald-900/40 flex items-center justify-center gap-1 transition-all"
+                      onClick={() => {
+                        const val = newWorkType.trim();
+                        if (val) {
+                          setWorkType(val);
+                          if (!customWorkTypes.includes(val) && !workTypes.includes(val)) {
+                            setCustomWorkTypes([...customWorkTypes, val]);
+                          }
+                          setNewWorkType('');
+                          setIsAddingWorkType(false);
+                        }
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl px-4 py-2 text-xs transition-colors cursor-pointer shrink-0 shadow"
                     >
-                      <Plus className="w-3 h-3" /> {t('addNewWorkType', language)}
+                      {t('confirmWorkType', language)}
                     </button>
                   </div>
-
-                  <div>
-                    {isAddingWorkType && (
-                      <div className="mt-3 flex gap-2 animate-in slide-in-from-top-2">
-                        <input
-                          type="text"
-                          value={newWorkType}
-                          onChange={(e) => setNewWorkType(e.target.value)}
-                          placeholder={t('enterWorkTypePlaceholder', language)}
-                          className="flex-1 bg-emerald-950/60 border border-emerald-800/60 text-white rounded-lg px-2 py-1.5 text-xs font-bold focus:outline-none focus:border-emerald-500"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const val = newWorkType.trim();
-                            if (val) {
-                              setWorkType(val);
-                              if (!customWorkTypes.includes(val) && !workTypes.includes(val)) {
-                                setCustomWorkTypes([...customWorkTypes, val]);
-                              }
-                              setNewWorkType('');
-                              setIsAddingWorkType(false);
-                            }
-                          }}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg px-3 py-1.5 text-xs transition-colors"
-                        >
-                          {t('confirmWorkType', language)}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </section>
-              </div>
+                )}
+              </section>
 
               <section className="bg-slate-900/40 p-4 rounded-2xl border border-slate-700/50 shadow-sm space-y-4">
                 <div>
@@ -1436,7 +1965,7 @@ export default function WorkEntryPage() {
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file && file.size > 50 * 1024 * 1024) {
-                          alert('動画のサイズは50MB以下にしてください。');
+                          alert(t('videoSizeLimitAlert', language));
                           e.target.value = '';
                           setVideoFile(null);
                         } else {
@@ -1499,14 +2028,12 @@ export default function WorkEntryPage() {
             {(() => {
               // 週間フル7日間の日付リストを生成 (モーダル用、calendarWeekOffsetと連動)
               const modalWeekDaysList = Array.from({ length: 7 }).map((_, idx) => {
-                const d = new Date();
-                d.setDate(d.getDate() + (calendarWeekOffset * 7) + idx);
-                const dateStr = d.toISOString().split('T')[0];
-                const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+                const { dateStr, dateObj } = getJSTDateWithOffset((calendarWeekOffset * 7) + idx);
+                const dayOfWeek = getWeekdayName(dateObj.getDay(), language);
                 
                 // 相対日数
                 const totalDiff = (calendarWeekOffset * 7) + idx;
-                const label = totalDiff === 0 ? '今日' : totalDiff === 1 ? '明日' : totalDiff === 2 ? '明後日' : `${d.getMonth() + 1}/${d.getDate()}`;
+                const label = totalDiff === 0 ? t('todayShort', language) : totalDiff === 1 ? t('tomorrowShort', language) : totalDiff === 2 ? t('dayAfterTomorrowShort', language) : `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
                 
                 const dayPendingOrders = allB2bOrders.filter(o => o.delivery_date === dateStr && o.status === 'pending');
                 const dayAllOrders = allB2bOrders.filter(o => o.delivery_date === dateStr);
@@ -1515,7 +2042,7 @@ export default function WorkEntryPage() {
                   dateStr,
                   dayOfWeek,
                   label,
-                  monthDate: `${d.getMonth() + 1}/${d.getDate()}`,
+                  monthDate: `${dateObj.getMonth() + 1}/${dateObj.getDate()}`,
                   pendingCount: dayPendingOrders.length,
                   allCount: dayAllOrders.length,
                   orders: dayAllOrders
@@ -1524,11 +2051,9 @@ export default function WorkEntryPage() {
 
               // メイン画面の直近4日間ピル (スクロールなしでピタッと美しく収める)
               const topFourDays = Array.from({ length: 4 }).map((_, idx) => {
-                const d = new Date();
-                d.setDate(d.getDate() + idx);
-                const dateStr = d.toISOString().split('T')[0];
-                const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
-                const label = idx === 0 ? '今日' : idx === 1 ? '明日' : idx === 2 ? '明後日' : `${d.getMonth() + 1}/${d.getDate()}`;
+                const { dateStr, dateObj } = getJSTDateWithOffset(idx);
+                const dayOfWeek = getWeekdayName(dateObj.getDay(), language);
+                const label = idx === 0 ? t('todayShort', language) : idx === 1 ? t('tomorrowShort', language) : idx === 2 ? t('dayAfterTomorrowShort', language) : t('threeDaysLaterShort', language);
                 
                 const dayPendingOrders = allB2bOrders.filter(o => o.delivery_date === dateStr && o.status === 'pending');
                 const dayAllOrders = allB2bOrders.filter(o => o.delivery_date === dateStr);
@@ -1537,7 +2062,7 @@ export default function WorkEntryPage() {
                   dateStr,
                   dayOfWeek,
                   label,
-                  monthDate: `${d.getMonth() + 1}/${d.getDate()}`,
+                  monthDate: `${dateObj.getMonth() + 1}/${dateObj.getDate()}`,
                   pendingCount: dayPendingOrders.length,
                   allCount: dayAllOrders.length,
                   orders: dayAllOrders
@@ -1579,10 +2104,10 @@ export default function WorkEntryPage() {
                     <div>
                       <h2 className="text-sm sm:text-base font-black text-emerald-300 flex items-center gap-2">
                         <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
-                        <span>📅 配達・収穫予定</span>
+                        <span>{t('deliveryScheduleTitle', language)}</span>
                       </h2>
                       <p className="text-[10px] sm:text-[11px] font-bold text-emerald-300/70 mt-0.5">
-                        明日・明後日の注文量と収穫目標
+                        {t('deliveryScheduleSub', language)}
                       </p>
                     </div>
 
@@ -1591,7 +2116,7 @@ export default function WorkEntryPage() {
                       onClick={() => setShowWeekCalendarModal(true)}
                       className="px-3 py-2 bg-emerald-700/90 hover:bg-emerald-600 active:scale-95 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-xs shrink-0 border border-emerald-600/50"
                     >
-                      <span>📊 注文カレンダー</span>
+                      <span>{t('orderCalendarBtn', language)}</span>
                     </button>
                   </div>
 
@@ -1620,7 +2145,7 @@ export default function WorkEntryPage() {
                             <span className={`text-[10px] px-2 py-0.2 rounded-full font-black mt-0.5 ${
                               isSelected ? 'bg-emerald-950 text-emerald-300' : 'bg-rose-500 text-white shadow-xs'
                             }`}>
-                              {item.pendingCount}件
+                              {item.pendingCount}{t('orderCountUnit', language)}
                             </span>
                           ) : (
                             <span className="text-[10px] text-emerald-500/40 mt-0.5 font-bold">
@@ -1638,23 +2163,23 @@ export default function WorkEntryPage() {
                       <div className="text-xs font-black text-emerald-300 flex items-center gap-1.5">
                         <span>🌾</span>
                         <span>
-                          {currentSelectedDay.label}（{currentSelectedDay.monthDate} {currentSelectedDay.dayOfWeek}）の総収穫・出荷目標
+                          {currentSelectedDay.label}（{currentSelectedDay.monthDate} {currentSelectedDay.dayOfWeek}）{t('harvestTargetTitleSuffix', language)}
                         </span>
                       </div>
                       <span className="text-[11px] font-bold text-emerald-400/80">
-                        {selectedOrders.length}件の注文
+                        {selectedOrders.length} {t('orderCountUnit', language)}
                       </span>
                     </div>
 
                     {Object.keys(harvestSummary).length === 0 ? (
                       <div className="text-center py-3 text-emerald-400/50 text-xs font-bold">
-                        この日の注文予定はありません
+                        {t('noOrdersForThisDay', language)}
                       </div>
                     ) : (
                       <div className="flex flex-wrap gap-2 pt-1">
                         {Object.values(harvestSummary).map((sum, idx) => (
                           <div 
-                            key={idx}
+                            key={idx} 
                             className="bg-emerald-900/70 border border-emerald-600/50 px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-xs"
                           >
                             <span className="font-black text-white text-xs">
@@ -1675,7 +2200,7 @@ export default function WorkEntryPage() {
                       <div className="text-center py-6 bg-emerald-950/40 rounded-2xl border border-emerald-900/50">
                         <CheckCircle2 className="w-7 h-7 text-emerald-500/40 mx-auto mb-1.5" />
                         <div className="text-emerald-400/70 font-bold text-xs">
-                          {currentSelectedDay.label}（{currentSelectedDay.monthDate}）の配達予定はありません
+                          {currentSelectedDay.label}（{currentSelectedDay.monthDate}）{t('noDeliveryForThisDaySuffix', language)}
                         </div>
                       </div>
                     ) : (
@@ -1695,7 +2220,7 @@ export default function WorkEntryPage() {
                                 <span className="font-black text-white text-sm">{order.customer?.name}</span>
                                 {isDelivered && (
                                   <span className="bg-emerald-900/80 text-emerald-300 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-700">
-                                    ✅ 納品済
+                                    {t('deliveredBadge', language)}
                                   </span>
                                 )}
                               </div>
@@ -1728,7 +2253,7 @@ export default function WorkEntryPage() {
                             <div className="flex items-center gap-2">
                               <Calendar className="w-5 h-5 text-emerald-400" />
                               <h3 className="text-base sm:text-lg font-black text-white">
-                                注文・収穫カレンダー（直近1ヶ月対応）
+                                {t('orderCalendarModalTitle', language)}
                               </h3>
                             </div>
                             <button
@@ -1749,7 +2274,7 @@ export default function WorkEntryPage() {
                                 disabled={calendarWeekOffset === 0}
                                 className="px-3 py-1.5 bg-emerald-900/80 hover:bg-emerald-800 text-emerald-200 rounded-xl text-xs font-black transition-colors disabled:opacity-30 disabled:pointer-events-none"
                               >
-                                ◀ 前の週
+                                {t('prevWeekBtn', language)}
                               </button>
                               
                               <span className="text-xs font-black text-emerald-300 px-1">
@@ -1762,18 +2287,18 @@ export default function WorkEntryPage() {
                                 disabled={calendarWeekOffset >= 4}
                                 className="px-3 py-1.5 bg-emerald-900/80 hover:bg-emerald-800 text-emerald-200 rounded-xl text-xs font-black transition-colors disabled:opacity-30 disabled:pointer-events-none"
                               >
-                                次の週 ▶
+                                {t('nextWeekBtn', language)}
                               </button>
                             </div>
 
                             {/* 1ヶ月クイック週選択ピル */}
                             <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
                               {[
-                                { offset: 0, label: '今週' },
-                                { offset: 1, label: '来週 (+1)' },
-                                { offset: 2, label: '再来週 (+2)' },
-                                { offset: 3, label: '3週後 (+3)' },
-                                { offset: 4, label: '4週後 (+4)' }
+                                { offset: 0, label: t('weekPillThisWeek', language) },
+                                { offset: 1, label: t('weekPillNextWeek', language) },
+                                { offset: 2, label: t('weekPillTwoWeeks', language) },
+                                { offset: 3, label: t('weekPillThreeWeeks', language) },
+                                { offset: 4, label: t('weekPillFourWeeks', language) }
                               ].map(pill => (
                                 <button
                                   key={pill.offset}
@@ -1838,7 +2363,7 @@ export default function WorkEntryPage() {
                                       {item.monthDate} ({item.dayOfWeek})
                                     </div>
                                     <div className="text-[10px] mt-0.5 font-bold opacity-90">
-                                      {item.pendingCount > 0 ? `未納品: ${item.pendingCount}件` : '注文なし'}
+                                      {item.pendingCount > 0 ? `${t('unshippedLabel', language)}: ${item.pendingCount}${t('orderCountUnit', language)}` : t('noOrdersShort', language)}
                                     </div>
                                   </div>
 
@@ -1848,7 +2373,7 @@ export default function WorkEntryPage() {
                                     {Object.keys(daySum).length > 0 && (
                                       <div className="bg-emerald-900/80 border border-emerald-600/50 p-2 rounded-xl space-y-1 shadow-xs">
                                         <div className="text-[10px] font-black text-emerald-300 flex items-center gap-1">
-                                          <span>🌾</span> 収穫目標:
+                                          <span>🌾</span> {t('harvestTargetLabel', language)}
                                         </div>
                                         <div className="space-y-1">
                                           {Object.values(daySum).map((s, sIdx) => (
@@ -1864,12 +2389,12 @@ export default function WorkEntryPage() {
                                     {/* 📦 顧客別注文カード */}
                                     {item.orders.length === 0 ? (
                                       <div className="text-center py-8 text-emerald-500/30 text-[11px] font-bold">
-                                        予定なし
+                                        {t('noScheduleLabel', language)}
                                       </div>
                                     ) : (
                                       <div className="space-y-1.5">
                                         <div className="text-[10px] font-bold text-emerald-400/80 px-1">
-                                          注文一覧 ({item.orders.length}件):
+                                          {t('orderListTitle', language)} ({item.orders.length}):
                                         </div>
                                         {item.orders.map(o => {
                                           const isDelivered = o.status === 'delivered' || o.status === 'invoiced';
@@ -1885,9 +2410,9 @@ export default function WorkEntryPage() {
                                               <div className="flex items-center justify-between font-black text-white">
                                                 <span className="truncate">{o.customer?.name}</span>
                                                 {isDelivered ? (
-                                                  <span className="text-[9px] text-emerald-400 bg-emerald-950 px-1.5 py-0.2 rounded">済</span>
+                                                  <span className="text-[9px] text-emerald-400 bg-emerald-950 px-1.5 py-0.2 rounded">{t('doneShort', language)}</span>
                                                 ) : (
-                                                  <span className="text-[9px] text-rose-400 bg-rose-950/80 px-1.5 py-0.2 rounded">未</span>
+                                                  <span className="text-[9px] text-rose-400 bg-rose-950/80 px-1.5 py-0.2 rounded">{t('undoneShort', language)}</span>
                                                 )}
                                               </div>
                                               <div className="text-[10px] text-emerald-300/80 font-bold truncate">
@@ -1914,7 +2439,7 @@ export default function WorkEntryPage() {
                                           : 'bg-emerald-800/60 hover:bg-emerald-700 text-emerald-200'
                                       }`}
                                     >
-                                      {isSelected ? '✓ 選択中' : 'この日を開く'}
+                                      {isSelected ? t('currentlySelected', language) : t('openThisDay', language)}
                                     </button>
                                   </div>
                                 </div>
@@ -1926,104 +2451,18 @@ export default function WorkEntryPage() {
                         {/* モーダルフッター */}
                         <div className="p-4 border-t border-emerald-800/80 bg-emerald-900/40 flex items-center justify-between">
                           <p className="text-xs font-bold text-emerald-300/70 hidden sm:block">
-                            💡 各週を切り替えて直近1ヶ月先までの注文を確認でき、「この日を開く」で詳細へジャンプできます。
+                            {t('orderCalendarGuideNote', language)}
                           </p>
                           <button
                             onClick={() => setShowWeekCalendarModal(false)}
                             className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black rounded-xl text-xs transition-all shadow-md ml-auto"
                           >
-                            閉じる
+                            {t('close', language)}
                           </button>
                         </div>
                       </div>
                     </div>
                   )}
-
-                  {/* 🌾 選択日の総収穫量（目標）サマリーカード */}
-                  <div className="bg-emerald-950/80 p-4 rounded-2xl border border-emerald-700/50 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs font-black text-emerald-300 flex items-center gap-1.5">
-                        <span>🌾</span>
-                        <span>
-                          {currentSelectedDay.label}（{currentSelectedDay.monthDate} {currentSelectedDay.dayOfWeek}）の総収穫・出荷目標
-                        </span>
-                      </div>
-                      <span className="text-[11px] font-bold text-emerald-400/80">
-                        {selectedOrders.length}件の注文
-                      </span>
-                    </div>
-
-                    {Object.keys(harvestSummary).length === 0 ? (
-                      <div className="text-center py-3 text-emerald-400/50 text-xs font-bold">
-                        この日の注文予定はありません
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {Object.values(harvestSummary).map((sum, idx) => (
-                          <div 
-                            key={idx}
-                            className="bg-emerald-900/70 border border-emerald-600/50 px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-xs"
-                          >
-                            <span className="font-black text-white text-xs">
-                              {getTranslatedName(sum.rawCrop, language)}
-                            </span>
-                            <span className="font-black text-emerald-300 text-sm bg-emerald-950 px-2 py-0.5 rounded-lg">
-                              {sum.quantity} {getTranslatedUnit(sum.unit, language)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 該当日の注文詳細リスト */}
-                  <div className="space-y-2.5">
-                    {selectedOrders.length === 0 ? (
-                      <div className="text-center py-6 bg-emerald-950/40 rounded-2xl border border-emerald-900/50">
-                        <CheckCircle2 className="w-7 h-7 text-emerald-500/40 mx-auto mb-1.5" />
-                        <div className="text-emerald-400/70 font-bold text-xs">
-                          {currentSelectedDay.label}（{currentSelectedDay.monthDate}）の配達予定はありません
-                        </div>
-                      </div>
-                    ) : (
-                      selectedOrders.map(order => {
-                        const isDelivered = order.status === 'delivered' || order.status === 'invoiced';
-                        return (
-                          <div 
-                            key={order.id} 
-                            className={`p-4 rounded-2xl flex items-center justify-between gap-3 shadow-sm border transition-all ${
-                              isDelivered
-                                ? 'bg-emerald-950/30 border-emerald-900/40 opacity-70'
-                                : 'bg-emerald-950/90 border-emerald-700/70'
-                            }`}
-                          >
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-black text-white text-sm">{order.customer?.name}</span>
-                                {isDelivered && (
-                                  <span className="bg-emerald-900/80 text-emerald-300 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-700">
-                                    ✅ 納品済
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-xs font-bold text-emerald-300/90 mt-1">
-                                {order.items?.map((i: any) => `${getTranslatedName(i.crops || i.crop || { name: '作物' }, language)} ${i.quantity}${getTranslatedUnit(i.unit || 'kg', language)}`).join(' / ')}
-                              </div>
-                            </div>
-
-                            {!isDelivered && (
-                              <button 
-                                onClick={() => handleCompleteB2BOrder(order.id)}
-                                className="bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-emerald-950 font-black text-xs py-2 px-3.5 rounded-xl transition-all flex items-center gap-1 shadow-md shrink-0"
-                              >
-                                {t('markDeliveredBtn', language)} <ArrowRight className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
                 </section>
               );
             })()}
@@ -2131,37 +2570,71 @@ export default function WorkEntryPage() {
               </button>
             </div>
 
-            <div className="space-y-3 bg-emerald-900/30 p-4 rounded-2xl border border-emerald-800/50 text-sm">
-              <div>
-                <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">{t('taskAssignee', language)}</span>
-                <p className="font-black text-white">👤 {getTranslatedName(selectedTaskDetail.workers || currentUser, language)}</p>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">🌱 {t('crop', language)}</span>
-                  <p className="font-black text-white">{selectedTaskDetail.crops?.name ? getTranslatedName(selectedTaskDetail.crops, language) : t('unspecified', language)}</p>
-                </div>
-                <div>
-                  <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">📍 {t('field', language)}</span>
-                  <p className="font-black text-white">{selectedTaskDetail.fields?.name ? getTranslatedName(selectedTaskDetail.fields, language) : t('unspecified', language)}</p>
-                </div>
-              </div>
+            {(() => {
+              const modalMemo = selectedTaskDetail.notes || selectedTaskDetail.memo || '';
+              const isLeader = modalMemo.includes('【👑現場責任者】');
+              const leaderMatch = modalMemo.match(/【👑現場リーダー:\s*([^】]+)】/);
+              const otherLeaderName = leaderMatch ? leaderMatch[1] : null;
+              const cleanModalNotes = modalMemo
+                .replace(/【👑現場責任者】\n?/, '')
+                .replace(/【👑現場リーダー:[^】]+】\n?/, '')
+                .trim();
 
-              <div>
-                <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">📋 {t('workContentLabel', language)}</span>
-                <p className="font-black text-emerald-400 text-base">{getTranslatedWorkType(selectedTaskDetail.work_type || selectedTaskDetail.task_title || '一般作業', language)}</p>
-              </div>
+              return (
+                <>
+                  {isLeader ? (
+                    <div className="p-3 bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 rounded-2xl text-amber-950 shadow-md flex items-center gap-3 border border-amber-400">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                        <Crown className="w-5 h-5 fill-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-black text-xs">{t('task_youAreLeader', language)}</div>
+                        <p className="text-[10px] font-bold text-amber-900 mt-0.5">
+                          {t('task_leaderInstruction', language)}
+                        </p>
+                      </div>
+                    </div>
+                  ) : otherLeaderName ? (
+                    <div className="p-2.5 bg-amber-950/60 border border-amber-500/40 rounded-xl text-amber-300 flex items-center gap-2 text-xs font-bold">
+                      <Crown className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>{t('task_todayLeaderIs', language)}<strong className="font-black text-amber-200">{otherLeaderName}</strong>{t('sanSuffix', language)}</span>
+                    </div>
+                  ) : null}
 
-              {selectedTaskDetail.notes && (
-                <div>
-                  <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">📝 {t('instructionsNotes', language)}</span>
-                  <div className="bg-emerald-950/90 p-3 rounded-xl border border-emerald-800/80 text-xs font-bold text-slate-200 whitespace-pre-wrap leading-relaxed">
-                    {selectedTaskDetail.notes}
+                  <div className="space-y-3 bg-emerald-900/30 p-4 rounded-2xl border border-emerald-800/50 text-sm">
+                    <div>
+                      <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">{t('taskAssignee', language)}</span>
+                      <p className="font-black text-white">👤 {getTranslatedName(selectedTaskDetail.workers || currentUser, language)}</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">🌱 {t('crop', language)}</span>
+                        <p className="font-black text-white">{selectedTaskDetail.crops?.name ? getTranslatedName(selectedTaskDetail.crops, language) : t('unspecified', language)}</p>
+                      </div>
+                      <div>
+                        <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">📍 {t('field', language)}</span>
+                        <p className="font-black text-white">{selectedTaskDetail.fields?.name ? getTranslatedName(selectedTaskDetail.fields, language) : t('unspecified', language)}</p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">📋 {t('workContentLabel', language)}</span>
+                      <p className="font-black text-emerald-400 text-base">{getTranslatedWorkType(selectedTaskDetail.work_type || selectedTaskDetail.task_title || '一般作業', language)}</p>
+                    </div>
+
+                    {cleanModalNotes && (
+                      <div>
+                        <span className="text-[11px] font-bold text-emerald-300 block mb-0.5">📝 {t('instructionsNotes', language)}</span>
+                        <div className="bg-emerald-950/90 p-3 rounded-xl border border-emerald-800/80 text-xs font-bold text-slate-200 whitespace-pre-wrap leading-relaxed">
+                          {language === 'ja' ? cleanModalNotes : (dynamicTranslations[cleanModalNotes] || cleanModalNotes)}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
-            </div>
+                </>
+              );
+            })()}
 
             <div className="pt-2 flex flex-col gap-2">
               <button
@@ -2195,11 +2668,11 @@ export default function WorkEntryPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-slate-800 rounded-3xl p-6 w-full max-w-sm border border-slate-700 shadow-2xl">
             <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2">
-              <Clock className="w-6 h-6 text-amber-400" /> 残業の申請
+              <Clock className="w-6 h-6 text-amber-400" /> {t('overtime_modalTitle', language)}
             </h3>
             <form onSubmit={handleOvertimeSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-slate-400 mb-1">残業する日付</label>
+                <label className="block text-sm font-bold text-slate-400 mb-1">{t('overtime_dateLabel', language)}</label>
                 <input
                   type="date"
                   required
@@ -2209,7 +2682,7 @@ export default function WorkEntryPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-400 mb-1">残業終了(予定)時刻</label>
+                <label className="block text-sm font-bold text-slate-400 mb-1">{t('overtime_endTimeLabel', language)}</label>
                 <input
                   type="time"
                   required
@@ -2218,16 +2691,16 @@ export default function WorkEntryPage() {
                   className="w-full p-4 bg-slate-900 border border-slate-700 rounded-2xl text-white font-black text-xl text-center focus:outline-none focus:border-amber-500"
                 />
                 <p className="text-xs text-emerald-400 mt-2 font-bold">
-                  ※承認されると、LINEの退勤忘れアラートは「この予定時刻の30分後」に自動で延長されます。
+                  {t('overtime_lineNote', language)}
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-400 mb-1">残業の理由・作業内容</label>
+                <label className="block text-sm font-bold text-slate-400 mb-1">{t('overtime_reasonLabel', language)}</label>
                 <textarea
                   required
                   value={overtimeReason}
                   onChange={e => setOvertimeReason(e.target.value)}
-                  placeholder="例: トマトの収穫が長引いたため"
+                  placeholder={t('overtime_reasonPlaceholder', language)}
                   className="w-full p-4 bg-slate-900 border border-slate-700 rounded-2xl text-white focus:outline-none focus:border-amber-500"
                   rows={3}
                 />
@@ -2238,20 +2711,34 @@ export default function WorkEntryPage() {
                   onClick={() => setShowOvertimeModal(false)}
                   className="py-3 bg-slate-700 text-slate-300 font-bold rounded-xl"
                 >
-                  キャンセル
+                  {t('leave_cancel', language)}
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
                   className="py-3 bg-amber-500 hover:bg-amber-400 text-amber-950 font-black rounded-xl disabled:opacity-50"
                 >
-                  {isSubmitting ? '送信中...' : '申請する'}
+                  {isSubmitting ? t('sendingBtn', language) : t('overtime_submitBtn', language)}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* 📍 位置情報設定・解除ガイドモーダル */}
+      <GpsGuideModal
+        isOpen={showGpsGuideModal}
+        onClose={() => setShowGpsGuideModal(false)}
+        language={language}
+        onRetry={async () => {
+          await refreshGpsPosition(true);
+        }}
+        isRetrying={isGpsLoading}
+      />
+
+      {/* 📱 ページの最下部に配置するアプリ化案内バナー（画面に被らない安全配置） */}
+      <PwaBottomBanner language={language} />
     </main>
   );
 }

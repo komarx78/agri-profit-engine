@@ -42,33 +42,42 @@ import { useCompany } from '@/hooks/useCompany';
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { companyName } = useCompany();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [tenantId, setTenantId] = useState<string>('');
+  const { companyName } = useCompany(tenantId);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     async function checkAuth() {
+      // 1. URLクエリから farm / tenant パラメータを検知
+      let urlFarm: string | null = null;
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        urlFarm = params.get('farm') || params.get('tenant') || params.get('farmId');
+      }
+
+      // 2. Supabase Auth による正規管理者セッションのチェック
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        setTenantId(session.user.id);
+      if (session && session.user) {
+        const resolvedId = urlFarm || session.user.id;
+        setTenantId(resolvedId);
+        if (typeof window !== 'undefined') {
+          try { localStorage.setItem('agri_owner_id', resolvedId); } catch (e) {}
+        }
         return;
       }
 
-      // 現場PINログインまたは農園オーナーIDの認証チェック
+      // 3. 現場スタッフ（PIN認証）の場合、明示的に管理者ロール (role === 'admin') を持つ場合のみ許可
       const savedWorker = localStorage.getItem('agri_current_worker');
-      const savedOwnerId = localStorage.getItem('agri_owner_id');
-
-      if (savedOwnerId) {
-        setTenantId(savedOwnerId);
-        return;
-      }
-
       if (savedWorker) {
         try {
           const workerData = JSON.parse(savedWorker);
-          if (workerData.user_id) {
-            setTenantId(workerData.user_id);
+          if (workerData.role === 'admin' && workerData.user_id) {
+            const resolvedId = urlFarm || workerData.user_id;
+            setTenantId(resolvedId);
+            if (typeof window !== 'undefined') {
+              try { localStorage.setItem('agri_owner_id', resolvedId); } catch (e) {}
+            }
             return;
           }
         } catch (e) {
@@ -76,6 +85,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         }
       }
 
+      // 未認証、または一般作業員アカウントの場合はログインへ誘導
       router.push('/login');
     }
     checkAuth();
@@ -83,7 +93,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const handleCopyUrl = async () => {
     const url = tenantId 
-      ? `${window.location.origin}/portal?farm=${tenantId}`
+      ? `${window.location.origin}/portal/${tenantId}`
       : `${window.location.origin}/portal`;
     try {
       await navigator.clipboard.writeText(url);
@@ -104,32 +114,32 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     {
       title: '日々の現場・作業日誌',
       items: [
-        { name: 'ダッシュボード', path: '/admin/dashboard', icon: LayoutDashboard },
-        { name: '作付け・作業 統合司令塔', path: '/admin/cultivations', icon: Sprout },
-        { name: 'タスク・スケジュール管理', path: '/admin/tasks', icon: Calendar },
-        { name: '作業承認インボックス', path: '/admin/approvals', icon: Inbox },
+        { name: 'ダッシュボード', path: tenantId ? `/admin/dashboard?farm=${tenantId}` : '/admin/dashboard', icon: LayoutDashboard },
+        { name: '作付け・作業 統合司令塔', path: tenantId ? `/admin/cultivations?farm=${tenantId}` : '/admin/cultivations', icon: Sprout },
+        { name: 'タスク・スケジュール管理', path: tenantId ? `/admin/tasks?farm=${tenantId}` : '/admin/tasks', icon: Calendar },
+        { name: '作業承認インボックス', path: tenantId ? `/admin/approvals?farm=${tenantId}` : '/admin/approvals', icon: Inbox },
       ]
     },
     {
       title: '栽培計画・マップ・分析',
       items: [
-        { name: '作付地図 (圃場マップ)', path: '/admin/map', icon: MapPin },
-        { name: '栽培・予実管理表', path: '/admin/cultivation-schedule', icon: Calendar },
-        { name: '作目別 採算分析', path: '/admin/crop-analysis', icon: PieChart },
-        { name: '育苗スケジュール', path: '/admin/nursery-schedule', icon: Table },
-        { name: '必要資材自動集計', path: '/admin/material-requirements', icon: Calculator },
+        { name: '作付地図 (圃場マップ)', path: tenantId ? `/admin/map?farm=${tenantId}` : '/admin/map', icon: MapPin },
+        { name: '栽培・予実管理表', path: tenantId ? `/admin/cultivation-schedule?farm=${tenantId}` : '/admin/cultivation-schedule', icon: Calendar },
+        { name: '作目別 採算分析', path: tenantId ? `/admin/crop-analysis?farm=${tenantId}` : '/admin/crop-analysis', icon: PieChart },
+        { name: '育苗スケジュール', path: tenantId ? `/admin/nursery-schedule?farm=${tenantId}` : '/admin/nursery-schedule', icon: Table },
+        { name: '必要資材自動集計', path: tenantId ? `/admin/material-requirements?farm=${tenantId}` : '/admin/material-requirements', icon: Calculator },
       ]
     },
     {
       title: '連携システム・マスタ',
       items: [
-        { name: '📦 販売管理システム', path: '/sales-management', icon: ShoppingCart, external: true },
-        { name: '💳 経理・購買システム', path: '/accounting-management', icon: Receipt, external: true },
-        { name: '📱 現場出退勤ポータル', path: '/portal', icon: Layout, external: true },
-        { name: '👥 労務・人事システム', path: '/hr', icon: Users, external: true },
-        { name: '💊 農薬検索・防除AI', path: '/farm/pesticide-check', icon: FlaskConical },
-        { name: '⚙️ マスタ管理全般', path: '/admin/masters', icon: Database },
-        { name: '🏢 自社情報設定', path: '/admin/settings', icon: Settings },
+        { name: '📦 販売管理システム', path: tenantId ? `/sales-management?farm=${tenantId}` : '/sales-management', icon: ShoppingCart, external: true },
+        { name: '💳 経理・購買システム', path: tenantId ? `/accounting-management?farm=${tenantId}` : '/accounting-management', icon: Receipt, external: true },
+        { name: '📱 現場出退勤ポータル', path: tenantId ? `/portal/${tenantId}` : '/portal', icon: Layout, external: true },
+        { name: '👥 労務・人事システム', path: tenantId ? `/hr?farm=${tenantId}` : '/hr', icon: Users, external: true },
+        { name: '💊 農薬検索・防除AI', path: tenantId ? `/farm/pesticide-check?farm=${tenantId}` : '/farm/pesticide-check', icon: FlaskConical },
+        { name: '⚙️ マスタ管理全般', path: tenantId ? `/admin/masters?farm=${tenantId}` : '/admin/masters', icon: Database },
+        { name: '🏢 自社情報設定', path: tenantId ? `/admin/settings?farm=${tenantId}` : '/admin/settings', icon: Settings },
       ]
     }
   ];
@@ -143,7 +153,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </h3>
           <div className="space-y-1">
             {group.items.map((item: any) => {
-              const isActive = pathname === item.path;
+              const isActive = pathname === item.path.split('?')[0];
               const Icon = item.icon;
               return (
                 <Link
@@ -196,14 +206,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             {tenantId && (
               <>
                 <Link 
-                  href="/portal" 
+                  href={tenantId ? `/portal/${tenantId}` : '/portal'}
                   className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-blue-700 font-bold bg-blue-50 hover:bg-blue-100 transition-colors mb-1.5"
                 >
                   <Layout className="w-5 h-5 text-blue-600" />
                   現場ポータルへ行く
                 </Link>
                 <Link 
-                  href="/work" 
+                  href={tenantId ? `/work/${tenantId}` : '/work'} 
                   className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 font-bold hover:bg-slate-100"
                 >
                   <Sprout className="w-5 h-5" />
@@ -256,14 +266,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {tenantId && (
             <>
               <Link 
-                href="/portal" 
+                href={tenantId ? `/portal/${tenantId}` : '/portal'}
                 className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-blue-700 font-bold bg-blue-50 hover:bg-blue-100 transition-colors mb-2 shadow-sm"
               >
                 <Layout className="w-5 h-5 text-blue-600" />
                 現場ポータルへ行く
               </Link>
               <Link 
-                href="/work" 
+                href={tenantId ? `/work/${tenantId}` : '/work'} 
                 className="flex items-center gap-3 px-4 py-2 rounded-xl text-slate-600 font-bold hover:bg-slate-100 transition-colors"
               >
                 <Sprout className="w-5 h-5" />

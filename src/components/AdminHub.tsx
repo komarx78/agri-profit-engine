@@ -58,9 +58,16 @@ export default function AdminHub({ onSwitchToHome, initialNav = 'cultivations' }
 
   useEffect(() => {
     async function checkAuth() {
+      let urlFarm: string | null = null;
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        urlFarm = params.get('farm') || params.get('tenant') || params.get('farmId');
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        setTenantId(session.user.id);
+        const resolved = urlFarm || session.user.id;
+        setTenantId(resolved);
         return;
       }
       const savedWorker = localStorage.getItem('agri_current_worker');
@@ -69,7 +76,8 @@ export default function AdminHub({ onSwitchToHome, initialNav = 'cultivations' }
         try {
           const workerData = JSON.parse(savedWorker);
           if (workerData.role === 'admin' || workerData.role === 'manager') {
-            setTenantId(savedOwnerId);
+            const resolved = urlFarm || savedOwnerId;
+            setTenantId(resolved);
             return;
           }
         } catch (e) {
@@ -82,7 +90,7 @@ export default function AdminHub({ onSwitchToHome, initialNav = 'cultivations' }
 
   const handleCopyUrl = async () => {
     const url = tenantId 
-      ? `${window.location.origin}/farm/${tenantId}`
+      ? `${window.location.origin}/portal/${tenantId}`
       : `${window.location.origin}/login`;
     try {
       await navigator.clipboard.writeText(url);
@@ -125,12 +133,12 @@ export default function AdminHub({ onSwitchToHome, initialNav = 'cultivations' }
     {
       title: '連携システム・マスタ',
       items: [
-        { id: 'sales', name: '📦 販売管理システム', icon: ShoppingCart, path: '/sales-management', external: true },
-        { id: 'accounting', name: '💳 経理・購買システム', icon: Receipt, path: '/accounting-management', external: true },
-        { id: 'hr', name: '👥 労務・人事システム', icon: Users, path: '/hr', external: true },
-        { id: 'pesticide', name: '💊 農薬検索・防除AI', icon: FlaskConical, path: '/farm/pesticide-check', external: true },
-        { id: 'masters', name: '⚙️ マスタ管理全般', icon: Database, path: '/admin/masters' },
-        { id: 'settings', name: '🏢 自社情報設定', icon: Settings, path: '/admin/settings' },
+        { id: 'sales', name: '📦 販売管理システム', icon: ShoppingCart, path: tenantId ? `/sales-management?farm=${tenantId}` : '/sales-management', external: true },
+        { id: 'accounting', name: '💳 経理・購買システム', icon: Receipt, path: tenantId ? `/accounting-management?farm=${tenantId}` : '/accounting-management', external: true },
+        { id: 'hr', name: '👥 労務・人事システム', icon: Users, path: tenantId ? `/hr?farm=${tenantId}` : '/hr', external: true },
+        { id: 'pesticide', name: '💊 農薬検索・防除AI', icon: FlaskConical, path: tenantId ? `/farm/pesticide-check?farm=${tenantId}` : '/farm/pesticide-check', external: true },
+        { id: 'masters', name: '⚙️ マスタ管理全般', icon: Database, path: tenantId ? `/admin/masters?farm=${tenantId}` : '/admin/masters' },
+        { id: 'settings', name: '🏢 自社情報設定', icon: Settings, path: tenantId ? `/admin/settings?farm=${tenantId}` : '/admin/settings' },
       ]
     }
   ];
@@ -232,7 +240,7 @@ export default function AdminHub({ onSwitchToHome, initialNav = 'cultivations' }
           </button>
 
           <Link
-            href="/work"
+            href={tenantId ? `/work/${tenantId}` : '/work'}
             className="w-full flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-black text-xs rounded-xl transition-colors"
           >
             <Sprout className="w-4 h-4 text-emerald-600" />

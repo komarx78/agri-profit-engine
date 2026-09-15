@@ -86,8 +86,8 @@ export default function MapPage() {
   const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
   const polygonsRef = useRef<{ [key: number]: google.maps.Polygon }>({});
 
-  // 選択された圃場の詳細（作付・履歴）用ステート
-  const [selectedFieldDetails, setSelectedFieldDetails] = useState<{ plan: any, works: any[] } | null>(null);
+  // 選択された圃場の詳細（作付・履歴・土壌診断）用ステート
+  const [selectedFieldDetails, setSelectedFieldDetails] = useState<{ plan: any, works: any[], soil?: any } | null>(null);
   
   // 圃場名編集用のステート
   const [isEditingName, setIsEditingName] = useState(false);
@@ -450,7 +450,7 @@ export default function MapPage() {
       
       // 再取得
       fetchFieldsData();
-      setSelectedField(prev => prev ? { ...prev, statusColor: color } : null);
+      setSelectedField((prev: any) => prev ? { ...prev, statusColor: color } : null);
     } catch (err) {
       console.error(err);
       alert('色の変更に失敗しました');

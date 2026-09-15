@@ -3,6 +3,7 @@
 import React, { useEffect, useState, use } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getJSTDate } from '@/lib/dateUtils';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Printer, Loader2, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -130,9 +131,10 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
     };
     
     workLogs.forEach(log => {
-      const date = new Date(log.work_date);
-      const month = date.getMonth() + 1;
-      const day = date.getDate();
+      // 日付文字列 (YYYY-MM-DD) から直接年月を取得（タイムゾーンズレ防止）
+      const [yStr, mStr, dStr] = (log.work_date || '').split('-');
+      const month = parseInt(mStr, 10) || 1;
+      const day = parseInt(dStr, 10) || 1;
       
       // 旬の判定 (上=1, 中=2, 下=3)
       let period = '上';
@@ -315,7 +317,7 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
 
         <h2 className="text-xl font-bold mb-4 border-b border-black pb-1 flex justify-between items-end">
           <span>経営指標記入用紙【詳細レポート】</span>
-          <span className="text-sm font-normal">出力日: {new Date().toLocaleDateString()}</span>
+          <span className="text-sm font-normal">出力日: {getJSTDate()}</span>
         </h2>
 
         {/* 基本情報 */}

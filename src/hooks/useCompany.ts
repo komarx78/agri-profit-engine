@@ -28,8 +28,12 @@ export function useCompany(explicitTenantId?: string | null): CompanyInfo {
 
   const fetchCompany = useCallback(async () => {
     try {
-      // 1. テナントIDの決定（引数指定を最優先）
+      // 1. テナントIDの決定（引数指定およびURLクエリを最優先）
       let currentTenant = explicitTenantId || null;
+      if (!currentTenant && typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        currentTenant = urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId');
+      }
 
       if (!currentTenant) {
         currentTenant = await getCurrentTenantId();

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Database, Upload, FileText, CheckCircle2, AlertTriangle, Loader2, Search, ArrowLeft, Trash2 } from 'lucide-react';
+import { Database, Upload, FileText, CheckCircle2, AlertTriangle, Loader2, Search, ArrowLeft, Trash2, ExternalLink, Calendar } from 'lucide-react';
 import Papa from 'papaparse';
 import { createBrowserClient } from '@supabase/ssr';
 import Link from 'next/link';
@@ -220,6 +220,37 @@ export default function AdminPesticidesPage() {
           {status.message}
         </div>
       )}
+
+      {/* FAMIC公式ダウンロード導線 ＆ 更新スケジュール案内カード */}
+      <div className="bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 border-2 border-teal-200 rounded-2xl p-6 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 bg-teal-600 text-white text-xs font-black px-2.5 py-1 rounded-full tracking-wide">
+                <Calendar className="w-3.5 h-3.5" />
+                更新時期: 原則毎月月初
+              </span>
+              <span className="text-xs font-bold text-teal-800">（月1回定期更新）</span>
+            </div>
+            <h2 className="text-lg font-black text-slate-800 tracking-tight">
+              FAMIC（農林水産消費安全技術センター）公式データ取得
+            </h2>
+            <p className="text-xs font-bold text-slate-600 leading-relaxed max-w-2xl">
+              農薬の「新規登録」「適用拡大（対象作物追加等）」「登録失効」は法令に基づき毎月更新されます。<br />
+              公式ページを開き、「<strong>同意する</strong>」ボタンを押して最新の基本部（<code className="bg-white/80 px-1 py-0.5 rounded text-teal-800">kihon.csv</code>）および適用部（<code className="bg-white/80 px-1 py-0.5 rounded text-teal-800">tekiyou.csv</code>）をダウンロードしてください。
+            </p>
+          </div>
+          <a
+            href="https://www.acis.famic.go.jp/ddownload/index.htm"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-black text-sm px-6 py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 shrink-0"
+          >
+            <span>FAMIC公式ダウンロードへ</span>
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        </div>
+      </div>
 
       {/* データベース統計 */}
       <div className="grid grid-cols-2 gap-4">

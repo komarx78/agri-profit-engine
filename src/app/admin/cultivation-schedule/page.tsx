@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getJSTDate } from '@/lib/dateUtils';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Calendar, Save, Loader2, ChevronLeft, ChevronRight, Plus, Trash2, X, BarChart2, User, ChevronDown, ChevronUp, PieChart as PieChartIcon, Sprout } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
@@ -35,8 +36,8 @@ export default function CultivationSchedulePage() {
   const [isPanelLoading, setIsPanelLoading] = useState(false);
   
   // 新規入力用ステート
-  const [newWork, setNewWork] = useState({ date: new Date().toISOString().split('T')[0], type: '播種', duration: '', note: '' });
-  const [newSales, setNewSales] = useState({ date: new Date().toISOString().split('T')[0], quantity: '', price: '', channel: '直売所' });
+  const [newWork, setNewWork] = useState({ date: getJSTDate(), type: '播種', duration: '', note: '' });
+  const [newSales, setNewSales] = useState({ date: getJSTDate(), quantity: '', price: '', channel: '直売所' });
 
   // 8月〜7月の月配列
   const months = [8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7];
@@ -151,7 +152,12 @@ export default function CultivationSchedulePage() {
     if (!confirm("この計画を削除しますか？\n（関連する育苗スケジュールも削除されます）")) return;
     
     try {
-      const { error } = await supabase.from('cultivation_plans_v2').delete().eq('id', id);
+      const tenantId = await getCurrentTenantId();
+      let query = supabase.from('cultivation_plans_v2').delete().eq('id', id);
+      if (tenantId) {
+        query = query.eq('user_id', tenantId);
+      }
+      const { error } = await query;
       if (error) throw error;
       if (selectedPlan?.id === id) setSelectedPlan(null);
       fetchData();
@@ -967,14 +973,14 @@ export default function CultivationSchedulePage() {
                                           outerRadius={60}
                                           paddingAngle={2}
                                           dataKey="value"
-                                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                          label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
                                           labelLine={true}
                                         >
                                           {pieData.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                                           ))}
                                         </Pie>
-                                        <RechartsTooltip formatter={(value: number) => [`${value} 時間/10a`, '時間']} />
+                                        <RechartsTooltip formatter={(value: any) => [`${value} 時間/10a`, '時間']} />
                                       </PieChart>
                                     </ResponsiveContainer>
                                   </div>
@@ -996,14 +1002,14 @@ export default function CultivationSchedulePage() {
                                           outerRadius={60}
                                           paddingAngle={2}
                                           dataKey="value"
-                                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                          label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
                                           labelLine={true}
                                         >
                                           {workerPieData.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={WORKER_COLORS[index % WORKER_COLORS.length]} />
                                           ))}
                                         </Pie>
-                                        <RechartsTooltip formatter={(value: number) => [`${value} 時間/10a`, '時間']} />
+                                        <RechartsTooltip formatter={(value: any) => [`${value} 時間/10a`, '時間']} />
                                       </PieChart>
                                     </ResponsiveContainer>
                                   </div>

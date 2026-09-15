@@ -215,6 +215,9 @@ export async function getFarmMasters(tenantId: string) {
 export async function submitWorkLog(tenantId: string, workerId: string, logData: any) {
   try {
     const supabase = createAdminClient();
+    if (!tenantId || tenantId === 'null' || tenantId === 'undefined') {
+      return { success: false, error: '農園IDが不正です。' };
+    }
     
     // 強制的に tenant_id と worker_id をセットして保存
     const insertData = {
@@ -291,19 +294,30 @@ export async function submitSalesLog(tenantId: string, logData: any) {
     return { success: false, error: '出荷記録の保存に失敗しました。' };
   }
 }
-// 当日の勤怠データの取得
+// 当日の勤怠データの取得（未退勤ログのフォールバック付き）
 export async function getTodayAttendance(tenantId: string, workerId: string, date: string) {
   try {
     const supabase = createAdminClient();
-    const { data, error } = await supabase.from('attendance_logs')
+    const { data: todayLogs } = await supabase.from('attendance_logs')
       .select('*')
       .eq('worker_id', workerId)
       .eq('date', date)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "not found"
-    return { success: true, data: data || null };
+      .limit(1);
+
+    if (todayLogs && todayLogs.length > 0) {
+      return { success: true, data: todayLogs[0] };
+    }
+
+    // 当日の打刻がない場合、未退勤ログ（直近の未退勤打刻）を検索
+    const { data: unclosed } = await supabase.from('attendance_logs')
+      .select('*')
+      .eq('worker_id', workerId)
+      .is('clock_out', null)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    return { success: true, data: (unclosed && unclosed.length > 0) ? unclosed[0] : null };
   } catch (err: any) {
     console.error('getTodayAttendance error:', err);
     return { success: false, data: null };
@@ -316,7 +330,26 @@ export async function submitAttendance(tenantId: string, workerId: string, actio
     const supabase = createAdminClient();
     
     if (action === 'clock_in') {
+      let resolvedUserId = tenantId;
+      if (!resolvedUserId || resolvedUserId === 'null' || resolvedUserId === 'undefined') {
+        const { data: w } = await supabase.from('workers').select('user_id').eq('id', workerId).maybeSingle();
+        if (w?.user_id) resolvedUserId = w.user_id;
+      }
+
+      // 🛡️ 二重出勤防止ガード（連打や通信ラグによる重複レコード作成を物理遮断）
+      const { data: existingToday } = await supabase.from('attendance_logs')
+        .select('*')
+        .eq('worker_id', workerId)
+        .eq('date', date)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (existingToday && existingToday.length > 0) {
+        return { success: true, data: existingToday[0] };
+      }
+
       const { data, error } = await supabase.from('attendance_logs').insert([{
+        user_id: resolvedUserId || null,
         worker_id: workerId,
         date: date,
         clock_in: now,
@@ -327,7 +360,13 @@ export async function submitAttendance(tenantId: string, workerId: string, actio
       return { success: true, data };
     } else if (logId) {
       const updates: any = {};
-      if (action === 'break_start') updates.break_start_time = now;
+      if (tenantId && tenantId !== 'null' && tenantId !== 'undefined') {
+        updates.user_id = tenantId;
+      }
+      if (action === 'break_start') {
+        updates.break_start_time = now;
+        updates.break_end_time = null;
+      }
       if (action === 'break_end') {
         updates.break_end_time = now;
         // 休憩時間の計算
@@ -335,11 +374,22 @@ export async function submitAttendance(tenantId: string, workerId: string, actio
         if (currentLog?.break_start_time) {
           const bStart = new Date(currentLog.break_start_time).getTime();
           const bEnd = new Date(now).getTime();
-          const diffMins = Math.floor((bEnd - bStart) / 1000 / 60);
+          const diffMins = Math.max(0, Math.floor((bEnd - bStart) / 1000 / 60));
           updates.total_break_minutes = (currentLog.total_break_minutes || 0) + diffMins;
         }
       }
-      if (action === 'clock_out') updates.clock_out = now;
+      if (action === 'clock_out') {
+        updates.clock_out = now;
+        // もし休憩終了を押さずに退勤した場合、休憩も自動精算
+        const { data: currentLog } = await supabase.from('attendance_logs').select('break_start_time, break_end_time, total_break_minutes').eq('id', logId).single();
+        if (currentLog?.break_start_time && !currentLog.break_end_time) {
+          updates.break_end_time = now;
+          const bStart = new Date(currentLog.break_start_time).getTime();
+          const bEnd = new Date(now).getTime();
+          const diffMins = Math.max(0, Math.floor((bEnd - bStart) / 1000 / 60));
+          updates.total_break_minutes = (currentLog.total_break_minutes || 0) + diffMins;
+        }
+      }
       
       const { data, error } = await supabase.from('attendance_logs').update(updates).eq('id', logId).select().single();
       if (error) throw error;
@@ -531,6 +581,8 @@ export async function savePlannedTask(
       step_order?: number;
       time_slot?: string;
       field_memo?: string;
+      leader_worker_id?: string | null;
+      leader_name?: string | null;
     }>;
     translations?: any;
   },
@@ -548,9 +600,17 @@ export async function savePlannedTask(
       const workerIds = assignment.worker_ids || [];
       const primaryWorkerId = workerIds.length > 0 ? workerIds[0] : null;
 
-      const combinedMemo = assignment.field_memo 
+      let combinedMemo = assignment.field_memo 
         ? (taskData.memo ? `${taskData.memo}\n${assignment.field_memo}` : assignment.field_memo)
         : (taskData.memo || null);
+
+      if (assignment.leader_worker_id) {
+        const isSelfLeader = primaryWorkerId === assignment.leader_worker_id;
+        const leaderTag = isSelfLeader ? '【👑現場責任者】' : (assignment.leader_name ? `【👑現場リーダー: ${assignment.leader_name}】` : '【👑現場リーダーあり】');
+        if (!combinedMemo || !combinedMemo.includes('【👑')) {
+          combinedMemo = combinedMemo ? `${leaderTag} ${combinedMemo}` : leaderTag;
+        }
+      }
 
       const updatePayload: any = {
         work_date: taskData.work_date,
@@ -575,23 +635,32 @@ export async function savePlannedTask(
 
       // 2人目以降の担当者が追加された場合は追加作成
       if (workerIds.length > 1) {
-        const additionalInserts = workerIds.slice(1).map(wId => ({
-          user_id: tenantId,
-          work_date: taskData.work_date,
-          task_title: taskData.task_title,
-          work_type: taskData.task_title,
-          crop_id: taskData.crop_id || null,
-          field_id: assignment.field_id || null,
-          worker_id: wId,
-          department_id: taskData.department_id || null,
-          memo: combinedMemo,
-          step_order: assignment.step_order || 1,
-          time_slot: assignment.time_slot || null,
-          status: 'planned',
-          duration_minutes: 0,
-          approval_status: null,
-          ...transPayload
-        }));
+        const additionalInserts = workerIds.slice(1).map(wId => {
+          let workerMemo = combinedMemo;
+          if (assignment.leader_worker_id) {
+            const isSelf = wId === assignment.leader_worker_id;
+            const tag = isSelf ? '【👑現場責任者】' : (assignment.leader_name ? `【👑現場リーダー: ${assignment.leader_name}】` : '【👑現場リーダーあり】');
+            workerMemo = combinedMemo ? combinedMemo.replace(/【👑[^】]+】/g, '').trim() : '';
+            workerMemo = workerMemo ? `${tag} ${workerMemo}` : tag;
+          }
+          return {
+            user_id: tenantId,
+            work_date: taskData.work_date,
+            task_title: taskData.task_title,
+            work_type: taskData.task_title,
+            crop_id: taskData.crop_id || null,
+            field_id: assignment.field_id || null,
+            worker_id: wId,
+            department_id: taskData.department_id || null,
+            memo: workerMemo,
+            step_order: assignment.step_order || 1,
+            time_slot: assignment.time_slot || null,
+            status: 'planned',
+            duration_minutes: 0,
+            approval_status: null,
+            ...transPayload
+          };
+        });
 
         await supabase.from('work_logs').insert(additionalInserts);
       }
@@ -608,12 +677,18 @@ export async function savePlannedTask(
         const fId = assignment.field_id || null;
         const wIds = assignment.worker_ids || [];
         const stepNum = assignment.step_order || (idx + 1);
-        const combinedMemo = assignment.field_memo 
+        const baseMemo = assignment.field_memo 
           ? (taskData.memo ? `${taskData.memo}\n${assignment.field_memo}` : assignment.field_memo)
           : (taskData.memo || null);
 
         if (wIds.length > 0) {
           wIds.forEach(wId => {
+            let combinedMemo = baseMemo;
+            if (assignment.leader_worker_id) {
+              const isSelf = wId === assignment.leader_worker_id;
+              const leaderTag = isSelf ? '【👑現場責任者】' : (assignment.leader_name ? `【👑現場リーダー: ${assignment.leader_name}】` : '【👑現場リーダーあり】');
+              combinedMemo = baseMemo ? `${leaderTag} ${baseMemo}` : leaderTag;
+            }
             insertData.push({
               user_id: tenantId,
               work_date: taskData.work_date,
@@ -642,7 +717,7 @@ export async function savePlannedTask(
             field_id: fId,
             worker_id: null,
             department_id: taskData.department_id || null,
-            memo: combinedMemo,
+            memo: baseMemo,
             step_order: stepNum,
             time_slot: assignment.time_slot || null,
             status: 'planned',
@@ -667,10 +742,14 @@ export async function savePlannedTask(
 }
 
 // 9. タスクの削除
-export async function deletePlannedTask(taskId: string) {
+export async function deletePlannedTask(taskId: string, tenantId?: string | null) {
   try {
     const supabase = createAdminClient();
-    const { error } = await supabase.from('work_logs').delete().eq('id', taskId);
+    let query = supabase.from('work_logs').delete().eq('id', taskId);
+    if (tenantId && tenantId !== 'null' && tenantId !== 'undefined') {
+      query = query.eq('user_id', tenantId);
+    }
+    const { error } = await query;
     if (error) throw error;
     return { success: true };
   } catch (err: any) {
@@ -679,3 +758,316 @@ export async function deletePlannedTask(taskId: string) {
   }
 }
 
+// 10. 有給・休暇申請の送信（管理者クライアント・RLS完全バイパス）
+export async function submitLeaveRequest(
+  tenantId: string,
+  workerId: string,
+  type: string,
+  startDate: string,
+  endDate: string,
+  reason: string,
+  isAutoApprove: boolean = false
+) {
+  try {
+    const supabase = createAdminClient();
+    let resolvedUserId = tenantId;
+    if (!resolvedUserId || resolvedUserId === 'null' || resolvedUserId === 'undefined') {
+      const { data: w } = await supabase.from('workers').select('user_id').eq('id', workerId).maybeSingle();
+      if (w?.user_id) resolvedUserId = w.user_id;
+    }
+
+    const { data, error } = await supabase.from('leave_requests').insert([{
+      user_id: resolvedUserId || null,
+      worker_id: workerId,
+      type: type,
+      start_date: startDate,
+      end_date: endDate,
+      reason: reason || '私用のため',
+      status: isAutoApprove ? '承認' : '申請中'
+    }]).select().single();
+
+    if (error) throw error;
+    return { success: true, data };
+  } catch (err: any) {
+    console.error('submitLeaveRequest error:', err);
+    return { success: false, error: err.message || '休暇申請の送信に失敗しました' };
+  }
+}
+
+// 11. 特定作業者の休暇申請履歴の取得
+export async function getWorkerLeaveRequests(tenantId: string, workerId: string) {
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from('leave_requests')
+      .select('*, workers(name, user_id)')
+      .eq('worker_id', workerId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) throw error;
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    console.error('getWorkerLeaveRequests error:', err);
+    return { success: false, data: [] };
+  }
+}
+
+// 12. 指定日の予定タスクを丸ごと別の日付へ一括複製（前日コピー等）
+export async function copyTasksFromDate(
+  tenantId: string,
+  sourceDate: string,
+  targetDate: string
+): Promise<{ success: boolean; count?: number; error?: string }> {
+  try {
+    const supabase = createAdminClient();
+    if (!tenantId) return { success: false, error: '農園IDが不正です' };
+    if (!sourceDate || !targetDate) return { success: false, error: '複製元日と複製先日付を指定してください' };
+
+    // 複製元日の予定タスク（planned）を取得
+    const { data: sourceTasks, error: fetchErr } = await supabase
+      .from('work_logs')
+      .select('*')
+      .eq('user_id', tenantId)
+      .eq('work_date', sourceDate)
+      .eq('status', 'planned');
+
+    if (fetchErr) throw fetchErr;
+    if (!sourceTasks || sourceTasks.length === 0) {
+      return { success: false, error: `${sourceDate} の予定タスクが見つかりません` };
+    }
+
+    // 複製先のレコードを作成
+    const newTasks = sourceTasks.map(task => {
+      const { id, created_at, updated_at, actual_time, completed_at, ...rest } = task;
+      return {
+        ...rest,
+        user_id: tenantId,
+        work_date: targetDate,
+        status: 'planned',
+        duration_minutes: 0,
+        approval_status: null
+      };
+    });
+
+    const { error: insertErr } = await supabase.from('work_logs').insert(newTasks);
+    if (insertErr) throw insertErr;
+
+    return { success: true, count: newTasks.length };
+  } catch (err: any) {
+    console.error('copyTasksFromDate error:', err);
+    return { success: false, error: err.message || 'タスクの複製に失敗しました' };
+  }
+}
+
+// 13. 特定作業者の予定タスクを他の作業者たちへ一括複製（人起点クローン）
+export async function cloneWorkerTasks(
+  tenantId: string,
+  sourceWorkerId: string,
+  targetWorkerIds: string[],
+  workDate: string
+): Promise<{ success: boolean; count?: number; error?: string }> {
+  try {
+    const supabase = createAdminClient();
+    if (!tenantId) return { success: false, error: '農園IDが不正です' };
+    if (!sourceWorkerId || !targetWorkerIds || targetWorkerIds.length === 0) {
+      return { success: false, error: 'コピー元およびコピー先の作業者を指定してください' };
+    }
+
+    // コピー元の作業者の予定タスクを取得
+    let query = supabase
+      .from('work_logs')
+      .select('*')
+      .eq('user_id', tenantId)
+      .eq('work_date', workDate)
+      .eq('status', 'planned');
+
+    if (sourceWorkerId === 'unassigned') {
+      query = query.is('worker_id', null);
+    } else {
+      query = query.eq('worker_id', sourceWorkerId);
+    }
+
+    const { data: sourceTasks, error: fetchErr } = await query;
+    if (fetchErr) throw fetchErr;
+
+    if (!sourceTasks || sourceTasks.length === 0) {
+      return { success: false, error: 'コピー元のタスクがありません' };
+    }
+
+    const newTasks: any[] = [];
+    targetWorkerIds.forEach(targetWId => {
+      sourceTasks.forEach(task => {
+        const { id, created_at, updated_at, ...rest } = task;
+        newTasks.push({
+          ...rest,
+          user_id: tenantId,
+          worker_id: targetWId,
+          work_date: workDate,
+          status: 'planned',
+          duration_minutes: 0,
+          approval_status: null
+        });
+      });
+    });
+
+    const { error: insertErr } = await supabase.from('work_logs').insert(newTasks);
+    if (insertErr) throw insertErr;
+
+    return { success: true, count: newTasks.length };
+  } catch (err: any) {
+    console.error('cloneWorkerTasks error:', err);
+    return { success: false, error: err.message || '作業者タスクの複製に失敗しました' };
+  }
+}
+
+// 13. 指定日の予定タスクを一括スライド（移動 / 延期 / コピー）
+export async function shiftTasksDate(
+  tenantId: string,
+  sourceDate: string,
+  targetDate: string,
+  mode: 'move' | 'copy' = 'move',
+  reasonNote?: string
+): Promise<{ success: boolean; count?: number; error?: string }> {
+  try {
+    if (!tenantId || !sourceDate || !targetDate) {
+      return { success: false, error: '農園ID、移動元日、移動先日は必須です' };
+    }
+
+    const supabase = createAdminClient();
+
+    // 移動元の予定タスクを取得
+    const { data: sourceTasks, error: fetchErr } = await supabase
+      .from('work_logs')
+      .select('*')
+      .eq('user_id', tenantId)
+      .eq('work_date', sourceDate)
+      .eq('status', 'planned');
+
+    if (fetchErr) throw fetchErr;
+
+    if (!sourceTasks || sourceTasks.length === 0) {
+      return { success: false, error: `${sourceDate} に予定タスクが見つかりません` };
+    }
+
+    if (mode === 'move') {
+      // 一括移動（UPDATE）
+      for (const t of sourceTasks) {
+        let updatedMemo = t.memo || '';
+        if (reasonNote) {
+          updatedMemo = updatedMemo ? `${updatedMemo}\n[${reasonNote}]` : `[${reasonNote}]`;
+        }
+        await supabase
+          .from('work_logs')
+          .update({
+            work_date: targetDate,
+            memo: updatedMemo || null
+          })
+          .eq('id', t.id)
+          .eq('user_id', tenantId);
+      }
+      return { success: true, count: sourceTasks.length };
+    } else {
+      // 一括複製（INSERT）
+      const newTasks = sourceTasks.map(t => {
+        const { id, created_at, updated_at, ...rest } = t;
+        let memoWithNote = rest.memo || '';
+        if (reasonNote) {
+          memoWithNote = memoWithNote ? `${memoWithNote}\n[${reasonNote}]` : `[${reasonNote}]`;
+        }
+        return {
+          ...rest,
+          user_id: tenantId,
+          work_date: targetDate,
+          memo: memoWithNote || null,
+          status: 'planned',
+          duration_minutes: 0,
+          approval_status: null
+        };
+      });
+
+      const { error: insertErr } = await supabase.from('work_logs').insert(newTasks);
+      if (insertErr) throw insertErr;
+      return { success: true, count: newTasks.length };
+    }
+  } catch (err: any) {
+    console.error('shiftTasksDate error:', err);
+    return { success: false, error: err.message || '予定の一括移動に失敗しました' };
+  }
+}
+
+// 現場ポータル用：タスクの完了更新・日報化（RLS回避・安全実行）
+export async function completePortalTask(
+  tenantId: string, 
+  taskId: string, 
+  options?: { 
+    durationMinutes?: number; 
+    memo?: string; 
+    harvestAmount?: number; 
+    workerId?: string;
+  }
+) {
+  try {
+    const supabase = createAdminClient();
+    if (!taskId) return { success: false, error: 'Task ID is required' };
+
+    const updatePayload: any = {
+      status: 'completed',
+      approval_status: 'pending',
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    if (options?.durationMinutes !== undefined && options.durationMinutes !== null && !isNaN(options.durationMinutes)) {
+      updatePayload.duration_minutes = Number(options.durationMinutes);
+    }
+    if (options?.memo !== undefined && options.memo !== null) {
+      updatePayload.memo = options.memo;
+    }
+    if (options?.harvestAmount !== undefined && options.harvestAmount !== null && !isNaN(options.harvestAmount)) {
+      updatePayload.harvest_amount = Number(options.harvestAmount);
+    }
+    if (options?.workerId) {
+      updatePayload.worker_id = options.workerId;
+    }
+
+    const { data, error } = await supabase
+      .from('work_logs')
+      .update(updatePayload)
+      .eq('id', taskId)
+      .select('*, crops(*), fields(*), workers(*)')
+      .single();
+
+    if (error) throw error;
+    return { success: true, data };
+  } catch (err: any) {
+    console.error('completePortalTask error:', err);
+    return { success: false, error: err.message || '更新に失敗しました' };
+  }
+}
+
+// 現場ポータル用：タスクの未完了復帰（予定に戻す）
+export async function reopenPortalTask(tenantId: string, taskId: string) {
+  try {
+    const supabase = createAdminClient();
+    if (!taskId) return { success: false, error: 'Task ID is required' };
+
+    const { data, error } = await supabase
+      .from('work_logs')
+      .update({
+        status: 'planned',
+        approval_status: null,
+        completed_at: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', taskId)
+      .select('*, crops(*), fields(*), workers(*)')
+      .single();
+
+    if (error) throw error;
+    return { success: true, data };
+  } catch (err: any) {
+    console.error('reopenPortalTask error:', err);
+    return { success: false, error: err.message || '更新に失敗しました' };
+  }
+}

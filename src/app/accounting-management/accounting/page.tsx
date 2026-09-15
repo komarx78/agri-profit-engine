@@ -6,10 +6,11 @@ import { getCurrentTenantId } from '@/lib/tenant';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { FileSpreadsheet, Download, RefreshCw, Loader2, Info, AlertTriangle, Calendar, Settings } from 'lucide-react';
 import Papa from 'papaparse';
+import { getJSTDate } from '@/lib/dateUtils';
 
 export default function AccountingExportPage() {
-  const today = new Date().toISOString().split('T')[0];
-  const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+  const today = getJSTDate();
+  const firstDayOfMonth = `${today.substring(0, 7)}-01`;
   
   const [startDate, setStartDate] = useState(firstDayOfMonth);
   const [endDate, setEndDate] = useState(today);

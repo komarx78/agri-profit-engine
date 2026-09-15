@@ -23,7 +23,17 @@ export default function SalesManagementLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const { companyName } = useCompany();
+  const [currentFarmId, setCurrentFarmId] = React.useState<string>('');
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      const f = p.get('farm') || p.get('tenant') || localStorage.getItem('agri_owner_id') || '';
+      if (f) setCurrentFarmId(f);
+    }
+  }, []);
+
+  const { companyName } = useCompany(currentFarmId);
 
   const navItems = [
     { name: '販売ダッシュボード', path: '/sales-management', icon: LayoutDashboard },
@@ -42,8 +52,11 @@ export default function SalesManagementLayout({
           
           {/* ヘッダー */}
           <div className="p-4 border-b border-slate-800 bg-slate-950">
-            <Link href="/" className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs font-bold transition-colors mb-2">
-              <ArrowLeft className="w-3.5 h-3.5" /> ポータルTOPへ
+            <Link 
+              href={currentFarmId ? `/portal/${currentFarmId}` : '/portal'} 
+              className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs font-bold transition-colors mb-2"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> 現場ポータルへ戻る
             </Link>
             <div className="flex items-center gap-2.5">
               <div className="p-2 bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 rounded-xl shrink-0">
@@ -66,10 +79,11 @@ export default function SalesManagementLayout({
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.path;
+              const linkHref = currentFarmId ? `${item.path}?farm=${currentFarmId}` : item.path;
               return (
                 <Link
                   key={item.path}
-                  href={item.path}
+                  href={linkHref}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-xs transition-all ${
                     isActive
                       ? 'bg-indigo-600 text-white shadow-md'
@@ -86,14 +100,14 @@ export default function SalesManagementLayout({
           {/* フッター */}
           <div className="p-4 border-t border-slate-800 space-y-2">
             <Link
-              href="/admin/cultivations"
+              href={currentFarmId ? `/admin/cultivations?farm=${currentFarmId}` : '/admin/cultivations'}
               className="w-full py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors"
             >
               <Sprout className="w-4 h-4" />
               <span>農業司令塔へ戻る</span>
             </Link>
             <Link
-              href="/portal"
+              href={currentFarmId ? `/portal/${currentFarmId}` : '/portal'}
               className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -117,10 +131,16 @@ export default function SalesManagementLayout({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Link href="/admin/cultivations" className="px-2.5 py-1 bg-emerald-900/60 text-emerald-300 text-xs font-bold rounded-lg border border-emerald-700">
+              <Link 
+                href={currentFarmId ? `/admin/cultivations?farm=${currentFarmId}` : '/admin/cultivations'} 
+                className="px-2.5 py-1 bg-emerald-900/60 text-emerald-300 text-xs font-bold rounded-lg border border-emerald-700"
+              >
                 🌾 農業司令塔
               </Link>
-              <Link href="/" className="p-1 text-slate-400 hover:text-white">
+              <Link 
+                href={currentFarmId ? `/portal/${currentFarmId}` : '/'} 
+                className="p-1 text-slate-400 hover:text-white"
+              >
                 <LogOut className="w-5 h-5" />
               </Link>
             </div>

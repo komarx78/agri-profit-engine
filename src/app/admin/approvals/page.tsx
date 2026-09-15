@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Calendar, CheckCircle2, Clock, MapPin, Sprout, Loader2, Plus, Trash2, Edit2, Users, Briefcase, Inbox, XCircle, FileText } from 'lucide-react';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
+import { getCurrentTenantId } from '@/lib/tenant';
 
 export default function ApprovalsPage() {
   const [logs, setLogs] = useState<any[]>([]);
@@ -13,8 +14,7 @@ export default function ApprovalsPage() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      const userTenantId = session ? session.user.id : (localStorage.getItem('agri_owner_id') || '');
+      const userTenantId = await getCurrentTenantId();
       if (!userTenantId) {
         setIsLoading(false);
         return;
@@ -46,10 +46,16 @@ export default function ApprovalsPage() {
 
   const handleUpdateStatus = async (id: string, newStatus: 'approved' | 'rejected') => {
     try {
-      const { error } = await supabase.from('work_logs').update({
+      const activeTenantId = tenantId || await getCurrentTenantId();
+      let query = supabase.from('work_logs').update({
         approval_status: newStatus
       }).eq('id', id);
+
+      if (activeTenantId) {
+        query = query.eq('user_id', activeTenantId);
+      }
       
+      const { error } = await query;
       if (error) throw error;
       
       // リストから消す（再取得）
