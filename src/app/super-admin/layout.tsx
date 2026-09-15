@@ -21,6 +21,7 @@ import { supabase } from '@/lib/supabase';
 
 // スーパー管理者許可メールアドレス（環境変数またはデフォルト許可リスト）
 const DEFAULT_SUPER_ADMINS = [
+  'noriyasu@sahara831.jp',
   'koma@ggmc.secret.jp',
   'koma@kap-cocotte.com',
   'admin@agri-profit-engine.com'
@@ -59,6 +60,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
         // 2. メタデータでの super_admin フラグ判定
         const isSuper = 
           allowedEmails.includes(email) || 
+          email === 'noriyasu@sahara831.jp' ||
           email === 'koma@ggmc.secret.jp' ||
           email.startsWith('koma@') ||
           email.endsWith('@ggmc.secret.jp') ||
