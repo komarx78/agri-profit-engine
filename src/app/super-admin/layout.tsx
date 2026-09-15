@@ -124,7 +124,6 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
       </div>
     );
   }
-  }
 
   const menuItems = [
     { name: 'ダッシュボード', href: '/super-admin', icon: LayoutDashboard },
