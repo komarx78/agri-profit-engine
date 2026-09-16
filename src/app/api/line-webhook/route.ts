@@ -89,14 +89,21 @@ const FARM_RICH_MENUS: Record<string, { farmUserId: string; companyName: string;
       }
     }
 
-    // 2. 【連携解除コマンド】
-    if (['解除', '連携解除', 'unlink'].includes(text.toLowerCase())) {
+    // 2. 【連携解除・農園リセットコマンド】
+    if (['解除', '連携解除', 'unlink', 'リセット', 'reset', '初期化'].includes(text.toLowerCase())) {
+      // ユーザーの農園専用リッチメニューを剥奪（デフォルト共通メニューへリセット）
+      await unlinkRichMenuFromUser(lineUserId);
+
+      // ワーカーの通知連携も解除
       await supabase
         .from('workers')
         .update({ line_user_id: null, is_line_notification_enabled: false })
         .eq('line_user_id', lineUserId);
 
-      await replyMessage(replyToken, `LINE連携を解除いたしました。\n再度連携したい場合は、お名前や暗証番号を送信してください。`);
+      await replyMessage(
+        replyToken,
+        `【🔄 所属・連携をリセットいたしました】\n農園の専用メニューおよびLINE連携を解除し、初期状態に戻しました。\n\n別の農園に登録する場合は、各農園のコード（例: 「kap」または「sahara」）を送信してください🌱`
+      );
       return NextResponse.json({ status: 'unlinked' }, { status: 200 });
     }
 
@@ -199,6 +206,24 @@ async function linkRichMenuToUser(userId: string, richMenuId: string) {
     console.log(`Linked richmenu ${richMenuId} to user ${userId}: status ${res.status}`);
   } catch (e) {
     console.error('Failed to link rich menu to user:', e);
+  }
+}
+
+// LINE Messaging API でユーザーの個別リッチメニューを解除する関数（デフォルト共通メニューへ復帰）
+async function unlinkRichMenuFromUser(userId: string) {
+  const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  if (!channelAccessToken || !userId) return;
+
+  try {
+    const res = await fetch(`https://api.line.me/v2/bot/user/${userId}/richmenu`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${channelAccessToken}`
+      }
+    });
+    console.log(`Unlinked richmenu from user ${userId}: status ${res.status}`);
+  } catch (e) {
+    console.error('Failed to unlink rich menu from user:', e);
   }
 }
 
