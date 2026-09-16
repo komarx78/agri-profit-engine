@@ -187,23 +187,11 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
         }
       }
 
-      // 4. 万が一まだ0件の場合（※農園IDが未指定の場合のみ、主農園をフェッチして救済）
-      if (workerList.length === 0 && !targetOwnerId) {
-        try {
-          const { data: fallbackWorkers } = await supabase
-            .from('workers')
-            .select('*')
-            .eq('user_id', '62163024-2c8e-4057-a872-2455dbc58d32')
-            .order('name');
-          if (fallbackWorkers && fallbackWorkers.length > 0) {
-            workerList = fallbackWorkers;
-            resolvedOwnerId = '62163024-2c8e-4057-a872-2455dbc58d32';
-            setCurrentFarmName('佐原農園株式会社');
-            safeStorage.setItem('agri_cached_company_name', '佐原農園株式会社');
-          }
-        } catch (fbErr) {
-          console.warn('Fallback workers fetch error:', fbErr);
-        }
+      // 4. 農園が未指定または見つからない場合は、必ず所属農園選択へ戻す（憲法3条）
+      if (!targetOwnerId) {
+        setStep('select_farm');
+        setIsLoading(false);
+        return;
       }
 
       if (workerList.length > 0) {

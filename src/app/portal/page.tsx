@@ -2580,12 +2580,30 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
     }
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    localStorage.removeItem('agri_current_worker');
+  const handleSwitchFarm = () => {
+    try {
+      localStorage.removeItem('agri_current_worker');
+      localStorage.removeItem('agri_owner_id');
+      localStorage.removeItem('agri_cached_company_name');
+    } catch (e) {}
     setCurrentUser(null);
     setWorkerProfile(null);
     setRole('worker');
+    setActiveFarmId('');
+    setShowWorkerGate(true);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    try {
+      localStorage.removeItem('agri_current_worker');
+      localStorage.removeItem('agri_owner_id');
+      localStorage.removeItem('agri_cached_company_name');
+    } catch (e) {}
+    setCurrentUser(null);
+    setWorkerProfile(null);
+    setRole('worker');
+    setActiveFarmId('');
     setShowWorkerGate(true);
   };
 
@@ -2835,6 +2853,16 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                 ))}
               </select>
             </div>
+
+            {/* 農園切替 */}
+            <button
+              onClick={handleSwitchFarm}
+              className="flex items-center gap-1 p-2 sm:px-2.5 sm:py-1.5 text-xs sm:text-sm font-bold text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-colors shrink-0"
+              title="農園を切り替える"
+            >
+              <Building className="w-4 h-4 shrink-0 text-emerald-600" />
+              <span className="hidden sm:inline">農園切替</span>
+            </button>
 
             {/* ログアウト */}
             <button 
