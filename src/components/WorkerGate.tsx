@@ -533,21 +533,25 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
         {step === 'select_worker' && (
           <div>
             <div className="text-center mb-5">
-              {currentFarmName && (
-                <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-xs font-black text-emerald-300 mb-2">
+              <div className="flex items-center justify-center gap-2 mb-3">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-xs font-black text-emerald-300">
                   <Building className="w-3.5 h-3.5" />
-                  <span>{currentFarmName}</span>
-                  {availableFarms.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setStep('select_farm')}
-                      className="text-[10px] text-slate-400 hover:text-white underline ml-1 cursor-pointer"
-                    >
-                      農園変更
-                    </button>
-                  )}
+                  <span>{currentFarmName || '所属農園'}</span>
                 </div>
-              )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    safeStorage.clearWorkerCache();
+                    setWorkers([]);
+                    setCurrentFarmName('');
+                    setStep('select_farm');
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+                >
+                  <RefreshCw className="w-3 h-3 text-emerald-400" />
+                  <span>農園を変更</span>
+                </button>
+              </div>
               <div className="w-12 h-12 bg-emerald-500/20 rounded-2xl mx-auto flex items-center justify-center mb-2 border border-emerald-500/30">
                 <User className="w-6 h-6 text-emerald-400" />
               </div>
