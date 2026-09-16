@@ -772,24 +772,6 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
 
         {/* 共通フッターリンク */}
         <div className="mt-6 pt-5 border-t border-slate-800 text-center space-y-3">
-          {!farmId && step !== 'select_farm' && (
-            <div>
-              <button
-                type="button"
-                onClick={() => {
-                  safeStorage.clearWorkerCache();
-                  setWorkers([]);
-                  setCurrentFarmName('');
-                  setStep('select_farm');
-                }}
-                className="text-xs text-slate-400 hover:text-emerald-400 font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
-              >
-                <Building className="w-3.5 h-3.5" />
-                <span>🏢 {t('switchFarm', language)}</span>
-              </button>
-            </div>
-          )}
-
           <div>
             <a
               href="/login"

@@ -249,33 +249,64 @@ async function unlinkRichMenuFromUser(userId: string) {
   }
 }
 
-// LINE Messaging API で返信するヘルパー関数
-async function replyMessage(replyToken: string, text: string) {
+// LINE Messaging API で返信するヘルパー関数（失敗時は即座にpushMessageで確実に配送）
+async function replyMessage(replyToken: string, text: string, userId?: string) {
   if (!LINE_ACCESS_TOKEN) {
     console.error('LINE_CHANNEL_ACCESS_TOKEN is not set');
     return;
   }
 
+  let sent = false;
+  if (replyToken && replyToken !== 'dummy_token') {
+    try {
+      const res = await fetch('https://api.line.me/v2/bot/message/reply', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${LINE_ACCESS_TOKEN}`
+        },
+        body: JSON.stringify({
+          replyToken: replyToken,
+          messages: [{ type: 'text', text: text }]
+        })
+      });
+      if (res.ok) {
+        sent = true;
+        console.log(`Successfully replied message via replyToken`);
+      } else {
+        const errText = await res.text();
+        console.warn(`ReplyToken failed (${res.status}): ${errText}`);
+      }
+    } catch (e) {
+      console.warn('Reply error:', e);
+    }
+  }
+
+  // replyTokenで届かなかった場合は、ユーザーIDへのダイレクトpushで確実に配送！
+  if (!sent && userId && userId.startsWith('U')) {
+    await pushMessage(userId, text);
+  }
+}
+
+// LINE Messaging API でダイレクトプッシュ送信する関数
+async function pushMessage(userId: string, text: string) {
+  if (!LINE_ACCESS_TOKEN || !userId) return;
+
   try {
-    const res = await fetch('https://api.line.me/v2/bot/message/reply', {
+    const res = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${LINE_ACCESS_TOKEN}`
       },
       body: JSON.stringify({
-        replyToken: replyToken,
+        to: userId,
         messages: [{ type: 'text', text: text }]
       })
     });
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error(`Failed to reply message: status ${res.status}, response: ${errText}`);
-    } else {
-      console.log(`Successfully replied message to replyToken`);
-    }
+    console.log(`Direct push to ${userId}: status ${res.status}`);
   } catch (e) {
-    console.error('Failed to reply message:', e);
+    console.error('Push error:', e);
   }
 }
 
