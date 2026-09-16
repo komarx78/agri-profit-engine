@@ -73,6 +73,15 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
   const [isLineBrowser, setIsLineBrowser] = useState(false);
   const [showPin, setShowPin] = useState(false);
   const [inputFarmId, setInputFarmId] = useState('');
+  const [availableFarms, setAvailableFarms] = useState<any[]>([]);
+
+  const handleSelectFarm = (farm: any) => {
+    setCurrentFarmName(farm.company_name);
+    safeStorage.setItem('agri_owner_id', farm.user_id);
+    safeStorage.setItem('agri_cached_company_name', farm.company_name);
+    setStep('select_worker');
+    loadWorkersForOwner(farm.user_id);
+  };
 
   // 全角数字 ➔ 半角数字自動変換 ＆ 非数字除去
   const normalizePin = (val: string) => {
@@ -111,6 +120,7 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
           .select('id, user_id, company_name');
         
         if (companies && companies.length > 0) {
+          setAvailableFarms(companies);
           if (targetOwnerId && targetOwnerId !== 'null' && targetOwnerId !== 'undefined') {
             const matched = companies.find(c => c.user_id === targetOwnerId || c.id === targetOwnerId);
             if (matched) {
@@ -121,13 +131,10 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
               resolvedOwnerId = targetOwnerId;
             }
           } else {
-            // targetOwnerId が一切未指定の場合のみ主農園を自動解決
-            const mainComp = companies.find(c => c.company_name?.includes('佐原')) || companies[0];
-            if (mainComp) {
-              resolvedOwnerId = mainComp.user_id;
-              setCurrentFarmName(mainComp.company_name);
-              safeStorage.setItem('agri_cached_company_name', mainComp.company_name);
-            }
+            // targetOwnerId が一切未指定の場合、特定農園にハードコードせず農園選択ステップを表示（憲法3条）
+            setStep('select_farm');
+            setIsLoading(false);
+            return;
           }
         }
       } catch (cErr) {
@@ -477,15 +484,80 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
         )}
 
         {/* ══════════════════════════════════════════════════════
+            【ステップ0】農園選択画面（初回アクセス・農園ID未指定時）
+            ══════════════════════════════════════════════════════ */}
+        {step === 'select_farm' && (
+          <div>
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-black mb-3">
+                <Building className="w-3.5 h-3.5" />
+                <span>所属農園の選択</span>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                あなたの農園を選んでください
+              </h1>
+              <p className="text-xs text-slate-400 mt-1">
+                ※一度選ぶと次回から自動でこの農園が開きます
+              </p>
+            </div>
+
+            <div className="space-y-3 max-w-sm mx-auto mb-6">
+              {availableFarms.map(f => (
+                <button
+                  key={f.id || f.user_id}
+                  type="button"
+                  onClick={() => handleSelectFarm(f)}
+                  className="w-full p-4 rounded-2xl bg-slate-800/90 hover:bg-emerald-600/20 border-2 border-slate-700 hover:border-emerald-500 text-left transition-all active:scale-98 flex items-center justify-between group shadow-lg cursor-pointer"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-11 h-11 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-black text-xl group-hover:bg-emerald-500 group-hover:text-slate-950 transition-all">
+                      🏢
+                    </div>
+                    <div>
+                      <div className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">
+                        {f.company_name}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-bold mt-0.5">
+                        タップしてこの農園でログイン
+                      </div>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all" />
+                </button>
+              ))}
+            </div>
+
+            <div className="text-center pt-2">
+              <a
+                href="/login"
+                className="text-xs text-slate-400 hover:text-emerald-400 transition-colors inline-flex items-center gap-1 font-bold"
+              >
+                <span>管理者の方はこちら（ログイン）</span>
+                <ArrowRight className="w-3 h-3" />
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════
             【ステップ1】お名前選択画面（スタッフカード一覧）
             ══════════════════════════════════════════════════════ */}
         {step === 'select_worker' && (
           <div>
             <div className="text-center mb-5">
               {currentFarmName && (
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-xs font-black text-emerald-300 mb-2">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded-full text-xs font-black text-emerald-300 mb-2">
                   <Building className="w-3.5 h-3.5" />
                   <span>{currentFarmName}</span>
+                  {availableFarms.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setStep('select_farm')}
+                      className="text-[10px] text-slate-400 hover:text-white underline ml-1 cursor-pointer"
+                    >
+                      農園変更
+                    </button>
+                  )}
                 </div>
               )}
               <div className="w-12 h-12 bg-emerald-500/20 rounded-2xl mx-auto flex items-center justify-center mb-2 border border-emerald-500/30">
