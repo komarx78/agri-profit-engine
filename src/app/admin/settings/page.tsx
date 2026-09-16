@@ -3,13 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
-import { Settings, Save, CheckCircle2, Building, MapPin, Phone, FileText, Landmark, Calendar, ArrowRight } from 'lucide-react';
+import { Settings, Save, CheckCircle2, Building, MapPin, Phone, FileText, Landmark, Calendar, ArrowRight, QrCode, Copy, Smartphone } from 'lucide-react';
 import Link from 'next/link';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 import { getAttendancePeriod } from '@/lib/dateUtils';
 
 export default function SettingsPage() {
   const [settingsId, setSettingsId] = useState<string | null>(null);
+  const [currentTenant, setCurrentTenant] = useState<string>('');
   const [formData, setFormData] = useState({
     company_name: '',
     postal_code: '',
@@ -34,6 +35,7 @@ export default function SettingsPage() {
           setIsLoading(false);
           return;
         }
+        setCurrentTenant(tenantId);
 
         // LocalStorage からキャッシュ読み込み
         if (typeof window !== 'undefined') {
@@ -151,6 +153,101 @@ export default function SettingsPage() {
           ここで設定した情報は、請求書の自動発行時にヘッダーや振込先として印字されます。
         </p>
       </div>
+
+      {/* 📱 現場スタッフ案内・QRコード発行（SaaSハイブリッド対応） */}
+      {currentTenant && (
+        <section className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-6 rounded-3xl shadow-lg border border-slate-700">
+          <div className="flex items-center justify-between gap-4 mb-2">
+            <h2 className="text-lg font-black text-white flex items-center gap-2">
+              <Smartphone className="w-5 h-5 text-emerald-400" />
+              現場スタッフ用 打刻ポータル・案内QRコード
+            </h2>
+            <span className="text-[11px] font-bold px-2.5 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full">
+              SaaSハイブリッド対応
+            </span>
+          </div>
+          <p className="text-xs text-slate-300 mb-6 leading-relaxed">
+            貴社の現場スタッフが他社と混ざらず安全に打刻できるよう、2つの案内方法（Web/QR掲示、またはLINE連携）をご用意しております。現場の運用形態に合わせてお選びいただけます。
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* 方式①: 現場掲示用QRコード (LINE不要) */}
+            <div className="bg-slate-800/90 p-5 rounded-2xl border border-slate-700 flex flex-col justify-between shadow-sm">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/20 text-emerald-300 rounded-lg text-xs font-black mb-3">
+                  <span>方式①：現場掲示用QRコード（LINE不要）</span>
+                </div>
+                <h3 className="text-sm font-bold text-white mb-1.5">タイムカード置き場・現場の壁に掲示</h3>
+                <p className="text-xs text-slate-300 mb-4 leading-relaxed">
+                  スタッフはスマホのカメラでQRコードを読み取るだけで、貴社専用の打刻画面へ直行します。他社の名前や変更ボタンは一切出ません。
+                </p>
+                <div className="bg-white p-3 rounded-2xl inline-block mb-3 shadow-md text-center">
+                  <img 
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`https://agri-profit-engine.vercel.app/portal/${currentTenant}?openExternalBrowser=1`)}`}
+                    alt="専用ポータルQRコード"
+                    className="w-32 h-32 mx-auto"
+                  />
+                  <span className="text-[10px] font-black text-slate-600 block mt-1">印刷して現場に掲示</span>
+                </div>
+              </div>
+              <div className="space-y-2 pt-2 border-t border-slate-700/60">
+                <div className="text-[11px] text-slate-400 font-mono truncate bg-slate-950/60 p-2 rounded-lg">
+                  {`https://agri-profit-engine.vercel.app/portal/${currentTenant}`}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`https://agri-profit-engine.vercel.app/portal/${currentTenant}?openExternalBrowser=1`);
+                    alert('貴社専用ポータルのURLをコピーしました！');
+                  }}
+                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 shadow-sm"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>専用URLをコピー</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 方式②: LINE公式アカウント連携 (LINEで使いたい人向け) */}
+            <div className="bg-slate-800/90 p-5 rounded-2xl border border-slate-700 flex flex-col justify-between shadow-sm">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/20 text-blue-300 rounded-lg text-xs font-black mb-3">
+                  <span>方式②：公式LINE連携（LINEで打刻）</span>
+                </div>
+                <h3 className="text-sm font-bold text-white mb-1.5">スタッフ個人のLINEで毎朝打刻</h3>
+                <p className="text-xs text-slate-300 mb-4 leading-relaxed">
+                  スタッフがこのQRコードを読み取って送信すると、LINEの下部メニューが貴社専用の打刻ボタンに自動で切り替わります。
+                </p>
+                <div className="bg-white p-3 rounded-2xl inline-block mb-3 shadow-md text-center">
+                  <img 
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`https://line.me/R/oaMessage/@566kmiby/?${currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : currentTenant}`)}`}
+                    alt="LINE登録用QRコード"
+                    className="w-32 h-32 mx-auto"
+                  />
+                  <span className="text-[10px] font-black text-slate-600 block mt-1">LINEで送信して登録</span>
+                </div>
+              </div>
+              <div className="space-y-2 pt-2 border-t border-slate-700/60">
+                <div className="text-[11px] text-slate-400 font-mono truncate bg-slate-950/60 p-2 rounded-lg">
+                  {`参加コード: ${currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : currentTenant}`}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const code = currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : currentTenant;
+                    navigator.clipboard.writeText(`https://line.me/R/oaMessage/@566kmiby/?${code}`);
+                    alert('LINE連携用URLをコピーしました！');
+                  }}
+                  className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 shadow-sm"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>LINE招待リンクをコピー</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* 全社勤怠締日 ＆ 給与支払日 連動カード */}
       <div className="bg-gradient-to-r from-indigo-50/80 via-blue-50/50 to-slate-50 p-5 rounded-2xl border border-indigo-100 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">

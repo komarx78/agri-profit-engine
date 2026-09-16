@@ -538,19 +538,21 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
                   <Building className="w-3.5 h-3.5" />
                   <span>{currentFarmName || '所属農園'}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    safeStorage.clearWorkerCache();
-                    setWorkers([]);
-                    setCurrentFarmName('');
-                    setStep('select_farm');
-                  }}
-                  className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
-                >
-                  <RefreshCw className="w-3 h-3 text-emerald-400" />
-                  <span>農園を変更</span>
-                </button>
+                {!farmId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      safeStorage.clearWorkerCache();
+                      setWorkers([]);
+                      setCurrentFarmName('');
+                      setStep('select_farm');
+                    }}
+                    className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+                  >
+                    <RefreshCw className="w-3 h-3 text-emerald-400" />
+                    <span>農園を変更</span>
+                  </button>
+                )}
               </div>
               <div className="w-12 h-12 bg-emerald-500/20 rounded-2xl mx-auto flex items-center justify-center mb-2 border border-emerald-500/30">
                 <User className="w-6 h-6 text-emerald-400" />
@@ -770,7 +772,7 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
 
         {/* 共通フッターリンク */}
         <div className="mt-6 pt-5 border-t border-slate-800 text-center space-y-3">
-          {step !== 'select_farm' && (
+          {!farmId && step !== 'select_farm' && (
             <div>
               <button
                 type="button"

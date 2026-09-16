@@ -34,6 +34,40 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: 'ignored_no_user' }, { status: 200 });
     }
 
+// 各農園の専用リッチメニュー設定（SaaS個別バインド）
+const FARM_RICH_MENUS: Record<string, { farmUserId: string; companyName: string; richMenuId: string }> = {
+  kap: {
+    farmUserId: '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04',
+    companyName: '株式会社KAP',
+    richMenuId: 'richmenu-c1ec7f8a5c71fe96f19dab6fdaae6eb3'
+  },
+  sahara: {
+    farmUserId: '62163024-2c8e-4057-a872-2455dbc58d32',
+    companyName: '佐原農園株式会社',
+    richMenuId: 'richmenu-0bac6b2dfa110035303eff1d8f1cf36b'
+  }
+};
+
+    // 0. 【農園登録・所属バインドコマンド（SaaSハイブリッド連携）】
+    // 例: "kap", "join_kap", "農園登録_kap", "sahara", "join_sahara", "佐原" など
+    const lowerText = text.toLowerCase().replace(/^(join_|登録_|農園登録_|農園_)/, '');
+    const matchedFarmKey = Object.keys(FARM_RICH_MENUS).find(
+      k => k === lowerText || FARM_RICH_MENUS[k].companyName.toLowerCase().includes(lowerText) || lowerText.includes(k)
+    );
+
+    if (matchedFarmKey) {
+      const farmInfo = FARM_RICH_MENUS[matchedFarmKey];
+      // ユーザーに個別リッチメニューを連携（他社は一切不可視・完全ロック）
+      await linkRichMenuToUser(lineUserId, farmInfo.richMenuId);
+
+      const portalUrl = `https://agri-profit-engine.vercel.app/portal/${farmInfo.farmUserId}?openExternalBrowser=1`;
+      await replyMessage(
+        replyToken,
+        `🎉【${farmInfo.companyName}】の現場ポータルに登録が完了いたしました！\n\n画面下のメニューが「${farmInfo.companyName} 専用メニュー」に切り替わりました。\n\n今後は下のボタンを押すだけで、いつでも${farmInfo.companyName}の打刻画面が開きます🌱\n\n▼直通リンク：\n${portalUrl}`
+      );
+      return NextResponse.json({ status: 'farm_linked', farm: farmInfo.companyName }, { status: 200 });
+    }
+
     // 1. 【管理者連携コマンド】
     if (['管理者', '管理者連携', 'admin', '管理者登録'].includes(text.toLowerCase())) {
       try {
@@ -140,13 +174,31 @@ export async function POST(req: Request) {
     }
 
     // 6. 【未一致時のスマート案内メッセージ】
-    const helpMsg = `Agri-Profit 打刻アシスタントです🌱\n\nLINE連携を行うには、以下のいずれかをこのトークに送信してください：\n\n1️⃣ あなたの「4桁の暗証番号」（例: 0301）\n2️⃣ あなたの「お名前」（例: 佐原由実香）\n3️⃣ 現場ポータルに表示されている「連携キー」\n\n※管理者の方は「管理者連携」と送信してください。`;
+    const helpMsg = `agri-profit 現場クラウドです🌱\n\n【所属農園のLINE連携】\nあなたの農園コードを送信してください：\n・株式会社KAP ➔ 「kap」\n・佐原農園株式会社 ➔ 「sahara」\n\n送信すると、画面下のメニューが自社専用の打刻メニューに切り替わります！\n\n※スタッフ個人の通知連携は「お名前」または「4桁の暗証番号」を送信してください。\n※管理者の方は「管理者連携」と送信してください。`;
     await replyMessage(replyToken, helpMsg);
     return NextResponse.json({ status: 'help_sent' }, { status: 200 });
 
   } catch (error: any) {
     console.error('Webhook Error:', error);
     return NextResponse.json({ status: 'error', message: error.message }, { status: 500 });
+  }
+}
+
+// LINE Messaging API で個別リッチメニューをユーザーにバインドする関数
+async function linkRichMenuToUser(userId: string, richMenuId: string) {
+  const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  if (!channelAccessToken || !userId || !richMenuId) return;
+
+  try {
+    const res = await fetch(`https://api.line.me/v2/bot/user/${userId}/richmenu/${richMenuId}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${channelAccessToken}`
+      }
+    });
+    console.log(`Linked richmenu ${richMenuId} to user ${userId}: status ${res.status}`);
+  } catch (e) {
+    console.error('Failed to link rich menu to user:', e);
   }
 }
 
