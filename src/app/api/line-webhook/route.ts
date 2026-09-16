@@ -30,6 +30,18 @@ export async function POST(req: Request) {
     const lineUserId = event.source?.userId;
     const replyToken = event.replyToken;
 
+    // 受信内容を即座にDBログへ記録（監査・追跡用）
+    try {
+      await supabase.from('system_error_logs').insert({
+        company_name: 'LINE_WEBHOOK',
+        error_level: 'info',
+        error_category: 'webhook_received',
+        error_message: `Text: "${text}", UserId: ${lineUserId || 'none'}, Token: ${replyToken ? 'present' : 'none'}`
+      });
+    } catch (logErr) {
+      console.error('Log insert error:', logErr);
+    }
+
     if (!lineUserId || !replyToken) {
       return NextResponse.json({ status: 'ignored_no_user' }, { status: 200 });
     }
@@ -57,20 +69,25 @@ const FARM_RICH_MENUS: Record<string, { farmUserId: string; companyName: string;
 
     if (matchedFarmKey) {
       const farmInfo = FARM_RICH_MENUS[matchedFarmKey];
-      // ユーザーに個別リッチメニューを連携（他社は一切不可視・完全ロック）
-      await linkRichMenuToUser(lineUserId, farmInfo.richMenuId);
-
       const portalUrl = `https://agri-profit-engine.vercel.app/portal/${farmInfo.farmUserId}?openExternalBrowser=1`;
+
+      // 1. 最優先で返信
       await replyMessage(
         replyToken,
         `🎉【${farmInfo.companyName}】の現場ポータルに登録が完了いたしました！\n\n画面下のメニューが「${farmInfo.companyName} 専用メニュー」に切り替わりました。\n\n今後は下のボタンを押すだけで、いつでも${farmInfo.companyName}の打刻画面が開きます🌱\n\n▼直通リンク：\n${portalUrl}`
       );
+
+      // 2. 個別リッチメニューを連携（他社は一切不可視・完全ロック）
+      await linkRichMenuToUser(lineUserId, farmInfo.richMenuId);
+
       return NextResponse.json({ status: 'farm_linked', farm: farmInfo.companyName }, { status: 200 });
     }
 
     // 1. 【管理者連携コマンド】
     if (['管理者', '管理者連携', 'admin', '管理者登録'].includes(text.toLowerCase())) {
       try {
+        await replyMessage(replyToken, `【👑 管理者LINE連携完了】\nシステム管理者としてLINE登録が完了いたしました！\n\n以後、定時後に未退勤のスタッフがいる場合、こちらへ「打刻忘れ一括アラート」が自動配信されます。`);
+
         await supabase
           .from('system_notification_settings')
           .upsert({
@@ -80,30 +97,34 @@ const FARM_RICH_MENUS: Record<string, { farmUserId: string; companyName: string;
             updated_at: new Date().toISOString()
           }, { onConflict: 'id' });
 
-        await replyMessage(replyToken, `【👑 管理者LINE連携完了】\nシステム管理者としてLINE登録が完了いたしました！\n\n以後、定時後に未退勤のスタッフがいる場合、こちらへ「打刻忘れ一括アラート」が自動配信されます。`);
         return NextResponse.json({ status: 'admin_linked' }, { status: 200 });
       } catch (e: any) {
         console.error('Admin link error:', e);
-        await replyMessage(replyToken, `管理者連携中にエラーが発生しました: ${e.message}`);
         return NextResponse.json({ status: 'error' }, { status: 500 });
       }
     }
 
     // 2. 【連携解除・農園リセットコマンド】
     if (['解除', '連携解除', 'unlink', 'リセット', 'reset', '初期化'].includes(text.toLowerCase())) {
-      // ユーザーの農園専用リッチメニューを剥奪（デフォルト共通メニューへリセット）
-      await unlinkRichMenuFromUser(lineUserId);
-
-      // ワーカーの通知連携も解除
-      await supabase
-        .from('workers')
-        .update({ line_user_id: null, is_line_notification_enabled: false })
-        .eq('line_user_id', lineUserId);
-
+      // 1. 最優先で即座に返信
       await replyMessage(
         replyToken,
         `【🔄 所属・連携をリセットいたしました】\n農園の専用メニューおよびLINE連携を解除し、初期状態に戻しました。\n\n別の農園に登録する場合は、各農園のコード（例: 「kap」または「sahara」）を送信してください🌱`
       );
+
+      // 2. ユーザーの農園専用リッチメニューを剥奪（デフォルト共通メニューへリセット）
+      await unlinkRichMenuFromUser(lineUserId);
+
+      // 3. ワーカーの通知連携も解除
+      try {
+        await supabase
+          .from('workers')
+          .update({ line_user_id: null, is_line_notification_enabled: false })
+          .eq('line_user_id', lineUserId);
+      } catch (err) {
+        console.error('DB worker update error:', err);
+      }
+
       return NextResponse.json({ status: 'unlinked' }, { status: 200 });
     }
 
