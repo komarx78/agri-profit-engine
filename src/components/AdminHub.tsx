@@ -36,7 +36,8 @@ import {
   ShoppingCart,
   Building,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  ShieldAlert
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useCompany } from '@/hooks/useCompany';
@@ -139,6 +140,7 @@ export default function AdminHub({ onSwitchToHome, initialNav = 'cultivations' }
         { id: 'pesticide', name: '💊 農薬検索・防除AI', icon: FlaskConical, path: tenantId ? `/farm/pesticide-check?farm=${tenantId}` : '/farm/pesticide-check', external: true },
         { id: 'masters', name: '⚙️ マスタ管理全般', icon: Database, path: tenantId ? `/admin/masters?farm=${tenantId}` : '/admin/masters' },
         { id: 'settings', name: '🏢 自社情報設定', icon: Settings, path: tenantId ? `/admin/settings?farm=${tenantId}` : '/admin/settings' },
+        { id: 'super-admin', name: '🛡️ スーパー管理者 (HQ)', icon: ShieldAlert, path: '/super-admin', external: true },
       ]
     }
   ];

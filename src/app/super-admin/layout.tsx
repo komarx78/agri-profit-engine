@@ -21,6 +21,7 @@ import { supabase } from '@/lib/supabase';
 
 // スーパー管理者許可メールアドレス（環境変数またはデフォルト許可リスト）
 const DEFAULT_SUPER_ADMINS = [
+  'noriyasu@sahara831.jp',
   'koma@ggmc.secret.jp',
   'koma@kap-cocotte.com',
   'admin@agri-profit-engine.com'
@@ -59,11 +60,11 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
         // 2. メタデータでの super_admin フラグ判定
         const isSuper = 
           allowedEmails.includes(email) || 
+          email === 'noriyasu@sahara831.jp' ||
           email === 'koma@ggmc.secret.jp' ||
           email.startsWith('koma@') ||
           email.endsWith('@ggmc.secret.jp') ||
-          session.user.user_metadata?.role === 'super_admin' ||
-          session.user.user_metadata?.role === 'admin';
+          session.user.user_metadata?.role === 'super_admin';
 
         setIsAuthorized(isSuper);
       } catch (err) {
@@ -103,23 +104,22 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
             </span>
             <h2 className="text-xl font-black text-white pt-1">スーパー管理者 権限制限</h2>
             <p className="text-xs font-medium text-slate-400 leading-relaxed">
-              この画面はシステム統括管理者（HQ）専用の司令室です。<br />
-              現在のアカウント（{currentUserEmail || '未認証'}）にはアクセス権限がありません。
+              この画面はシステム統括管理者（開発・本部）専用の司令室です。<br />
+              農園の管理者様は以下のボタンより農園管理画面へお進みください。
             </p>
           </div>
-          <div className="pt-2 space-y-2">
+          <div className="pt-2 space-y-3">
             <Link
-              href="/"
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
+              href="/admin/cultivations"
+              className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 active:scale-95"
             >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Cloud Portal へ戻る</span>
+              <span>🌱 農園管理画面（作付け・スタッフ管理）へ</span>
             </Link>
             <Link
               href="/login"
               className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-all block text-center"
             >
-              統括管理者アカウントで再ログイン
+              別のアカウントでログイン
             </Link>
           </div>
         </div>
