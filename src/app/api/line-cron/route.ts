@@ -152,6 +152,96 @@ export async function GET(req: Request) {
         adminLineUserIds.push(compSetting.admin_line_user_id);
       }
 
+      // この農園専用の現場ポータルURL（他農園への誤遷移を物理遮断）
+      const farmPortalUrl = `https://agri-profit-engine.vercel.app/portal/${tenantId}`;
+
+      // =========================================================================
+      // 🌿 A. 前日以前の未確定ログ（1日1回限定リマインド・未解決の間は毎日朝/日中に1回送信）
+      // =========================================================================
+      const pastLogs = logs.filter(l => l.date < todayStr);
+      let pastAlertSent = false;
+      let pastStaffCount = 0;
+
+      if (pastLogs.length > 0) {
+        // 本日（todayStr）すでにこのテナントに「前日以前リマインド」を送信したかを厳格チェック（憲法10条：1日1回限定）
+        const { data: pastAlertSentToday } = await supabase
+          .from('system_error_logs')
+          .select('id')
+          .eq('error_category', 'past_unclocked_alert')
+          .eq('tenant_id', tenantId)
+          .eq('error_message', `PAST_ALERT_SENT_${tenantId}_${todayStr}`)
+          .limit(1);
+
+        const isAlreadySentToday = pastAlertSentToday && pastAlertSentToday.length > 0;
+
+        if (!isAlreadySentToday || forceRun) {
+          // 過去日の未確定スタッフリスト（重複スタッフは日付ごとに集約）
+          const pastStaffLines = pastLogs.map(l => {
+            const w = workersMap.get(l.worker_id);
+            const wName = w?.name || 'スタッフ';
+            const clockInTime = l.clock_in 
+              ? new Date(l.clock_in).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }) 
+              : '--:--';
+            return `・${wName}：${l.date} 出勤 ${clockInTime}（退勤未打刻）`;
+          });
+
+          pastStaffCount = pastLogs.length;
+          const pastAlertTitle = `【${companyName}】過去の未退勤リマインド（計 ${pastLogs.length}件）🌱`;
+          const pastAlertBody = [
+            `お疲れ様です。農業収益エンジン（勤怠管理）です。`,
+            ``,
+            `${companyName} において、前日以前の「退勤打刻」が未確定のままとなっているログがございます。`,
+            ``,
+            pastStaffLines.slice(0, 10).join('\n'),
+            pastStaffLines.length > 10 ? `...他 ${pastStaffLines.length - 10}件` : '',
+            ``,
+            `現場ポータルよりご確認の上、代理打刻または退勤時刻の修正をお願いいたします。`,
+            `【${companyName}】現場ポータルURL:`,
+            farmPortalUrl
+          ].filter(Boolean).join('\n');
+
+          // 農業管理者のLINEへプッシュ送信！
+          if (channelAccessToken && adminLineUserIds.length > 0) {
+            for (const adminLineId of Array.from(new Set(adminLineUserIds))) {
+              try {
+                await fetch('https://api.line.me/v2/bot/message/push', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${channelAccessToken}`
+                  },
+                  body: JSON.stringify({
+                    to: adminLineId,
+                    messages: [{ type: 'text', text: `${pastAlertTitle}\n\n${pastAlertBody}` }]
+                  })
+                });
+                pastAlertSent = true;
+              } catch (pErr) {
+                console.warn(`Past unclocked LINE push error for ${companyName}:`, pErr);
+              }
+            }
+          }
+
+          // 🚨【送信履歴を即座にDB永続化（次回10分後cronでの重複送信を100%完全遮断・憲法10条）】
+          try {
+            await supabase.from('system_error_logs').insert({
+              tenant_id: tenantId,
+              company_name: companyName,
+              error_category: 'past_unclocked_alert',
+              error_level: 'info',
+              error_message: `PAST_ALERT_SENT_${tenantId}_${todayStr}`,
+              page_url: farmPortalUrl
+            });
+          } catch (logErr) {
+            console.warn(`Failed to record past alert history for ${tenantId}:`, logErr);
+          }
+        }
+      }
+
+      // =========================================================================
+      // ⏰ B. 本日（todayStr）の打刻忘れ判定（退勤予定時刻＋30分後に夕方1回送信）
+      // =========================================================================
+      const todayLogs = logs.filter(l => l.date === todayStr);
       const unclockedStaffList: {
         logId: string;
         originalMemo: string;
@@ -167,25 +257,16 @@ export async function GET(req: Request) {
         lineUserId?: string | null;
       }[] = [];
 
-      for (const log of logs) {
+      for (const log of todayLogs) {
         const worker = workersMap.get(log.worker_id);
         if (!worker) continue;
 
-        const isPastDate = log.date < todayStr;
-
-        // 🚨【多重送信・過去日スパムの完全物理遮断】
-        // 1. 過去日の打刻漏れは、明示的に include_past=true が指定されない限り、10分おきの定期cronでは絶対に送らない！
-        if (isPastDate && !includePast) {
-          continue;
-        }
-
-        // 2. すでに通知済みのログ（memoに LINE_ALERT_SENT が記録されている場合）は絶対に再送しない！
-        // ※[LINE_ALERT_SENT:2026-09-11 18:30] 等の形式に対応し、同一日・同一スタッフへの1日1回送信を物理保証（憲法10条）
+        // すでに通知済みのログ（memoに LINE_ALERT_SENT が記録されている場合）は絶対に再送しない！
         if (log.memo && (log.memo.includes('LINE_ALERT_SENT') || log.memo.includes('ALERT_SENT'))) {
           continue;
         }
 
-        // 3. 同一Cronバッチ内での同一スタッフ重複追加を物理遮断
+        // 同一Cronバッチ内での同一スタッフ重複追加を物理遮断
         if (unclockedStaffList.some(s => s.workerId === worker.id)) {
           continue;
         }
@@ -203,14 +284,12 @@ export async function GET(req: Request) {
           baseEndTime = compSetting.default_end_time.substring(0, 5);
         }
 
-        // 2. 残業申請があれば残業予定時刻を最優先！（当日の場合）
+        // 2. 残業申請があれば残業予定時刻を最優先！
         let isOvertime = false;
-        if (!isPastDate) {
-          const ot = otList.find(o => o.worker_id === worker.id);
-          if (ot?.scheduled_end_time) {
-            baseEndTime = ot.scheduled_end_time.substring(0, 5);
-            isOvertime = true;
-          }
+        const ot = otList.find(o => o.worker_id === worker.id);
+        if (ot?.scheduled_end_time) {
+          baseEndTime = ot.scheduled_end_time.substring(0, 5);
+          isOvertime = true;
         }
 
         // 3. 通知オフセット分数（定時または残業終了の◯分後、デフォルト30分）
@@ -234,7 +313,7 @@ export async function GET(req: Request) {
             workerId: worker.id,
             name: worker.name,
             date: log.date,
-            isPastDate,
+            isPastDate: false,
             endTime: baseEndTime,
             targetTime,
             offsetMinutes,
@@ -249,14 +328,13 @@ export async function GET(req: Request) {
         resultsByTenant.push({
           tenant_id: tenantId,
           company_name: companyName,
-          status: 'no_unclocked_or_before_target_time',
+          status: 'no_today_unclocked_or_before_target_time',
+          past_alert_sent: pastAlertSent,
+          past_unclocked_count: pastStaffCount,
           logs_count: logs.length
         });
         continue;
       }
-
-      // この農園専用の現場ポータルURL（他農園への誤遷移を物理遮断）
-      const farmPortalUrl = `https://agri-profit-engine.vercel.app/portal/${tenantId}`;
 
       // A. 未退勤スタッフ本人への個別LINEプッシュ（本人がLINE連携済みの場合）
       const workerPushResults: any[] = [];
@@ -352,6 +430,8 @@ export async function GET(req: Request) {
         company_name: companyName,
         admin_line_notified: adminLineUserIds,
         admin_alert_sent: adminAlertSent,
+        past_alert_sent: pastAlertSent,
+        past_unclocked_count: pastStaffCount,
         unclocked_count: unclockedStaffList.length,
         unclocked_staff: unclockedStaffList.map(s => ({ name: s.name, date: s.date, isPastDate: s.isPastDate })),
         worker_push_results: workerPushResults
