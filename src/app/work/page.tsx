@@ -13,6 +13,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { getB2BOrders, updateB2BOrderStatus } from '@/app/actions/b2b';
 import { getWorkerShareSettings, submitAttendance } from '@/app/actions/farm';
+import { executeAttendanceWithRetry } from '@/lib/attendanceClient';
 import { WorkerGate } from '@/components/WorkerGate';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { PwaBottomBanner } from '@/components/PwaInstallPrompt';
@@ -969,7 +970,17 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
       }
 
       if (action === 'clock_in') {
-        const res = await submitAttendance(ownerId || '', currentUser.id, 'clock_in', null, today, now, weatherText, temp);
+        const res = await executeAttendanceWithRetry({
+          tenantId: ownerId || '',
+          workerId: currentUser.id,
+          action: 'clock_in',
+          logId: null,
+          date: today,
+          now: now,
+          weather: weatherText,
+          temp: temp
+        });
+
         if (res.success && res.data) {
           setAttendanceLog(res.data);
         } else {
@@ -988,15 +999,21 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
           if (unclosed && unclosed.length > 0) targetLog = unclosed[0];
         }
 
-        if (targetLog) {
-          const res = await submitAttendance(ownerId || '', currentUser.id, action, targetLog.id, today, now, weatherText, temp);
-          if (res.success && res.data) {
-            setAttendanceLog(res.data);
-          } else {
-            alert('打刻エラー: ' + (res.error || '通信エラーが発生しました'));
-          }
+        const res = await executeAttendanceWithRetry({
+          tenantId: ownerId || '',
+          workerId: currentUser.id,
+          action: action as any,
+          logId: targetLog?.id || null,
+          date: today,
+          now: now,
+          weather: weatherText,
+          temp: temp
+        });
+
+        if (res.success && res.data) {
+          setAttendanceLog(res.data);
         } else {
-          alert('出勤記録が見つかりませんでした。出勤打刻を行ってください。');
+          alert('打刻エラー: ' + (res.error || '通信エラーが発生しました'));
         }
       }
       setIsSubmitting(false);

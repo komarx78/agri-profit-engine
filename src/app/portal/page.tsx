@@ -21,6 +21,7 @@ import VideoPlayerWithSubtitles, { Narration, TrimRange } from '@/components/Vid
 import { t, getTranslatedName, getTranslatedWorkType, getWeekdayName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
 import { getPortalTasks, completePortalTask, reopenPortalTask, submitAttendance, submitLeaveRequest, getWorkerLeaveRequests } from '@/app/actions/farm';
+import { executeAttendanceWithRetry } from '@/lib/attendanceClient';
 import { reportSystemError } from '@/lib/errorReporter';
 import { translateSingleText } from '@/app/actions/translate';
 import { PwaBottomBanner } from '@/components/PwaInstallPrompt';
@@ -2514,7 +2515,15 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
 
     try {
       if (type === 'in') {
-        const res = await submitAttendance(tenantUserId || '', workerId, 'clock_in', null, today, nowIso, null, null);
+        const res = await executeAttendanceWithRetry({
+          tenantId: tenantUserId || '',
+          workerId,
+          action: 'clock_in',
+          logId: null,
+          date: today,
+          now: nowIso
+        });
+
         if (res.success && res.data) {
           setAttendance(res.data);
           fetchWorkerMonthlyAttendance(workerId, timecardMonth);
@@ -2539,19 +2548,16 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             .limit(1);
           if (unclosed && unclosed.length > 0) targetAtt = unclosed[0];
         }
-        if (!targetAtt) {
-          reportSystemError({
-            category: 'attendance',
-            message: '退勤打刻失敗: 出勤記録が見つかりませんでした',
-            workerId,
-            workerName: workerProfile?.name,
-            companyName
-          });
-          alert('出勤記録が見つかりませんでした。出勤打刻を行ってください。');
-          return;
-        }
 
-        const res = await submitAttendance(tenantUserId || '', workerId, 'clock_out', targetAtt.id, today, nowIso, null, null);
+        const res = await executeAttendanceWithRetry({
+          tenantId: tenantUserId || '',
+          workerId,
+          action: 'clock_out',
+          logId: targetAtt?.id || null,
+          date: today,
+          now: nowIso
+        });
+
         if (res.success && res.data) {
           setAttendance(res.data);
           fetchWorkerMonthlyAttendance(workerId, timecardMonth);
