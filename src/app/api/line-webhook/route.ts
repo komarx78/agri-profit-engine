@@ -212,8 +212,8 @@ const FARM_RICH_MENUS: Record<string, { farmUserId: string; companyName: string;
   }
 }
 
-// LINE Messaging API トークン（環境変数または検証済み安全フォールバック）
-const LINE_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || "YWjhUwtUi46VGlW2t7+Wu6KKe51WmG2/MRl+ue8LvUgpSzdXO4HgyXvdQnupRdmao2VXNhBAcpXDegaq1MJZeN8styDQW5jFQ9nSnxmEJJ9nQUU8u+Bmtrq9D+nTvmnLxcct/nvFqdqpoICT5XQl3gdB04t89/1O/w1cDnyilFU=";
+// LINE Messaging API トークン（環境変数から安全に取得）
+const LINE_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || '';
 
 // LINE Messaging API で個別リッチメニューをユーザーにバインドする関数
 async function linkRichMenuToUser(userId: string, richMenuId: string) {
