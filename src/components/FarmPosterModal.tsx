@@ -23,7 +23,7 @@ export const FarmPosterModal: React.FC<FarmPosterModalProps> = ({
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://agri-profit-engine.vercel.app';
   const portalUrl = `${origin}/portal/${tenantId}?openExternalBrowser=1`;
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&data=${encodeURIComponent(portalUrl)}`;
-  const displayCode = (farmCode || 'sahara').toUpperCase();
+  const displayCode = (farmCode || 'sahara-789').toUpperCase();
 
   const handlePrint = () => {
     window.print();
@@ -140,9 +140,9 @@ export const FarmPosterModal: React.FC<FarmPosterModalProps> = ({
                       1
                     </span>
                     <div>
-                      <div className="font-bold text-slate-800">QRコードをカメラで読み取る</div>
+                      <div className="font-bold text-slate-800">QRコードをかざす（入力不要！）</div>
                       <div className="text-xs text-slate-500">
-                        またはスマホの専用アプリを開きます。
+                        スマホのカメラ、またはアプリの「📷 QR読み取り」ボタンでこのQRを写すだけで一発接続！
                       </div>
                     </div>
                   </div>
@@ -152,7 +152,7 @@ export const FarmPosterModal: React.FC<FarmPosterModalProps> = ({
                       2
                     </span>
                     <div>
-                      <div className="font-bold text-slate-800">農園コードを入力</div>
+                      <div className="font-bold text-slate-800">（手入力する場合）農園コードを入力</div>
                       <div className="text-xs text-slate-500">
                         「<span className="font-mono font-bold text-emerald-700">{displayCode}</span>」と入力して接続ボタンを押します。
                       </div>

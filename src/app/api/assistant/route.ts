@@ -16,14 +16,14 @@ interface AssistantRequestBody {
 function getFallbackResponse(
   query: string,
   companyName: string = '当農園',
-  farmCode: string = 'sahara',
+  farmCode: string = 'sahara-789',
   tenantId: string = ''
 ): { reply: string; actionLinks?: Array<{ label: string; url: string }> } {
   const q = query.toLowerCase();
 
-  if (q.includes('農園コード') || q.includes('コード') || q.includes('アプリ') || q.includes('ログインできない') || q.includes('入れない')) {
+  if (q.includes('農園コード') || q.includes('コード') || q.includes('アプリ') || q.includes('ログインできない') || q.includes('入れない') || q.includes('qr')) {
     return {
-      reply: `【${companyName}】の現場アプリ用「農園コード」は **${farmCode.toUpperCase()}** です！\n\nスマホ専用アプリの初回起動画面、または現場ポータルでこのコードを入力することで、当農園の打刻・日報画面へ瞬時に接続できます。\n\n農園コードの確認・変更は「自社情報設定」からいつでも行えます。また、スタッフ休憩所に貼れる「A4ポスター印刷」もご利用いただけます。`,
+      reply: `【${companyName}】の現場アプリ用「農園コード」は **${farmCode.toUpperCase()}** です！\n\n【接続方法（2通り）】\n1. **QRコードで自動接続（おすすめ）**: 現場アプリの「📷 ポスターのQRコードをカメラで読み取る」ボタンを押して、A4ポスターをかざすだけで手入力不要で一瞬接続できます。\n2. **手入力**: アプリ起動時に「農園コード（${farmCode.toUpperCase()}）」を入力して接続ボタンを押します。\n\n※農園コードの確認・変更は「自社情報設定」からいつでも行えます。また、スタッフ休憩所に貼れる「A4ポスター印刷」もご利用いただけます。`,
       actionLinks: [
         { label: '自社情報設定を開く', url: tenantId ? `/admin/settings?farm=${tenantId}` : '/admin/settings' },
         { label: '現場ポータルを開く', url: tenantId ? `/portal/${tenantId}` : '/portal' },

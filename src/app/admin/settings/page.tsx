@@ -62,9 +62,12 @@ export default function SettingsPage() {
           setSettingsId(data.id);
           let resolvedCode = data.farm_code || '';
           if (!resolvedCode) {
-            if (tenantId === '62163024-2c8e-4057-a872-2455dbc58d32') resolvedCode = 'sahara';
-            else if (tenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04') resolvedCode = 'kap';
-            else resolvedCode = (data.company_name || 'farm').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'myfarm';
+            if (tenantId === '62163024-2c8e-4057-a872-2455dbc58d32') resolvedCode = 'sahara-789';
+            else if (tenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04') resolvedCode = 'kap-101';
+            else {
+              const prefix = (data.company_name || 'farm').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'farm';
+              resolvedCode = `${prefix}-101`;
+            }
           }
           setFormData({
             company_name: data.company_name || '',
@@ -106,6 +109,20 @@ export default function SettingsPage() {
       if (!tenantId) throw new Error('テナントIDが特定できません');
 
       const cleanFarmCode = (formData.farm_code || '').trim().toLowerCase().replace(/\s+/g, '');
+
+      // 🛡️ 司馬懿防壁：全国重複チェック（他社との農園コード衝突を物理遮断）
+      if (cleanFarmCode) {
+        const { data: duplicate } = await supabase
+          .from('company_settings')
+          .select('id, user_id, company_name')
+          .ilike('farm_code', cleanFarmCode)
+          .neq('user_id', tenantId)
+          .maybeSingle();
+
+        if (duplicate) {
+          throw new Error(`農園コード「${cleanFarmCode.toUpperCase()}」は既に別の農園様（${duplicate.company_name || '他社'}）で使用されています。\n末尾の番号を変更（例: ${cleanFarmCode}-2 または数字を変更）して再度お試しください。`);
+        }
+      }
 
       const dataToSave: any = {
         company_name: formData.company_name || '',

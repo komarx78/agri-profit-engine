@@ -92,9 +92,12 @@ export function useCompany(explicitTenantId?: string | null): CompanyInfo {
 
         let resolvedFarmCode = data.farm_code || '';
         if (!resolvedFarmCode) {
-          if (currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32') resolvedFarmCode = 'sahara';
-          else if (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04') resolvedFarmCode = 'kap';
-          else resolvedFarmCode = (data.company_name || 'farm').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'myfarm';
+          if (currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32') resolvedFarmCode = 'sahara-789';
+          else if (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04') resolvedFarmCode = 'kap-101';
+          else {
+            const prefix = (data.company_name || 'farm').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'farm';
+            resolvedFarmCode = `${prefix}-101`;
+          }
         }
         setFarmCode(resolvedFarmCode);
 

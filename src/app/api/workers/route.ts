@@ -24,13 +24,14 @@ export async function GET(request: Request) {
 
     if (ownerId && ownerId !== 'null' && ownerId !== 'undefined') {
       const cleanOwnerId = ownerId.trim().toLowerCase();
+      const noHyphen = cleanOwnerId.replace(/-/g, '');
 
-      // ① farm_code カラムでのピンポイント照合
+      // ① farm_code カラムでのピンポイント照合（ハイフン有無両対応）
       try {
         const { data: compByCode } = await supabase
           .from('company_settings')
           .select('id, user_id, company_name')
-          .ilike('farm_code', cleanOwnerId)
+          .or(`farm_code.ilike.${cleanOwnerId},farm_code.ilike.${noHyphen}`)
           .maybeSingle();
         if (compByCode) {
           resolvedOwnerId = compByCode.user_id;
@@ -38,14 +39,18 @@ export async function GET(request: Request) {
         }
       } catch (e) {}
 
-      // ② 既知短縮コード（sahara, kap 等）の直接解決
+      // ② 既知短縮コード（案Aの名前+数字および従来の短縮コード両対応）
       if (!farmName) {
         const SHORT_CODES: Record<string, string> = {
+          'sahara-789': '62163024-2c8e-4057-a872-2455dbc58d32',
+          'sahara789': '62163024-2c8e-4057-a872-2455dbc58d32',
           'sahara': '62163024-2c8e-4057-a872-2455dbc58d32',
+          'kap-101': '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04',
+          'kap101': '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04',
           'kap': '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04',
         };
-        if (SHORT_CODES[cleanOwnerId]) {
-          resolvedOwnerId = SHORT_CODES[cleanOwnerId];
+        if (SHORT_CODES[cleanOwnerId] || SHORT_CODES[noHyphen]) {
+          resolvedOwnerId = SHORT_CODES[cleanOwnerId] || SHORT_CODES[noHyphen];
         }
       }
 

@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { User, Lock, ArrowRight, Loader2, Globe, Eye, EyeOff, Building, RefreshCw } from 'lucide-react';
+import { User, Lock, ArrowRight, Loader2, Globe, Eye, EyeOff, Building, RefreshCw, Camera, QrCode } from 'lucide-react';
 import { t, getTranslatedName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { reportSystemError } from '@/lib/errorReporter';
+import { QrScannerModal } from '@/components/QrScannerModal';
 
 interface WorkerGateProps {
   onLogin: (user: any) => void;
@@ -73,17 +74,22 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
   const [isLineBrowser, setIsLineBrowser] = useState(false);
   const [showPin, setShowPin] = useState(false);
   const [inputFarmId, setInputFarmId] = useState('');
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
 
-  // 短縮農園コードの既知辞書（LINE連携等と統一・初期フォールバック用）
+  // 短縮農園コードの既知辞書（案Aの名前+数字および従来の短縮コード両対応）
   const SHORT_FARM_CODES: Record<string, string> = {
+    'sahara-789': '62163024-2c8e-4057-a872-2455dbc58d32',
+    'sahara789': '62163024-2c8e-4057-a872-2455dbc58d32',
     'sahara': '62163024-2c8e-4057-a872-2455dbc58d32',
+    'kap-101': '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04',
+    'kap101': '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04',
     'kap': '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04',
   };
 
-  // 農園コードの照合と自社バインド（電話番号は完全廃止、他社一覧は0件・不可視）
-  const handleVerifyFarmCode = async (e?: React.FormEvent) => {
+  // 農園コードの照合と自社バインド（案Aの名前+数字およびQR自動入力対応）
+  const handleVerifyFarmCode = async (e?: React.FormEvent, overrideCode?: string) => {
     if (e) e.preventDefault();
-    const raw = inputFarmId.trim();
+    const raw = (overrideCode !== undefined ? overrideCode : inputFarmId).trim();
     if (!raw) {
       setErrorMsg('農園コードを入力してください');
       return;
@@ -98,16 +104,17 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
         .replace(/[！-～]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
         .replace(/\s+/g, '');
       const lower = normalized.toLowerCase();
+      const noHyphen = lower.replace(/-/g, '');
 
       let matchedUserId = '';
       let matchedFarmName = '';
 
-      // ① DBの farm_code カラムで大文字小文字無視のピンポイント照合
+      // ① DBの farm_code カラムで大文字小文字無視のピンポイント照合（ハイフン有無両対応）
       try {
         const { data: farmByCode } = await supabase
           .from('company_settings')
           .select('id, user_id, company_name, farm_code')
-          .ilike('farm_code', lower)
+          .or(`farm_code.ilike.${lower},farm_code.ilike.${noHyphen}`)
           .maybeSingle();
         if (farmByCode) {
           matchedUserId = farmByCode.user_id;
@@ -117,9 +124,9 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
         // カラム未作成時等の安全スルー
       }
 
-      // ② 既知短縮コード（sahara, kap 等）の直接解決
-      if (!matchedUserId && SHORT_FARM_CODES[lower]) {
-        matchedUserId = SHORT_FARM_CODES[lower];
+      // ② 既知短縮コード（sahara-789, sahara, kap-101 等）の直接解決
+      if (!matchedUserId && (SHORT_FARM_CODES[lower] || SHORT_FARM_CODES[noHyphen])) {
+        matchedUserId = SHORT_FARM_CODES[lower] || SHORT_FARM_CODES[noHyphen];
       }
 
       // ③ UUID または ID によるピンポイント照合
@@ -165,6 +172,31 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
       console.error('Farm verify error:', err);
       setErrorMsg('照合エラーが発生しました: ' + (err.message || ''));
     }
+  };
+
+  // 📷 QRコード読み取り結果の解析と自動接続
+  const handleQrScan = (scannedText: string) => {
+    let detected = scannedText.trim();
+    // URLから農園IDまたは農園コードを抽出
+    if (detected.includes('/portal/')) {
+      const parts = detected.split('/portal/');
+      if (parts[1]) {
+        detected = parts[1].split('?')[0].split('/')[0];
+      }
+    } else if (detected.includes('?farm=')) {
+      try {
+        const url = new URL(detected);
+        detected = url.searchParams.get('farm') || detected;
+      } catch (e) {}
+    } else if (detected.includes('?code=')) {
+      try {
+        const url = new URL(detected);
+        detected = url.searchParams.get('code') || detected;
+      } catch (e) {}
+    }
+
+    setInputFarmId(detected);
+    handleVerifyFarmCode(undefined, detected);
   };
 
   // 全角数字 ➔ 半角数字自動変換 ＆ 非数字除去
@@ -539,6 +571,22 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
                 )}
               </button>
 
+              <div className="relative flex py-1 items-center">
+                <div className="flex-grow border-t border-slate-700"></div>
+                <span className="flex-shrink mx-3 text-[11px] text-slate-500 font-bold">または</span>
+                <div className="flex-grow border-t border-slate-700"></div>
+              </div>
+
+              {/* 📷 QRコード自動読み取りボタン（手入力ゼロ秒ログイン） */}
+              <button
+                type="button"
+                onClick={() => setIsQrModalOpen(true)}
+                className="w-full py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/40 font-bold text-xs shadow-md transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Camera className="w-4 h-4 text-emerald-400" />
+                <span>📷 ポスターのQRコードをカメラで読み取る</span>
+              </button>
+
               <div className="p-3.5 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-[11px] text-slate-400 space-y-1.5 leading-relaxed">
                 <p className="font-bold text-emerald-400 flex items-center gap-1">
                   <span>💡</span>
@@ -836,6 +884,13 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
           </div>
         </div>
       </div>
+
+      {/* 📷 QRコードカメラ読み取りモーダル */}
+      <QrScannerModal
+        isOpen={isQrModalOpen}
+        onClose={() => setIsQrModalOpen(false)}
+        onScan={handleQrScan}
+      />
     </div>
   );
 }
