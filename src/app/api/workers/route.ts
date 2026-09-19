@@ -23,17 +23,58 @@ export async function GET(request: Request) {
     let farmName = '';
 
     if (ownerId && ownerId !== 'null' && ownerId !== 'undefined') {
-      const cleanOwnerId = ownerId.trim();
-      // 指定された農園のみをピンポイント照合（他社一覧の取得は厳禁）
-      const { data: company } = await supabase
-        .from('company_settings')
-        .select('id, user_id, company_name')
-        .or(`user_id.eq.${cleanOwnerId},id.eq.${cleanOwnerId}`)
-        .maybeSingle();
+      const cleanOwnerId = ownerId.trim().toLowerCase();
 
-      if (company) {
-        resolvedOwnerId = company.user_id;
-        farmName = company.company_name;
+      // ① farm_code カラムでのピンポイント照合
+      try {
+        const { data: compByCode } = await supabase
+          .from('company_settings')
+          .select('id, user_id, company_name')
+          .ilike('farm_code', cleanOwnerId)
+          .maybeSingle();
+        if (compByCode) {
+          resolvedOwnerId = compByCode.user_id;
+          farmName = compByCode.company_name;
+        }
+      } catch (e) {}
+
+      // ② 既知短縮コード（sahara, kap 等）の直接解決
+      if (!farmName) {
+        const SHORT_CODES: Record<string, string> = {
+          'sahara': '62163024-2c8e-4057-a872-2455dbc58d32',
+          'kap': '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04',
+        };
+        if (SHORT_CODES[cleanOwnerId]) {
+          resolvedOwnerId = SHORT_CODES[cleanOwnerId];
+        }
+      }
+
+      // ③ UUID または ID によるピンポイント照合
+      if (!farmName) {
+        try {
+          const { data: company } = await supabase
+            .from('company_settings')
+            .select('id, user_id, company_name')
+            .or(`user_id.eq.${cleanOwnerId},id.eq.${cleanOwnerId}`)
+            .maybeSingle();
+
+          if (company) {
+            resolvedOwnerId = company.user_id;
+            farmName = company.company_name;
+          }
+        } catch (e) {}
+      }
+
+      // 会社名が未解決で resolvedOwnerId があれば取得
+      if (resolvedOwnerId && !farmName) {
+        try {
+          const { data: comp } = await supabase
+            .from('company_settings')
+            .select('company_name')
+            .eq('user_id', resolvedOwnerId)
+            .maybeSingle();
+          if (comp?.company_name) farmName = comp.company_name;
+        } catch (e) {}
       }
     }
 

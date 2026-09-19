@@ -74,18 +74,18 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
   const [showPin, setShowPin] = useState(false);
   const [inputFarmId, setInputFarmId] = useState('');
 
-  // 短縮農園コードの既知辞書（LINE連携等と統一）
+  // 短縮農園コードの既知辞書（LINE連携等と統一・初期フォールバック用）
   const SHORT_FARM_CODES: Record<string, string> = {
     'sahara': '62163024-2c8e-4057-a872-2455dbc58d32',
     'kap': '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04',
   };
 
-  // 農園コード / 電話番号の照合と自社バインド（他社一覧は0件・不可視）
+  // 農園コードの照合と自社バインド（電話番号は完全廃止、他社一覧は0件・不可視）
   const handleVerifyFarmCode = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const raw = inputFarmId.trim();
     if (!raw) {
-      setErrorMsg('農園コードまたは電話番号を入力してください');
+      setErrorMsg('農園コードを入力してください');
       return;
     }
 
@@ -93,27 +93,41 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
     setErrorMsg('');
 
     try {
-      // 全角英数 ➔ 半角変換・空白除去
+      // 全角英数 ➔ 半角変換・空白除去・小文字化
       const normalized = raw
         .replace(/[！-～]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
         .replace(/\s+/g, '');
       const lower = normalized.toLowerCase();
-      const cleanDigitsOnly = normalized.replace(/\D/g, '');
 
       let matchedUserId = '';
       let matchedFarmName = '';
 
-      // ① 短縮コード（sahara, kap 等）の直接解決
-      if (SHORT_FARM_CODES[lower]) {
+      // ① DBの farm_code カラムで大文字小文字無視のピンポイント照合
+      try {
+        const { data: farmByCode } = await supabase
+          .from('company_settings')
+          .select('id, user_id, company_name, farm_code')
+          .ilike('farm_code', lower)
+          .maybeSingle();
+        if (farmByCode) {
+          matchedUserId = farmByCode.user_id;
+          matchedFarmName = farmByCode.company_name;
+        }
+      } catch (codeErr) {
+        // カラム未作成時等の安全スルー
+      }
+
+      // ② 既知短縮コード（sahara, kap 等）の直接解決
+      if (!matchedUserId && SHORT_FARM_CODES[lower]) {
         matchedUserId = SHORT_FARM_CODES[lower];
       }
 
-      // ② UUID または ID によるピンポイント照合
+      // ③ UUID または ID によるピンポイント照合
       if (!matchedUserId) {
         try {
           const { data: farmById } = await supabase
             .from('company_settings')
-            .select('id, user_id, company_name, phone')
+            .select('id, user_id, company_name')
             .or(`user_id.eq.${normalized},id.eq.${normalized}`)
             .maybeSingle();
           if (farmById) {
@@ -122,35 +136,6 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
           }
         } catch (idErr) {
           // UUID形式外の場合は無視
-        }
-      }
-
-      // ③ 電話番号によるピンポイント照合（数字10〜11桁の場合）
-      if (!matchedUserId && cleanDigitsOnly.length >= 10) {
-        try {
-          const { data: farmByPhone } = await supabase
-            .from('company_settings')
-            .select('id, user_id, company_name, phone')
-            .eq('phone', cleanDigitsOnly)
-            .maybeSingle();
-          if (farmByPhone) {
-            matchedUserId = farmByPhone.user_id;
-            matchedFarmName = farmByPhone.company_name;
-          } else {
-            // 末尾8桁等でのLIKE検索
-            const { data: farmByPhoneLike } = await supabase
-              .from('company_settings')
-              .select('id, user_id, company_name, phone')
-              .like('phone', `%${cleanDigitsOnly.slice(-8)}%`)
-              .limit(1)
-              .maybeSingle();
-            if (farmByPhoneLike) {
-              matchedUserId = farmByPhoneLike.user_id;
-              matchedFarmName = farmByPhoneLike.company_name;
-            }
-          }
-        } catch (phoneErr) {
-          console.warn('Phone search err:', phoneErr);
         }
       }
 
@@ -173,13 +158,12 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
         }
         await loadWorkersForOwner(matchedUserId);
       } else {
-        setErrorMsg('該当する農園が見つかりませんでした。\n農園コードまたは登録電話番号をご確認の上、農園管理者にお問い合わせください。');
+        setErrorMsg('該当する農園が見つかりませんでした。\n農園コードをご確認の上、農園管理者にお問い合わせください。');
         setIsLoading(false);
       }
     } catch (err: any) {
       console.error('Farm verify error:', err);
       setErrorMsg('照合エラーが発生しました: ' + (err.message || ''));
-      setIsLoading(false);
     }
   };
 
@@ -512,21 +496,21 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
                 農園コードを入力してください
               </h1>
               <p className="text-xs text-slate-300 mt-2 max-w-xs mx-auto leading-relaxed font-medium">
-                農園の管理者から案内された【農園コード】または【登録電話番号】を入力してください。
+                農園の管理者から案内された【農園コード】を入力してください。
               </p>
             </div>
 
             <form onSubmit={handleVerifyFarmCode} className="space-y-4 max-w-sm mx-auto mb-6">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                  農園コード または 登録電話番号
+                  農園コード
                 </label>
                 <input
                   type="text"
                   value={inputFarmId}
                   onChange={(e) => setInputFarmId(e.target.value)}
-                  placeholder="例: sahara または 09012345678"
-                  className="w-full px-4 py-3.5 rounded-2xl bg-slate-800/90 border-2 border-slate-700 text-white placeholder-slate-500 font-bold text-base focus:border-emerald-500 focus:outline-none transition-all text-center tracking-wider"
+                  placeholder="例: SAHARA"
+                  className="w-full px-4 py-3.5 rounded-2xl bg-slate-800/90 border-2 border-slate-700 text-white placeholder-slate-500 font-bold text-base focus:border-emerald-500 focus:outline-none transition-all text-center tracking-wider uppercase"
                   autoFocus
                 />
               </div>
@@ -561,7 +545,7 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
                   <span>ご利用のご案内</span>
                 </p>
                 <p>・一度接続すると、次回から自動でこの農園が開きます（再入力不要）。</p>
-                <p>・農園コードがご不明な場合は、農園の管理者にお尋ねください。</p>
+                <p>・農園コードは、管理画面の【設定 ＞ 自社情報】で確認できます。</p>
               </div>
             </form>
 

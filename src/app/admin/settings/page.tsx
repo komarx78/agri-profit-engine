@@ -18,6 +18,7 @@ export default function SettingsPage() {
     phone: '',
     invoice_number: '',
     bank_info: '',
+    farm_code: '',
   });
 
   const [closingDay, setClosingDay] = useState<number>(0);
@@ -57,6 +58,12 @@ export default function SettingsPage() {
 
         if (data) {
           setSettingsId(data.id);
+          let resolvedCode = data.farm_code || '';
+          if (!resolvedCode) {
+            if (tenantId === '62163024-2c8e-4057-a872-2455dbc58d32') resolvedCode = 'sahara';
+            else if (tenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04') resolvedCode = 'kap';
+            else resolvedCode = (data.company_name || 'farm').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'myfarm';
+          }
           setFormData({
             company_name: data.company_name || '',
             postal_code: data.postal_code || '',
@@ -64,6 +71,7 @@ export default function SettingsPage() {
             phone: data.phone || '',
             invoice_number: data.invoice_number || '',
             bank_info: data.bank_info || '',
+            farm_code: resolvedCode,
           });
           if (data.attendance_closing_day !== undefined && data.attendance_closing_day !== null) {
             setClosingDay(Number(data.attendance_closing_day));
@@ -95,13 +103,16 @@ export default function SettingsPage() {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) throw new Error('テナントIDが特定できません');
 
-      const dataToSave = {
+      const cleanFarmCode = (formData.farm_code || '').trim().toLowerCase().replace(/\s+/g, '');
+
+      const dataToSave: any = {
         company_name: formData.company_name || '',
         postal_code: formData.postal_code || '',
         address: formData.address || '',
         phone: formData.phone || '',
         invoice_number: formData.invoice_number || '',
         bank_info: formData.bank_info || '',
+        farm_code: cleanFarmCode || null,
         user_id: tenantId,
         updated_at: new Date().toISOString()
       };
@@ -255,30 +266,23 @@ export default function SettingsPage() {
                 </div>
                 <h3 className="text-sm font-bold text-white mb-1.5">スマホアプリの初回起動時に入力</h3>
                 <p className="text-xs text-slate-300 mb-4 leading-relaxed">
-                  スタッフがアプリを初めて起動した際、下記の【農園コード】または【登録電話番号】を入力すると、一瞬で貴社専用の打刻画面に接続・永続保存されます。
+                  スタッフがアプリを初めて起動した際、下記の【農園コード】を入力すると、一瞬で貴社専用の打刻画面に接続・永続保存されます。
                 </p>
-                <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3 mb-4">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold block">農園コード</span>
-                    <span className="text-base font-mono font-black text-amber-300 tracking-wider">
-                      {currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : currentTenant}
+                <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-2 mb-4">
+                  <span className="text-[10px] text-slate-400 font-bold block">貴社の農園コード</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xl font-mono font-black text-amber-300 tracking-wider uppercase">
+                      {formData.farm_code || (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : 'sahara')}
                     </span>
+                    <span className="text-[10px] text-slate-500 font-medium">※大文字・小文字どちらでも可</span>
                   </div>
-                  {formData.phone && (
-                    <div className="pt-2 border-t border-slate-800">
-                      <span className="text-[10px] text-slate-400 font-bold block">登録電話番号（電話番号でも接続可能）</span>
-                      <span className="text-sm font-mono font-bold text-white tracking-wider">
-                        {formData.phone}
-                      </span>
-                    </div>
-                  )}
                 </div>
               </div>
               <div className="space-y-2 pt-2 border-t border-slate-700/60">
                 <button
                   type="button"
                   onClick={() => {
-                    const code = currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : currentTenant;
+                    const code = formData.farm_code || (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : 'sahara');
                     navigator.clipboard.writeText(code);
                     alert(`農園コード「${code}」をコピーしました！現場スタッフにご案内ください。`);
                   }}
@@ -354,6 +358,26 @@ export default function SettingsPage() {
                   placeholder="例: ココット農園"
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:outline-none focus:border-emerald-500"
                 />
+              </div>
+              <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200">
+                <label className="block text-sm font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-amber-900">
+                    <Smartphone className="w-4 h-4 text-amber-600" />
+                    現場スマホアプリ用 農園コード
+                  </span>
+                  <span className="text-[11px] text-amber-700 font-bold">半角英数字・ハイフン</span>
+                </label>
+                <input
+                  type="text"
+                  name="farm_code"
+                  value={formData.farm_code}
+                  onChange={handleChange}
+                  placeholder="例: sahara"
+                  className="w-full p-3 bg-white border-2 border-amber-300 rounded-xl font-mono font-black text-amber-900 tracking-wider uppercase focus:outline-none focus:border-amber-500"
+                />
+                <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                  ※現場スタッフがスマホアプリ（Android / iOS）を初めて開いた際、このコードを入力すると貴社の現場に接続されます。お好きなコードに変更可能です。
+                </p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
