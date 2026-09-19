@@ -3,10 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
-import { Settings, Save, CheckCircle2, Building, MapPin, Phone, FileText, Landmark, Calendar, ArrowRight, QrCode, Copy, Smartphone } from 'lucide-react';
+import { Settings, Save, CheckCircle2, Building, MapPin, Phone, FileText, Landmark, Calendar, ArrowRight, QrCode, Copy, Smartphone, Printer } from 'lucide-react';
 import Link from 'next/link';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 import { getAttendancePeriod } from '@/lib/dateUtils';
+import { FarmPosterModal } from '@/components/FarmPosterModal';
 
 export default function SettingsPage() {
   const [settingsId, setSettingsId] = useState<string | null>(null);
@@ -27,6 +28,7 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isPosterModalOpen, setIsPosterModalOpen] = useState(false);
 
   useEffect(() => {
     async function fetchSettings() {
@@ -165,6 +167,47 @@ export default function SettingsPage() {
         </p>
       </div>
 
+      {/* 🌟 最上部ハイライト：貴社の農園コード ＆ A4ポスター即時印刷 */}
+      <div className="bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-700 text-white p-5 md:p-6 rounded-3xl shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-emerald-500/30">
+        <div>
+          <div className="flex items-center gap-2 text-emerald-200 text-xs font-bold uppercase tracking-wider mb-1">
+            <Smartphone className="w-4 h-4 text-emerald-300" />
+            現場スマホアプリ・ポータル接続用
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm md:text-base font-bold text-emerald-100">貴社の農園コード:</span>
+            <span className="text-2xl md:text-3xl font-mono font-black tracking-widest bg-white/20 px-3.5 py-1 rounded-xl border border-white/30 text-white select-all">
+              {(formData.farm_code || (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : 'sahara')).toUpperCase()}
+            </span>
+          </div>
+          <p className="text-xs text-emerald-200 mt-1 font-medium">
+            ※現場スタッフがスマホアプリを起動した際、このコードを入力すると貴社専用画面に接続されます。
+          </p>
+        </div>
+        <div className="flex items-center gap-2.5 w-full md:w-auto">
+          <button
+            type="button"
+            onClick={() => {
+              const code = (formData.farm_code || (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : 'sahara')).toUpperCase();
+              navigator.clipboard.writeText(code);
+              alert(`農園コード「${code}」をコピーしました！`);
+            }}
+            className="flex-1 md:flex-initial px-4 py-2.5 bg-white text-emerald-800 hover:bg-emerald-50 rounded-xl text-xs font-black shadow-sm flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+          >
+            <Copy className="w-4 h-4 text-emerald-600" />
+            コードをコピー
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsPosterModalOpen(true)}
+            className="flex-1 md:flex-initial px-4 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white border border-emerald-400/40 rounded-xl text-xs font-black shadow-sm flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+          >
+            <Printer className="w-4 h-4 text-emerald-300" />
+            A4ポスター印刷
+          </button>
+        </div>
+      </div>
+
       {/* 📱 現場スタッフ案内・QRコード発行（SaaSハイブリッド対応） */}
       {currentTenant && (
         <section className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-6 rounded-3xl shadow-lg border border-slate-700">
@@ -290,6 +333,14 @@ export default function SettingsPage() {
                 >
                   <Copy className="w-3.5 h-3.5" />
                   <span>農園コードをコピー</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPosterModalOpen(true)}
+                  className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-amber-200 border border-amber-400/30 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 shadow-sm"
+                >
+                  <Printer className="w-3.5 h-3.5 text-amber-300" />
+                  <span>A4現場掲示用ポスター印刷</span>
                 </button>
               </div>
             </div>
@@ -486,6 +537,15 @@ export default function SettingsPage() {
           </button>
         </div>
       </form>
+
+      {/* A4現場掲示用ポスター印刷モーダル */}
+      <FarmPosterModal
+        isOpen={isPosterModalOpen}
+        onClose={() => setIsPosterModalOpen(false)}
+        farmCode={formData.farm_code || (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : 'sahara')}
+        companyName={formData.company_name || '当農園'}
+        tenantId={currentTenant}
+      />
       </div>
       )}
     </AdminOnlyGuard>

@@ -34,18 +34,24 @@ import {
   Inbox,
   Layout,
   ShoppingCart,
-  Building
+  Building,
+  Smartphone,
+  Printer
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useCompany } from '@/hooks/useCompany';
+import { AiAssistant } from '@/components/AiAssistant';
+import { FarmPosterModal } from '@/components/FarmPosterModal';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [tenantId, setTenantId] = useState<string>('');
-  const { companyName } = useCompany(tenantId);
+  const { companyName, farmCode } = useCompany(tenantId);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [isPosterOpen, setIsPosterOpen] = useState(false);
 
   useEffect(() => {
     async function checkAuth() {
@@ -101,6 +107,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy', err);
+    }
+  };
+
+  const handleCopyFarmCode = async () => {
+    const code = (farmCode || 'sahara').toUpperCase();
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy farm code', err);
     }
   };
 
@@ -201,6 +218,34 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {isMobileMenuOpen && (
         <div className="md:hidden bg-white border-b border-slate-200 p-4 space-y-2 shadow-lg absolute top-16 left-0 right-0 w-full z-40">
+          {/* モバイル用 農園コードバナー */}
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-3">
+            <div className="flex items-center justify-between text-xs font-bold text-emerald-900 mb-1.5">
+              <span className="flex items-center gap-1">
+                <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
+                現場アプリ用 農園コード
+              </span>
+              <button
+                onClick={() => { setIsMobileMenuOpen(false); setIsPosterOpen(true); }}
+                className="text-[11px] text-emerald-700 underline font-bold"
+              >
+                ポスター印刷
+              </button>
+            </div>
+            <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-emerald-100">
+              <span className="font-mono font-black text-sm text-emerald-950 tracking-wider">
+                {(farmCode || 'sahara').toUpperCase()}
+              </span>
+              <button
+                onClick={handleCopyFarmCode}
+                className="text-xs text-emerald-700 font-bold flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-emerald-100"
+              >
+                {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedCode ? 'コピー済' : 'コピー'}</span>
+              </button>
+            </div>
+          </div>
+
           <NavLinks />
           <div className="pt-2 mt-2 border-t border-slate-100">
             {tenantId && (
@@ -256,6 +301,37 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <p className="text-[10px] font-bold text-emerald-600">農業統合司令塔</p>
             </div>
           </div>
+
+          {/* 現場アプリ用 農園コード常設カード */}
+          <div className="mt-3 p-2.5 bg-white border border-emerald-200 rounded-xl shadow-2xs">
+            <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 mb-1">
+              <span className="flex items-center gap-1 text-emerald-800">
+                <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
+                現場アプリ用 農園コード
+              </span>
+              <button
+                onClick={() => setIsPosterOpen(true)}
+                className="text-[10px] text-emerald-700 hover:text-emerald-800 font-bold underline flex items-center gap-0.5 cursor-pointer"
+                title="現場掲示用ポスターを印刷"
+              >
+                <Printer className="w-3 h-3" />
+                ポスター印刷
+              </button>
+            </div>
+            <div className="flex items-center justify-between bg-emerald-50/90 px-2.5 py-1.5 rounded-lg border border-emerald-100">
+              <span className="font-mono font-black text-sm text-emerald-950 tracking-wider">
+                {(farmCode || 'sahara').toUpperCase()}
+              </span>
+              <button
+                onClick={handleCopyFarmCode}
+                className="text-xs text-emerald-700 hover:text-emerald-900 font-bold flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-emerald-100 transition-colors cursor-pointer"
+                title="農園コードをコピー"
+              >
+                {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedCode ? 'コピー済' : 'コピー'}</span>
+              </button>
+            </div>
+          </div>
         </div>
         
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
@@ -303,6 +379,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {children}
         </div>
       </main>
+
+      {/* A4現場掲示用ポスター印刷モーダル */}
+      <FarmPosterModal
+        isOpen={isPosterOpen}
+        onClose={() => setIsPosterOpen(false)}
+        farmCode={farmCode || 'sahara'}
+        companyName={companyName || '当農園'}
+        tenantId={tenantId}
+      />
+
+      {/* 画面右下常駐 孔明AI案内コンシェルジュ */}
+      <AiAssistant
+        tenantId={tenantId}
+        companyName={companyName || '当農園'}
+        farmCode={farmCode || 'sahara'}
+      />
     </div>
   );
 }
