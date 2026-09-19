@@ -7,7 +7,9 @@ export async function GET(request: Request) {
     let ownerId = searchParams.get('ownerId');
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    const supabaseKey = anonKey || serviceRoleKey;
 
     if (!supabaseUrl || !supabaseKey) {
       return NextResponse.json({ error: 'Supabase設定が不足しています', workers: [] }, { status: 500 });
@@ -51,7 +53,7 @@ export async function GET(request: Request) {
     
     if (error) {
       console.error('Error fetching workers:', error);
-      return NextResponse.json({ error: 'ワーカー一覧の取得に失敗しました', workers: [] }, { status: 500 });
+      return NextResponse.json({ error: 'ワーカー一覧の取得に失敗しました: ' + (error.message || ''), workers: [] }, { status: 500 });
     }
 
     return NextResponse.json({ 
