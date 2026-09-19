@@ -45,7 +45,7 @@ export async function GET(request: Request) {
     // 指定された農園のワーカー一覧を取得（現場PIN照合のためpin_codeも含める）
     const { data, error } = await supabase
       .from('workers')
-      .select('id, name, name_en, name_vi, name_id, name_zh, name_si, name_km, role, type, employment_type, pin_code, user_id, department_id, created_at')
+      .select('*')
       .eq('user_id', resolvedOwnerId)
       .order('name');
     
