@@ -170,7 +170,7 @@ export default function SettingsPage() {
             貴社の現場スタッフが他社と混ざらず安全に打刻できるよう、2つの案内方法（Web/QR掲示、またはLINE連携）をご用意しております。現場の運用形態に合わせてお選びいただけます。
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             {/* 方式①: 現場掲示用QRコード (LINE不要) */}
             <div className="bg-slate-800/90 p-5 rounded-2xl border border-slate-700 flex flex-col justify-between shadow-sm">
               <div>
@@ -242,6 +242,50 @@ export default function SettingsPage() {
                 >
                   <Copy className="w-3.5 h-3.5" />
                   <span>LINE招待リンクをコピー</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 方式③: 現場スマホアプリ（Android / iOS）初期接続コード */}
+            <div className="bg-slate-800/90 p-5 rounded-2xl border border-slate-700 flex flex-col justify-between shadow-sm">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/20 text-amber-300 rounded-lg text-xs font-black mb-3">
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>方式③：現場専用アプリ（Android / iOS）</span>
+                </div>
+                <h3 className="text-sm font-bold text-white mb-1.5">スマホアプリの初回起動時に入力</h3>
+                <p className="text-xs text-slate-300 mb-4 leading-relaxed">
+                  スタッフがアプリを初めて起動した際、下記の【農園コード】または【登録電話番号】を入力すると、一瞬で貴社専用の打刻画面に接続・永続保存されます。
+                </p>
+                <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3 mb-4">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold block">農園コード</span>
+                    <span className="text-base font-mono font-black text-amber-300 tracking-wider">
+                      {currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : currentTenant}
+                    </span>
+                  </div>
+                  {formData.phone && (
+                    <div className="pt-2 border-t border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-bold block">登録電話番号（電話番号でも接続可能）</span>
+                      <span className="text-sm font-mono font-bold text-white tracking-wider">
+                        {formData.phone}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-2 pt-2 border-t border-slate-700/60">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const code = currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : currentTenant;
+                    navigator.clipboard.writeText(code);
+                    alert(`農園コード「${code}」をコピーしました！現場スタッフにご案内ください。`);
+                  }}
+                  className="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 shadow-sm"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>農園コードをコピー</span>
                 </button>
               </div>
             </div>

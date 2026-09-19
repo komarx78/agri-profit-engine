@@ -63,7 +63,7 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
   const [workers, setWorkers] = useState<any[]>([]);
   const [currentFarmName, setCurrentFarmName] = useState<string>('');
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
-  const [step, setStep] = useState<'select_farm' | 'select_worker' | 'enter_pin'>('select_worker');
+  const [step, setStep] = useState<'enter_farm_code' | 'select_worker' | 'enter_pin'>('select_worker');
   const [pinCode, setPinCode] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -73,14 +73,114 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
   const [isLineBrowser, setIsLineBrowser] = useState(false);
   const [showPin, setShowPin] = useState(false);
   const [inputFarmId, setInputFarmId] = useState('');
-  const [availableFarms, setAvailableFarms] = useState<any[]>([]);
 
-  const handleSelectFarm = (farm: any) => {
-    setCurrentFarmName(farm.company_name);
-    safeStorage.setItem('agri_owner_id', farm.user_id);
-    safeStorage.setItem('agri_cached_company_name', farm.company_name);
-    setStep('select_worker');
-    loadWorkersForOwner(farm.user_id);
+  // 短縮農園コードの既知辞書（LINE連携等と統一）
+  const SHORT_FARM_CODES: Record<string, string> = {
+    'sahara': '62163024-2c8e-4057-a872-2455dbc58d32',
+    'kap': '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04',
+  };
+
+  // 農園コード / 電話番号の照合と自社バインド（他社一覧は0件・不可視）
+  const handleVerifyFarmCode = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const raw = inputFarmId.trim();
+    if (!raw) {
+      setErrorMsg('農園コードまたは電話番号を入力してください');
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMsg('');
+
+    try {
+      // 全角英数 ➔ 半角変換・空白除去
+      const normalized = raw
+        .replace(/[！-～]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+        .replace(/\s+/g, '');
+      const lower = normalized.toLowerCase();
+      const cleanDigitsOnly = normalized.replace(/\D/g, '');
+
+      let matchedUserId = '';
+      let matchedFarmName = '';
+
+      // ① 短縮コード（sahara, kap 等）の直接解決
+      if (SHORT_FARM_CODES[lower]) {
+        matchedUserId = SHORT_FARM_CODES[lower];
+      }
+
+      // ② UUID または ID によるピンポイント照合
+      if (!matchedUserId) {
+        try {
+          const { data: farmById } = await supabase
+            .from('company_settings')
+            .select('id, user_id, company_name, phone')
+            .or(`user_id.eq.${normalized},id.eq.${normalized}`)
+            .maybeSingle();
+          if (farmById) {
+            matchedUserId = farmById.user_id;
+            matchedFarmName = farmById.company_name;
+          }
+        } catch (idErr) {
+          // UUID形式外の場合は無視
+        }
+      }
+
+      // ③ 電話番号によるピンポイント照合（数字10〜11桁の場合）
+      if (!matchedUserId && cleanDigitsOnly.length >= 10) {
+        try {
+          const { data: farmByPhone } = await supabase
+            .from('company_settings')
+            .select('id, user_id, company_name, phone')
+            .eq('phone', cleanDigitsOnly)
+            .maybeSingle();
+          if (farmByPhone) {
+            matchedUserId = farmByPhone.user_id;
+            matchedFarmName = farmByPhone.company_name;
+          } else {
+            // 末尾8桁等でのLIKE検索
+            const { data: farmByPhoneLike } = await supabase
+              .from('company_settings')
+              .select('id, user_id, company_name, phone')
+              .like('phone', `%${cleanDigitsOnly.slice(-8)}%`)
+              .limit(1)
+              .maybeSingle();
+            if (farmByPhoneLike) {
+              matchedUserId = farmByPhoneLike.user_id;
+              matchedFarmName = farmByPhoneLike.company_name;
+            }
+          }
+        } catch (phoneErr) {
+          console.warn('Phone search err:', phoneErr);
+        }
+      }
+
+      if (matchedUserId) {
+        if (!matchedFarmName) {
+          const { data: farm } = await supabase
+            .from('company_settings')
+            .select('company_name')
+            .eq('user_id', matchedUserId)
+            .maybeSingle();
+          if (farm && farm.company_name) {
+            matchedFarmName = farm.company_name;
+          }
+        }
+
+        setCurrentFarmName(matchedFarmName);
+        safeStorage.setItem('agri_owner_id', matchedUserId);
+        if (matchedFarmName) {
+          safeStorage.setItem('agri_cached_company_name', matchedFarmName);
+        }
+        await loadWorkersForOwner(matchedUserId);
+      } else {
+        setErrorMsg('該当する農園が見つかりませんでした。\n農園コードまたは登録電話番号をご確認の上、農園管理者にお問い合わせください。');
+        setIsLoading(false);
+      }
+    } catch (err: any) {
+      console.error('Farm verify error:', err);
+      setErrorMsg('照合エラーが発生しました: ' + (err.message || ''));
+      setIsLoading(false);
+    }
   };
 
   // 全角数字 ➔ 半角数字自動変換 ＆ 非数字除去
@@ -106,6 +206,13 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
   }, []);
 
   const loadWorkersForOwner = async (targetOwnerId: string) => {
+    if (!targetOwnerId || targetOwnerId === 'null' || targetOwnerId === 'undefined') {
+      // 農園IDが未設定の場合は即座に農園コード入力画面へ遷移（他社一覧は絶対に取得しない）
+      setStep('enter_farm_code');
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setErrorMsg('');
 
@@ -113,29 +220,18 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
       let workerList: any[] = [];
       let resolvedOwnerId = targetOwnerId;
 
-      // 1. 農園IDの解決（company_settings の id でも user_id でも両対応、未指定時は主農園へ自動解決）
+      // 1. 指定農園のみをピンポイント照合（他社一覧の全件取得は完全遮断）
       try {
-        const { data: companies } = await supabase
+        const { data: farm } = await supabase
           .from('company_settings')
-          .select('id, user_id, company_name');
-        
-        if (companies && companies.length > 0) {
-          setAvailableFarms(companies);
-          if (targetOwnerId && targetOwnerId !== 'null' && targetOwnerId !== 'undefined') {
-            const matched = companies.find(c => c.user_id === targetOwnerId || c.id === targetOwnerId);
-            if (matched) {
-              resolvedOwnerId = matched.user_id;
-              setCurrentFarmName(matched.company_name);
-              safeStorage.setItem('agri_cached_company_name', matched.company_name);
-            } else {
-              resolvedOwnerId = targetOwnerId;
-            }
-          } else {
-            // targetOwnerId が一切未指定の場合、特定農園にハードコードせず農園選択ステップを表示（憲法3条）
-            setStep('select_farm');
-            setIsLoading(false);
-            return;
-          }
+          .select('id, user_id, company_name')
+          .or(`user_id.eq.${targetOwnerId},id.eq.${targetOwnerId}`)
+          .maybeSingle();
+
+        if (farm) {
+          resolvedOwnerId = farm.user_id;
+          setCurrentFarmName(farm.company_name);
+          safeStorage.setItem('agri_cached_company_name', farm.company_name);
         }
       } catch (cErr) {
         console.warn('Company resolution error:', cErr);
@@ -187,9 +283,9 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
         }
       }
 
-      // 4. 農園が未指定または見つからない場合は、必ず所属農園選択へ戻す（憲法3条）
+      // 4. 農園が未指定または見つからない場合は、必ず農園コード入力画面へ戻す（憲法3条）
       if (!targetOwnerId) {
-        setStep('select_farm');
+        setStep('enter_farm_code');
         setIsLoading(false);
         return;
       }
@@ -399,121 +495,75 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════
-            【ステップ0】所属農園選択画面（初回アクセス・農園未設定時）
-            ══════════════════════════════════════════════════════ */}
-        {step === 'select_farm' && (
-          <div>
-            <div className="text-center mb-6">
-              <div className="w-14 h-14 bg-emerald-500/20 rounded-2xl mx-auto flex items-center justify-center mb-3 border border-emerald-500/30">
-                <Building className="w-7 h-7 text-emerald-400" />
-              </div>
-              <h1 className="text-xl sm:text-2xl font-black text-white">{t('farmPortalConnect', language)}</h1>
-              <p className="text-xs sm:text-sm text-slate-400 font-medium mt-1.5 leading-relaxed">
-                {t('farmPortalConnectSub', language)}
-              </p>
-            </div>
 
-            {errorMsg && (
-              <div className="mb-4 p-3 bg-rose-500/20 border border-rose-500/50 text-rose-400 rounded-xl text-xs text-center font-bold whitespace-pre-line">
-                {errorMsg}
-              </div>
-            )}
-
-            <div className="space-y-4 mb-6">
-              {/* 農園コード・ID入力フォーム */}
-              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                  {t('connectFarmWithCode', language)}
-                </label>
-                <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
-                  {t('farmIdPrompt', language)}
-                </p>
-                <form onSubmit={handleManualSetupSubmit} className="space-y-3">
-                  <input
-                    type="text"
-                    value={inputFarmId}
-                    onChange={(e) => setInputFarmId(e.target.value)}
-                    placeholder="例: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-3 text-xs text-white outline-none focus:border-emerald-500 font-mono"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!inputFarmId.trim() || isLoading}
-                    className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-black rounded-xl text-xs transition-all cursor-pointer shadow-lg active:scale-95 flex items-center justify-center gap-1.5"
-                  >
-                    {isLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <>
-                        <span>{t('enterFarmPortalBtn', language)}</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </>
-                    )}
-                  </button>
-                </form>
-              </div>
-
-              {/* 管理者ログイン案内 */}
-              <div className="text-center pt-2">
-                <p className="text-[11px] text-slate-500 mb-2">
-                  {t('farmOwnerGuide', language)}
-                </p>
-                <a
-                  href="/login"
-                  className="w-full py-2.5 bg-slate-800/80 hover:bg-slate-800 text-slate-200 border border-slate-700/80 font-bold rounded-xl text-xs transition-all inline-flex items-center justify-center gap-2"
-                >
-                  <span>{t('adminLoginBtnWithUrl', language)}</span>
-                  <ArrowRight className="w-3 h-3" />
-                </a>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* ══════════════════════════════════════════════════════
-            【ステップ0】農園選択画面（初回アクセス・農園ID未指定時）
+            【ステップ0】農園初期連携画面（初回アクセス・農園ID未設定時）
+            ※他社契約一覧は一切取得・表示せず、入力されたコードのみピンポイント照合（憲法3条）
             ══════════════════════════════════════════════════════ */}
-        {step === 'select_farm' && (
+        {step === 'enter_farm_code' && (
           <div>
             <div className="text-center mb-6">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-black mb-3">
+              <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-black mb-3">
                 <Building className="w-3.5 h-3.5" />
-                <span>所属農園の選択</span>
+                <span>農園ポータル初期連携</span>
               </div>
               <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                あなたの農園を選んでください
+                農園コードを入力してください
               </h1>
-              <p className="text-xs text-slate-400 mt-1">
-                ※一度選ぶと次回から自動でこの農園が開きます
+              <p className="text-xs text-slate-300 mt-2 max-w-xs mx-auto leading-relaxed font-medium">
+                農園の管理者から案内された【農園コード】または【登録電話番号】を入力してください。
               </p>
             </div>
 
-            <div className="space-y-3 max-w-sm mx-auto mb-6">
-              {availableFarms.map(f => (
-                <button
-                  key={f.id || f.user_id}
-                  type="button"
-                  onClick={() => handleSelectFarm(f)}
-                  className="w-full p-4 rounded-2xl bg-slate-800/90 hover:bg-emerald-600/20 border-2 border-slate-700 hover:border-emerald-500 text-left transition-all active:scale-98 flex items-center justify-between group shadow-lg cursor-pointer"
-                >
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-black text-xl group-hover:bg-emerald-500 group-hover:text-slate-950 transition-all">
-                      🏢
-                    </div>
-                    <div>
-                      <div className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">
-                        {f.company_name}
-                      </div>
-                      <div className="text-[10px] text-slate-400 font-bold mt-0.5">
-                        タップしてこの農園でログイン
-                      </div>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all" />
-                </button>
-              ))}
-            </div>
+            <form onSubmit={handleVerifyFarmCode} className="space-y-4 max-w-sm mx-auto mb-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  農園コード または 登録電話番号
+                </label>
+                <input
+                  type="text"
+                  value={inputFarmId}
+                  onChange={(e) => setInputFarmId(e.target.value)}
+                  placeholder="例: sahara または 09012345678"
+                  className="w-full px-4 py-3.5 rounded-2xl bg-slate-800/90 border-2 border-slate-700 text-white placeholder-slate-500 font-bold text-base focus:border-emerald-500 focus:outline-none transition-all text-center tracking-wider"
+                  autoFocus
+                />
+              </div>
+
+              {errorMsg && (
+                <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-xs text-rose-300 font-bold whitespace-pre-line text-center leading-relaxed">
+                  {errorMsg}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isLoading || !inputFarmId.trim()}
+                className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm shadow-lg shadow-emerald-900/30 active:scale-98 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>照合中...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>農園に接続する</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+
+              <div className="p-3.5 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-[11px] text-slate-400 space-y-1.5 leading-relaxed">
+                <p className="font-bold text-emerald-400 flex items-center gap-1">
+                  <span>💡</span>
+                  <span>ご利用のご案内</span>
+                </p>
+                <p>・一度接続すると、次回から自動でこの農園が開きます（再入力不要）。</p>
+                <p>・農園コードがご不明な場合は、農園の管理者にお尋ねください。</p>
+              </div>
+            </form>
 
             <div className="text-center pt-2">
               <a
@@ -545,7 +595,9 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
                       safeStorage.clearWorkerCache();
                       setWorkers([]);
                       setCurrentFarmName('');
-                      setStep('select_farm');
+                      setInputFarmId('');
+                      setErrorMsg('');
+                      setStep('enter_farm_code');
                     }}
                     className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
                   >
