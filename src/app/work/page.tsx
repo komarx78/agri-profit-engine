@@ -259,6 +259,7 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
   const [offlineSyncNotice, setOfflineSyncNotice] = useState<string | null>(null);
+  const [lastAddedStamp, setLastAddedStamp] = useState<string | null>(null);
 
   // 生産性共有ステート
   const [productivity, setProductivity] = useState<{
@@ -2152,37 +2153,57 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
                     </span>
                   </div>
 
-                  {/* 🎨 提案③: 多言語ピクトグラムスタンプパレット */}
-                  <div className="mb-3 bg-slate-900/90 p-3 rounded-2xl border border-slate-700/80 space-y-2">
-                    <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-300">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>{t('stamp_sectionTitle', language)}</span>
+                  {/* 🎨 提案③: 多言語ピクトグラムスタンプパレット（現場直感・文字切れゼロ設計） */}
+                  <div className="mb-3 bg-slate-900/90 p-3.5 rounded-2xl border border-slate-700/80 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-xs font-black text-slate-200">
+                        <Sparkles className="w-4 h-4 text-amber-400" />
+                        <span>{t('stamp_sectionTitle', language)}</span>
+                      </div>
+                      {lastAddedStamp && (
+                        <span className="text-[11px] font-black text-emerald-400 bg-emerald-950/80 border border-emerald-500/50 px-2 py-0.5 rounded-full animate-in fade-in flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>{lastAddedStamp} 追加済</span>
+                        </span>
+                      )}
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+
+                    <div className="grid grid-cols-2 gap-2.5">
                       {[
-                        { key: 'stamp_harvest', text: '【現場報告】🧺 収穫完了', color: 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40' },
-                        { key: 'stamp_pest', text: '【現場報告】🐛 害虫・病気発見（要確認）', color: 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border-rose-500/40' },
-                        { key: 'stamp_water', text: '【現場報告】💧 水やり・潅水完了', color: 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border-blue-500/40' },
-                        { key: 'stamp_weed', text: '【現場報告】✂️ 除草・草刈り完了', color: 'bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border-teal-500/40' },
-                        { key: 'stamp_fertilizer', text: '【現場報告】🧪 追肥・施肥完了', color: 'bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border-indigo-500/40' },
-                        { key: 'stamp_machine', text: '【現場報告】⚠️ 機械トラブル・異変あり', color: 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40' },
-                        { key: 'stamp_clean', text: '【現場報告】🧹 片付け・清掃完了', color: 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600' },
-                        { key: 'stamp_good', text: '【現場報告】👍 順調・問題なし', color: 'bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-200 border-emerald-400/50' },
-                      ].map(stamp => (
-                        <button
-                          key={stamp.key}
-                          type="button"
-                          onClick={() => {
-                            setMemo(prev => {
-                              const clean = prev.trim();
-                              return clean ? `${clean}\n${stamp.text}` : stamp.text;
-                            });
-                          }}
-                          className={`p-2 rounded-xl border text-xs font-black flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs ${stamp.color}`}
-                        >
-                          <span className="truncate">{t(stamp.key, language)}</span>
-                        </button>
-                      ))}
+                        { emoji: '🧺', key: 'stamp_harvest', text: '【現場報告】🧺 収穫完了', color: 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/40' },
+                        { emoji: '🐛', key: 'stamp_pest', text: '【現場報告】🐛 害虫・病気発見（要確認）', color: 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border-rose-500/40' },
+                        { emoji: '💧', key: 'stamp_water', text: '【現場報告】💧 水やり・潅水完了', color: 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border-blue-500/40' },
+                        { emoji: '✂️', key: 'stamp_weed', text: '【現場報告】✂️ 除草・草刈り完了', color: 'bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border-teal-500/40' },
+                        { emoji: '🧪', key: 'stamp_fertilizer', text: '【現場報告】🧪 追肥・施肥完了', color: 'bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border-indigo-500/40' },
+                        { emoji: '⚠️', key: 'stamp_machine', text: '【現場報告】⚠️ 機械トラブル・異変あり', color: 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40' },
+                        { emoji: '🧹', key: 'stamp_clean', text: '【現場報告】🧹 片付け・清掃完了', color: 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600' },
+                        { emoji: '👍', key: 'stamp_good', text: '【現場報告】👍 順調・問題なし', color: 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-200 border-emerald-400/50' },
+                      ].map(stamp => {
+                        const rawLabel = t(stamp.key, language);
+                        const cleanLabel = rawLabel.replace(/^[^\s]+\s*/, '');
+                        return (
+                          <button
+                            key={stamp.key}
+                            type="button"
+                            onClick={() => {
+                              setMemo(prev => {
+                                const clean = prev.trim();
+                                return clean ? `${clean}\n${stamp.text}` : stamp.text;
+                              });
+                              setLastAddedStamp(cleanLabel || stamp.emoji);
+                              setTimeout(() => setLastAddedStamp(null), 2000);
+                            }}
+                            className={`p-2.5 sm:p-3 rounded-2xl border flex items-center gap-2.5 transition-all active:scale-95 cursor-pointer shadow-sm text-left ${stamp.color}`}
+                          >
+                            <span className="text-2xl shrink-0 p-1 bg-black/30 rounded-xl flex items-center justify-center">
+                              {stamp.emoji}
+                            </span>
+                            <span className="text-xs font-black leading-tight break-words whitespace-normal flex-1">
+                              {cleanLabel || rawLabel}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
