@@ -23,7 +23,7 @@ export const FarmPosterModal: React.FC<FarmPosterModalProps> = ({
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://agri-profit-engine.vercel.app';
   const portalUrl = `${origin}/portal/${tenantId}?openExternalBrowser=1`;
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&data=${encodeURIComponent(portalUrl)}`;
-  const displayCode = (farmCode || 'sahara-789').toUpperCase();
+  const displayCode = (farmCode || (tenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : tenantId === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : tenantId ? tenantId.substring(0, 8) : 'FARM')).toUpperCase();
 
   const handlePrint = () => {
     window.print();

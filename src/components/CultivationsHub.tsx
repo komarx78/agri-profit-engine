@@ -196,7 +196,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
 
   // 公的防除日誌モーダルステート
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [companyName, setCompanyName] = useState('佐原農園');
+  const [companyName, setCompanyName] = useState('');
 
   // --- タブ4: 予定ステート ---
   const [plannedTasks, setPlannedTasks] = useState<any[]>([]);
@@ -229,9 +229,13 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
       const fetchedMaterials = matRes.data || [];
       const fetchedFertMaterials = fertMatRes.data || [];
       const fetchedOfficialFerts = offFertRes.data || [];
-      if (compRes?.data?.company_name) {
-        setCompanyName(compRes.data.company_name);
+      let name = compRes?.data?.company_name || '';
+      if (!name) {
+        if (tenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04') name = '株式会社KAP';
+        else if (tenantId === '62163024-2c8e-4057-a872-2455dbc58d32') name = '佐原農園株式会社';
+        else name = '当農園';
       }
+      setCompanyName(name);
 
       setFields(fetchedFields);
       setCrops(fetchedCrops);

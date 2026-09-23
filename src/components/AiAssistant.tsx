@@ -47,7 +47,7 @@ const QUICK_QUESTIONS = [
 export const AiAssistant: React.FC<AiAssistantProps> = ({
   tenantId = '',
   companyName = '当農園',
-  farmCode = 'sahara',
+  farmCode = '',
 }) => {
   const router = useRouter();
   const pathname = usePathname();
@@ -114,7 +114,7 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
           message: query,
           history: historyPayload,
           companyName: companyName || '当農園',
-          farmCode: farmCode || 'sahara',
+          farmCode: farmCode || (tenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : tenantId === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : ''),
           tenantId: tenantId || '',
           currentPath: pathname || '',
         })
@@ -136,10 +136,11 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
       setMessages(prev => [...prev, botMessage]);
     } catch (err: any) {
       console.error('Assistant error:', err);
+      const safeCode = farmCode || (tenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : tenantId === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : '');
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: `申し訳ございません。通信エラーが発生いたしました。時間を置いて再度お試しいただくか、直接各メニューをご利用ください。\n\n※貴社の農園コードは【${(farmCode || 'sahara').toUpperCase()}】です。`,
+        content: `申し訳ございません。通信エラーが発生いたしました。時間を置いて再度お試しいただくか、直接各メニューをご利用ください。${safeCode ? `\n\n※貴社の農園コードは【${safeCode.toUpperCase()}】です。` : ''}`,
         actionLinks: [
           { label: '自社情報設定を開く', url: tenantId ? `/admin/settings?farm=${tenantId}` : '/admin/settings' },
         ],

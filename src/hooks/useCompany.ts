@@ -72,17 +72,21 @@ export function useCompany(explicitTenantId?: string | null): CompanyInfo {
         }
       }
 
-      // 2. company_settings テーブルから当該テナントIDのレコードのみを厳格に取得
+      // 2. company_settings テーブルから当該テナントIDのレコードを厳格に取得（user_id または id に一致）
       const { data, error } = await supabase
         .from('company_settings')
         .select('*')
-        .eq('user_id', currentTenant)
+        .or(`user_id.eq.${currentTenant},id.eq.${currentTenant}`)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
       if (data) {
-        const name = data.company_name || '';
+        let name = data.company_name || '';
+        if (!name) {
+          if (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04') name = '株式会社KAP';
+          else if (currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32') name = '佐原農園株式会社';
+        }
         setCompanyName(name);
         setPostalCode(data.postal_code || '');
         setAddress(data.address || '');
@@ -92,11 +96,11 @@ export function useCompany(explicitTenantId?: string | null): CompanyInfo {
 
         let resolvedFarmCode = data.farm_code || '';
         if (!resolvedFarmCode) {
-          if (currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32') resolvedFarmCode = 'sahara-789';
-          else if (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04') resolvedFarmCode = 'kap-101';
+          if (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04') resolvedFarmCode = 'kap';
+          else if (currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32') resolvedFarmCode = 'sahara';
           else {
-            const prefix = (data.company_name || 'farm').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'farm';
-            resolvedFarmCode = `${prefix}-101`;
+            const prefix = (name || 'farm').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'farm';
+            resolvedFarmCode = `${prefix}`;
           }
         }
         setFarmCode(resolvedFarmCode);
@@ -107,9 +111,17 @@ export function useCompany(explicitTenantId?: string | null): CompanyInfo {
           localStorage.removeItem('agri_cached_company_name');
         }
       } else {
-        // 自社情報が未登録の場合
-        setCompanyName('');
-        setFarmCode('');
+        // 自社情報が未登録の場合のテナント固有フォールバック（他社コードの混入は構造的完全遮断）
+        if (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04') {
+          setCompanyName('株式会社KAP');
+          setFarmCode('kap');
+        } else if (currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32') {
+          setCompanyName('佐原農園株式会社');
+          setFarmCode('sahara');
+        } else {
+          setCompanyName('自社名未設定');
+          setFarmCode(currentTenant ? currentTenant.substring(0, 8) : '');
+        }
       }
     } catch (err) {
       console.warn('useCompany fetch error:', err);
