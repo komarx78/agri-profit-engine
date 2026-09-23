@@ -28,11 +28,14 @@ import {
   ArrowRight,
   ChevronRight,
   ChevronDown,
-  Copy
+  Copy,
+  Printer,
+  AlertTriangle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { CultivationActionSheet, CultivationTarget } from '@/components/CultivationActionSheet';
+import { PesticideLogReportModal } from '@/components/PesticideLogReportModal';
 import { saveWorkerShareSettings, getWorkerShareSettings } from '@/app/actions/farm';
 import { generateComprehensiveSearchKeywords, isFuzzyMatch } from '@/lib/fuzzySearch';
 import { getJSTDate } from '@/lib/dateUtils';
@@ -191,6 +194,10 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     showToast('作業者への生産性共有設定を全社反映・保存しました！');
   };
 
+  // 公的防除日誌モーダルステート
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [companyName, setCompanyName] = useState('佐原農園');
+
   // --- タブ4: 予定ステート ---
   const [plannedTasks, setPlannedTasks] = useState<any[]>([]);
 
@@ -204,14 +211,15 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
         return;
       }
 
-      const [fRes, cRes, pRes, logsRes, matRes, fertMatRes, offFertRes] = await Promise.all([
+      const [fRes, cRes, pRes, logsRes, matRes, fertMatRes, offFertRes, compRes] = await Promise.all([
         supabase.from('fields').select('*').eq('user_id', tenantId).order('name'),
         supabase.from('crops').select('*').eq('user_id', tenantId).order('name'),
         supabase.from('cultivation_plans_v2').select('*, crops(*)').eq('user_id', tenantId).order('created_at', { ascending: false }),
         supabase.from('work_logs').select('*, crops(name), fields(name), workers(name)').eq('user_id', tenantId).order('work_date', { ascending: false }),
         supabase.from('materials').select('*').eq('user_id', tenantId).or('category.eq.農薬費,material_type.eq.pesticide').order('name'),
         supabase.from('materials').select('*').eq('user_id', tenantId).or('category.eq.肥料費,material_type.eq.fertilizer').order('name'),
-        supabase.from('m_fertilizers').select('*').order('created_at', { ascending: false }).limit(60)
+        supabase.from('m_fertilizers').select('*').order('created_at', { ascending: false }).limit(60),
+        supabase.from('company_settings').select('company_name').or(`user_id.eq.${tenantId},id.eq.${tenantId}`).maybeSingle()
       ]);
 
       const fetchedFields = fRes.data || [];
@@ -221,6 +229,9 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
       const fetchedMaterials = matRes.data || [];
       const fetchedFertMaterials = fertMatRes.data || [];
       const fetchedOfficialFerts = offFertRes.data || [];
+      if (compRes?.data?.company_name) {
+        setCompanyName(compRes.data.company_name);
+      }
 
       setFields(fetchedFields);
       setCrops(fetchedCrops);
@@ -1645,14 +1656,25 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                     className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none flex-1 sm:w-60"
                   />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsDirectAddModalOpen(true)}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors shadow-2xs shrink-0"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>作業履歴を直接登録</span>
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsReportModalOpen(true)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+                    title="農協（JA）・GAP提出用の病害虫防除日誌をA4横で印刷・PDF保存"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>📑 公的防除日誌を印刷・PDF出力</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsDirectAddModalOpen(true)}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors shadow-2xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>作業履歴を直接登録</span>
+                  </button>
+                </div>
               </div>
 
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
@@ -1772,6 +1794,40 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
               <FlaskConical className="w-5 h-5 text-rose-600" /> 農薬散布記録の確定
             </h3>
             <form onSubmit={handleSaveSprayLog} className="space-y-4">
+              {/* ⚠️ 散布基準セーフティ警告バナー */}
+              {pesticides.filter(p => selectedPesticideIds.includes(p.id)).some(p => p.usedCount >= p.maxCount) && (
+                <div className="p-3 bg-rose-50 border-2 border-rose-500 rounded-2xl flex items-start gap-2.5 text-rose-800 animate-pulse">
+                  <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="text-xs space-y-1">
+                    <p className="font-black text-rose-700">【農薬取締法違反・出荷停止の危険】</p>
+                    <p className="leading-snug">
+                      選択中の農薬の中に、**今期の上限使用回数にすでに達している農薬**があります。散布すると出荷停止や回収命令の対象となる恐れがあります。
+                    </p>
+                    <ul className="list-disc list-inside font-bold text-rose-900 pt-0.5">
+                      {pesticides
+                        .filter(p => selectedPesticideIds.includes(p.id) && p.usedCount >= p.maxCount)
+                        .map(p => (
+                          <li key={p.id}>{p.name} (今期 {p.usedCount}回 / 上限 {p.maxCount}回)</li>
+                        ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {/* ℹ️ 最終回アラート */}
+              {!pesticides.filter(p => selectedPesticideIds.includes(p.id)).some(p => p.usedCount >= p.maxCount) &&
+               pesticides.filter(p => selectedPesticideIds.includes(p.id)).some(p => p.usedCount + 1 === p.maxCount) && (
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-2xl flex items-start gap-2.5 text-amber-800">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="text-xs space-y-0.5">
+                    <p className="font-black text-amber-700">【今期最終散布のお知らせ】</p>
+                    <p className="leading-snug">
+                      今回の散布により、今期の上限使用回数に達する農薬があります（次回以降は散布できません）。
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="text-xs font-bold text-slate-500 block mb-1">散布日</label>
                 <input 
@@ -2035,6 +2091,16 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
           </div>
         </div>
       )}
+
+      {/* 📑 公的防除日誌（農薬使用台帳）A4横印刷プレビューモーダル */}
+      <PesticideLogReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        workLogs={workLogs}
+        crops={crops}
+        fields={fields}
+        companyName={companyName}
+      />
 
       {/* トースト通知 */}
       {toastMessage && (
