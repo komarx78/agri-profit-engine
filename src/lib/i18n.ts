@@ -1026,6 +1026,30 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   addressUnknown: { ja: '住所不明', en: 'Unknown address', vi: 'Không rõ địa chỉ', id: 'Alamat tidak diketahui', zh: '未知地址', si: 'නොදන්නා ලිපිනය', km: 'អាសយដ្ឋានមិនស្គាល់' },
   addressFailed: { ja: '住所取得失敗', en: 'Failed to get address', vi: 'Không lấy được địa chỉ', id: 'Gagal mendapatkan alamat', zh: '获取地址失败', si: 'ලිපිනය ලබා ගැනීමට නොහැකි විය', km: 'មិនអាចទទួលបានអាសយដ្ឋានទេ' },
   gpsNotSupported: { ja: '位置情報非対応ブラウザ', en: 'Browser does not support GPS', vi: 'Trình duyệt không hỗ trợ GPS', id: 'Browser tidak mendukung GPS', zh: '浏览器不支持GPS定位', si: 'බ්‍රව්සරය GPS සඳහා සහය නොදක්වයි', km: 'កម្មវិធីរុករកមិនគាំទ្រ GPS ទេ' },
+
+  // 🎨 提案③: 多言語ピクトグラムスタンプ ＆ スマートナビゲーション
+  stamp_sectionTitle: { ja: 'クイック報告スタンプ', en: 'Quick Report Stamps', vi: 'Con dấu báo cáo nhanh', id: 'Stempel Laporan Cepat', zh: '快捷汇报图章', si: 'ඉක්මන් වාර්තා මුද්දර', km: 'ត្រារាយការណ៍រហ័ស' },
+  stamp_tapHint: { ja: '押すと日報メモに自動入力されます', en: 'Tap to auto-insert into report memo', vi: 'Nhấn để tự động điền vào báo cáo', id: 'Ketuk untuk memasukkan ke catatan', zh: '点击即可自动填入日报备注', si: 'ස්වයංක්‍රීයව ඇතුළත් කිරීමට තට්ටු කරන්න', km: 'ចុចដើម្បីបញ្ចូលស្វ័យប្រវត្តិទៅក្នុងកំណត់ត្រា' },
+  stamp_harvest: { ja: '🧺 収穫完了', en: '🧺 Harvest Done', vi: '🧺 Đã thu hoạch', id: '🧺 Panen Selesai', zh: '🧺 采收完成', si: '🧺 අස්වැන්න නෙලා අවසන්', km: '🧺 ការប្រមូលផលបានបញ្ចប់' },
+  stamp_pest: { ja: '🐛 害虫・病気発見', en: '🐛 Pest/Disease Found', vi: '🐛 Phát hiện sâu bệnh', id: '🐛 Hama Ditemukan', zh: '🐛 发现病虫害', si: '🐛 පළිබෝධ සොයා ගන්නා ලදී', km: '🐛 បានរកឃើញសត្វល្អិត' },
+  stamp_water: { ja: '💧 水やり・潅水', en: '💧 Watering Done', vi: '💧 Đã tưới nước', id: '💧 Penyiraman Selesai', zh: '💧 浇水/灌溉完成', si: '💧 වතුර දැමීම අවසන්', km: '💧 ការស្រោចទឹកបានបញ្ចប់' },
+  stamp_weed: { ja: '✂️ 草刈り・除草', en: '✂️ Weeding Done', vi: '✂️ Đã làm cỏ', id: '✂️ Penyiangan Selesai', zh: '✂️ 除草完成', si: '✂️ වල් නෙලීම අවසන්', km: '✂️ ការបោចស្មៅបានបញ្ចប់' },
+  stamp_machine: { ja: '⚠️ 機械・トラブル', en: '⚠️ Machine/Issue', vi: '⚠️ Sự cố máy móc', id: '⚠️ Masalah Mesin', zh: '⚠️ 机械故障/异常', si: '⚠️ යන්ත්‍ර ගැටලුවක්', km: '⚠️ បញ្ហាម៉ាស៊ីន' },
+  stamp_fertilizer: { ja: '🧪 追肥・施肥', en: '🧪 Fertilizing Done', vi: '🧪 Đã bón phân', id: '🧪 Pemupukan Selesai', zh: '🧪 追肥完成', si: '🧪 පොහොර දැමීම අවසන්', km: '🧪 ការដាក់ជីបានបញ្ចប់' },
+  stamp_clean: { ja: '🧹 片付け・清掃', en: '🧹 Cleanup Done', vi: '🧹 Đã dọn dẹp', id: '🧹 Pembersihan Selesai', zh: '🧹 清理打扫完成', si: '🧹 පිරිසිදු කිරීම අවසන්', km: '🧹 ការសម្អាតបានបញ្ចប់' },
+  stamp_good: { ja: '👍 順調・問題なし', en: '👍 All Good / No Problem', vi: '👍 Tốt / Không vấn đề', id: '👍 Lancar / Aman', zh: '👍 一切顺利无异常', si: '👍 සියල්ල හොඳයි', km: '👍 ដំណើរការល្អ គ្មានបញ្ហា' },
+
+  // スマートナビゲーション（迷子ゼロ）
+  nav_actionPrompt: { ja: '👉 次に行う操作（迷ったらここを押す）', en: '👉 Next Action (Tap here)', vi: '👉 Hành động tiếp theo (Nhấn vào đây)', id: '👉 Tindakan Berikutnya (Ketuk di sini)', zh: '👉 下一步操作（点击这里）', si: '👉 ඊළඟ පියවර (මෙහි තට්ටු කරන්න)', km: '👉 សកម្មភាពបន្ទាប់ (ចុចទីនេះ)' },
+  nav_clockInNow: { ja: '出勤打刻をする', en: 'Clock In Now', vi: 'Chấm công vào làm ngay', id: 'Absen Masuk Sekarang', zh: '立即上班打卡', si: 'දැන් වැඩට පැමිණීම සටහන් කරන්න', km: 'កត់ត្រាចូលធ្វើការឥឡូវនេះ' },
+  nav_clockInSub: { ja: '今日も1日頑張りましょう！まずは出勤ボタンを押してください。', en: 'Have a great day! Please clock in first.', vi: 'Chúc bạn một ngày làm việc tốt lành! Hãy chấm công vào làm trước.', id: 'Semoga hari Anda menyenangkan! Silakan absen masuk terlebih dahulu.', zh: '祝您今天工作顺利！请先进行出勤打卡。', si: 'සුබ දවසක්! කරුණාකර පළමුව පැමිණීම සටහන් කරන්න.', km: 'សូមឱ្យថ្ងៃនេះល្អប្រសើរ! សូមកត់ត្រាចូលធ្វើការជាមុន។' },
+  nav_startTaskNow: { ja: '本日の担当作業を開始する', en: 'Start Today Assigned Task', vi: 'Bắt đầu công việc được giao hôm nay', id: 'Mulai Tugas Hari Ini', zh: '开始今日指派的作业', si: 'අද නියමිත කාර්යය ආරම්භ කරන්න', km: 'ចាប់ផ្តើមការងារដែលបានចាត់តាំងថ្ងៃនេះ' },
+  nav_startTaskSub: { ja: '畑・作物が自動セットされて1秒で作業開始できます。', en: 'Field & crop auto-filled for instant 1-second start.', vi: 'Tự động chọn khu đất & cây trồng, bắt đầu làm việc trong 1 giây.', id: 'Lahan & tanaman terisi otomatis untuk mulai instan 1 detik.', zh: '地块和作物自动带出，1秒即刻开工。', si: 'ක්ෂේත්‍රය සහ බෝගය ස්වයංක්‍රීයව තෝරා ඇත.', km: 'ដីស្រែនិងដំណាំត្រូវបានជ្រើសរើសដោយស្វ័យប្រវត្តិ។' },
+  nav_recordWorkNow: { ja: '現場作業を開始・記録する', en: 'Start & Record Field Work', vi: 'Bắt đầu & Ghi nhận công việc', id: 'Mulai & Catat Kerja Lapangan', zh: '开始并记录田间作业', si: 'ක්ෂේත්‍ර වැඩ ආරම්භ කර සටහන් කරන්න', km: 'ចាប់ផ្តើមនិងកត់ត្រាការងារ' },
+  nav_finishWorkingNow: { ja: '作業を完了して日報を送る', en: 'Finish Task & Submit Report', vi: 'Hoàn thành công việc & Gửi báo cáo', id: 'Selesaikan Tugas & Kirim Laporan', zh: '完成作业并提交日报', si: 'වැඩ අවසන් කර වාර්තාව එවන්න', km: 'បញ្ចប់ការងារនិងផ្ញើរបាយការណ៍' },
+  nav_finishWorkingSub: { ja: '作業時間を計測中です。終了したら押してください。', en: 'Timer is running. Tap when finished.', vi: 'Đang đếm giờ làm việc. Nhấn vào đây khi hoàn tất.', id: 'Timer sedang berjalan. Ketuk jika sudah selesai.', zh: '工时正在计时中。作业结束后请点击此处。', si: 'කාලය ගණනය වෙමින් පවතී. අවසන් වූ විට තට්ටු කරන්න.', km: 'កំពុងកំណត់ម៉ោង។ ចុចនៅពេលបញ្ចប់។' },
+  nav_offlineBuffered: { ja: '📶 電波圏外のため端末に一時保存しました（電波復帰時に自動送信）', en: '📶 Saved offline (Auto-syncs when online)', vi: '📶 Đã lưu ngoại tuyến (Tự động đồng bộ khi có mạng)', id: '📶 Tersimpan offline (Sinkron otomatis saat online)', zh: '📶 信号较弱，已暂存于本地（联网时将自动同步）', si: '📶 නොබැඳිව සුරකින ලදී (සම්බන්ධ වූ පසු ස්වයංක්‍රීයව යවනු ලැබේ)', km: '📶 បានរក្សាទុកក្រៅបណ្តាញ (ធ្វើសមកាលកម្មដោយស្វ័យប្រវត្តិនៅពេលមានអ៊ីនធឺណិត)' },
+  nav_offlineSyncSuccess: { ja: '✅ 圏外で一時保存されていた日報（{count}件）を正常に送信・同期しました！', en: '✅ Successfully synced {count} offline report(s)!', vi: '✅ Đã đồng bộ thành công {count} báo cáo ngoại tuyến!', id: '✅ Berhasil menyinkronkan {count} laporan offline!', zh: '✅ 已成功同步 {count} 条离线暂存的日报！', si: '✅ නොබැඳි වාර්තා {count} ක් සාර්ථකව යවන ලදී!', km: '✅ បានធ្វើសមកាលកម្មរបាយការណ៍ក្រៅបណ្តាញ {count} ដោយជោគជ័យ!' },
 };
 
 export const WEEKDAY_NAMES: Record<LanguageCode, string[]> = {

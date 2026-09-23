@@ -257,6 +257,8 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
+  const [offlineSyncNotice, setOfflineSyncNotice] = useState<string | null>(null);
 
   // 生産性共有ステート
   const [productivity, setProductivity] = useState<{
@@ -1024,6 +1026,71 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
     }
   };
 
+  // --- 🎨 提案③: オフライン一時退避＆オンライン復帰自動同期 ---
+  const saveOfflineWorkLog = (logData: any) => {
+    try {
+      const existing = JSON.parse(localStorage.getItem('agri_offline_work_logs') || '[]');
+      existing.push({
+        ...logData,
+        _offline_created_at: new Date().toISOString()
+      });
+      localStorage.setItem('agri_offline_work_logs', JSON.stringify(existing));
+      setOfflineNotice(t('nav_offlineBuffered', language));
+      setTimeout(() => setOfflineNotice(null), 6000);
+    } catch (e) {
+      console.error('Failed to save offline log:', e);
+    }
+  };
+
+  const syncOfflineWorkLogs = async () => {
+    if (typeof window === 'undefined' || !navigator.onLine) return;
+    try {
+      const raw = localStorage.getItem('agri_offline_work_logs');
+      if (!raw) return;
+      const list = JSON.parse(raw);
+      if (!Array.isArray(list) || list.length === 0) return;
+
+      const remaining: any[] = [];
+      let syncedCount = 0;
+      for (const item of list) {
+        const { _offline_created_at, ...dbPayload } = item;
+        const { error } = await supabase.from('work_logs').insert([dbPayload]);
+        if (!error) {
+          syncedCount++;
+        } else {
+          console.warn('Sync failed for item:', error);
+          remaining.push(item);
+        }
+      }
+
+      if (remaining.length > 0) {
+        localStorage.setItem('agri_offline_work_logs', JSON.stringify(remaining));
+      } else {
+        localStorage.removeItem('agri_offline_work_logs');
+      }
+
+      if (syncedCount > 0) {
+        const msg = t('nav_offlineSyncSuccess', language).replace('{count}', String(syncedCount));
+        setOfflineSyncNotice(msg);
+        setTimeout(() => setOfflineSyncNotice(null), 6000);
+      }
+    } catch (e) {
+      console.error('Offline sync error:', e);
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleOnline = () => {
+      syncOfflineWorkLogs();
+    };
+    window.addEventListener('online', handleOnline);
+    syncOfflineWorkLogs();
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [language]);
+
   // --- 作業記録アクション ---
   const handleStartWork = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1103,26 +1170,57 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
     if (!activeWorkLog) return;
     setIsSubmitting(true);
     try {
-      if (isConnected && activeWorkLog.id) {
-        const endTime = new Date();
-        const startTime = new Date(activeWorkLog.start_time);
-        const diffMins = Math.floor((endTime.getTime() - startTime.getTime()) / 1000 / 60);
+      const endTime = new Date();
+      const startTime = new Date(activeWorkLog.start_time);
+      const diffMins = Math.floor((endTime.getTime() - startTime.getTime()) / 1000 / 60);
+      const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
+      if (isOnline && isConnected && activeWorkLog.id) {
         const { error } = await supabase.from('work_logs').update({
           end_time: endTime.toISOString(),
           duration_minutes: diffMins,
           status: 'completed'
         }).eq('id', activeWorkLog.id);
         
-        if (error) throw error;
+        if (error) {
+          console.warn('Update failed, buffering completion to offline log:', error);
+          saveOfflineWorkLog({
+            ...activeWorkLog,
+            end_time: endTime.toISOString(),
+            duration_minutes: diffMins,
+            status: 'completed'
+          });
+        }
+      } else {
+        saveOfflineWorkLog({
+          ...activeWorkLog,
+          end_time: endTime.toISOString(),
+          duration_minutes: diffMins,
+          status: 'completed'
+        });
       }
+
       setActiveWorkLog(null);
       setIsSubmitting(false);
       setIsSuccess(true);
       setTimeout(() => { setIsSuccess(false); resetForm(); }, 2500);
     } catch (err: any) {
-      setErrorMsg(err.message || '通信エラー');
+      console.warn('Stop work exception, fallback to offline log:', err);
+      if (activeWorkLog) {
+        const endTime = new Date();
+        const startTime = new Date(activeWorkLog.start_time);
+        const diffMins = Math.floor((endTime.getTime() - startTime.getTime()) / 1000 / 60);
+        saveOfflineWorkLog({
+          ...activeWorkLog,
+          end_time: endTime.toISOString(),
+          duration_minutes: diffMins,
+          status: 'completed'
+        });
+      }
+      setActiveWorkLog(null);
       setIsSubmitting(false);
+      setIsSuccess(true);
+      setTimeout(() => { setIsSuccess(false); resetForm(); }, 2500);
     }
   };
 
@@ -1130,56 +1228,124 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
     e.preventDefault();
     if (!currentUser) return;
     setIsSubmitting(true);
+    const cropId = crops.find(c => c.name === selectedCrop)?.id;
+    const fieldId = fields.find(f => f.name === selectedField)?.id;
+    const matId = materials.find(m => m.name === selectedMaterial)?.id;
+    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+
     try {
-      if (isConnected) {
-        const cropId = crops.find(c => c.name === selectedCrop)?.id;
-        const fieldId = fields.find(f => f.name === selectedField)?.id;
-        const matId = materials.find(m => m.name === selectedMaterial)?.id;
-
-        let uploadedPhotoUrl = null;
-        let uploadedVideoUrl = null;
-
-        if (photoFile) {
-            const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1024, useWebWorker: true, fileType: 'image/jpeg' };
-            const compressedFile = await imageCompression(photoFile, options);
-            const fileName = `${workerProfile?.user_id || 'unknown'}/${currentUser.id}/${Date.now()}.jpg`;
-            const { error: uploadError } = await supabase.storage.from('work_photos').upload(fileName, compressedFile, { contentType: 'image/jpeg' });
-            if (uploadError) throw uploadError;
-            uploadedPhotoUrl = supabase.storage.from('work_photos').getPublicUrl(fileName).data.publicUrl;
-        }
-
-        if (videoFile) {
-            const fileName = `${workerProfile?.user_id || 'unknown'}/${currentUser.id}/${Date.now()}_video.mp4`;
-            const { error: uploadError } = await supabase.storage.from('work_videos').upload(fileName, videoFile);
-            if (uploadError) throw uploadError;
-            uploadedVideoUrl = fileName;
-        }
-
-        const { error } = await supabase.from('work_logs').insert([{
+      if (!isOnline) {
+        // 電波圏外時：直ちにローカルストレージへ退避
+        saveOfflineWorkLog({
           user_id: workerProfile?.user_id || null,
           farm_id: workerProfile?.farm_id || null,
           worker_id: currentUser.id,
           crop_id: cropId || null,
           field_id: fieldId || null,
           work_type: workType,
-          duration_minutes: parseInt(duration, 10),
+          duration_minutes: parseInt(duration, 10) || 0,
           status: 'completed',
           work_date: manualDate,
           material_id: matId || null,
           material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,
           memo: memo || null,
-          photo_url: uploadedPhotoUrl,
-          video_url: uploadedVideoUrl,
           approval_status: 'pending'
-        }]);
-        if (error) throw error;
+        });
+        setIsSubmitting(false);
+        setIsSuccess(true);
+        setTimeout(() => { setIsSuccess(false); resetForm(); }, 2500);
+        return;
       }
+
+      let uploadedPhotoUrl = null;
+      let uploadedVideoUrl = null;
+
+      if (photoFile) {
+        try {
+          const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1024, useWebWorker: true, fileType: 'image/jpeg' };
+          const compressedFile = await imageCompression(photoFile, options);
+          const fileName = `${workerProfile?.user_id || 'unknown'}/${currentUser.id}/${Date.now()}.jpg`;
+          const { error: uploadError } = await supabase.storage.from('work_photos').upload(fileName, compressedFile, { contentType: 'image/jpeg' });
+          if (!uploadError) {
+            uploadedPhotoUrl = supabase.storage.from('work_photos').getPublicUrl(fileName).data.publicUrl;
+          }
+        } catch (e) {
+          console.warn('Photo upload failed, continuing with log:', e);
+        }
+      }
+
+      if (videoFile) {
+        try {
+          const fileName = `${workerProfile?.user_id || 'unknown'}/${currentUser.id}/${Date.now()}_video.mp4`;
+          const { error: uploadError } = await supabase.storage.from('work_videos').upload(fileName, videoFile);
+          if (!uploadError) {
+            uploadedVideoUrl = fileName;
+          }
+        } catch (e) {
+          console.warn('Video upload failed, continuing with log:', e);
+        }
+      }
+
+      const { error } = await supabase.from('work_logs').insert([{
+        user_id: workerProfile?.user_id || null,
+        farm_id: workerProfile?.farm_id || null,
+        worker_id: currentUser.id,
+        crop_id: cropId || null,
+        field_id: fieldId || null,
+        work_type: workType,
+        duration_minutes: parseInt(duration, 10),
+        status: 'completed',
+        work_date: manualDate,
+        material_id: matId || null,
+        material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,
+        memo: memo || null,
+        photo_url: uploadedPhotoUrl,
+        video_url: uploadedVideoUrl,
+        approval_status: 'pending'
+      }]);
+
+      if (error) {
+        console.warn('Supabase insert failed, buffering to offline storage:', error);
+        saveOfflineWorkLog({
+          user_id: workerProfile?.user_id || null,
+          farm_id: workerProfile?.farm_id || null,
+          worker_id: currentUser.id,
+          crop_id: cropId || null,
+          field_id: fieldId || null,
+          work_type: workType,
+          duration_minutes: parseInt(duration, 10) || 0,
+          status: 'completed',
+          work_date: manualDate,
+          material_id: matId || null,
+          material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,
+          memo: memo || null,
+          approval_status: 'pending'
+        });
+      }
+
       setIsSubmitting(false);
       setIsSuccess(true);
       setTimeout(() => { setIsSuccess(false); resetForm(); }, 2500);
     } catch (err: any) {
-      setErrorMsg(err.message || '通信エラー');
+      console.warn('Submission error, fallback to offline storage:', err);
+      saveOfflineWorkLog({
+        user_id: workerProfile?.user_id || null,
+        farm_id: workerProfile?.farm_id || null,
+        worker_id: currentUser.id,
+        crop_id: cropId || null,
+        field_id: fieldId || null,
+        work_type: workType,
+        duration_minutes: parseInt(duration, 10) || 0,
+        status: 'completed',
+        work_date: manualDate,
+        material_id: matId || null,
+        material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,
+        memo: memo || null,
+        approval_status: 'pending'
+      });
       setIsSubmitting(false);
+      setIsSuccess(true);
+      setTimeout(() => { setIsSuccess(false); resetForm(); }, 2500);
     }
   };
 
@@ -1618,6 +1784,18 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
           <form onSubmit={inputMode === 'timer' ? handleStartWork : handleManualSubmit} className="space-y-6">
             <div>
               {errorMsg && <div className="p-4 bg-rose-500/20 border border-rose-500/50 text-rose-400 rounded-xl text-sm font-bold flex items-start gap-3"><AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" /><span>{errorMsg}</span></div>}
+              {offlineNotice && (
+                <div className="p-4 bg-amber-500/20 border-2 border-amber-500/50 text-amber-300 rounded-2xl text-xs font-bold flex items-center gap-3 animate-in fade-in shadow-md mb-3">
+                  <span className="text-xl">📶</span>
+                  <span>{offlineNotice}</span>
+                </div>
+              )}
+              {offlineSyncNotice && (
+                <div className="p-4 bg-emerald-500/20 border-2 border-emerald-500 text-emerald-300 rounded-2xl text-xs font-bold flex items-center gap-3 animate-in fade-in shadow-md mb-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <span>{offlineSyncNotice}</span>
+                </div>
+              )}
             </div>
 
             
@@ -1965,9 +2143,49 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
                 </div>
                 
                 <div>
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
-                    <FileText className="w-4 h-4" />{t('memoSectionLabel', language)}
-                  </h2>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                      <FileText className="w-4 h-4" />{t('memoSectionLabel', language)}
+                    </h2>
+                    <span className="text-[10px] text-emerald-400 font-bold">
+                      {t('stamp_tapHint', language)}
+                    </span>
+                  </div>
+
+                  {/* 🎨 提案③: 多言語ピクトグラムスタンプパレット */}
+                  <div className="mb-3 bg-slate-900/90 p-3 rounded-2xl border border-slate-700/80 space-y-2">
+                    <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-300">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{t('stamp_sectionTitle', language)}</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { key: 'stamp_harvest', text: '【現場報告】🧺 収穫完了', color: 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40' },
+                        { key: 'stamp_pest', text: '【現場報告】🐛 害虫・病気発見（要確認）', color: 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border-rose-500/40' },
+                        { key: 'stamp_water', text: '【現場報告】💧 水やり・潅水完了', color: 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border-blue-500/40' },
+                        { key: 'stamp_weed', text: '【現場報告】✂️ 除草・草刈り完了', color: 'bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border-teal-500/40' },
+                        { key: 'stamp_fertilizer', text: '【現場報告】🧪 追肥・施肥完了', color: 'bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border-indigo-500/40' },
+                        { key: 'stamp_machine', text: '【現場報告】⚠️ 機械トラブル・異変あり', color: 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40' },
+                        { key: 'stamp_clean', text: '【現場報告】🧹 片付け・清掃完了', color: 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600' },
+                        { key: 'stamp_good', text: '【現場報告】👍 順調・問題なし', color: 'bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-200 border-emerald-400/50' },
+                      ].map(stamp => (
+                        <button
+                          key={stamp.key}
+                          type="button"
+                          onClick={() => {
+                            setMemo(prev => {
+                              const clean = prev.trim();
+                              return clean ? `${clean}\n${stamp.text}` : stamp.text;
+                            });
+                          }}
+                          className={`p-2 rounded-xl border text-xs font-black flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs ${stamp.color}`}
+                        >
+                          <span className="truncate">{t(stamp.key, language)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={t('workMemoPlaceholder', language)} className="w-full h-24 p-3 bg-slate-950 border border-slate-700 text-white rounded-xl text-sm" />
                 </div>
 

@@ -2858,8 +2858,105 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
         
+        {/* 🎨 提案③: 迷子ゼロ・スマートナビゲーションバナー（今やるべき行動を特大カードで自動案内） */}
+        {currentUser && (
+          <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200">
+            <div className="text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>{t('nav_actionPrompt', language)}</span>
+            </div>
+
+            {!hasClockedIn ? (
+              // 1. 未出勤：出勤打刻カード
+              <div 
+                onClick={() => handleClockAction('in')}
+                className="cursor-pointer bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white p-4 sm:p-5 rounded-2xl shadow-md transition-all active:scale-[0.99] flex items-center justify-between gap-4 group"
+              >
+                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-2xl sm:text-3xl shrink-0 group-hover:scale-110 transition-transform">
+                    🏃‍♂️
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-base sm:text-xl font-black tracking-tight truncate">
+                      {t('nav_clockInNow', language)}
+                    </h2>
+                    <p className="text-xs sm:text-sm text-emerald-100 font-medium truncate mt-0.5">
+                      {t('nav_clockInSub', language)}
+                    </p>
+                  </div>
+                </div>
+                <div className="shrink-0 flex items-center gap-1 bg-white text-emerald-800 px-3.5 py-2 rounded-xl font-black text-xs sm:text-sm shadow-xs group-hover:bg-emerald-50">
+                  <span>{t('portal_clockIn', language)}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </div>
+              </div>
+            ) : !hasClockedOut ? (
+              // 2. 出勤中：作業開始または完了日報カード
+              (() => {
+                const pendingTask = tasks.find(tTask => tTask.status !== 'completed');
+                return (
+                  <div className="space-y-2">
+                    <div 
+                      onClick={() => {
+                        const targetFarm = activeFarmId || requestedFarmId;
+                        router.push(targetFarm ? `/work?farm=${targetFarm}` : '/work');
+                      }}
+                      className="cursor-pointer bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white p-4 sm:p-5 rounded-2xl shadow-md transition-all active:scale-[0.99] flex items-center justify-between gap-4 group"
+                    >
+                      <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-2xl sm:text-3xl shrink-0 group-hover:scale-110 transition-transform">
+                          {pendingTask ? '🚜' : '🌱'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black px-2 py-0.5 bg-white/20 rounded-full text-blue-100">
+                              {pendingTask ? t('nav_startTaskNow', language) : t('nav_recordWorkNow', language)}
+                            </span>
+                          </div>
+                          <h2 className="text-base sm:text-xl font-black tracking-tight truncate mt-0.5">
+                            {pendingTask 
+                              ? `${getTranslatedWorkType(pendingTask.work_type || pendingTask.task_title || '現場作業', language)} (${pendingTask.fields?.name || ''} ${pendingTask.crops?.name || ''})`
+                              : t('nav_recordWorkNow', language)}
+                          </h2>
+                          <p className="text-xs sm:text-sm text-blue-100 font-medium truncate mt-0.5">
+                            {pendingTask ? t('nav_startTaskSub', language) : '収穫・病害虫報告・作業時間を1タップで記録'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="shrink-0 flex items-center gap-1 bg-white text-blue-800 px-3.5 py-2 rounded-xl font-black text-xs sm:text-sm shadow-xs group-hover:bg-blue-50">
+                        <span>{t('workRecord', language)}</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
+            ) : (
+              // 3. 退勤済み：お疲れ様でした案内
+              <div className="bg-slate-100 border border-slate-200 text-slate-700 p-4 rounded-2xl flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center text-xl shrink-0">
+                    🏠
+                  </div>
+                  <div>
+                    <h2 className="text-sm sm:text-base font-black text-slate-800">
+                      本日のお仕事はすべて完了しました
+                    </h2>
+                    <p className="text-xs text-slate-500 font-medium">
+                      今日も1日お疲れ様でした！ゆっくりお休みください。
+                    </p>
+                  </div>
+                </div>
+                <div className="text-xs font-bold text-slate-400 shrink-0">
+                  退勤済: {attendance?.clock_out ? formatDisplayTime(attendance.clock_out) : '--:--'}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 📱 現場ホーム（一般スタッフ・パート用 出退勤打刻・タスク・日報・掲示板・マニュアル） */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
