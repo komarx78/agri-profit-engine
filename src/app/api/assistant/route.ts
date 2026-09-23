@@ -16,14 +16,15 @@ interface AssistantRequestBody {
 function getFallbackResponse(
   query: string,
   companyName: string = '当農園',
-  farmCode: string = 'sahara-789',
+  farmCode: string = '',
   tenantId: string = ''
 ): { reply: string; actionLinks?: Array<{ label: string; url: string }> } {
   const q = query.toLowerCase();
+  const codeDisplay = (farmCode || (tenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : tenantId === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : '')).toUpperCase();
 
   if (q.includes('農園コード') || q.includes('コード') || q.includes('アプリ') || q.includes('ログインできない') || q.includes('入れない') || q.includes('qr')) {
     return {
-      reply: `【${companyName}】の現場アプリ用「農園コード」は **${farmCode.toUpperCase()}** です！\n\n【接続方法（2通り）】\n1. **QRコードで自動接続（おすすめ）**: 現場アプリの「📷 ポスターのQRコードをカメラで読み取る」ボタンを押して、A4ポスターをかざすだけで手入力不要で一瞬接続できます。\n2. **手入力**: アプリ起動時に「農園コード（${farmCode.toUpperCase()}）」を入力して接続ボタンを押します。\n\n※農園コードの確認・変更は「自社情報設定」からいつでも行えます。また、スタッフ休憩所に貼れる「A4ポスター印刷」もご利用いただけます。`,
+      reply: `【${companyName}】の現場アプリ用「農園コード」は **${codeDisplay || '（自社設定でご確認ください）'}** です！\n\n【接続方法（2通り）】\n1. **QRコードで自動接続（おすすめ）**: 現場アプリの「📷 ポスターのQRコードをカメラで読み取る」ボタンを押して、A4ポスターをかざすだけで手入力不要で一瞬接続できます。\n2. **手入力**: アプリ起動時に「農園コード${codeDisplay ? `（${codeDisplay}）` : ''}」を入力して接続ボタンを押します。\n\n※農園コードの確認・変更は「自社情報設定」からいつでも行えます。また、スタッフ休憩所に貼れる「A4ポスター印刷」もご利用いただけます。`,
       actionLinks: [
         { label: '自社情報設定を開く', url: tenantId ? `/admin/settings?farm=${tenantId}` : '/admin/settings' },
         { label: '現場ポータルを開く', url: tenantId ? `/portal/${tenantId}` : '/portal' },
@@ -118,7 +119,8 @@ function getFallbackResponse(
 export async function POST(req: Request) {
   try {
     const body: AssistantRequestBody = await req.json();
-    const { message, history = [], companyName = '当農園', farmCode = 'sahara', tenantId = '', currentPath = '' } = body;
+    const { message, history = [], companyName = '当農園', farmCode = '', tenantId = '', currentPath = '' } = body;
+    const resolvedFarmCode = (farmCode || (tenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : tenantId === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : '')).toUpperCase();
 
     if (!message || !message.trim()) {
       return NextResponse.json({ error: 'メッセージが空です' }, { status: 400 });
@@ -128,7 +130,7 @@ export async function POST(req: Request) {
 
     // APIキーがない場合は即座にローカルナレッジベースで回答
     if (!apiKey) {
-      const fallback = getFallbackResponse(message, companyName, farmCode, tenantId);
+      const fallback = getFallbackResponse(message, companyName, resolvedFarmCode, tenantId);
       return NextResponse.json({
         reply: fallback.reply,
         actionLinks: fallback.actionLinks || [],
@@ -144,18 +146,18 @@ export async function POST(req: Request) {
       let aiResponseText = '';
 
       const systemInstruction = `
-あなたは農業経営統合SaaS「agri-profit-engine PRO」の専任コンシェルジュAI（孔明システムアドバイザー）です。
+あなたはお客さまの農業経営統合SaaS「agri-profit-engine PRO」の専任コンシェルジュAI（孔明システムアドバイザー）です。
 PC操作やITツールに不慣れな農家様や現場スタッフ、管理者様にも100%直感的でわかりやすい、極めて優しく親切・丁寧な日本語で回答してください。
 
 【現在のアクセス中コンテキスト】
 - 農園名: ${companyName}
-- 現場アプリ用農園コード: ${farmCode.toUpperCase()}
+- 現場アプリ用農園コード: ${resolvedFarmCode || '（自社設定画面で確認）'}
 - テナントID: ${tenantId || '未指定'}
 - 現在開いている画面パス: ${currentPath || '管理画面'}
 
 【システム全機能マップとルーティング】
 1. 現場アプリ・農園コード:
-   - スタッフ用スマホアプリ（Android APK / PWA）の初回起動時は「農園コード (${farmCode.toUpperCase()})」の入力が必要。
+   - スタッフ用スマホアプリ（Android APK / PWA）の初回起動時は「農園コード (${resolvedFarmCode || '自社設定画面で確認'})」の入力が必要。
    - 確認・変更は「自社情報設定」(/admin/settings) で可能。
    - 休憩所掲示用のA4ポスター印刷機能も備わっています。
 2. 現場・打刻・日報:

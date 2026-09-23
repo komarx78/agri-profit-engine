@@ -62,11 +62,11 @@ export default function SettingsPage() {
           setSettingsId(data.id);
           let resolvedCode = data.farm_code || '';
           if (!resolvedCode) {
-            if (tenantId === '62163024-2c8e-4057-a872-2455dbc58d32') resolvedCode = 'sahara-789';
-            else if (tenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04') resolvedCode = 'kap-101';
+            if (tenantId === '62163024-2c8e-4057-a872-2455dbc58d32') resolvedCode = 'sahara';
+            else if (tenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04') resolvedCode = 'kap';
             else {
               const prefix = (data.company_name || 'farm').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'farm';
-              resolvedCode = `${prefix}-101`;
+              resolvedCode = `${prefix}`;
             }
           }
           setFormData({
@@ -168,6 +168,13 @@ export default function SettingsPage() {
     }
   };
 
+  const resolveSafeFarmCode = (code?: string): string => {
+    if (code && code.trim()) return code.trim();
+    if (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04') return 'kap';
+    if (currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32') return 'sahara';
+    return currentTenant ? currentTenant.substring(0, 8) : '';
+  };
+
   return (
     <AdminOnlyGuard>
       {isLoading ? (
@@ -194,7 +201,7 @@ export default function SettingsPage() {
           <div className="flex items-center gap-3">
             <span className="text-sm md:text-base font-bold text-emerald-100">貴社の農園コード:</span>
             <span className="text-2xl md:text-3xl font-mono font-black tracking-widest bg-white/20 px-3.5 py-1 rounded-xl border border-white/30 text-white select-all">
-              {(formData.farm_code || (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : 'sahara')).toUpperCase()}
+              {resolveSafeFarmCode(formData.farm_code).toUpperCase()}
             </span>
           </div>
           <p className="text-xs text-emerald-200 mt-1 font-medium">
@@ -205,7 +212,7 @@ export default function SettingsPage() {
           <button
             type="button"
             onClick={() => {
-              const code = (formData.farm_code || (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : 'sahara')).toUpperCase();
+              const code = resolveSafeFarmCode(formData.farm_code).toUpperCase();
               navigator.clipboard.writeText(code);
               alert(`農園コード「${code}」をコピーしました！`);
             }}
@@ -291,7 +298,7 @@ export default function SettingsPage() {
                 </p>
                 <div className="bg-white p-3 rounded-2xl inline-block mb-3 shadow-md text-center">
                   <img 
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`https://line.me/R/oaMessage/@566kmiby/?${currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : currentTenant}`)}`}
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`https://line.me/R/oaMessage/@566kmiby/?${resolveSafeFarmCode(formData.farm_code)}`)}`}
                     alt="LINE登録用QRコード"
                     className="w-32 h-32 mx-auto"
                   />
@@ -300,12 +307,12 @@ export default function SettingsPage() {
               </div>
               <div className="space-y-2 pt-2 border-t border-slate-700/60">
                 <div className="text-[11px] text-slate-400 font-mono truncate bg-slate-950/60 p-2 rounded-lg">
-                  {`参加コード: ${currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : currentTenant}`}
+                  {`参加コード: ${resolveSafeFarmCode(formData.farm_code)}`}
                 </div>
                 <button
                   type="button"
                   onClick={() => {
-                    const code = currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : currentTenant === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : currentTenant;
+                    const code = resolveSafeFarmCode(formData.farm_code);
                     navigator.clipboard.writeText(`https://line.me/R/oaMessage/@566kmiby/?${code}`);
                     alert('LINE連携用URLをコピーしました！');
                   }}
@@ -332,7 +339,7 @@ export default function SettingsPage() {
                   <span className="text-[10px] text-slate-400 font-bold block">貴社の農園コード</span>
                   <div className="flex items-center justify-between">
                     <span className="text-xl font-mono font-black text-amber-300 tracking-wider uppercase">
-                      {formData.farm_code || (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : 'sahara')}
+                      {resolveSafeFarmCode(formData.farm_code)}
                     </span>
                     <span className="text-[10px] text-slate-500 font-medium">※大文字・小文字どちらでも可</span>
                   </div>
@@ -342,7 +349,7 @@ export default function SettingsPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    const code = formData.farm_code || (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : 'sahara');
+                    const code = resolveSafeFarmCode(formData.farm_code);
                     navigator.clipboard.writeText(code);
                     alert(`農園コード「${code}」をコピーしました！現場スタッフにご案内ください。`);
                   }}
@@ -559,7 +566,7 @@ export default function SettingsPage() {
       <FarmPosterModal
         isOpen={isPosterModalOpen}
         onClose={() => setIsPosterModalOpen(false)}
-        farmCode={formData.farm_code || (currentTenant === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : 'sahara')}
+        farmCode={resolveSafeFarmCode(formData.farm_code)}
         companyName={formData.company_name || '当農園'}
         tenantId={currentTenant}
       />

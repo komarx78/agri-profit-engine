@@ -46,12 +46,20 @@ import { FarmPosterModal } from '@/components/FarmPosterModal';
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [tenantId, setTenantId] = useState<string>('');
+  const [tenantId, setTenantId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('farm') || params.get('tenant') || params.get('farmId') || '';
+    }
+    return '';
+  });
   const { companyName, farmCode } = useCompany(tenantId);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [isPosterOpen, setIsPosterOpen] = useState(false);
+
+  const displayFarmCode = (farmCode || (tenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : tenantId === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : tenantId ? tenantId.substring(0, 8) : '')).toUpperCase();
 
   useEffect(() => {
     async function checkAuth() {
@@ -111,9 +119,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   const handleCopyFarmCode = async () => {
-    const code = (farmCode || 'sahara').toUpperCase();
     try {
-      await navigator.clipboard.writeText(code);
+      await navigator.clipboard.writeText(displayFarmCode);
       setCopiedCode(true);
       setTimeout(() => setCopiedCode(false), 2000);
     } catch (err) {
@@ -234,7 +241,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
             <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-emerald-100">
               <span className="font-mono font-black text-sm text-emerald-950 tracking-wider">
-                {(farmCode || 'sahara').toUpperCase()}
+                {displayFarmCode}
               </span>
               <button
                 onClick={handleCopyFarmCode}
@@ -320,7 +327,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
             <div className="flex items-center justify-between bg-emerald-50/90 px-2.5 py-1.5 rounded-lg border border-emerald-100">
               <span className="font-mono font-black text-sm text-emerald-950 tracking-wider">
-                {(farmCode || 'sahara').toUpperCase()}
+                {displayFarmCode}
               </span>
               <button
                 onClick={handleCopyFarmCode}
@@ -384,7 +391,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <FarmPosterModal
         isOpen={isPosterOpen}
         onClose={() => setIsPosterOpen(false)}
-        farmCode={farmCode || 'sahara'}
+        farmCode={displayFarmCode}
         companyName={companyName || '当農園'}
         tenantId={tenantId}
       />
@@ -393,7 +400,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <AiAssistant
         tenantId={tenantId}
         companyName={companyName || '当農園'}
-        farmCode={farmCode || 'sahara'}
+        farmCode={displayFarmCode}
       />
     </div>
   );
