@@ -25,6 +25,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [tenantId, setTenantId] = useState<string>('');
 
   useEffect(() => {
     async function unwrap() {
@@ -38,13 +39,14 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     async function load() {
       if (!orderId) return;
       
-      const tenantId = await getCurrentTenantId();
-      if (!tenantId) return;
+      const activeTenantId = await getCurrentTenantId();
+      if (activeTenantId) setTenantId(activeTenantId);
+      if (!activeTenantId) return;
 
-      const { data: cropData } = await supabase.from('crops').select('*').eq('user_id', tenantId);
+      const { data: cropData } = await supabase.from('crops').select('*').eq('user_id', activeTenantId);
       if (cropData) setCrops(cropData);
 
-      const custRes = await getB2BCustomers(tenantId);
+      const custRes = await getB2BCustomers(activeTenantId);
       if (custRes.success) setCustomers(custRes.customers || []);
       
       // Load existing order (自社テナント限定)
@@ -52,7 +54,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         .from('b2b_orders')
         .select(`*, items:b2b_order_items(*)`)
         .eq('id', orderId)
-        .eq('user_id', tenantId)
+        .eq('user_id', activeTenantId)
         .single();
         
       if (orderData) {
@@ -143,7 +145,10 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   return (
     <div className="space-y-6 animate-in fade-in duration-300 max-w-3xl mx-auto">
       <div className="flex items-center gap-4">
-        <Link href="/sales-management/orders" className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-800 transition-colors">
+        <Link 
+          href={tenantId ? `/sales-management/orders?farm=${tenantId}` : "/sales-management/orders"} 
+          className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-800 transition-colors"
+        >
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>

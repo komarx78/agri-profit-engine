@@ -77,6 +77,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
 
   const [isLoading, setIsLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [currentTenantId, setCurrentTenantId] = useState<string>('');
 
   // マスタ
   const [crops, setCrops] = useState<any[]>([]);
@@ -215,6 +216,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
         setIsLoading(false);
         return;
       }
+      setCurrentTenantId(tenantId);
 
       const [fRes, cRes, pRes, logsRes, matRes, fertMatRes, offFertRes, compRes] = await Promise.all([
         supabase.from('fields').select('*').eq('user_id', tenantId).order('name'),
@@ -1056,7 +1058,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                     {selectedIds.length === filteredCultivations.length ? '全選択解除' : 'すべて選択'}
                   </button>
                   <Link
-                    href="/admin/cultivation-schedule"
+                    href={currentTenantId ? `/admin/cultivation-schedule?farm=${currentTenantId}` : "/admin/cultivation-schedule"}
                     className="px-3.5 py-2 text-xs font-black bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl flex items-center gap-1.5 transition-colors shadow-2xs"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -1466,7 +1468,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                   <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
                     <span>自農園マスタ登録数: <strong className="text-teal-700 font-black">{farmRegisteredFertilizers.length}</strong> 品目</span>
                     <Link
-                      href="/admin/masters"
+                      href={currentTenantId ? `/admin/masters?farm=${currentTenantId}` : "/admin/masters"}
                       className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors"
                     >
                       マスタ管理へ ➔
@@ -1607,7 +1609,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                                 <Check className="w-3.5 h-3.5" /> 自農園マスタ登録済
                               </span>
                               <Link
-                                href="/admin/masters"
+                                href={currentTenantId ? `/admin/masters?farm=${currentTenantId}` : "/admin/masters"}
                                 className="text-[11px] font-bold text-slate-500 hover:text-slate-800 underline"
                               >
                                 単価・荷姿を変更 ➔

@@ -38,6 +38,7 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
   
   // 記号カレンダー用データ
   const [calendarMarks, setCalendarMarks] = useState<any>({});
+  const [tenantId, setTenantId] = useState<string>('');
 
   useEffect(() => {
     fetchData();
@@ -46,11 +47,12 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const tenantId = await getCurrentTenantId();
-      if (!tenantId) {
+      const currentTenant = await getCurrentTenantId();
+      if (!currentTenant) {
         setIsLoading(false);
         return;
       }
+      setTenantId(currentTenant);
 
       // 計画データの取得 (自社テナント限定)
       const planQuery = supabase
@@ -278,7 +280,10 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
       {/* 印刷時には非表示になるツールバー */}
       <div className="no-print bg-white border-b border-slate-200 p-4 sticky top-0 z-10 shadow-sm flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/admin/cultivation-schedule" className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">
+          <Link 
+            href={tenantId ? `/admin/cultivation-schedule?farm=${tenantId}` : "/admin/cultivation-schedule"} 
+            className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+          >
             <ChevronLeft className="w-5 h-5" />
           </Link>
           <h1 className="font-bold text-slate-700 flex items-center gap-2">

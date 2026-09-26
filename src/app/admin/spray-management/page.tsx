@@ -69,20 +69,22 @@ function SprayManagementContent() {
 
   // 農薬リスト（FAMIC本番DB連動）
   const [pesticides, setPesticides] = useState<PesticideDisplayItem[]>([]);
+  const [tenantId, setTenantId] = useState<string>('');
 
   // 1. 作目・圃場・散布履歴の初期読み込み
   const fetchInitialData = async () => {
     setIsLoading(true);
     try {
-      const tenantId = await getCurrentTenantId();
-      if (!tenantId) {
+      const activeTenantId = await getCurrentTenantId();
+      if (activeTenantId) setTenantId(activeTenantId);
+      if (!activeTenantId) {
         setIsLoading(false);
         return;
       }
 
       const [cropsRes, fieldsRes] = await Promise.all([
-        supabase.from('crops').select('*').eq('user_id', tenantId).order('name'),
-        supabase.from('fields').select('*').eq('user_id', tenantId).order('name')
+        supabase.from('crops').select('*').eq('user_id', activeTenantId).order('name'),
+        supabase.from('fields').select('*').eq('user_id', activeTenantId).order('name')
       ]);
 
       const fetchedCrops = cropsRes.data || [];
@@ -301,7 +303,7 @@ function SprayManagementContent() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <Link 
-                href="/admin/cultivations"
+                href={tenantId ? `/admin/cultivations?farm=${tenantId}` : "/admin/cultivations"}
                 className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
               >
                 <ArrowLeft className="w-5 h-5" />

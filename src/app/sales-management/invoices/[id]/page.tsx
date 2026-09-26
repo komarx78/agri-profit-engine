@@ -17,6 +17,7 @@ export default function InvoicePrintPage({ params }: { params: Promise<{ id: str
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [tenantId, setTenantId] = useState<string>('');
 
   useEffect(() => {
     async function unwrap() {
@@ -30,17 +31,18 @@ export default function InvoicePrintPage({ params }: { params: Promise<{ id: str
     async function loadData() {
       if (!invoiceId) return;
       try {
-        const tenantId = await getCurrentTenantId();
-        if (!tenantId) {
+        const activeTenantId = await getCurrentTenantId();
+        if (!activeTenantId) {
           setLoading(false);
           return;
         }
+        setTenantId(activeTenantId);
 
         const { data: inv, error: invErr } = await supabase
           .from('b2b_invoices')
           .select('*, customer:b2b_customers(*)')
           .eq('id', invoiceId)
-          .eq('user_id', tenantId)
+          .eq('user_id', activeTenantId)
           .single();
 
         if (invErr || !inv) throw new Error("請求書が見つかりません");
@@ -154,7 +156,10 @@ export default function InvoicePrintPage({ params }: { params: Promise<{ id: str
       
       {/* 画面上の操作パネル（印刷時は非表示） */}
       <div className="max-w-[210mm] mx-auto mb-6 flex flex-col sm:flex-row justify-between items-center gap-4 px-4 print:hidden">
-        <Link href="/sales-management/invoices" className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-800 transition-colors shadow-sm self-start sm:self-auto">
+        <Link 
+          href={tenantId ? `/sales-management/invoices?farm=${tenantId}` : "/sales-management/invoices"} 
+          className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-800 transition-colors shadow-sm self-start sm:self-auto"
+        >
           <ArrowLeft className="w-5 h-5" />
         </Link>
         

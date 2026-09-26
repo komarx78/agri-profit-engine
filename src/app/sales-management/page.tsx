@@ -16,26 +16,28 @@ export default function SalesManagementDashboard() {
   const [channels, setChannels] = useState<any[]>([]);
   const [crops, setCrops] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tenantId, setTenantId] = useState<string>('');
 
   useEffect(() => {
     async function loadDashboardData() {
       try {
         setLoading(true);
-        const tenantId = await getCurrentTenantId();
+        const activeTenantId = await getCurrentTenantId();
+        if (activeTenantId) setTenantId(activeTenantId);
 
         const [ordersRes, logsRes, channelsRes, cropsRes] = await Promise.all([
-          getB2BOrders(tenantId),
-          tenantId
+          getB2BOrders(activeTenantId),
+          activeTenantId
             ? supabase
                 .from('sales_logs')
                 .select('id, sales_date, quantity, unit, total_sales, channel_id, crop_id, status')
-                .eq('user_id', tenantId)
+                .eq('user_id', activeTenantId)
                 .or('status.neq.planned,status.is.null')
                 .order('sales_date', { ascending: false })
                 .order('id', { ascending: false })
             : Promise.resolve({ data: [], error: null }),
-          tenantId ? supabase.from('sales_channels').select('id, name').eq('user_id', tenantId) : Promise.resolve({ data: [], error: null }),
-          tenantId ? supabase.from('crops').select('id, name').eq('user_id', tenantId) : Promise.resolve({ data: [], error: null })
+          activeTenantId ? supabase.from('sales_channels').select('id, name').eq('user_id', activeTenantId) : Promise.resolve({ data: [], error: null }),
+          activeTenantId ? supabase.from('crops').select('id, name').eq('user_id', activeTenantId) : Promise.resolve({ data: [], error: null })
         ]);
 
         if (ordersRes.success) {
@@ -154,7 +156,7 @@ export default function SalesManagementDashboard() {
 
         {/* 3. 精算待ち（未確定）出荷 */}
         <Link 
-          href="/sales-management/sales-history" 
+          href={tenantId ? `/sales-management/sales-history?farm=${tenantId}` : "/sales-management/sales-history"} 
           className="bg-white hover:bg-amber-50/50 transition-colors rounded-3xl p-5 border border-amber-200/80 shadow-xs flex flex-col justify-between group cursor-pointer"
         >
           <div className="flex items-center justify-between mb-3">
@@ -218,7 +220,7 @@ export default function SalesManagementDashboard() {
               <p className="text-xs text-slate-400 font-bold mt-0.5">現場日報から登録された直近の出荷記録</p>
             </div>
             <Link 
-              href="/sales-management/sales-history" 
+              href={tenantId ? `/sales-management/sales-history?farm=${tenantId}` : "/sales-management/sales-history"} 
               className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 bg-indigo-50 px-3 py-1.5 rounded-xl transition-colors"
             >
               出荷履歴へ <ArrowRight className="w-3.5 h-3.5" />
@@ -264,7 +266,7 @@ export default function SalesManagementDashboard() {
                         </div>
                       ) : (
                         <Link
-                          href="/sales-management/sales-history"
+                          href={tenantId ? `/sales-management/sales-history?farm=${tenantId}` : "/sales-management/sales-history"}
                           className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg text-[10px] font-bold transition-colors"
                         >
                           <AlertCircle className="w-3 h-3 text-amber-500" />
@@ -289,7 +291,7 @@ export default function SalesManagementDashboard() {
               <p className="text-xs text-slate-400 font-bold mt-0.5">飲食店・スーパー等への受注と配達予定</p>
             </div>
             <Link 
-              href="/sales-management/orders" 
+              href={tenantId ? `/sales-management/orders?farm=${tenantId}` : "/sales-management/orders"} 
               className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 bg-indigo-50 px-3 py-1.5 rounded-xl transition-colors"
             >
               受注一覧へ <ArrowRight className="w-3.5 h-3.5" />
@@ -325,7 +327,10 @@ export default function SalesManagementDashboard() {
                   </div>
                   <div className="text-right shrink-0">
                     <span className="text-sm font-black text-slate-800">¥{Number(order.total_amount).toLocaleString()}</span>
-                    <Link href="/sales-management/orders" className="block text-[11px] font-bold text-indigo-600 hover:text-indigo-800 mt-0.5">
+                    <Link 
+                      href={tenantId ? `/sales-management/orders?farm=${tenantId}` : "/sales-management/orders"} 
+                      className="block text-[11px] font-bold text-indigo-600 hover:text-indigo-800 mt-0.5"
+                    >
                       詳細 ➔
                     </Link>
                   </div>

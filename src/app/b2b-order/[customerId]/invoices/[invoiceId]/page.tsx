@@ -28,14 +28,26 @@ export default function CustomerInvoicePrintPage({ params }: { params: Promise<{
     async function loadData() {
       if (!invoiceId || !customerId) return;
       try {
-        // customerId は実は order_token なので、実際の顧客UUIDを取得する
-        const { data: custData, error: custErr } = await supabase
+        // customerId は order_token または UUID なので両対応で顧客を取得する
+        let { data: custData } = await supabase
           .from('b2b_customers')
           .select('id')
           .eq('order_token', customerId)
-          .single();
+          .maybeSingle();
           
-        if (custErr || !custData) throw new Error("顧客が見つかりません");
+        if (!custData) {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customerId);
+          if (isUuid) {
+            const { data: byId } = await supabase
+              .from('b2b_customers')
+              .select('id')
+              .eq('id', customerId)
+              .maybeSingle();
+            custData = byId;
+          }
+        }
+
+        if (!custData) throw new Error("顧客が見つかりません");
 
         const { data: inv, error: invErr } = await supabase
           .from('b2b_invoices')
@@ -54,19 +66,35 @@ export default function CustomerInvoicePrintPage({ params }: { params: Promise<{
         const { data: comp } = await compQuery.maybeSingle();
         if (comp) setCompany(comp);
 
-        const startDate = `${inv.target_month}-01`;
-        const [yearStr, monthStr] = inv.target_month.split('-');
-        const nextMonth = new Date(Number(yearStr), Number(monthStr), 1);
-        const endDate = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`;
+        const targetMonthStr = inv.target_month || '';
+        let startDate = '';
+        let endDate = '';
+        if (targetMonthStr.includes('-')) {
+          startDate = `${targetMonthStr}-01`;
+          const [yearStr, monthStr] = targetMonthStr.split('-');
+          const y = Number(yearStr);
+          const m = Number(monthStr);
+          if (!isNaN(y) && !isNaN(m)) {
+            const nextMonth = new Date(y, m, 1);
+            endDate = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`;
+          }
+        }
 
-        const { data: ords } = await supabase
+        let orderQuery = supabase
           .from('b2b_orders')
           .select('*, items:b2b_order_items(*, crops(*))')
           .eq('customer_id', inv.customer_id)
-          .gte('delivery_date', startDate)
-          .lt('delivery_date', endDate)
           .in('status', ['invoiced', 'delivered', 'paid'])
           .order('delivery_date', { ascending: true });
+
+        if (startDate) {
+          orderQuery = orderQuery.gte('delivery_date', startDate);
+        }
+        if (endDate) {
+          orderQuery = orderQuery.lt('delivery_date', endDate);
+        }
+
+        const { data: ords } = await orderQuery;
         
         if (ords) setOrders(ords);
       } catch (err) {
@@ -126,8 +154,8 @@ export default function CustomerInvoicePrintPage({ params }: { params: Promise<{
             </p>
           </div>
           <div className="text-right text-sm space-y-1 text-slate-700 font-bold">
-            <div>発行日: {invoice.issue_date}</div>
-            <div>請求番号: INV-{invoice.id.split('-')[0].toUpperCase()}</div>
+            <div>発行日: {invoice.issue_date || '未設定'}</div>
+            <div>請求番号: INV-{String(invoice.id || '').split('-')[0].toUpperCase()}</div>
             <div className="mt-6 text-base font-black text-slate-800">{company?.company_name || '自社名未設定'}</div>
             <div>〒{company?.postal_code || '000-0000'}</div>
             <div>{company?.address || '住所未設定'}</div>
@@ -148,7 +176,7 @@ export default function CustomerInvoicePrintPage({ params }: { params: Promise<{
 
         {/* 支払い条件 */}
         <div className="mb-10 text-sm font-bold text-slate-700 flex gap-8">
-          <div><span className="text-slate-500">お支払期限:</span> {invoice.due_date}</div>
+          <div><span className="text-slate-500">お支払期限:</span> {invoice.due_date || '未設定'}</div>
           <div><span className="text-slate-500">お振込先:</span> {company?.bank_info || '振込先未設定'}</div>
         </div>
 
@@ -168,11 +196,11 @@ export default function CustomerInvoicePrintPage({ params }: { params: Promise<{
               <React.Fragment key={order.id}>
                 {order.items?.map((item: any, i: number) => (
                   <tr key={item.id} className="text-slate-700">
-                    <td className="py-3 px-4">{i === 0 ? order.delivery_date : ''}</td>
-                    <td className="py-3 px-4">{item.crops?.name || item.crop?.name || '不明'}</td>
-                    <td className="py-3 px-4 text-right">{item.quantity} {item.unit}</td>
-                    <td className="py-2 px-4 text-right">¥{Number(item.unit_price).toLocaleString()}</td>
-                    <td className="py-3 px-4 text-right font-black">¥{Number(item.total_price).toLocaleString()}</td>
+                    <td className="py-3 px-4">{i === 0 ? (order.delivery_date || '') : ''}</td>
+                    <td className="py-3 px-4">{item.crops?.name || item.crop?.name || '農産物'}</td>
+                    <td className="py-3 px-4 text-right">{item.quantity || 0} {item.unit || '個'}</td>
+                    <td className="py-2 px-4 text-right">¥{Number(item.unit_price || 0).toLocaleString()}</td>
+                    <td className="py-3 px-4 text-right font-black">¥{Number(item.total_price || 0).toLocaleString()}</td>
                   </tr>
                 ))}
               </React.Fragment>

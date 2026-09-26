@@ -64,14 +64,31 @@ export default function SharedInvoicePage() {
     );
   }
 
-  const invoiceData = data.invoice_data;
-  const settings = invoiceData.settings;
-  const logs = invoiceData.logs;
-  const [year, month] = data.billing_month.split('-');
+  const invoiceData = data.invoice_data || {};
+  const settings = invoiceData.settings || null;
+  const logs = Array.isArray(invoiceData.logs) ? invoiceData.logs : [];
+  const billingMonthStr = data.billing_month || '';
+  const [year, month] = billingMonthStr.includes('-') ? billingMonthStr.split('-') : ['', ''];
 
+  const totalAmount = Number(data.total_amount) || 0;
   const taxRate = 0.10;
-  const taxAmount = Math.floor(data.total_amount * taxRate);
-  const totalWithTax = data.total_amount + taxAmount;
+  const taxAmount = Math.floor(totalAmount * taxRate);
+  const totalWithTax = totalAmount + taxAmount;
+
+  let issueDateStr = '';
+  try {
+    if (billingMonthStr && billingMonthStr.includes('-')) {
+      const parts = billingMonthStr.split('-');
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(y) && !isNaN(m)) {
+        issueDateStr = new Date(y, m, 0).toLocaleDateString('ja-JP');
+      }
+    }
+  } catch (e) {}
+  if (!issueDateStr) {
+    issueDateStr = new Date().toLocaleDateString('ja-JP');
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 py-8 px-4 font-sans print:bg-white print:p-0 print:py-0">
@@ -80,7 +97,7 @@ export default function SharedInvoicePage() {
         {/* ヘッダー/アクションバー */}
         <div className="print:hidden bg-white p-4 rounded-2xl shadow-md border border-slate-200 flex justify-between items-center sticky top-4 z-10">
           <div className="text-slate-600 font-bold">
-            {data.billing_month.replace('-', '年')}月分 請求書
+            {billingMonthStr ? `${billingMonthStr.replace('-', '年')}月分 請求書` : '請求書'}
           </div>
           <button
             onClick={handlePrint}
@@ -99,7 +116,7 @@ export default function SharedInvoicePage() {
                 請求書
               </h2>
               <div className="text-xl font-bold text-slate-800 border-b-2 border-slate-800 pb-2 inline-block min-w-[250px]">
-                {data.channel_name} <span className="text-base font-medium ml-2">御中</span>
+                {data.channel_name || 'お取引先'} <span className="text-base font-medium ml-2">御中</span>
               </div>
               <p className="text-sm text-slate-500 pt-2">
                 下記の通りご請求申し上げます。
@@ -108,17 +125,19 @@ export default function SharedInvoicePage() {
 
             <div className="text-right text-sm text-slate-700 space-y-1">
               <div className="mb-4 font-bold text-slate-500">
-                発行日: {new Date(new Date(data.billing_month + '-01').getFullYear(), new Date(data.billing_month + '-01').getMonth() + 1, 0).toLocaleDateString('ja-JP')}
+                発行日: {issueDateStr}
               </div>
               {settings ? (
                 <>
                   <div className="text-lg font-black text-slate-800 mb-2">{settings.company_name}</div>
-                  <div>〒{settings.postal_code}</div>
-                  <div>{settings.address}</div>
-                  <div>TEL: {settings.phone}</div>
-                  <div className="inline-block mt-2 px-3 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-500">
-                    登録番号: {settings.invoice_number}
-                  </div>
+                  {settings.postal_code && <div>〒{settings.postal_code}</div>}
+                  {settings.address && <div>{settings.address}</div>}
+                  {settings.phone && <div>TEL: {settings.phone}</div>}
+                  {settings.invoice_number && (
+                    <div className="inline-block mt-2 px-3 py-1 bg-slate-50 border border-slate-200 rounded text-xs font-bold text-slate-500">
+                      登録番号: {settings.invoice_number}
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="text-red-500">自社情報が未設定です</div>
@@ -152,9 +171,9 @@ export default function SharedInvoicePage() {
                 return (
                   <tr key={idx} className="border-b border-slate-200 text-slate-700">
                     <td className="py-3 text-left font-medium">{dateStr}</td>
-                    <td className="py-3 text-left font-bold">{log.crops?.name}</td>
+                    <td className="py-3 text-left font-bold">{log.crops?.name || log.crop_name || '農産物'}</td>
                     <td className="py-3 text-right">{log.quantity}</td>
-                    <td className="py-3 text-left px-2 text-slate-500">{log.unit}</td>
+                    <td className="py-3 text-left px-2 text-slate-500">{log.unit || '個'}</td>
                     <td className="py-3 text-right text-slate-500">
                       <span className="text-xs mr-1">@</span>¥{price.toLocaleString()}
                     </td>
@@ -171,7 +190,7 @@ export default function SharedInvoicePage() {
             <div className="w-72 space-y-2">
               <div className="flex justify-between text-slate-600 font-medium pb-2 border-b border-slate-200">
                 <span>小計 (税抜)</span>
-                <span>¥{data.total_amount.toLocaleString()}</span>
+                <span>¥{totalAmount.toLocaleString()}</span>
               </div>
               <div className="flex justify-between text-slate-600 font-medium pb-2 border-b border-slate-200">
                 <span>消費税 (10%)</span>

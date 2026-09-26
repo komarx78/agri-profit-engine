@@ -214,11 +214,11 @@ export default function B2BClientOrderPage({ params }: { params: Promise<{ custo
               ) : invoices.map(inv => (
                 <Link href={`/b2b-order/${customerId}/invoices/${inv.id}`} key={inv.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors block">
                   <div>
-                    <div className="font-black text-slate-800">{inv.target_month.replace('-', '年')}月分 請求書</div>
-                    <div className="text-xs font-bold text-slate-500 mt-1">お支払期限: {inv.due_date}</div>
+                    <div className="font-black text-slate-800">{inv.target_month ? `${inv.target_month.replace('-', '年')}月分 請求書` : '請求書'}</div>
+                    <div className="text-xs font-bold text-slate-500 mt-1">お支払期限: {inv.due_date || '未設定'}</div>
                   </div>
                   <div className="text-right">
-                    <div className="font-black text-indigo-700">¥{Number(inv.total_amount).toLocaleString()}</div>
+                    <div className="font-black text-indigo-700">¥{Number(inv.total_amount || 0).toLocaleString()}</div>
                   </div>
                 </Link>
               ))}

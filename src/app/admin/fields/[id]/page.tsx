@@ -28,6 +28,7 @@ export default function FieldDetailPage() {
   const [recentWorks, setRecentWorks] = useState<any[]>([]);
   const [soilDiagnoses, setSoilDiagnoses] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentTenant, setCurrentTenant] = useState<string>('');
 
   // 土壌診断モーダル用ステート
   const [isSoilModalOpen, setIsSoilModalOpen] = useState(false);
@@ -67,10 +68,9 @@ export default function FieldDetailPage() {
   }, [fieldId]);
 
   async function fetchFieldDetails() {
-    let currentTenant: string | null = null;
     try {
       const tenantId = await getCurrentTenantId();
-      currentTenant = tenantId;
+      if (tenantId) setCurrentTenant(tenantId);
       if (!tenantId) {
         setIsLoading(false);
         return;
@@ -483,7 +483,7 @@ export default function FieldDetailPage() {
       {/* 戻るボタンとヘッダー */}
       <div className="flex items-center gap-4 mb-8">
         <Link 
-          href="/admin/map"
+          href={currentTenant ? `/admin/map?farm=${currentTenant}` : "/admin/map"}
           className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-500"
         >
           <ArrowLeft className="w-6 h-6" />
@@ -572,7 +572,7 @@ export default function FieldDetailPage() {
             </div>
 
             <Link 
-              href="/admin/cultivation-schedule"
+              href={currentTenant ? `/admin/cultivation-schedule?farm=${currentTenant}` : "/admin/cultivation-schedule"}
               className="w-full py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
             >
               <Calendar className="w-5 h-5" /> 栽培・予実管理表でスケジュールを確認
