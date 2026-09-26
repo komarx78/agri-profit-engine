@@ -90,17 +90,14 @@ export default function PesticideCheckPage() {
     const fetchMasterPesticides = async () => {
       try {
         const tId = await getCurrentTenantId();
-        if (tId) setTenantId(tId);
-        let query = supabase
+        if (!tId) return;
+        setTenantId(tId);
+        const { data, error } = await supabase
           .from('materials')
           .select('name')
-          .or("category.eq.農薬費,material_type.eq.pesticide");
+          .or("category.eq.農薬費,material_type.eq.pesticide")
+          .eq('user_id', tId);
 
-        if (tId) {
-          query = query.eq('user_id', tId);
-        }
-
-        const { data, error } = await query;
         if (data) {
           setRegisteredMasterNames(data.map(d => d.name));
         }
@@ -121,10 +118,14 @@ export default function PesticideCheckPage() {
     setIsRegisteringMaster(p.name);
     try {
       const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        throw new Error('農園IDが特定できません。ログイン状態を確認してください。');
+      }
       const pType = (p.purpose && p.purpose !== '-') ? p.purpose : (p.type && p.type !== '-') ? p.type : '殺虫剤';
       const maxCountNum = typeof p.usage_count === 'string' ? parseInt(p.usage_count.match(/\d+/)?.[0] || '4', 10) : 4;
 
       const dataToInsert: any = {
+        user_id: tenantId,
         name: p.name,
         category: '農薬費',
         material_type: 'pesticide',
@@ -135,10 +136,6 @@ export default function PesticideCheckPage() {
         max_count: maxCountNum,
         unit: '本'
       };
-
-      if (tenantId) {
-        dataToInsert.user_id = tenantId;
-      }
 
       const { error } = await supabase.from('materials').insert(dataToInsert);
 

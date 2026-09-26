@@ -287,7 +287,7 @@ export default function WorkLedgerPage() {
   };
 
   const formatValue = (val: number) => {
-    if (!val) return '-';
+    if (!val || !isFinite(val)) return '-';
     if (viewMode === 'hours') {
       return `${val.toFixed(1)} h`;
     } else {

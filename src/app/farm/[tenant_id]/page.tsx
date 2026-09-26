@@ -6,7 +6,7 @@ import { getFarmInfo, getFarmWorkers, verifyWorkerPin, getFarmMasters, getCustom
 import { supabase } from '@/lib/supabase';
 import imageCompression from 'browser-image-compression';
 import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode } from '@/lib/i18n';
-import { getJSTDate } from '@/lib/dateUtils';
+import { getJSTDate, formatDisplayTime } from '@/lib/dateUtils';
 
 // プライベートブラウズ等の例外で落ちない安全なStorageラッパー
 const safeStorage = {
@@ -704,14 +704,14 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                   <div className="flex flex-col items-center">
                     <span className="text-xs mb-1">出勤</span>
                     <span className="font-bold text-white text-base">
-                      {attendanceLog.clock_in ? new Date(attendanceLog.clock_in).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                      {attendanceLog.clock_in ? (formatDisplayTime(attendanceLog.clock_in) || '--:--') : '--:--'}
                     </span>
                   </div>
                   <div className="w-px h-8 bg-emerald-800/50"></div>
                   <div className="flex flex-col items-center">
                     <span className="text-xs mb-1">退勤</span>
                     <span className="font-bold text-white text-base">
-                      {attendanceLog.clock_out ? new Date(attendanceLog.clock_out).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                      {attendanceLog.clock_out ? (formatDisplayTime(attendanceLog.clock_out) || '--:--') : '--:--'}
                     </span>
                   </div>
                 </div>

@@ -47,20 +47,21 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
     setIsLoading(true);
     try {
       const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
 
-      // 計画データの取得
-      let planQuery = supabase
+      // 計画データの取得 (自社テナント限定)
+      const planQuery = supabase
         .from('cultivation_plans_v2')
         .select(`
           *,
           fields ( name, area_size ),
           crops ( * )
         `)
-        .eq('id', unwrappedParams.plan_id);
-
-      if (tenantId) {
-        planQuery = planQuery.eq('user_id', tenantId);
-      }
+        .eq('id', unwrappedParams.plan_id)
+        .eq('user_id', tenantId);
 
       const { data: planRes, error: planErr } = await planQuery.single();
         
@@ -69,27 +70,27 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
       const plan = planRes;
       setPlanData(plan);
       
-      const area = plan.fields?.area_size || plan.calculated_area || 1;
+      const rawArea = Number(plan.fields?.area_size || plan.calculated_area);
+      const area = rawArea > 0 ? rawArea : 1;
       setAreaSize(area);
       const m = 10 / area;
       setMultiplier(m);
       
       // 自社テナントの作業ログと出荷ログの取得
-      let wQuery = supabase.from('work_logs').select(`
+      const wQuery = supabase.from('work_logs').select(`
         *,
         materials (*)
-      `).or(`plan_id.eq.${unwrappedParams.plan_id},and(crop_id.eq.${plan.crop_id},field_id.eq.${plan.field_id})`).order('work_date', { ascending: true });
+      `).or(`plan_id.eq.${unwrappedParams.plan_id},and(crop_id.eq.${plan.crop_id},field_id.eq.${plan.field_id})`)
+        .eq('user_id', tenantId)
+        .order('work_date', { ascending: true });
 
-      let sQuery = supabase.from('sales_logs').select('*').or(`plan_id.eq.${unwrappedParams.plan_id},crop_id.eq.${plan.crop_id}`).order('sales_date', { ascending: true });
-      let fQuery = supabase.from('fields').select('*');
-      let eQuery = supabase.from('monthly_expenses').select('*');
+      const sQuery = supabase.from('sales_logs').select('*')
+        .or(`plan_id.eq.${unwrappedParams.plan_id},crop_id.eq.${plan.crop_id}`)
+        .eq('user_id', tenantId)
+        .order('sales_date', { ascending: true });
 
-      if (tenantId) {
-        wQuery = wQuery.eq('user_id', tenantId);
-        sQuery = sQuery.eq('user_id', tenantId);
-        fQuery = fQuery.eq('user_id', tenantId);
-        eQuery = eQuery.eq('user_id', tenantId);
-      }
+      const fQuery = supabase.from('fields').select('*').eq('user_id', tenantId);
+      const eQuery = supabase.from('monthly_expenses').select('*').eq('user_id', tenantId);
 
       const [workRes, salesRes, fieldsRes, expRes] = await Promise.all([
         wQuery,

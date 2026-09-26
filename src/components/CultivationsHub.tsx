@@ -168,7 +168,12 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
         }
         if (typeof window !== 'undefined') {
           const saved = localStorage.getItem('agri_worker_share_settings');
-          if (saved) setShareSettings(JSON.parse(saved));
+          if (saved) {
+            try {
+              const parsed = JSON.parse(saved);
+              if (parsed && typeof parsed === 'object') setShareSettings(parsed);
+            } catch (e) {}
+          }
         }
       } catch (e) {
         console.warn('Failed to load share settings:', e);
@@ -838,7 +843,8 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     setIsUpdatingLog(true);
     try {
       const tenantId = await getCurrentTenantId();
-      let query = supabase
+      if (!tenantId) throw new Error('テナントIDが特定できません');
+      const { error } = await supabase
         .from('work_logs')
         .update({
           work_date: editWorkDate,
@@ -848,13 +854,8 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
           duration_minutes: parseInt(editDuration, 10) || 60,
           memo: editMemo
         })
-        .eq('id', editingLog.id);
-
-      if (tenantId) {
-        query = query.eq('user_id', tenantId);
-      }
-
-      const { error } = await query;
+        .eq('id', editingLog.id)
+        .eq('user_id', tenantId);
 
       if (error) throw error;
       setEditingLog(null);
@@ -873,16 +874,12 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     if (!window.confirm('この作業記録を削除してもよろしいですか？\n※削除した記録は元に戻せません。')) return;
     try {
       const tenantId = await getCurrentTenantId();
-      let query = supabase
+      if (!tenantId) throw new Error('テナントIDが特定できません');
+      const { error } = await supabase
         .from('work_logs')
         .delete()
-        .eq('id', logId);
-
-      if (tenantId) {
-        query = query.eq('user_id', tenantId);
-      }
-
-      const { error } = await query;
+        .eq('id', logId)
+        .eq('user_id', tenantId);
 
       if (error) throw error;
       setToastMessage('作業記録を削除しました');
@@ -932,16 +929,13 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   const handleCompleteTask = async (taskId: string) => {
     try {
       const tenantId = await getCurrentTenantId();
-      let query = supabase
+      if (!tenantId) throw new Error('テナントIDが特定できません');
+      const { error } = await supabase
         .from('work_logs')
         .update({ status: 'completed' })
-        .eq('id', taskId);
+        .eq('id', taskId)
+        .eq('user_id', tenantId);
 
-      if (tenantId) {
-        query = query.eq('user_id', tenantId);
-      }
-
-      const { error } = await query;
       if (error) throw error;
       setToastMessage('予定作業を完了（実績化）しました！');
       fetchAllData();

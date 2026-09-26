@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -67,8 +67,10 @@ export default function HrDashboardPage() {
 
   const calculateTotalMinutes = (start?: string, end?: string) => {
     if (!start || !end) return 0;
-    const diff = new Date(end).getTime() - new Date(start).getTime();
-    return Math.floor(diff / 1000 / 60);
+    const s = new Date(start).getTime();
+    const e = new Date(end).getTime();
+    if (isNaN(s) || isNaN(e) || e <= s) return 0;
+    return Math.floor((e - s) / 1000 / 60);
   };
 
   if (isLoading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;

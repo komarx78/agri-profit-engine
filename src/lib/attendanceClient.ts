@@ -178,7 +178,15 @@ function enqueuePendingAttendance(params: AttendanceRequestParams) {
   if (typeof window === 'undefined') return;
   try {
     const raw = localStorage.getItem(PENDING_QUEUE_KEY);
-    const queue: AttendanceRequestParams[] = raw ? JSON.parse(raw) : [];
+    let queue: AttendanceRequestParams[] = [];
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) queue = parsed;
+      } catch (e) {
+        console.warn('Corrupt attendance queue in storage:', e);
+      }
+    }
     // 重複防止（同一ワーカー・同一アクション・同一日）
     const isDup = queue.some(q => q.workerId === params.workerId && q.action === params.action && q.date === params.date);
     if (!isDup) {
@@ -199,8 +207,15 @@ export async function triggerOfflineQueueSync(): Promise<void> {
   try {
     const raw = localStorage.getItem(PENDING_QUEUE_KEY);
     if (!raw) return;
-    const queue: AttendanceRequestParams[] = JSON.parse(raw);
-    if (!queue || queue.length === 0) return;
+    let queue: AttendanceRequestParams[] = [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) queue = parsed;
+    } catch (e) {
+      console.warn('Corrupt attendance queue during sync:', e);
+      return;
+    }
+    if (queue.length === 0) return;
 
     console.log(`📡 未送信打刻 ${queue.length} 件のバックグラウンド自動同期を開始...`);
     const remaining: AttendanceRequestParams[] = [];

@@ -31,25 +31,28 @@ export default function InvoicePrintPage({ params }: { params: Promise<{ id: str
       if (!invoiceId) return;
       try {
         const tenantId = await getCurrentTenantId();
-        let invQuery = supabase
-          .from('b2b_invoices')
-          .select('*, customer:b2b_customers(*)')
-          .eq('id', invoiceId);
-
-        if (tenantId) {
-          invQuery = invQuery.eq('user_id', tenantId);
+        if (!tenantId) {
+          setLoading(false);
+          return;
         }
 
-        const { data: inv, error: invErr } = await invQuery.single();
+        const { data: inv, error: invErr } = await supabase
+          .from('b2b_invoices')
+          .select('*, customer:b2b_customers(*)')
+          .eq('id', invoiceId)
+          .eq('user_id', tenantId)
+          .single();
+
         if (invErr || !inv) throw new Error("請求書が見つかりません");
         setInvoice(inv);
 
         const ownerId = inv.user_id;
-        let compQuery = supabase.from('company_settings').select('*');
-        if (ownerId) {
-          compQuery = compQuery.eq('user_id', ownerId);
-        }
-        const { data: comp } = await compQuery.maybeSingle();
+        const { data: comp } = await supabase
+          .from('company_settings')
+          .select('*')
+          .eq('user_id', ownerId)
+          .maybeSingle();
+
         if (comp) setCompany(comp);
 
         const startDate = `${inv.target_month}-01`;
@@ -60,6 +63,7 @@ export default function InvoicePrintPage({ params }: { params: Promise<{ id: str
         const { data: ords } = await supabase
           .from('b2b_orders')
           .select('*, items:b2b_order_items(*, crops(*))')
+          .eq('user_id', tenantId)
           .eq('customer_id', inv.customer_id)
           .gte('delivery_date', startDate)
           .lt('delivery_date', endDate)

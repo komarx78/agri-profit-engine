@@ -99,7 +99,9 @@ function HistoryContent() {
     const exportData = filteredLogs.map(log => {
       const formatDate = (dateStr: string) => {
         if (!dateStr) return '';
-        const d = new Date(dateStr);
+        const normalized = dateStr.includes(' ') && !dateStr.includes('T') ? dateStr.replace(' ', 'T') : dateStr;
+        const d = new Date(normalized);
+        if (isNaN(d.getTime())) return dateStr;
         return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
       };
 
@@ -131,7 +133,9 @@ function HistoryContent() {
 
   const formatTime = (dateString: string) => {
     if (!dateString) return '-';
-    const d = new Date(dateString);
+    const normalized = dateString.includes(' ') && !dateString.includes('T') ? dateString.replace(' ', 'T') : dateString;
+    const d = new Date(normalized);
+    if (isNaN(d.getTime())) return dateString.substring(0, 5) || '-';
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   };
 

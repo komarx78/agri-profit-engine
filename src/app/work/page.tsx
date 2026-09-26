@@ -1030,7 +1030,16 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
   // --- 🎨 提案③: オフライン一時退避＆オンライン復帰自動同期 ---
   const saveOfflineWorkLog = (logData: any) => {
     try {
-      const existing = JSON.parse(localStorage.getItem('agri_offline_work_logs') || '[]');
+      let existing: any[] = [];
+      const raw = localStorage.getItem('agri_offline_work_logs');
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) existing = parsed;
+        } catch (e) {
+          console.warn('Corrupt offline work logs in storage:', e);
+        }
+      }
       existing.push({
         ...logData,
         _offline_created_at: new Date().toISOString()
@@ -1048,8 +1057,15 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
     try {
       const raw = localStorage.getItem('agri_offline_work_logs');
       if (!raw) return;
-      const list = JSON.parse(raw);
-      if (!Array.isArray(list) || list.length === 0) return;
+      let list: any[] = [];
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) list = parsed;
+      } catch (e) {
+        console.warn('Corrupt offline work logs during sync:', e);
+        return;
+      }
+      if (list.length === 0) return;
 
       const remaining: any[] = [];
       let syncedCount = 0;

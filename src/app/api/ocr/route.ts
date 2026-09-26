@@ -63,11 +63,12 @@ export async function POST(req: Request) {
     const response = await result.response;
     let text = response.text();
     
-    // Markdownのコードブロックが含まれている場合のクリーニング
-    text = text.replace(/```json\n/g, '').replace(/```\n?/g, '').trim();
+    // Markdownのコードブロックや余分なテキストが含まれている場合のクリーニング
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const cleanedText = jsonMatch ? jsonMatch[0] : text.replace(/```(?:json)?\n?/g, '').replace(/```\n?/g, '').trim();
 
     try {
-      const parsedData = JSON.parse(text);
+      const parsedData = JSON.parse(cleanedText);
       return NextResponse.json(parsedData);
     } catch (parseError) {
       console.error('Failed to parse AI response as JSON:', text);

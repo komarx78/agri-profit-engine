@@ -77,7 +77,8 @@ export async function POST(req: Request) {
       ]);
 
       const text = result.response.text().trim();
-      const cleanedJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const cleanedJson = jsonMatch ? jsonMatch[0] : text.replace(/```(?:json)?/g, '').replace(/```/g, '').trim();
       const parsedData = JSON.parse(cleanedJson);
 
       return NextResponse.json({ success: true, data: parsedData });
@@ -143,7 +144,8 @@ export async function POST(req: Request) {
 
       const result = await model.generateContent(prompt);
       const text = result.response.text().trim();
-      const cleanedJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const cleanedJson = jsonMatch ? jsonMatch[0] : text.replace(/```(?:json)?/g, '').replace(/```/g, '').trim();
       const parsedData = JSON.parse(cleanedJson);
 
       return NextResponse.json({ success: true, data: parsedData });

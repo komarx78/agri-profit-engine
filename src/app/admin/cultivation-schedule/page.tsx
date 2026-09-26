@@ -177,19 +177,22 @@ export default function CultivationSchedulePage() {
     setIsPanelLoading(true);
     try {
       const tenantId = await getCurrentTenantId();
-      let workQuery = supabase.from('work_logs').select(`
+      if (!tenantId) {
+        setIsPanelLoading(false);
+        return;
+      }
+      const workQuery = supabase.from('work_logs').select(`
         *,
         workers (name, hourly_wage),
         materials (default_price, category)
-      `).or(`plan_id.eq.${plan.id},crop_id.eq.${plan.crop_id}`).order('work_date', { ascending: false });
+      `).or(`plan_id.eq.${plan.id},crop_id.eq.${plan.crop_id}`)
+        .eq('user_id', tenantId)
+        .order('work_date', { ascending: false });
 
-      let salesQuery = supabase.from('sales_logs').select('*')
-        .or(`plan_id.eq.${plan.id},crop_id.eq.${plan.crop_id}`).order('sales_date', { ascending: false });
-
-      if (tenantId) {
-        workQuery = workQuery.eq('user_id', tenantId);
-        salesQuery = salesQuery.eq('user_id', tenantId);
-      }
+      const salesQuery = supabase.from('sales_logs').select('*')
+        .or(`plan_id.eq.${plan.id},crop_id.eq.${plan.crop_id}`)
+        .eq('user_id', tenantId)
+        .order('sales_date', { ascending: false });
 
       const [workRes, salesRes] = await Promise.all([workQuery, salesQuery]);
       setWorkLogs(workRes.data || []);
@@ -771,7 +774,8 @@ export default function CultivationSchedulePage() {
                     <div className="space-y-6">
                       {(() => {
                         const areaStr = fields.find(f => f.id === selectedPlan.field_id)?.area_size || selectedPlan.calculated_area;
-                        const area = Number(areaStr) || 1; // 0除算防止
+                        const rawArea = Number(areaStr);
+                        const area = rawArea > 0 ? rawArea : 1; // 0除算防止
                         const multiplier = 10 / area;
                         
                         // 売上集計

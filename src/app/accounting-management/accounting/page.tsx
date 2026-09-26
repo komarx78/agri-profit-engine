@@ -77,9 +77,9 @@ export default function AccountingExportPage() {
       const monthlySalesMap = new Map<string, { total: number; channelName: string; lastDate: string }>();
 
       salesLogs.forEach((log: any) => {
-        if (!log.total_sales || log.total_sales <= 0) return;
+        if (!log.sales_date || !log.total_sales || log.total_sales <= 0) return;
         
-        const monthKey = log.sales_date.substring(0, 7);
+        const monthKey = String(log.sales_date).substring(0, 7);
         const channelName = log.sales_channels?.name || '不明な請求先';
         const mapKey = `${monthKey}_${channelName}`;
 
@@ -97,9 +97,13 @@ export default function AccountingExportPage() {
 
       let index = 1;
       monthlySalesMap.forEach((value, key) => {
-        const [yearStr, monthStr] = key.split('_')[0].split('-');
-        let accDate = new Date(parseInt(yearStr), parseInt(monthStr), 0);
-        let dateStr = `${accDate.getFullYear()}/${String(accDate.getMonth()+1).padStart(2, '0')}/${String(accDate.getDate()).padStart(2, '0')}`;
+        const parts = key.split('_')[0].split('-');
+        const yearNum = parseInt(parts[0], 10) || new Date().getFullYear();
+        const monthNum = parseInt(parts[1], 10) || 1;
+        const accDate = new Date(yearNum, monthNum, 0);
+        const dateStr = !isNaN(accDate.getTime())
+          ? `${accDate.getFullYear()}/${String(accDate.getMonth()+1).padStart(2, '0')}/${String(accDate.getDate()).padStart(2, '0')}`
+          : `${yearNum}/${String(monthNum).padStart(2, '0')}/01`;
         
         journalEntries.push({
           'No': index++,
@@ -118,7 +122,7 @@ export default function AccountingExportPage() {
           '貸方インボイス': '',
           '貸方金額(円)': Math.round(value.total),
           '貸方税額': 0,
-          '摘要': `【${parseInt(monthStr)}月分ご請求】${value.channelName}`,
+          '摘要': `【${monthNum}月分ご請求】${value.channelName}`,
           '仕訳メモ': '',
           'タグ': '',
           'MF仕訳タイプ': '',
@@ -175,7 +179,7 @@ export default function AccountingExportPage() {
         return;
       }
 
-      journalEntries.sort((a, b) => new Date(a.日付).getTime() - new Date(b.日付).getTime());
+      journalEntries.sort((a, b) => (new Date(a.日付).getTime() || 0) - (new Date(b.日付).getTime() || 0));
       
       journalEntries.forEach((entry, i) => {
         entry['No'] = i + 1;

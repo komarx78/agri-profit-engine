@@ -845,13 +845,13 @@ export default function PlansPage() {
                           {/* 売上：予定 (薄い枠線) */}
                           {(ganttFilter === 'all' || ganttFilter === 'salesOnly') && plannedSales.map((s, idx) => (
                             <div key={`ps-${idx}`} className="bg-amber-50 border border-amber-300 border-dashed text-amber-600 text-[10px] font-bold px-1 py-0.5 rounded truncate" title={`[目標] 売上予測: ¥${s.total_sales?.toLocaleString() || '-'}`}>
-                              目:¥{(s.total_sales / 1000).toFixed(0)}k
+                              目:¥{((s.total_sales || 0) / 1000).toFixed(0)}k
                             </div>
                           ))}
                           {/* 売上：実績 (濃いベタ塗り) */}
                           {(ganttFilter === 'all' || ganttFilter === 'salesOnly') && actualSales.map((s, idx) => (
                             <div key={`as-${idx}`} className="bg-amber-500 border border-amber-600 text-white shadow-sm text-[10px] font-bold px-1 py-0.5 rounded truncate" title={`[実績] 売上: ¥${s.total_sales?.toLocaleString() || '-'}`}>
-                              実:¥{(s.total_sales / 1000).toFixed(0)}k
+                              実:¥{((s.total_sales || 0) / 1000).toFixed(0)}k
                             </div>
                           ))}
                         </div>

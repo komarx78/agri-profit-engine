@@ -39,28 +39,21 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       if (!orderId) return;
       
       const tenantId = await getCurrentTenantId();
+      if (!tenantId) return;
 
-      let cropQuery = supabase.from('crops').select('*');
-      if (tenantId) {
-        cropQuery = cropQuery.eq('user_id', tenantId);
-      }
-      const { data: cropData } = await cropQuery;
+      const { data: cropData } = await supabase.from('crops').select('*').eq('user_id', tenantId);
       if (cropData) setCrops(cropData);
 
       const custRes = await getB2BCustomers(tenantId);
       if (custRes.success) setCustomers(custRes.customers || []);
       
-      // Load existing order
-      let orderQuery = supabase
+      // Load existing order (自社テナント限定)
+      const { data: orderData, error } = await supabase
         .from('b2b_orders')
         .select(`*, items:b2b_order_items(*)`)
-        .eq('id', orderId);
-
-      if (tenantId) {
-        orderQuery = orderQuery.eq('user_id', tenantId);
-      }
-
-      const { data: orderData, error } = await orderQuery.single();
+        .eq('id', orderId)
+        .eq('user_id', tenantId)
+        .single();
         
       if (orderData) {
         setSelectedCustomerId(orderData.customer_id);

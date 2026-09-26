@@ -374,7 +374,9 @@ export async function submitAttendance(tenantId: string, workerId: string, actio
         if (currentLog?.break_start_time) {
           const bStart = new Date(currentLog.break_start_time).getTime();
           const bEnd = new Date(now).getTime();
-          const diffMins = Math.max(0, Math.floor((bEnd - bStart) / 1000 / 60));
+          const diffMins = (!isNaN(bStart) && !isNaN(bEnd) && bEnd > bStart)
+            ? Math.floor((bEnd - bStart) / 1000 / 60)
+            : 0;
           updates.total_break_minutes = (currentLog.total_break_minutes || 0) + diffMins;
         }
       }
@@ -386,7 +388,9 @@ export async function submitAttendance(tenantId: string, workerId: string, actio
           updates.break_end_time = now;
           const bStart = new Date(currentLog.break_start_time).getTime();
           const bEnd = new Date(now).getTime();
-          const diffMins = Math.max(0, Math.floor((bEnd - bStart) / 1000 / 60));
+          const diffMins = (!isNaN(bStart) && !isNaN(bEnd) && bEnd > bStart)
+            ? Math.floor((bEnd - bStart) / 1000 / 60)
+            : 0;
           updates.total_break_minutes = (currentLog.total_break_minutes || 0) + diffMins;
         }
       }
