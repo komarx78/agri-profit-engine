@@ -370,7 +370,7 @@ export async function submitAttendance(tenantId: string, workerId: string, actio
       if (action === 'break_end') {
         updates.break_end_time = now;
         // 休憩時間の計算
-        const { data: currentLog } = await supabase.from('attendance_logs').select('break_start_time, total_break_minutes').eq('id', logId).single();
+        const { data: currentLog } = await supabase.from('attendance_logs').select('break_start_time, total_break_minutes').eq('id', logId).eq('worker_id', workerId).single();
         if (currentLog?.break_start_time) {
           const bStart = new Date(currentLog.break_start_time).getTime();
           const bEnd = new Date(now).getTime();
@@ -383,7 +383,7 @@ export async function submitAttendance(tenantId: string, workerId: string, actio
       if (action === 'clock_out') {
         updates.clock_out = now;
         // もし休憩終了を押さずに退勤した場合、休憩も自動精算
-        const { data: currentLog } = await supabase.from('attendance_logs').select('break_start_time, break_end_time, total_break_minutes').eq('id', logId).single();
+        const { data: currentLog } = await supabase.from('attendance_logs').select('break_start_time, break_end_time, total_break_minutes').eq('id', logId).eq('worker_id', workerId).single();
         if (currentLog?.break_start_time && !currentLog.break_end_time) {
           updates.break_end_time = now;
           const bStart = new Date(currentLog.break_start_time).getTime();
@@ -395,7 +395,7 @@ export async function submitAttendance(tenantId: string, workerId: string, actio
         }
       }
       
-      const { data, error } = await supabase.from('attendance_logs').update(updates).eq('id', logId).select().single();
+      const { data, error } = await supabase.from('attendance_logs').update(updates).eq('id', logId).eq('worker_id', workerId).select().single();
       if (error) throw error;
       return { success: true, data };
     }
@@ -748,12 +748,28 @@ export async function savePlannedTask(
 // 9. タスクの削除
 export async function deletePlannedTask(taskId: string, tenantId?: string | null) {
   try {
-    const supabase = createAdminClient();
-    let query = supabase.from('work_logs').delete().eq('id', taskId);
-    if (tenantId && tenantId !== 'null' && tenantId !== 'undefined') {
-      query = query.eq('user_id', tenantId);
+    if (!tenantId || tenantId === 'null' || tenantId === 'undefined') {
+      return { success: false, error: 'テナントIDが特定できません' };
     }
-    const { error } = await query;
+    const supabase = createAdminClient();
+
+    let ownerId = tenantId;
+    const { data: comp } = await supabase
+      .from('company_settings')
+      .select('user_id')
+      .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+      .limit(1)
+      .maybeSingle();
+    if (comp?.user_id) {
+      ownerId = comp.user_id;
+    }
+
+    const { error } = await supabase
+      .from('work_logs')
+      .delete()
+      .eq('id', taskId)
+      .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`);
+
     if (error) throw error;
     return { success: true };
   } catch (err: any) {
@@ -1035,10 +1051,28 @@ export async function completePortalTask(
       updatePayload.worker_id = options.workerId;
     }
 
-    const { data, error } = await supabase
+    let ownerId = tenantId;
+    if (tenantId && tenantId !== 'null' && tenantId !== 'undefined') {
+      const { data: comp } = await supabase
+        .from('company_settings')
+        .select('user_id')
+        .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+        .limit(1)
+        .maybeSingle();
+      if (comp?.user_id) {
+        ownerId = comp.user_id;
+      }
+    }
+
+    let updateQuery = supabase
       .from('work_logs')
       .update(updatePayload)
-      .eq('id', taskId)
+      .eq('id', taskId);
+    if (ownerId && ownerId !== 'null' && ownerId !== 'undefined') {
+      updateQuery = updateQuery.or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`);
+    }
+
+    const { data, error } = await updateQuery
       .select('*, crops(*), fields(*), workers(*)')
       .single();
 
@@ -1056,7 +1090,20 @@ export async function reopenPortalTask(tenantId: string, taskId: string) {
     const supabase = createAdminClient();
     if (!taskId) return { success: false, error: 'Task ID is required' };
 
-    const { data, error } = await supabase
+    let ownerId = tenantId;
+    if (tenantId && tenantId !== 'null' && tenantId !== 'undefined') {
+      const { data: comp } = await supabase
+        .from('company_settings')
+        .select('user_id')
+        .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+        .limit(1)
+        .maybeSingle();
+      if (comp?.user_id) {
+        ownerId = comp.user_id;
+      }
+    }
+
+    let updateQuery = supabase
       .from('work_logs')
       .update({
         status: 'planned',
@@ -1064,7 +1111,12 @@ export async function reopenPortalTask(tenantId: string, taskId: string) {
         completed_at: null,
         updated_at: new Date().toISOString()
       })
-      .eq('id', taskId)
+      .eq('id', taskId);
+    if (ownerId && ownerId !== 'null' && ownerId !== 'undefined') {
+      updateQuery = updateQuery.or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`);
+    }
+
+    const { data, error } = await updateQuery
       .select('*, crops(*), fields(*), workers(*)')
       .single();
 

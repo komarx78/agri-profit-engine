@@ -67,8 +67,10 @@ export default function FieldDetailPage() {
   }, [fieldId]);
 
   async function fetchFieldDetails() {
+    let currentTenant: string | null = null;
     try {
       const tenantId = await getCurrentTenantId();
+      currentTenant = tenantId;
       if (!tenantId) {
         setIsLoading(false);
         return;
@@ -153,7 +155,7 @@ export default function FieldDetailPage() {
     } catch (err) {
       console.error(err);
       alert('圃場データの取得に失敗しました');
-      router.push('/admin/map');
+      router.push(currentTenant ? `/admin/map?farm=${currentTenant}` : '/admin/map');
     } finally {
       setIsLoading(false);
     }

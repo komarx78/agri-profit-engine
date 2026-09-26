@@ -143,6 +143,7 @@ export async function POST(req: Request) {
         .from('attendance_logs')
         .select('break_start_time, total_break_minutes')
         .eq('id', targetLogId)
+        .eq('worker_id', workerId)
         .single();
 
       if (currentLog?.break_start_time) {
@@ -163,6 +164,7 @@ export async function POST(req: Request) {
         .from('attendance_logs')
         .select('break_start_time, break_end_time, total_break_minutes')
         .eq('id', targetLogId)
+        .eq('worker_id', workerId)
         .single();
 
       if (currentLog?.break_start_time && !currentLog.break_end_time) {
@@ -180,6 +182,7 @@ export async function POST(req: Request) {
       .from('attendance_logs')
       .update(updates)
       .eq('id', targetLogId)
+      .eq('worker_id', workerId)
       .select()
       .single();
 

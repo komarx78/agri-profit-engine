@@ -75,7 +75,7 @@ export default function MaterialRequirementsPage() {
         const material = materials.find(mat => mat.id === m.material_id);
         if (!material) return;
 
-        const amount = (area / 10) * m.amount;
+        const amount = (Number(area) / 10) * (Number(m.amount) || 0);
         if (!requirements[material.id]) {
           requirements[material.id] = { material: material, totalAmount: 0, details: [] };
         }
@@ -152,7 +152,7 @@ export default function MaterialRequirementsPage() {
                   <div className="text-right">
                     <div className="text-xs font-bold text-slate-500 mb-0.5">今年度の必要総量</div>
                     <div className="text-2xl font-black text-amber-600">
-                      {req.totalAmount.toLocaleString()} <span className="text-sm">{req.material.unit}</span>
+                      {Number((req.totalAmount || 0).toFixed(1)).toLocaleString()} <span className="text-sm">{req.material.unit}</span>
                     </div>
                   </div>
                 </div>
@@ -177,7 +177,7 @@ export default function MaterialRequirementsPage() {
                             <span className="text-xs text-slate-400 ml-2">[{detail.plan.start_month}月〜{detail.plan.end_month}月]</span>
                           </td>
                           <td className="px-6 py-3 text-right font-black text-slate-700">
-                            {detail.amount.toLocaleString()} {req.material.unit}
+                            {Number((detail.amount || 0).toFixed(1)).toLocaleString()} {req.material.unit}
                           </td>
                         </tr>
                       ))}

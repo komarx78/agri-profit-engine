@@ -120,7 +120,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     
     if (res.success) {
       alert("注文を修正しました。");
-      router.push('/sales-management/orders');
+      router.push(tenantId ? `/sales-management/orders?farm=${tenantId}` : '/sales-management/orders');
     } else {
       alert("エラー: " + res.error);
     }
@@ -134,7 +134,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     setIsSubmitting(false);
     if (res.success) {
       alert("注文を削除しました。");
-      router.push('/sales-management/orders');
+      router.push(tenantId ? `/sales-management/orders?farm=${tenantId}` : '/sales-management/orders');
     } else {
       alert("エラー: " + res.error);
     }

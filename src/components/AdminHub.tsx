@@ -115,20 +115,20 @@ export default function AdminHub({ onSwitchToHome, initialNav = 'cultivations' }
     {
       title: '日々の現場・作業日誌',
       items: [
-        { id: 'dashboard', name: 'ダッシュボード', icon: LayoutDashboard, path: '/admin/dashboard' },
-        { id: 'cultivations', name: '作付け・作業 統合司令塔', icon: Sprout, path: '/admin/cultivations' },
-        { id: 'tasks', name: 'タスク・スケジュール', icon: Calendar, path: '/admin/tasks' },
-        { id: 'approvals', name: '作業承認インボックス', icon: Inbox, path: '/admin/approvals' },
+        { id: 'dashboard', name: 'ダッシュボード', icon: LayoutDashboard, path: tenantId ? `/admin/dashboard?farm=${tenantId}` : '/admin/dashboard' },
+        { id: 'cultivations', name: '作付け・作業 統合司令塔', icon: Sprout, path: tenantId ? `/admin/cultivations?farm=${tenantId}` : '/admin/cultivations' },
+        { id: 'tasks', name: 'タスク・スケジュール', icon: Calendar, path: tenantId ? `/admin/tasks?farm=${tenantId}` : '/admin/tasks' },
+        { id: 'approvals', name: '作業承認インボックス', icon: Inbox, path: tenantId ? `/admin/approvals?farm=${tenantId}` : '/admin/approvals' },
       ]
     },
     {
       title: '栽培計画・マップ・分析',
       items: [
-        { id: 'map', name: '作付地図 (圃場マップ)', icon: MapPin, path: '/admin/map' },
-        { id: 'schedule', name: '栽培・予実管理表', icon: Calendar, path: '/admin/cultivation-schedule' },
-        { id: 'crop-analysis', name: '作目別 採算分析', icon: PieChart, path: '/admin/crop-analysis' },
-        { id: 'nursery', name: '育苗スケジュール', icon: Table, path: '/admin/nursery-schedule' },
-        { id: 'materials', name: '必要資材自動集計', icon: Calculator, path: '/admin/material-requirements' },
+        { id: 'map', name: '作付地図 (圃場マップ)', icon: MapPin, path: tenantId ? `/admin/map?farm=${tenantId}` : '/admin/map' },
+        { id: 'schedule', name: '栽培・予実管理表', icon: Calendar, path: tenantId ? `/admin/cultivation-schedule?farm=${tenantId}` : '/admin/cultivation-schedule' },
+        { id: 'crop-analysis', name: '作目別 採算分析', icon: PieChart, path: tenantId ? `/admin/crop-analysis?farm=${tenantId}` : '/admin/crop-analysis' },
+        { id: 'nursery', name: '育苗スケジュール', icon: Table, path: tenantId ? `/admin/nursery-schedule?farm=${tenantId}` : '/admin/nursery-schedule' },
+        { id: 'materials', name: '必要資材自動集計', icon: Calculator, path: tenantId ? `/admin/material-requirements?farm=${tenantId}` : '/admin/material-requirements' },
       ]
     },
     {

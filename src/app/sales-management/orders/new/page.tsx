@@ -23,16 +23,18 @@ export default function NewOrderPage() {
   ]);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [tenantId, setTenantId] = useState<string>('');
 
   useEffect(() => {
     async function load() {
-      const tenantId = await getCurrentTenantId();
-      if (!tenantId) return;
+      const tId = await getCurrentTenantId();
+      if (!tId) return;
+      setTenantId(tId);
 
       const [custRes, cropRes, ordRes] = await Promise.all([
-        getB2BCustomers(tenantId),
-        supabase.from('crops').select('*').eq('user_id', tenantId),
-        getB2BOrders(tenantId)
+        getB2BCustomers(tId),
+        supabase.from('crops').select('*').eq('user_id', tId),
+        getB2BOrders(tId)
       ]);
       if (custRes.success) setCustomers(custRes.customers || []);
       if (cropRes.data) setCrops(cropRes.data);
@@ -121,7 +123,7 @@ export default function NewOrderPage() {
     const res = await createB2BOrder(orderData, formattedItems, tenantId);
     if (res.success) {
       alert("新規受注を登録しました。");
-      router.push('/sales-management/orders');
+      router.push(tenantId ? `/sales-management/orders?farm=${tenantId}` : '/sales-management/orders');
     } else {
       alert("エラー: " + res.error);
       setIsSubmitting(false);
@@ -131,7 +133,7 @@ export default function NewOrderPage() {
   return (
     <div className="space-y-6 animate-in fade-in duration-300 max-w-3xl mx-auto">
       <div className="flex items-center gap-4">
-        <Link href="/sales-management/orders" className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-800 transition-colors">
+        <Link href={tenantId ? `/sales-management/orders?farm=${tenantId}` : '/sales-management/orders'} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-slate-800 transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>

@@ -84,6 +84,7 @@ export default function NurserySchedulePage() {
         const { data: schedulesData, error: schedulesErr } = await supabase
           .from('nursery_schedules_v2')
           .select('*')
+          .eq('user_id', tenantId)
           .in('plan_id', planIds);
           
         if (schedulesErr && schedulesErr.code !== '42P01') {
@@ -149,13 +150,14 @@ export default function NurserySchedulePage() {
     setIsSaving(true);
     try {
       const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error('テナントIDが特定できません。ログイン状態を確認してください。');
       const newSchedules = schedules.filter(s => s.isNew);
       const existingSchedules = schedules.filter(s => !s.isNew);
 
       if (newSchedules.length > 0) {
         const inserts = newSchedules.map(({ isNew, loss_rate, schedule_data, ...rest }) => ({
           ...rest,
-          user_id: tenantId || null,
+          user_id: tenantId,
           schedule_data: {
             ...schedule_data,
             _loss_rate: Number(loss_rate) || 0
@@ -171,18 +173,14 @@ export default function NurserySchedulePage() {
           _loss_rate: Number(schedule.loss_rate) || 0
         };
 
-        let updateQuery = supabase.from('nursery_schedules_v2')
+        const { error } = await supabase.from('nursery_schedules_v2')
           .update({
             sown_quantity: schedule.sown_quantity,
             schedule_data: scheduleDataWithMeta
           })
-          .eq('id', schedule.id);
+          .eq('id', schedule.id)
+          .eq('user_id', tenantId);
 
-        if (tenantId) {
-          updateQuery = updateQuery.eq('user_id', tenantId);
-        }
-
-        const { error } = await updateQuery;
         if (error) throw error;
       }
 

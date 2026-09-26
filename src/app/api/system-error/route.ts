@@ -33,7 +33,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing error_message' }, { status: 400 });
     }
 
-    console.error(`🚨 [FRONTEND_ALERT] [${company_name || '未特定農園'}] ${worker_name || '作業者未特定'}: ${error_message}`);
+    // 憲法10条：同一農園・同一エラーメッセージの過剰通知スパムを物理遮断（15分クールダウン）
+    let isDuplicateSpam = false;
+    try {
+      const supabase = getSupabase();
+      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+      let recentQuery = supabase
+        .from('system_error_logs')
+        .select('id')
+        .eq('error_message', error_message)
+        .gte('created_at', fifteenMinutesAgo)
+        .limit(1);
+      if (tenant_id) {
+        recentQuery = recentQuery.eq('tenant_id', tenant_id);
+      }
+      const { data: recentLogs } = await recentQuery;
+      if (recentLogs && recentLogs.length > 0) {
+        isDuplicateSpam = true;
+      }
+    } catch (checkErr) {
+      console.warn('Spam cooldown check warning:', checkErr);
+    }
 
     // 1. Supabase の system_error_logs テーブルへ保存
     let savedLog: any = null;
@@ -63,18 +83,22 @@ export async function POST(req: Request) {
     }
 
     // 2. 外部通知（メール / LINE / Webhook）の発火
-    // ※非同期で安全に送信を試みる（エラー通知処理自体が落ちるのを防ぐ）
-    sendAdminNotification({
-      toEmail: ALERT_EMAIL,
-      companyName: company_name || '未特定農園',
-      workerName: worker_name || 'スタッフ未特定',
-      category: error_category,
-      message: error_message,
-      pageUrl: page_url,
-      time: new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
-    }).catch(notifyErr => {
-      console.warn('Admin notification error:', notifyErr);
-    });
+    // ※同一事象の過剰スパムを遮断しつつ、非同期で安全に送信
+    if (!isDuplicateSpam) {
+      sendAdminNotification({
+        toEmail: ALERT_EMAIL,
+        companyName: company_name || '未特定農園',
+        workerName: worker_name || 'スタッフ未特定',
+        category: error_category,
+        message: error_message,
+        pageUrl: page_url,
+        time: new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+      }).catch(notifyErr => {
+        console.warn('Admin notification error:', notifyErr);
+      });
+    } else {
+      console.log(`[SPAM_PROTECTION] 15分以内の重複エラー検知のため外部通知を抑止: ${error_message}`);
+    }
 
     return NextResponse.json({ success: true, log: savedLog });
   } catch (err: any) {

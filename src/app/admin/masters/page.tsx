@@ -209,12 +209,11 @@ export default function MastersPage() {
 
       // テナントIDを取得してセット
       const tenantId = await getCurrentTenantId();
-      if (tenantId) {
-        if (table === 'departments') {
-          dataToSave.tenant_id = tenantId;
-        } else {
-          dataToSave.user_id = tenantId;
-        }
+      if (!tenantId) throw new Error('テナントIDが特定できません。ログイン状態を確認してください。');
+      if (table === 'departments') {
+        dataToSave.tenant_id = tenantId;
+      } else {
+        dataToSave.user_id = tenantId;
       }
 
       if (['crops', 'fields', 'materials', 'pesticides', 'fertilizers', 'sales_channels'].includes(modalType) && dataToSave.name) {
@@ -340,12 +339,11 @@ export default function MastersPage() {
     try {
       setUploadStatus({ type: 'info', message: '削除中...' });
       const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error('テナントIDが特定できません。ログイン状態を確認してください。');
       const table = (type === 'pesticides' || type === 'fertilizers') ? 'materials' : type;
-      let deleteQuery = supabase.from(table).delete().eq('id', id);
-      if (tenantId) {
-        deleteQuery = (table === 'departments') ? deleteQuery.eq('tenant_id', tenantId) : deleteQuery.eq('user_id', tenantId);
-      }
-      const { error } = await deleteQuery;
+      const deleteQuery = supabase.from(table).delete().eq('id', id);
+      const scopedDelete = (table === 'departments') ? deleteQuery.eq('tenant_id', tenantId) : deleteQuery.eq('user_id', tenantId);
+      const { error } = await scopedDelete;
       if (error) throw error;
       
       setUploadStatus({ type: 'success', message: '削除しました' });

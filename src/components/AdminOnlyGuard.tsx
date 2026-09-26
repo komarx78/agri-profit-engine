@@ -36,9 +36,29 @@ export function AdminOnlyGuard({ children }: AdminOnlyGuardProps) {
     return false;
   });
 
+  const [farmId, setFarmId] = useState<string>('');
+
   useEffect(() => {
     async function verifyAdmin() {
       try {
+        if (typeof window !== 'undefined') {
+          const params = new URLSearchParams(window.location.search);
+          let currentFarm = params.get('farm') || params.get('tenant') || '';
+          if (!currentFarm) {
+            const currentWorkerStr = localStorage.getItem('agri_current_worker') || localStorage.getItem('current_worker');
+            if (currentWorkerStr) {
+              try {
+                const worker = JSON.parse(currentWorkerStr);
+                if (worker?.user_id) currentFarm = worker.user_id;
+              } catch (e) {}
+            }
+          }
+          if (!currentFarm) {
+            currentFarm = localStorage.getItem('agri_owner_id') || '';
+          }
+          if (currentFarm) setFarmId(currentFarm);
+        }
+
         // 1. localStorage の現在の作業者ロールを即座にチェック（0ms・通信不要）
         if (typeof window !== 'undefined') {
           const currentWorkerStr = localStorage.getItem('agri_current_worker') || localStorage.getItem('current_worker');
@@ -105,14 +125,14 @@ export function AdminOnlyGuard({ children }: AdminOnlyGuardProps) {
           </div>
           <div className="pt-2 space-y-2">
             <button
-              onClick={() => router.push('/portal')}
+              onClick={() => router.push(farmId ? `/portal/${farmId}` : '/portal')}
               className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>ポータル画面へ戻る</span>
             </button>
             <button
-              onClick={() => router.push('/login')}
+              onClick={() => router.push(farmId ? `/login?farm=${farmId}` : '/login')}
               className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-all"
             >
               管理者アカウントでログイン

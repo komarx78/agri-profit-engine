@@ -119,17 +119,16 @@ function SprayManagementContent() {
     setIsPesticidesLoading(true);
     try {
       const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        setIsPesticidesLoading(false);
+        return;
+      }
       // 過去の自社散布履歴を取得（使用回数計算用）
-      let sprayQuery = supabase
+      const { data: pastSprays } = await supabase
         .from('work_logs')
         .select('*')
+        .eq('user_id', tenantId)
         .like('work_type', '%農薬%');
-
-      if (tenantId) {
-        sprayQuery = sprayQuery.eq('user_id', tenantId);
-      }
-
-      const { data: pastSprays } = await sprayQuery;
 
       // 本番APIから作物の適用農薬を全件取得
       const res = await fetch('/api/pesticide-check', {
