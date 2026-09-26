@@ -153,7 +153,7 @@ export function getDateListBetween(startDateStr: string, endDateStr: string): st
     return [startDateStr];
   }
 
-  let curr = new Date(start);
+  const curr = new Date(start);
   while (curr <= end) {
     dates.push(getJSTDate(curr));
     curr.setDate(curr.getDate() + 1);
