@@ -148,6 +148,43 @@ export default function AdminFertilizersPage() {
     return 0;
   };
 
+  // 🧹 鉄壁サニタイズ（PostgreSQLの NULバイト \u0000 拒絶および制御文字エラーを根絶）
+  const cleanText = (val: any): string => {
+    if (val === null || val === undefined) return '';
+    return String(val)
+      .replace(/\0/g, '') // NUL文字 (0x00) を完全除去
+      .replace(/\\u0000/g, '') // エスケープされた \u0000 を除去
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // 改行・タブ以外の制御文字を除去
+      .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '') // 孤立サロゲートを除去
+      .trim();
+  };
+
+  // 🛡️ 文字コード自動判定 ＆ 安全デコード（UTF-8 BOM / UTF-8 / Shift-JIS / CP932 を全自動判別）
+  const readFileTextSafely = async (file: File): Promise<string> => {
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+
+    // 1. UTF-8 BOM (0xEF, 0xBB, 0xBF)
+    if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+      return new TextDecoder('utf-8').decode(bytes.slice(3));
+    }
+
+    // 2. UTF-8 で厳格デコード試行 (fatal: true)
+    try {
+      const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+      return utf8Decoder.decode(bytes);
+    } catch {
+      // 3. 失敗した場合は Shift-JIS (Windows-31J / CP932) でデコード
+      try {
+        const sjisDecoder = new TextDecoder('shift-jis');
+        return sjisDecoder.decode(bytes);
+      } catch {
+        // 4. 万が一のフォールバック
+        return new TextDecoder('utf-8').decode(bytes);
+      }
+    }
+  };
+
   // FAMIC公的CSV対応 インポートエンジン
   const handleImportCSV = async () => {
     if (!file) return;
@@ -155,233 +192,212 @@ export default function AdminFertilizersPage() {
     setStatus({ type: 'info', message: '公的肥料CSVファイルを解析しています...' });
     setProgress(null);
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      encoding: 'Shift-JIS', // 日本の公的CSVの標準
-      complete: async (results) => {
-        try {
-          let rows = results.data;
-          
-          // ヘッダー文字化けチェック（UTF-8リトライ判定）
-          const firstRowKeys = rows.length > 0 && rows[0] ? Object.keys(rows[0] as object).join('') : '';
-          if (firstRowKeys.includes('')) {
-            const utf8Results: any = await new Promise((resolve) => {
-              Papa.parse(file, {
-                header: true,
-                skipEmptyLines: true,
-                encoding: 'UTF-8',
-                complete: resolve
-              });
-            });
-            rows = utf8Results.data;
-          }
-
-          const parsedList = rows.map((row: any, idx: number) => {
-            const vals = Object.values(row);
-
-            // 1. 基本情報
-            const regNo = String(getValue(row, ['登録番号', '届出番号', 'registration_no']) || vals[0] || '').trim();
-            const regDate = String(getValue(row, ['登録年月日', 'registration_date']) || vals[1] || '').trim();
-            const fName = String(getValue(row, ['肥料の名称', '肥料名', '銘柄名', '名称', 'fertilizer_name']) || vals[2] || vals[0] || '').trim();
-            const applicant = String(getValue(row, ['肥料業者', '登録を有する者の名称', '製造業者', 'メーカー', 'applicant_name']) || '').trim();
-            const address = String(getValue(row, ['住所', 'applicant_address']) || '').trim();
-            const fType = String(getValue(row, ['肥料種類名称', '肥料の種類', '種類', 'fertilizer_type']) || '化成肥料').trim();
-            const expiry = String(getValue(row, ['失効区分', 'expiry_status']) || '').trim();
-
-            // 2. 成分コード1〜16 & 保証成分量1〜16（%）の解析
-            let nVal = 0, pVal = 0, kVal = 0, mgVal = 0, caVal = 0;
-            const otherDetails: string[] = [];
-            let hasTN = false;
-            let hasTP = false;
-            let hasTK = false;
-
-            // 列に直接「窒素」「りん酸」「加里」がある場合の事前取得
-            const directN = parsePercent(getValue(row, ['窒素全量', '窒素', 'n_percent', 'チッソ']));
-            const directP = parsePercent(getValue(row, ['りん酸全量', '水溶性りん酸', 'りん酸', 'リン酸', 'p_percent']));
-            const directK = parsePercent(getValue(row, ['加里全量', '水溶性加里', '加里', 'カリ', 'k_percent']));
-            const directMg = parsePercent(getValue(row, ['苦土', '水溶性苦土', 'mg_percent']));
-            const directCa = parsePercent(getValue(row, ['石灰', 'ca_percent']));
-
-            if (directN > 0) nVal = directN;
-            if (directP > 0) pVal = directP;
-            if (directK > 0) kVal = directK;
-            if (directMg > 0) mgVal = directMg;
-            if (directCa > 0) caVal = directCa;
-
-            // 成分コード1〜16ループ
-            for (let i = 1; i <= 16; i++) {
-              const codeKey = Object.keys(row).find(k => {
-                const clean = k.replace(/[\s　]+/g, '');
-                return clean === `成分コード${i}` || clean === `成分コード(${i})` || clean === `成分コード_${i}`;
-              });
-              const amountKey = Object.keys(row).find(k => {
-                const clean = k.replace(/[\s　]+/g, '');
-                return clean.includes(`保証成分量${i}`) || clean.includes(`保証成分量(${i})`) || clean.includes(`成分量${i}`);
-              });
-
-              const code = (codeKey ? String(row[codeKey] || '') : '').trim().toUpperCase();
-              const amount = parsePercent(amountKey ? row[amountKey] : 0);
-
-              if (!code || amount <= 0) continue;
-
-              // --- 窒素 (N) 系統 ---
-              if (code === 'TN' || code === 'N' || code.includes('全窒素')) {
-                nVal = amount;
-                hasTN = true;
-              } else if (code === 'AN' || code === 'NN' || code === 'UN' || code === 'ON' || code === 'CN' || code.includes('窒素')) {
-                if (!hasTN) {
-                  nVal += amount;
-                }
-                const label = code === 'AN' ? 'アンモニア性窒素' : code === 'NN' ? '硝酸性窒素' : code === 'UN' ? '尿素態窒素' : code;
-                otherDetails.push(`${label}:${amount}%`);
-              }
-              // --- りん酸 (P) 系統 ---
-              else if (code === 'TP' || code === 'P' || code.includes('全りん酸') || code.includes('全リン酸')) {
-                pVal = amount;
-                hasTP = true;
-              } else if (code === 'WP' || code === 'CP' || code === 'SP' || code.includes('りん酸') || code.includes('リン酸')) {
-                if (!hasTP) {
-                  pVal = Math.max(pVal, amount);
-                }
-                const label = code === 'WP' ? '水溶性りん酸' : code === 'CP' ? 'く溶性りん酸' : code === 'SP' ? '可溶性りん酸' : code;
-                otherDetails.push(`${label}:${amount}%`);
-              }
-              // --- 加里 (K) 系統 ---
-              else if (code === 'TK' || code === 'K' || code.includes('全加里') || code.includes('全カリ')) {
-                kVal = amount;
-                hasTK = true;
-              } else if (code === 'WK' || code === 'CK' || code.includes('加里') || code.includes('カリ')) {
-                if (!hasTK) {
-                  kVal = Math.max(kVal, amount);
-                }
-                const label = code === 'WK' ? '水溶性加里' : code === 'CK' ? 'く溶性加里' : code;
-                otherDetails.push(`${label}:${amount}%`);
-              }
-              // --- 苦土 (Mg) 系統 ---
-              else if (code.includes('MG') || code.includes('苦土')) {
-                mgVal = Math.max(mgVal, amount);
-                otherDetails.push(`苦土:${amount}%`);
-              }
-              // --- 石灰 (Ca) 系統 ---
-              else if (code.includes('CA') || code.includes('石灰') || code.includes('アルカリ')) {
-                caVal = Math.max(caVal, amount);
-                otherDetails.push(`石灰/アルカリ:${amount}%`);
-              }
-              // --- ほう素・マンガン・その他微量要素 ---
-              else {
-                const label = code === 'B' ? 'ほう素' : code === 'MN' ? 'マンガン' : code === 'FE' ? '鉄' : code;
-                otherDetails.push(`${label}:${amount}%`);
-              }
-            }
-
-            return {
-              registration_no: regNo || `REG-${Date.now()}-${idx}`,
-              registration_date: regDate,
-              fertilizer_name: fName,
-              fertilizer_type: fType || '普通肥料',
-              applicant_name: applicant,
-              applicant_address: address,
-              expiry_status: expiry || '有効',
-              n_percent: Math.round(nVal * 100) / 100,
-              p_percent: Math.round(pVal * 100) / 100,
-              k_percent: Math.round(kVal * 100) / 100,
-              mg_percent: Math.round(mgVal * 100) / 100,
-              ca_percent: Math.round(caVal * 100) / 100,
-              other_ingredients: otherDetails.join(' / '),
-              updated_at: new Date().toISOString()
-            };
-          }).filter((item: any) => item.fertilizer_name);
-
-          if (parsedList.length === 0) {
-            throw new Error('有効な肥料データ（肥料名を含む行）が見つかりませんでした。CSVファイルをご確認ください。');
-          }
-
-          // 厳格な重複除外（同一registration_noの完全一本化）
-          const uniqueMap = new Map();
-          parsedList.forEach((item: any, idx: number) => {
-            let reg = item.registration_no;
-            if (!reg || reg === '-' || reg === 'null' || reg === 'undefined') {
-              reg = `NO-REG-${idx}-${Date.now()}`;
-              item.registration_no = reg;
-            }
-            uniqueMap.set(reg, item);
-          });
-          const uniqueData = Array.from(uniqueMap.values());
-
-          // 完全上書きモードが有効な場合は既存データをクリア
-          if (overwriteMode) {
-            setStatus({ type: 'info', message: '既存のデータをクリアしています...' });
-            await supabase.from('m_fertilizers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-          }
-
-          setStatus({ type: 'info', message: `${uniqueData.length}件の肥料データをSupabaseに一括登録しています...` });
-
-          const chunkSize = 400;
-          for (let i = 0; i < uniqueData.length; i += chunkSize) {
-            const chunk = uniqueData.slice(i, i + chunkSize);
-            
-            // 1. PostgREST Upsert (onConflict)
-            const { error: upsertErr } = await supabase
-              .from('m_fertilizers')
-              .upsert(chunk, { onConflict: 'registration_no', ignoreDuplicates: false });
-
-            if (upsertErr) {
-              if (upsertErr.code === 'PGRST205' || upsertErr.message?.includes('schema cache')) {
-                throw new Error('データベースに「m_fertilizers」テーブルが存在しません。SupabaseのSQL Editorでテーブル作成SQLを実行してください。');
-              }
-              
-              // 2. 制約エラー等の場合のフォールバック（重複無視で登録）
-              const { error: insertErr } = await supabase
-                .from('m_fertilizers')
-                .upsert(chunk, { onConflict: 'registration_no', ignoreDuplicates: true });
-                
-              if (insertErr) {
-                console.warn('Chunk upsert retry failed, doing single items fallback...', insertErr);
-                // 3. 最後の砦：行単位での個別保存
-                for (const item of chunk) {
-                  try {
-                    await supabase.from('m_fertilizers').upsert([item], { onConflict: 'registration_no' });
-                  } catch (singleErr) {
-                    // 個別エラーはスキップして継続
-                  }
-                }
-              }
-            }
-
-            setProgress({ current: Math.min(i + chunkSize, uniqueData.length), total: uniqueData.length });
-          }
-
-          setStatus({ 
-            type: 'success', 
-            message: `🎉 FAMIC公的肥料マスターのインポートが完了しました！（全 ${uniqueData.length} 件）` 
-          });
-          setFile(null);
-          fetchStatsAndList();
-        } catch (err: any) {
-          console.error(err);
-          setStatus({ type: 'error', message: `インポートエラー: ${err.message || 'CSVの解析に失敗しました'}` });
-        } finally {
-          setLoading(false);
-          setProgress(null);
-        }
-      }
-    });
-  };
-
-  // 全件リセット
-  const handleClearAll = async () => {
-    if (!confirm('⚠️ 【警告】本当に全ての肥料マスターデータを削除しますか？\n（この操作は取り消せません）')) return;
-    setLoading(true);
     try {
-      const { error } = await supabase.from('m_fertilizers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      if (error) throw error;
-      setStatus({ type: 'success', message: '全肥料データをリセットしました。' });
+      const csvText = await readFileTextSafely(file);
+
+      const parsedRows: any[] = await new Promise((resolve, reject) => {
+        Papa.parse(csvText, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => resolve(results.data),
+          error: (err) => reject(err)
+        });
+      });
+
+      const parsedList = parsedRows.map((row: any, idx: number) => {
+        const vals = Object.values(row);
+
+        // 1. 基本情報
+        const regNo = cleanText(getValue(row, ['登録番号', '届出番号', 'registration_no']) || vals[0] || '');
+        const regDate = cleanText(getValue(row, ['登録年月日', 'registration_date']) || vals[1] || '');
+        const fName = cleanText(getValue(row, ['肥料の名称', '肥料名', '銘柄名', '名称', 'fertilizer_name']) || vals[2] || vals[0] || '');
+        const applicant = cleanText(getValue(row, ['肥料業者', '登録を有する者の名称', '製造業者', 'メーカー', 'applicant_name']) || '');
+        const address = cleanText(getValue(row, ['住所', 'applicant_address']) || '');
+        const fType = cleanText(getValue(row, ['肥料種類名称', '肥料の種類', '種類', 'fertilizer_type']) || '化成肥料');
+        const expiry = cleanText(getValue(row, ['失効区分', 'expiry_status']) || '');
+
+        // 2. 成分コード1〜16 & 保証成分量1〜16（%）の解析
+        let nVal = 0, pVal = 0, kVal = 0, mgVal = 0, caVal = 0;
+        const otherDetails: string[] = [];
+        let hasTN = false;
+        let hasTP = false;
+        let hasTK = false;
+
+        // 列に直接「窒素」「りん酸」「加里」がある場合の事前取得
+        const directN = parsePercent(getValue(row, ['窒素全量', '窒素', 'n_percent', 'チッソ']));
+        const directP = parsePercent(getValue(row, ['りん酸全量', '水溶性りん酸', 'りん酸', 'リン酸', 'p_percent']));
+        const directK = parsePercent(getValue(row, ['加里全量', '水溶性加里', '加里', 'カリ', 'k_percent']));
+        const directMg = parsePercent(getValue(row, ['苦土', '水溶性苦土', 'mg_percent']));
+        const directCa = parsePercent(getValue(row, ['石灰', 'ca_percent']));
+
+        if (directN > 0) nVal = directN;
+        if (directP > 0) pVal = directP;
+        if (directK > 0) kVal = directK;
+        if (directMg > 0) mgVal = directMg;
+        if (directCa > 0) caVal = directCa;
+
+        // 成分コード1〜16ループ
+        for (let i = 1; i <= 16; i++) {
+          const codeKey = Object.keys(row).find(k => {
+            const clean = k.replace(/[\s　]+/g, '');
+            return clean === `成分コード${i}` || clean === `成分コード(${i})` || clean === `成分コード_${i}`;
+          });
+          const amountKey = Object.keys(row).find(k => {
+            const clean = k.replace(/[\s　]+/g, '');
+            return clean.includes(`保証成分量${i}`) || clean.includes(`保証成分量(${i})`) || clean.includes(`成分量${i}`);
+          });
+
+          const code = cleanText(codeKey ? String(row[codeKey] || '') : '').toUpperCase();
+          const amount = parsePercent(amountKey ? row[amountKey] : 0);
+
+          if (!code || amount <= 0) continue;
+
+          // --- 窒素 (N) 系統 ---
+          if (code === 'TN' || code === 'N' || code.includes('全窒素')) {
+            nVal = amount;
+            hasTN = true;
+          } else if (code === 'AN' || code === 'NN' || code === 'UN' || code === 'ON' || code === 'CN' || code.includes('窒素')) {
+            if (!hasTN) {
+              nVal += amount;
+            }
+            const label = code === 'AN' ? 'アンモニア性窒素' : code === 'NN' ? '硝酸性窒素' : code === 'UN' ? '尿素態窒素' : code;
+            otherDetails.push(`${label}:${amount}%`);
+          }
+          // --- りん酸 (P) 系統 ---
+          else if (code === 'TP' || code === 'P' || code.includes('全りん酸') || code.includes('全リン酸')) {
+            pVal = amount;
+            hasTP = true;
+          } else if (code === 'WP' || code === 'CP' || code === 'SP' || code.includes('りん酸') || code.includes('リン酸')) {
+            if (!hasTP) {
+              pVal = Math.max(pVal, amount);
+            }
+            const label = code === 'WP' ? '水溶性りん酸' : code === 'CP' ? 'く溶性りん酸' : code === 'SP' ? '可溶性りん酸' : code;
+            otherDetails.push(`${label}:${amount}%`);
+          }
+          // --- 加里 (K) 系統 ---
+          else if (code === 'TK' || code === 'K' || code.includes('全加里') || code.includes('全カリ')) {
+            kVal = amount;
+            hasTK = true;
+          } else if (code === 'WK' || code === 'CK' || code.includes('加里') || code.includes('カリ')) {
+            if (!hasTK) {
+              kVal = Math.max(kVal, amount);
+            }
+            const label = code === 'WK' ? '水溶性加里' : code === 'CK' ? 'く溶性加里' : code;
+            otherDetails.push(`${label}:${amount}%`);
+          }
+          // --- 苦土 (Mg) 系統 ---
+          else if (code.includes('MG') || code.includes('苦土')) {
+            mgVal = Math.max(mgVal, amount);
+            otherDetails.push(`苦土:${amount}%`);
+          }
+          // --- 石灰 (Ca) 系統 ---
+          else if (code.includes('CA') || code.includes('石灰') || code.includes('アルカリ')) {
+            caVal = Math.max(caVal, amount);
+            otherDetails.push(`石灰/アルカリ:${amount}%`);
+          }
+          // --- ほう素・マンガン・その他微量要素 ---
+          else {
+            const label = code === 'B' ? 'ほう素' : code === 'MN' ? 'マンガン' : code === 'FE' ? '鉄' : code;
+            otherDetails.push(`${label}:${amount}%`);
+          }
+        }
+
+        return {
+          registration_no: regNo || `REG-${Date.now()}-${idx}`,
+          registration_date: regDate,
+          fertilizer_name: fName,
+          fertilizer_type: fType || '普通肥料',
+          applicant_name: applicant,
+          applicant_address: address,
+          expiry_status: expiry || '有効',
+          n_percent: Math.round(nVal * 100) / 100,
+          p_percent: Math.round(pVal * 100) / 100,
+          k_percent: Math.round(kVal * 100) / 100,
+          mg_percent: Math.round(mgVal * 100) / 100,
+          ca_percent: Math.round(caVal * 100) / 100,
+          other_ingredients: cleanText(otherDetails.join(' / ')),
+          updated_at: new Date().toISOString()
+        };
+      }).filter((item: any) => item.fertilizer_name);
+
+      if (parsedList.length === 0) {
+        throw new Error('有効な肥料データ（肥料名を含む行）が見つかりませんでした。CSVファイルをご確認ください。');
+      }
+
+      // 厳格な重複除外（同一registration_noの完全一本化）
+      const uniqueMap = new Map();
+      parsedList.forEach((item: any, idx: number) => {
+        let reg = item.registration_no;
+        if (!reg || reg === '-' || reg === 'null' || reg === 'undefined') {
+          reg = `NO-REG-${idx}-${Date.now()}`;
+          item.registration_no = reg;
+        }
+        uniqueMap.set(reg, item);
+      });
+      const uniqueData = Array.from(uniqueMap.values());
+
+      // 完全上書きモードが有効な場合は既存データをクリア
+      if (overwriteMode) {
+        setStatus({ type: 'info', message: '既存のデータをクリアしています...' });
+        await supabase.from('m_fertilizers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      }
+
+      const total = uniqueData.length;
+      setStatus({ type: 'info', message: `${total.toLocaleString()}件の肥料データをSupabaseに一括登録しています...` });
+
+      const chunkSize = 400;
+      for (let i = 0; i < total; i += chunkSize) {
+        const chunk = uniqueData.slice(i, i + chunkSize);
+        
+        // 1. PostgREST Upsert (onConflict)
+        const { error: upsertErr } = await supabase
+          .from('m_fertilizers')
+          .upsert(chunk, { onConflict: 'registration_no', ignoreDuplicates: false });
+
+        if (upsertErr) {
+          if (upsertErr.code === 'PGRST205' || upsertErr.message?.includes('schema cache')) {
+            throw new Error('データベースに「m_fertilizers」テーブルが存在しません。SupabaseのSQL Editorでテーブル作成SQLを実行してください。');
+          }
+          
+          // 2. 制約エラー等の場合のフォールバック（重複無視で登録）
+          const { error: insertErr } = await supabase
+            .from('m_fertilizers')
+            .upsert(chunk, { onConflict: 'registration_no', ignoreDuplicates: true });
+            
+          if (insertErr) {
+            console.warn('Chunk upsert retry failed, doing single items fallback...', insertErr);
+            // 3. 最後の砦：行単位での個別保存
+            for (const item of chunk) {
+              try {
+                await supabase.from('m_fertilizers').upsert([item], { onConflict: 'registration_no' });
+              } catch (singleErr) {
+                // 個別エラーはスキップして継続
+              }
+            }
+          }
+        }
+
+        const processed = Math.min(i + chunkSize, total);
+        setProgress({ current: processed, total });
+        const percent = Math.round((processed / total) * 100);
+        setStatus({ 
+          type: 'info', 
+          message: `データベースに保存中... (${processed.toLocaleString()} / ${total.toLocaleString()}件 - ${percent}%)` 
+        });
+      }
+
+      setStatus({ 
+        type: 'success', 
+        message: `🎉 FAMIC公的肥料マスターのインポートが完了しました！（全 ${total.toLocaleString()} 件）` 
+      });
+      setFile(null);
       fetchStatsAndList();
     } catch (err: any) {
-      setStatus({ type: 'error', message: `削除エラー: ${err.message}` });
+      console.error(err);
+      setStatus({ type: 'error', message: `インポートエラー: ${err.message || 'CSVの解析に失敗しました'}` });
     } finally {
       setLoading(false);
+      setProgress(null);
     }
   };
 
@@ -614,19 +630,14 @@ CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR
           </div>
         </div>
 
-        <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">マスター操作</p>
-            <p className="text-xs text-slate-400 mt-1">全件再登録時の初期化</p>
+        <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-teal-500/10 border border-teal-500/20 text-teal-400 flex items-center justify-center">
+            <CheckCircle2 className="w-6 h-6" />
           </div>
-          <button
-            onClick={handleClearAll}
-            disabled={loading || totalCount === 0}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl text-xs font-bold transition-colors disabled:opacity-40"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            全件クリア
-          </button>
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">データ保護モード</p>
+            <p className="text-2xl font-black text-teal-300 mt-0.5">安全スマート更新</p>
+          </div>
         </div>
       </div>
 
@@ -760,96 +771,105 @@ CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR
 
         <div className="overflow-x-auto rounded-2xl border border-slate-800/80">
           <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-900/80 text-xs font-black text-slate-400 uppercase border-b border-slate-800">
+            <thead className="bg-slate-900/90 text-xs font-black text-slate-400 uppercase border-b border-slate-800">
               <tr>
-                <th className="p-4">登録番号</th>
-                <th className="p-4">肥料の名称 (銘柄)</th>
-                <th className="p-4">肥料種類</th>
-                <th className="p-4">製造・肥料業者</th>
-                <th className="p-4 text-center">N - P - K 保証成分比率</th>
-                <th className="p-4 text-right">操作</th>
+                <th className="p-4 w-32 sm:w-36 whitespace-nowrap">登録番号・日付</th>
+                <th className="p-4 min-w-[280px]">肥料の名称 (銘柄) ＆ 保証成分比率 (N - P - K)</th>
+                <th className="p-4 w-52 sm:w-60">種類 / 製造・肥料業者</th>
+                <th className="p-4 w-20 text-right whitespace-nowrap">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-medium">
               {previewLoading ? (
                 <tr>
-                  <td colSpan={6} className="p-12 text-center text-slate-500">
+                  <td colSpan={4} className="p-12 text-center text-slate-500">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-400" />
                     データを読み込んでいます...
                   </td>
                 </tr>
               ) : fertilizers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-12 text-center text-slate-500">
+                  <td colSpan={4} className="p-12 text-center text-slate-500">
                     登録されている肥料データがありません。上のフォームからCSVをインポートしてください。
                   </td>
                 </tr>
               ) : (
                 fertilizers.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-900/50 transition-colors">
-                    <td className="p-4 text-xs font-mono text-slate-400 whitespace-nowrap">
-                      <div>{item.registration_no || '-'}</div>
+                  <tr key={item.id} className="hover:bg-slate-900/60 transition-colors">
+                    {/* 1. 登録番号・日付 */}
+                    <td className="p-4 align-top text-xs font-mono whitespace-nowrap">
+                      <div className="font-bold text-slate-200">{item.registration_no || '-'}</div>
                       {item.registration_date && (
-                        <div className="text-[10px] text-slate-500">{item.registration_date}</div>
+                        <div className="text-2xs text-slate-400 mt-0.5">{item.registration_date}</div>
                       )}
                     </td>
-                    <td className="p-4 font-bold text-white">
-                      <div className="flex items-center gap-2">
-                        {item.fertilizer_name}
+
+                    {/* 2. 肥料名 ＆ 高視認性 N-P-K 成分比率バー（横スクロール見切れ一切ゼロ！） */}
+                    <td className="p-4 align-top">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <span className="text-base font-black text-white tracking-wide">{item.fertilizer_name}</span>
                         {item.expiry_status && item.expiry_status.includes('失効') && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.2 bg-rose-950 text-rose-300 border border-rose-800 rounded">
+                          <span className="text-2xs font-black px-2 py-0.5 bg-rose-950/80 text-rose-300 border border-rose-700/60 rounded-full">
                             {item.expiry_status}
                           </span>
                         )}
                       </div>
-                      {item.other_ingredients && (
-                        <span className="block text-[10px] text-slate-400 font-normal mt-0.5 max-w-md truncate">
-                          {item.other_ingredients}
+
+                      {/* 🌟 N-P-K 保証成分比率バッジ（チッソ・リン酸・カリ） */}
+                      <div className="flex flex-wrap items-center gap-1.5 font-mono">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-950/80 text-blue-200 border border-blue-700/70 rounded-lg text-xs font-bold shadow-2xs">
+                          <span className="text-blue-400 font-black">N</span>
+                          <strong className="text-sm font-black text-white">{item.n_percent}%</strong>
                         </span>
-                      )}
-                    </td>
-                    <td className="p-4 whitespace-nowrap">
-                      <span className="text-xs px-2.5 py-0.5 rounded-md font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                        {item.fertilizer_type || '普通肥料'}
-                      </span>
-                    </td>
-                    <td className="p-4 text-xs text-slate-400 whitespace-nowrap">
-                      <div>{item.applicant_name || '-'}</div>
-                      {item.applicant_address && (
-                        <div className="text-[10px] text-slate-500 max-w-xs truncate">{item.applicant_address}</div>
-                      )}
-                    </td>
-                    <td className="p-4 text-center whitespace-nowrap">
-                      <div className="inline-flex items-center gap-1.5 font-mono text-xs font-black">
-                        <span className="px-2 py-0.5 bg-blue-950 text-blue-300 border border-blue-800 rounded">
-                          N {item.n_percent}%
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-950/80 text-amber-200 border border-amber-700/70 rounded-lg text-xs font-bold shadow-2xs">
+                          <span className="text-amber-400 font-black">P</span>
+                          <strong className="text-sm font-black text-white">{item.p_percent}%</strong>
                         </span>
-                        <span className="px-2 py-0.5 bg-amber-950 text-amber-300 border border-amber-800 rounded">
-                          P {item.p_percent}%
-                        </span>
-                        <span className="px-2 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800 rounded">
-                          K {item.k_percent}%
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-950/80 text-emerald-200 border border-emerald-700/70 rounded-lg text-xs font-bold shadow-2xs">
+                          <span className="text-emerald-400 font-black">K</span>
+                          <strong className="text-sm font-black text-white">{item.k_percent}%</strong>
                         </span>
                         {(item.mg_percent > 0 || item.ca_percent > 0) && (
-                          <span className="text-[10px] text-slate-400 ml-1">
-                            {item.mg_percent > 0 ? `Mg:${item.mg_percent}% ` : ''}
-                            {item.ca_percent > 0 ? `Ca:${item.ca_percent}%` : ''}
+                          <span className="px-2 py-1 bg-slate-800 text-slate-300 border border-slate-700 rounded-lg text-2xs font-bold">
+                            {item.mg_percent > 0 ? `苦土:${item.mg_percent}% ` : ''}
+                            {item.ca_percent > 0 ? `石灰:${item.ca_percent}%` : ''}
                           </span>
                         )}
                       </div>
+
+                      {item.other_ingredients && (
+                        <p className="text-xs text-slate-400 font-medium mt-1.5 max-w-xl line-clamp-1" title={item.other_ingredients}>
+                          {item.other_ingredients}
+                        </p>
+                      )}
                     </td>
-                    <td className="p-4 text-right whitespace-nowrap">
+
+                    {/* 3. 種類 / 製造・肥料業者 */}
+                    <td className="p-4 align-top text-xs">
+                      <span className="inline-block px-2 py-0.5 rounded-md font-bold bg-slate-800 text-slate-200 border border-slate-700 mb-1">
+                        {item.fertilizer_type || '普通肥料'}
+                      </span>
+                      <div className="font-bold text-slate-300 mt-1">{item.applicant_name || '-'}</div>
+                      {item.applicant_address && (
+                        <div className="text-2xs text-slate-400 max-w-xs truncate mt-0.5" title={item.applicant_address}>
+                          {item.applicant_address}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* 4. 操作ボタン */}
+                    <td className="p-4 align-top text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => handleOpenEdit(item)}
-                          className="p-1.5 text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 rounded-lg transition-colors"
+                          className="p-2 text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 rounded-xl transition-colors"
                           title="編集"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleDeleteItem(item.id)}
-                          className="p-1.5 text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-900/60 rounded-lg transition-colors"
+                          className="p-2 text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-900/60 rounded-xl transition-colors"
                           title="削除"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
