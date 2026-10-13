@@ -137,6 +137,12 @@ export default function SuperAdminLogsPage() {
 
   // 推奨アクションの自動生成
   const getRecommendation = (category: string, message: string) => {
+    if (category === 'past_unclocked_alert' || message.includes('PAST_ALERT_SENT')) {
+      return '【正常稼働】農園管理者への「前日以前の未退勤リマインドLINE送信」が正常完了した記録（重複送信防止フラグ）です。システムは正常に稼働しており、障害対応は不要です。';
+    }
+    if (category === 'line_notification' || message.includes('LINE_ALERT_SENT')) {
+      return '【正常稼働】LINE自動通知が正常に送信された記録です。システムは正常に稼働しており、対応は不要です。';
+    }
     if (category === 'attendance' || message.includes('打刻') || message.includes('出勤') || message.includes('退勤')) {
       return '同日の重複打刻レコードが存在しないか、または作業者一覧テーブルのステータスを確認してください。';
     }
@@ -147,6 +153,16 @@ export default function SuperAdminLogsPage() {
       return '現場端末の電波状況、またはオフラインキャッシュの同期状態を確認してください。';
     }
     return 'スタックトレースとリクエスト情報からエラーの原因箇所を調査・対応してください。';
+  };
+
+  // メッセージの親切な日本語ラベル化
+  const formatLogTitle = (category: string, message: string) => {
+    if (category === 'past_unclocked_alert' || message.startsWith('PAST_ALERT_SENT_')) {
+      const dateMatch = message.match(/\d{4}-\d{2}-\d{2}/);
+      const dateStr = dateMatch ? dateMatch[0] : '';
+      return `🌿【正常通知】過去の未退勤リマインドLINE送信完了 ${dateStr ? `(対象: ${dateStr})` : ''}`;
+    }
+    return message;
   };
 
   // 実DBログ取得関数
@@ -164,12 +180,12 @@ export default function SuperAdminLogsPage() {
         const mapped: SystemLog[] = data.logs.map((item: any) => ({
           id: item.id,
           type: item.error_level || 'error',
-          message: item.error_message || '不明なエラー',
+          message: formatLogTitle(item.error_category, item.error_message || '不明なエラー'),
           tenant: item.company_name || item.tenant_id || '未特定農園',
-          worker: item.worker_name,
+          worker: item.worker_name || (item.error_category === 'past_unclocked_alert' ? '農園管理者（一括通知）' : undefined),
           time: formatTimeAgo(item.created_at),
           rawTime: item.created_at,
-          code: item.error_category || 'SYSTEM_ERR',
+          code: item.error_category === 'past_unclocked_alert' ? 'LINE通知完了' : (item.error_category || 'SYSTEM_ERR'),
           path: item.page_url,
           stack: item.error_stack,
           payload: {
@@ -177,7 +193,8 @@ export default function SuperAdminLogsPage() {
             worker_name: item.worker_name,
             device_info: item.device_info,
             resolved: item.is_resolved,
-            resolved_at: item.resolved_at
+            resolved_at: item.resolved_at,
+            raw_message: item.error_message
           },
           recommendation: getRecommendation(item.error_category, item.error_message),
           is_resolved: item.is_resolved
@@ -480,7 +497,7 @@ export default function SuperAdminLogsPage() {
         <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-sm font-bold text-slate-400">
           <div className="flex items-center gap-2">
             <Terminal className="w-4 h-4 text-emerald-400" />
-            <span>最新のエラー・警告ログ ({logs.length}件)</span>
+            <span>最新のシステム稼働・エラー・通知ログ ({logs.length}件)</span>
           </div>
           <div className="flex items-center gap-3">
             <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -506,11 +523,19 @@ export default function SuperAdminLogsPage() {
                   <div className={`p-2.5 rounded-xl shrink-0 mt-0.5 ${
                     log.is_resolved
                       ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                      : log.type === 'error' 
-                        ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' 
-                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                      : log.code.includes('LINE') || log.type === 'info'
+                        ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20'
+                        : log.type === 'error' 
+                          ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' 
+                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                   }`}>
-                    {log.is_resolved ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <AlertTriangle className="w-5 h-5" />}
+                    {log.is_resolved ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                    ) : log.code.includes('LINE') || log.type === 'info' ? (
+                      <CheckCircle2 className="w-5 h-5 text-teal-400" />
+                    ) : (
+                      <AlertTriangle className="w-5 h-5" />
+                    )}
                   </div>
 
                   <div className="space-y-1">
@@ -518,9 +543,11 @@ export default function SuperAdminLogsPage() {
                       <span className={`text-xs font-black px-2.5 py-0.5 rounded-md font-mono ${
                         log.is_resolved
                           ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                          : log.type === 'error' 
-                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' 
-                            : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          : log.code.includes('LINE') || log.type === 'info'
+                            ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
+                            : log.type === 'error' 
+                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' 
+                              : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                       }`}>
                         {log.is_resolved ? 'RESOLVED' : log.code}
                       </span>
@@ -536,7 +563,7 @@ export default function SuperAdminLogsPage() {
                       </span>
                       {log.worker && (
                         <span className="flex items-center gap-1 text-slate-300 font-sans font-bold">
-                          作業者: <span className="text-indigo-300">{log.worker}</span>
+                          対象: <span className="text-indigo-300">{log.worker}</span>
                         </span>
                       )}
                       <span className="flex items-center gap-1">
@@ -583,9 +610,11 @@ export default function SuperAdminLogsPage() {
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span className={`text-xs font-black px-2.5 py-0.5 rounded-md font-mono ${
-                    selectedLog.type === 'error' 
-                      ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' 
-                      : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                    selectedLog.code.includes('LINE') || selectedLog.type === 'info'
+                      ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
+                      : selectedLog.type === 'error' 
+                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' 
+                        : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                   }`}>
                     {selectedLog.code}
                   </span>
@@ -605,10 +634,24 @@ export default function SuperAdminLogsPage() {
 
             {/* 推奨対応手順 */}
             {selectedLog.recommendation && (
-              <div className="bg-indigo-950/40 border border-indigo-500/40 rounded-2xl p-4 space-y-1">
-                <h4 className="text-xs font-black text-indigo-300 flex items-center gap-1.5">
-                  <ShieldAlert className="w-4 h-4" />
-                  推奨される対応手順:
+              <div className={`rounded-2xl p-4 space-y-1 border ${
+                selectedLog.code.includes('LINE') || selectedLog.type === 'info'
+                  ? 'bg-teal-950/40 border-teal-500/40'
+                  : 'bg-indigo-950/40 border-indigo-500/40'
+              }`}>
+                <h4 className={`text-xs font-black flex items-center gap-1.5 ${
+                  selectedLog.code.includes('LINE') || selectedLog.type === 'info'
+                    ? 'text-teal-300'
+                    : 'text-indigo-300'
+                }`}>
+                  {selectedLog.code.includes('LINE') || selectedLog.type === 'info' ? (
+                    <CheckCircle2 className="w-4 h-4 text-teal-400" />
+                  ) : (
+                    <ShieldAlert className="w-4 h-4" />
+                  )}
+                  {selectedLog.code.includes('LINE') || selectedLog.type === 'info'
+                    ? 'システム稼働状況（正常）:'
+                    : '推奨される対応手順:'}
                 </h4>
                 <p className="text-sm font-bold text-slate-200">
                   {selectedLog.recommendation}
@@ -678,7 +721,12 @@ export default function SuperAdminLogsPage() {
                 {selectedLog.is_resolved ? (
                   <>
                     <RefreshCw className="w-3.5 h-3.5" />
-                    未解決に戻す
+                    未確認に戻す
+                  </>
+                ) : selectedLog.code.includes('LINE') || selectedLog.type === 'info' ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    確認完了（アーカイブ）
                   </>
                 ) : (
                   <>
