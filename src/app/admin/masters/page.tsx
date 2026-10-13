@@ -65,6 +65,13 @@ export default function MastersPage() {
   const [materialViewMode, setMaterialViewMode] = useState<'card' | 'table'>('table');
   const [pesticideSubFilter, setPesticideSubFilter] = useState<'all' | 'insecticide' | 'fungicide' | 'herbicide'>('all');
 
+  // 基本マスタ（作目・圃場・作業者・部署）用の検索・フィルター状態管理
+  const [cropSearch, setCropSearch] = useState("");
+  const [fieldSearch, setFieldSearch] = useState("");
+  const [workerSearch, setWorkerSearch] = useState("");
+  const [workerLineFilter, setWorkerLineFilter] = useState<'all' | 'unlinked' | 'linked'>('all');
+  const [deptSearch, setDeptSearch] = useState("");
+
   const fileInputRefMats = useRef<HTMLInputElement>(null);
   const fileInputRefPesticides = useRef<HTMLInputElement>(null);
   const fileInputRefFertilizers = useRef<HTMLInputElement>(null);
@@ -73,6 +80,7 @@ export default function MastersPage() {
   const fileInputRefFields = useRef<HTMLInputElement>(null);
   const fileInputRefWorkers = useRef<HTMLInputElement>(null);
   const fileInputRefChannels = useRef<HTMLInputElement>(null);
+  const fileInputRefDepartments = useRef<HTMLInputElement>(null);
 
   const fetchMasters = async () => {
     try {
@@ -573,6 +581,7 @@ export default function MastersPage() {
     else if (type === 'crops') helpContent = "栽培する作目を登録します。登録した作目は、作業記録や売上登録の際に選択肢として表示されます。";
     else if (type === 'fields') helpContent = "農地（圃場）を登録します。面積を入力しておくと、ダッシュボードでの利益分析に活用できます。";
     else if (type === 'workers') helpContent = "農作業を行うスタッフを登録します。時給を設定すると、ダッシュボードで人件費として自動計算されます。";
+    else if (type === 'departments') helpContent = "農園の部署・チームを登録します。作業者を所属部署ごとに分類して管理できます。";
 
     return (
       <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3 gap-2">
@@ -682,6 +691,39 @@ export default function MastersPage() {
     return true;
   });
 
+  // 基本マスタの実務サマリー＆フィルタリング計算
+  const totalFieldArea = fields.reduce((sum, f) => sum + (Number(f.area_size) || 0), 0);
+  const mappedFieldCount = fields.filter(f => f.polygon_coordinates).length;
+
+  const linkedWorkerCount = workers.filter(w => w.line_user_id).length;
+  const unlinkedWorkerCount = workers.filter(w => !w.line_user_id).length;
+
+  // 絞り込み済みリスト
+  const filteredCrops = crops.filter(c => 
+    !cropSearch.trim() || (c.name || '').toLowerCase().includes(cropSearch.trim().toLowerCase())
+  );
+
+  const filteredFields = fields.filter(f => 
+    !fieldSearch.trim() || (f.name || '').toLowerCase().includes(fieldSearch.trim().toLowerCase())
+  );
+
+  const filteredWorkers = workers.filter(w => {
+    if (workerLineFilter === 'unlinked' && w.line_user_id) return false;
+    if (workerLineFilter === 'linked' && !w.line_user_id) return false;
+    if (workerSearch.trim()) {
+      const q = workerSearch.trim().toLowerCase();
+      const matchName = (w.name || '').toLowerCase().includes(q);
+      const matchPin = (w.pin_code || '').includes(q);
+      const matchLinePin = (w.line_link_pin || '').toLowerCase().includes(q);
+      if (!matchName && !matchPin && !matchLinePin) return false;
+    }
+    return true;
+  });
+
+  const filteredDepartments = departments.filter(d => 
+    !deptSearch.trim() || (d.name || '').toLowerCase().includes(deptSearch.trim().toLowerCase())
+  );
+
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-12 relative">
       <div>
@@ -709,23 +751,52 @@ export default function MastersPage() {
         </div>
       ) : (
         <>
-          <h2 className="text-xl font-bold text-slate-700 mt-8 mb-4 border-b-2 border-slate-200 inline-block pb-1">基本マスタ</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="flex items-center justify-between mt-8 mb-4">
+            <div>
+              <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                <Database className="w-5 h-5 text-emerald-600" />
+                基本マスタ（4大分類）
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">作目・圃場・作業者・部署の基本情報です。検索や実務サマリー、LINE連携案内を1画面で完結できます。</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             
-            {/* 作目一覧 */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[420px]">
+            {/* 1. 作目一覧 */}
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
               <CardHeader icon={Sprout} title={`作目 (${crops.length})`} type="crops" />
-              <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
-                {crops.length === 0 ? <p className="text-slate-400 text-sm">データなし</p> : null}
-                {crops.map(c => (
-                  <div key={c.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
-                    <span className="font-bold text-slate-700">{c.name}</span>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleOpenModal('crops', c)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
-                        <Edit2 className="w-4 h-4" />
+              
+              {/* ミニ検索窓 */}
+              <div className="relative mb-2.5">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={cropSearch}
+                  onChange={(e) => setCropSearch(e.target.value)}
+                  placeholder="作目を検索..."
+                  className="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-400"
+                />
+                {cropSearch && (
+                  <button onClick={() => setCropSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-1.5 overflow-y-auto flex-1 mb-3 pr-1">
+                {filteredCrops.length === 0 ? (
+                  <p className="text-slate-400 text-xs text-center py-8">{cropSearch ? '一致する作目なし' : 'データなし'}</p>
+                ) : null}
+                {filteredCrops.map(c => (
+                  <div key={c.id} className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
+                    <span className="font-bold text-slate-700 text-xs sm:text-sm">{c.name}</span>
+                    <div className="flex gap-1 opacity-70 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => handleOpenModal('crops', c)} className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded" title="編集">
+                        <Edit2 className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => handleDelete('crops', c.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                        <Trash2 className="w-4 h-4" />
+                      <button onClick={() => handleDelete('crops', c.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="削除">
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -734,24 +805,54 @@ export default function MastersPage() {
               <CsvActionButtons type="crops" inputRef={fileInputRefCrops} />
             </div>
 
-            {/* 圃場一覧 */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[420px]">
+            {/* 2. 圃場一覧 */}
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
               <CardHeader icon={MapPin} title={`圃場 (${fields.length})`} type="fields" />
-              <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
-                {fields.length === 0 ? <p className="text-slate-400 text-sm">データなし</p> : null}
-                {fields.map(f => (
-                  <div key={f.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
+              
+              {/* 実務サマリーバー: 合計面積 ＆ マップ連携数 */}
+              <div className="flex items-center justify-between gap-1 bg-emerald-50/70 border border-emerald-200/80 px-2.5 py-1 rounded-lg text-[11px] mb-2 font-bold">
+                <span className="text-emerald-900">
+                  総面積: <strong className="text-emerald-950 font-black font-mono">{totalFieldArea.toFixed(1)}a</strong>
+                </span>
+                <span className="text-emerald-700 text-[10px]">
+                  マップ済: {mappedFieldCount}/{fields.length}
+                </span>
+              </div>
+
+              {/* ミニ検索窓 */}
+              <div className="relative mb-2.5">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={fieldSearch}
+                  onChange={(e) => setFieldSearch(e.target.value)}
+                  placeholder="圃場名で検索..."
+                  className="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-400"
+                />
+                {fieldSearch && (
+                  <button onClick={() => setFieldSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-1.5 overflow-y-auto flex-1 mb-3 pr-1">
+                {filteredFields.length === 0 ? (
+                  <p className="text-slate-400 text-xs text-center py-8">{fieldSearch ? '一致する圃場なし' : 'データなし'}</p>
+                ) : null}
+                {filteredFields.map(f => (
+                  <div key={f.id} className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
                     <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
-                      <span className="font-bold text-slate-700">{f.name}</span>
+                      <span className="font-bold text-slate-700 text-xs sm:text-sm">{f.name}</span>
                       {f.area_size && <span className="text-[10px] text-slate-500 font-bold whitespace-nowrap">{f.area_size}a</span>}
                       {f.polygon_coordinates && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold border border-emerald-200 whitespace-nowrap shrink-0 inline-block">マップ連携済</span>}
                     </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleOpenModal('fields', f)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
-                        <Edit2 className="w-4 h-4" />
+                    <div className="flex gap-1 opacity-70 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => handleOpenModal('fields', f)} className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded" title="編集">
+                        <Edit2 className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => handleDelete('fields', f.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                        <Trash2 className="w-4 h-4" />
+                      <button onClick={() => handleDelete('fields', f.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="削除">
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -760,59 +861,117 @@ export default function MastersPage() {
               <CsvActionButtons type="fields" inputRef={fileInputRefFields} />
             </div>
 
-            {/* 作業者一覧 */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[420px]">
+            {/* 3. 作業者一覧 */}
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
               <CardHeader icon={User} title={`作業者 (${workers.length})`} type="workers" />
-              <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
-                {workers.length === 0 ? <p className="text-slate-400 text-sm">データなし</p> : null}
-                {workers.map(w => (
-                  <div key={w.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors gap-2">
-                    <div className="space-y-1.5 flex-1 min-w-0 pr-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-slate-800 text-sm">{w.name}</span>
-                        <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-300 px-1.5 py-0.5 rounded font-mono font-bold whitespace-nowrap" title="現場打刻・ログイン用暗証番号（4桁）">
-                          打刻PIN: {w.pin_code || '0000'}
+              
+              {/* 実務サマリー ＆ ワンタップLINEフィルター */}
+              <div className="space-y-1 mb-2">
+                <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 px-0.5">
+                  <span>全{workers.length}名</span>
+                  <span>
+                    済 <strong className="text-emerald-700">{linkedWorkerCount}</strong> / 未 <strong className={unlinkedWorkerCount > 0 ? "text-amber-600" : "text-slate-400"}>{unlinkedWorkerCount}名</strong>
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
+                  <button
+                    onClick={() => setWorkerLineFilter('all')}
+                    className={`flex-1 py-0.5 rounded transition-colors cursor-pointer ${
+                      workerLineFilter === 'all' ? 'bg-white text-slate-800 shadow-2xs font-black' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    全員
+                  </button>
+                  <button
+                    onClick={() => setWorkerLineFilter('unlinked')}
+                    className={`flex-1 py-0.5 rounded transition-colors cursor-pointer flex items-center justify-center gap-0.5 ${
+                      workerLineFilter === 'unlinked' ? 'bg-amber-500 text-white shadow-2xs font-black' : 'text-amber-700 hover:bg-amber-100/50'
+                    }`}
+                  >
+                    未連携{unlinkedWorkerCount > 0 ? ` (${unlinkedWorkerCount})` : ''}
+                  </button>
+                  <button
+                    onClick={() => setWorkerLineFilter('linked')}
+                    className={`flex-1 py-0.5 rounded transition-colors cursor-pointer ${
+                      workerLineFilter === 'linked' ? 'bg-emerald-600 text-white shadow-2xs font-black' : 'text-emerald-700 hover:bg-emerald-100/50'
+                    }`}
+                  >
+                    連携済
+                  </button>
+                </div>
+              </div>
+
+              {/* ミニ検索窓 */}
+              <div className="relative mb-2.5">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={workerSearch}
+                  onChange={(e) => setWorkerSearch(e.target.value)}
+                  placeholder="氏名・PINで検索..."
+                  className="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-400"
+                />
+                {workerSearch && (
+                  <button onClick={() => setWorkerSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-1.5 overflow-y-auto flex-1 mb-3 pr-1">
+                {filteredWorkers.length === 0 ? (
+                  <p className="text-slate-400 text-xs text-center py-8">
+                    {workerSearch ? '一致する作業者なし' : workerLineFilter === 'unlinked' ? '未連携のスタッフはいません🎉' : 'データなし'}
+                  </p>
+                ) : null}
+                {filteredWorkers.map(w => (
+                  <div key={w.id} className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors gap-1.5">
+                    <div className="space-y-1 flex-1 min-w-0 pr-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-slate-800 text-xs sm:text-sm">{w.name}</span>
+                        <span className="text-[9px] bg-slate-100 text-slate-600 border border-slate-300 px-1 py-0.2 rounded font-mono font-bold whitespace-nowrap" title="現場打刻PIN">
+                          PIN: {w.pin_code || '0000'}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 flex-wrap text-xs">
+                      <div className="flex items-center gap-1.5 flex-wrap text-xs">
                         {w.line_user_id ? (
-                          <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-black flex items-center gap-1 border border-emerald-300 whitespace-nowrap">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> LINE連携済
+                          <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-black flex items-center gap-0.5 border border-emerald-300 whitespace-nowrap">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" /> LINE済
                           </span>
                         ) : (
                           <div 
                             onClick={() => setSelectedWorkerForLine(w)} 
-                            className="flex items-center gap-1.5 flex-wrap cursor-pointer group/line" 
+                            className="flex items-center gap-1 flex-wrap cursor-pointer group/line" 
                             title="クリックしてこのスタッフ専用のLINE連携案内を開く"
                           >
-                            <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold border border-amber-300 whitespace-nowrap">
-                              LINE未連携
+                            <span className="text-[9px] bg-amber-100 text-amber-800 px-1 py-0.2 rounded font-bold border border-amber-300 whitespace-nowrap">
+                              未連携
                             </span>
-                            <span className="text-[11px] font-mono font-black text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded shadow-2xs whitespace-nowrap flex items-center gap-1 transition-colors" title="スタッフが公式LINEに送信する専用コード">
-                              <span className="text-[9px] text-emerald-600 font-bold">LINEコード:</span>
+                            <span className="text-[10px] font-mono font-black text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-1.5 py-0.2 rounded shadow-2xs whitespace-nowrap flex items-center gap-0.5 transition-colors" title="スタッフが公式LINEに送信する専用コード">
+                              <span className="text-[8px] text-emerald-600 font-bold">LINE:</span>
                               <strong className="text-emerald-950 font-mono tracking-wider font-black">{w.line_link_pin || '----'}</strong>
                             </span>
                           </div>
                         )}
-                        <span className="text-xs text-slate-400 whitespace-nowrap">時給: ¥{w.hourly_wage}</span>
+                        <span className="text-[10px] text-slate-400 whitespace-nowrap">¥{w.hourly_wage}/h</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       {!w.line_user_id && (
                         <button 
                           onClick={() => setSelectedWorkerForLine(w)} 
-                          className="px-2 py-1 text-emerald-700 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                          className="px-1.5 py-1 text-emerald-700 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-lg text-[10px] font-bold flex items-center gap-0.5 transition-colors cursor-pointer shadow-2xs"
                           title="このスタッフ専用のLINE連携QR・コード案内を表示"
                         >
-                          <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
-                          <span className="hidden sm:inline">LINE案内</span>
+                          <Smartphone className="w-3 h-3 text-emerald-600" />
+                          <span className="hidden xl:inline">案内</span>
                         </button>
                       )}
-                      <button onClick={() => handleOpenModal('workers', w)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg opacity-60 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Edit2 className="w-4 h-4" />
+                      <button onClick={() => handleOpenModal('workers', w)} className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded opacity-70 sm:opacity-0 group-hover:opacity-100 transition-opacity" title="編集">
+                        <Edit2 className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => handleDelete('workers', w.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-60 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Trash2 className="w-4 h-4" />
+                      <button onClick={() => handleDelete('workers', w.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded opacity-70 sm:opacity-0 group-hover:opacity-100 transition-opacity" title="削除">
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -821,26 +980,60 @@ export default function MastersPage() {
               <CsvActionButtons type="workers" inputRef={fileInputRefWorkers} />
             </div>
 
-            {/* 部署 */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[420px]">
+            {/* 4. 部署一覧 */}
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
               <CardHeader icon={Briefcase} title={`部署 (${departments.length})`} type="departments" />
-              <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
-                {departments.length === 0 ? <p className="text-slate-400 text-sm">データなし</p> : null}
-                {departments.map(d => (
-                  <div key={d.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
-                    <span className="font-bold text-slate-700">{d.name}</span>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleOpenModal('departments', d)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => handleDelete('departments', d.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+              
+              {/* 実務サマリーバー */}
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 bg-slate-50 border border-slate-200/80 px-2.5 py-1 rounded-lg mb-2">
+                <span>組織・部門</span>
+                <span className="text-slate-500 font-mono">全 {departments.length} 部署</span>
               </div>
-              <CsvActionButtons type="departments" inputRef={undefined as any} />
+
+              {/* ミニ検索窓 */}
+              <div className="relative mb-2.5">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={deptSearch}
+                  onChange={(e) => setDeptSearch(e.target.value)}
+                  placeholder="部署名を検索..."
+                  className="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-slate-400"
+                />
+                {deptSearch && (
+                  <button onClick={() => setDeptSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-1.5 overflow-y-auto flex-1 mb-3 pr-1">
+                {filteredDepartments.length === 0 ? (
+                  <p className="text-slate-400 text-xs text-center py-8">{deptSearch ? '一致する部署なし' : 'データなし'}</p>
+                ) : null}
+                {filteredDepartments.map(d => {
+                  const assignedCount = workers.filter(w => w.department_id === d.id).length;
+                  return (
+                    <div key={d.id} className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                        <span className="font-bold text-slate-700 text-xs sm:text-sm truncate">{d.name}</span>
+                        <span className="text-[10px] bg-slate-200/70 text-slate-600 px-1.5 py-0.2 rounded font-bold whitespace-nowrap shrink-0">
+                          {assignedCount}名
+                        </span>
+                      </div>
+                      <div className="flex gap-1 opacity-70 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => handleOpenModal('departments', d)} className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded" title="編集">
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => handleDelete('departments', d.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="削除">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <CsvActionButtons type="departments" inputRef={fileInputRefDepartments} />
             </div>
           </div>
 
