@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Database, Upload, FileText, CheckCircle2, AlertTriangle, 
   Loader2, Search, ArrowLeft, Trash2, Plus, Edit2, RefreshCw, 
-  Layers, FlaskConical, Check, X, ShieldAlert, Copy, CheckCheck
+  Layers, FlaskConical, Check, X, ShieldAlert, Copy, CheckCheck, ExternalLink
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { createBrowserClient } from '@supabase/ssr';
@@ -643,15 +643,45 @@ CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR
 
       {/* CSVインポートセクション */}
       <div className="bg-slate-950 p-6 md:p-8 rounded-3xl border border-slate-800 shadow-lg space-y-6">
-        <div className="flex items-center gap-3 border-b border-slate-800/80 pb-4">
-          <div className="p-2 bg-emerald-600/20 text-emerald-400 rounded-xl border border-emerald-500/20">
-            <Upload className="w-5 h-5" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-5">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-emerald-600/20 text-emerald-400 rounded-xl border border-emerald-500/20 shrink-0">
+              <Upload className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black text-white">FAMIC / 公的肥料CSV一括インポート</h2>
+                <span className="hidden sm:inline-block px-2 py-0.5 bg-indigo-950/60 text-indigo-300 border border-indigo-800/60 rounded-full text-2xs font-bold">
+                  農水省・FAMIC公的規格準拠
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                「登録番号」「肥料の名称」「成分コード1〜16」「保証成分量1〜16」等の公的フォーマットCSVに対応。
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-black text-white">FAMIC / 公的肥料CSV一括インポート</h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              農林水産省・FAMIC形式（「登録番号」「肥料の名称」「成分コード1〜16」「保証成分量1〜16」等）のCSVに対応。
-            </p>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <a
+              href="https://fertilizer-search.maff.go.jp/FertilizerRegistrationSearch"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-bold transition-all shadow-sm hover:text-white"
+              title="農林水産省の肥料登録銘柄検索システム（公式）を新しいタブで開く"
+            >
+              <span>農水省 肥料検索へ</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+            <a
+              href="https://www.famic.go.jp/ffis/fert/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-xs font-bold transition-all shadow-sm"
+              title="FAMIC（農林水産消費安全技術センター）肥料関係ポータル（公式）を新しいタブで開く"
+            >
+              <span>FAMIC公式ポータル</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
           </div>
         </div>
 
