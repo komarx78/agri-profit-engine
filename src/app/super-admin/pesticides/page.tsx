@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Database, Upload, FileText, CheckCircle2, AlertTriangle, Loader2, Search, ArrowLeft, Trash2, ExternalLink, Calendar, X } from 'lucide-react';
+import { Database, Upload, FileText, CheckCircle2, AlertTriangle, Loader2, Search, ArrowLeft, ExternalLink, Calendar, X } from 'lucide-react';
 import Papa from 'papaparse';
 import { createBrowserClient } from '@supabase/ssr';
 import Link from 'next/link';
@@ -285,38 +285,6 @@ export default function AdminPesticidesPage() {
     }
   };
 
-  const handleClearUsages = async () => {
-    if (!window.confirm('適用部（作物・使用法など）のデータをすべて削除します。よろしいですか？')) return;
-    setLoading(true);
-    setStatus({ type: 'info', message: '適用部データを削除中...' });
-    try {
-      const { error } = await supabase.from('m_pesticide_usages').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      if (error) throw error;
-      setStatus({ type: 'success', message: '適用部データをすべて削除しました。' });
-      fetchDbStats();
-    } catch (error: any) {
-      setStatus({ type: 'error', message: `削除エラー: ${error.message}` });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleClearBasics = async () => {
-    if (!window.confirm('基本部（農薬名など）のデータをすべて削除します。よろしいですか？')) return;
-    setLoading(true);
-    setStatus({ type: 'info', message: '基本部データを削除中...' });
-    try {
-      const { error } = await supabase.from('m_pesticides').delete().neq('registration_no', '00000');
-      if (error) throw error;
-      setStatus({ type: 'success', message: '基本部データをすべて削除しました。' });
-      fetchDbStats();
-    } catch (error: any) {
-      setStatus({ type: 'error', message: `削除エラー: ${error.message}` });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="space-y-8 pb-12">
       <div className="flex items-center gap-3">
@@ -392,14 +360,11 @@ export default function AdminPesticidesPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* 1. 基本部インポート */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm transition-all hover:border-slate-300">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4">
             <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
-              <span className="bg-slate-100 text-slate-500 w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>
+              <span className="bg-slate-100 text-slate-600 w-6 h-6 rounded-full flex items-center justify-center text-xs font-black">1</span>
               農薬マスター（基本部）
             </h2>
-            <button onClick={handleClearBasics} className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="基本部データを全削除">
-              <Trash2 className="w-4 h-4" />
-            </button>
           </div>
           <p className="text-xs font-bold text-slate-400 mb-6 leading-relaxed">
             「農薬の種類」や「メーカー名」などの基本情報を読み込みます。<br/>
@@ -420,14 +385,11 @@ export default function AdminPesticidesPage() {
 
         {/* 2. 適用部インポート（2ファイル一括対応） */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm transition-all hover:border-slate-300">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4">
             <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
-              <span className="bg-slate-100 text-slate-500 w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span>
+              <span className="bg-teal-100 text-teal-700 w-6 h-6 rounded-full flex items-center justify-center text-xs font-black">2</span>
               農薬適用表（適用部）
             </h2>
-            <button onClick={handleClearUsages} className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="適用部データを全削除">
-              <Trash2 className="w-4 h-4" />
-            </button>
           </div>
 
           <div className="bg-teal-50/70 border border-teal-200 rounded-xl p-3 mb-4">
