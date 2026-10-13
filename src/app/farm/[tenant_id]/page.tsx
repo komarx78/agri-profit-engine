@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import imageCompression from 'browser-image-compression';
 import { t, getTranslatedName, getTranslatedWorkType, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { getJSTDate, formatDisplayTime } from '@/lib/dateUtils';
+import { LineLinkModal } from '@/components/LineLinkModal';
 
 // プライベートブラウズ等の例外で落ちない安全なStorageラッパー
 const safeStorage = {
@@ -93,6 +94,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
 
   const [manuals, setManuals] = useState<any[]>([]);
   const [playingVideo, setPlayingVideo] = useState<string | null>(null);
+  const [showLineModal, setShowLineModal] = useState(false);
 
   const [activeWorkStartTime, setActiveWorkStartTime] = useState<string | null>(null);
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
@@ -760,10 +762,21 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
 
             {/* LINE連携・通知設定エリア */}
             <div className="mt-12 bg-slate-800/50 border border-slate-700 p-6 rounded-3xl shadow-inner">
-              <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                <svg viewBox="0 0 24 24" className="w-6 h-6 fill-[#06C755]"><path d="M22.2 10.3c0-4.4-4.5-8-10.1-8s-10.1 3.6-10.1 8c0 4 3.7 7.4 8.6 7.9.4 0 .9.1 1 .5.1.3.1.5-.1 1-.1.4-.4 1.3-.4 1.3s-.1.4.1.5c.2.1.5 0 .5 0 2.9-1.8 5.7-4 7.6-6 1.8-1.7 2.9-3.4 2.9-5.2zm-12.7 3c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h2.3c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3h-1.4v.9h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3h-1.4v.9h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3zM7.3 13.3c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v4.2c0 .2-.1.3-.3.3h-.8zm-3 0c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v3h1.4c.2 0 .3.1.3.3v.8c0 .2-.1.3-.3.3h-2.8zm13.1-.3c0 .2-.1.3-.3.3h-.8c-.2 0-.3-.1-.3-.3v-3l-1.9 3c-.1.1-.2.2-.3.2h-.8c-.2 0-.3-.1-.3-.3V8.8c0-.2.1-.3.3-.3h.8c.2 0 .3.1.3.3v3l1.9-3c.1-.1.2-.2.3-.2h.8c.2 0 .3.1.3.3v4.2z"/></svg>
-                {t('lineAlertTitle', language)}
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-white font-bold flex items-center gap-2">
+                  <svg viewBox="0 0 24 24" className="w-6 h-6 fill-[#06C755]"><path d="M12 2C6.48 2 2 5.82 2 10.53c0 4.23 3.64 7.77 8.56 8.41.33.07.78.22.89.5.1.25.07.64-.03 1.05-.16.63-.53 2.05-.53 2.05s-.16.65.25.79c.41.14.94-.23 1.3-.5 3.09-2.27 6.09-4.8 7.98-7.39C21.6 13.56 22 12.09 22 10.53 22 5.82 17.52 2 12 2z"/></svg>
+                  {t('lineAlertTitle', language)}
+                </h3>
+                {workerProfile?.line_user_id && (
+                  <button
+                    type="button"
+                    onClick={() => setShowLineModal(true)}
+                    className="text-xs text-slate-400 hover:text-emerald-400 underline font-bold cursor-pointer"
+                  >
+                    設定・QR確認
+                  </button>
+                )}
+              </div>
               
               {!workerProfile?.line_user_id ? (
                 <div className="bg-slate-900/80 p-4 rounded-2xl border border-slate-700">
@@ -775,40 +788,42 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                   <div className="flex flex-col items-center gap-3">
                     <button 
                       type="button"
-                      onClick={() => {
-                        if(workerProfile?.id) {
-                          navigator.clipboard.writeText(workerProfile.id);
-                        }
-                        window.open("https://lin.ee/RD1vp8c", "_blank");
-                      }}
-                      className="w-full py-4 bg-[#06C755] hover:bg-[#05b34c] text-white font-black rounded-xl text-center flex items-center justify-center gap-2 mt-2"
+                      onClick={() => setShowLineModal(true)}
+                      className="w-full py-4 bg-[#06C755] hover:bg-[#05b34c] text-white font-black rounded-xl text-center flex items-center justify-center gap-2 mt-2 shadow-lg transition-transform active:scale-98 cursor-pointer"
                     >
-                      {t('lineConnectBtn', language)}
+                      <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current"><path d="M12 2C6.48 2 2 5.82 2 10.53c0 4.23 3.64 7.77 8.56 8.41.33.07.78.22.89.5.1.25.07.64-.03 1.05-.16.63-.53 2.05-.53 2.05s-.16.65.25.79c.41.14.94-.23 1.3-.5 3.09-2.27 6.09-4.8 7.98-7.39C21.6 13.56 22 12.09 22 10.53 22 5.82 17.52 2 12 2z"/></svg>
+                      <span>{t('lineConnectBtn', language)}</span>
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="flex items-center justify-between bg-slate-900/80 p-4 rounded-2xl border border-emerald-900/50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500">
+                  <div className="flex items-center gap-3 cursor-pointer" onClick={() => setShowLineModal(true)}>
+                    <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500 shrink-0">
                       <CheckCircle2 className="w-6 h-6" />
                     </div>
                     <div>
-                      <div className="text-emerald-400 font-bold text-sm">{t('lineLinked', language)}</div>
+                      <div className="text-emerald-400 font-bold text-sm flex items-center gap-1.5">
+                        <span>{t('lineLinked', language)}</span>
+                        <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 rounded-md">正常</span>
+                      </div>
                       <div className="text-xs text-slate-400 mt-1">{t('lineNotifyDesc', language)}</div>
                     </div>
                   </div>
-                  <button 
-                    type="button"
-                    onClick={async () => {
-                      const newVal = !workerProfile.is_line_notification_enabled;
-                      setWorkerProfile({...workerProfile, is_line_notification_enabled: newVal});
-                      await toggleWorkerLineNotification(workerProfile.id, newVal);
-                    }}
-                    className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${workerProfile.is_line_notification_enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
-                  >
-                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${workerProfile.is_line_notification_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      type="button"
+                      onClick={async () => {
+                        const newVal = !workerProfile.is_line_notification_enabled;
+                        setWorkerProfile({...workerProfile, is_line_notification_enabled: newVal});
+                        await toggleWorkerLineNotification(workerProfile.id, newVal);
+                      }}
+                      className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none ${workerProfile.is_line_notification_enabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                      title="LINE通知のON/OFF"
+                    >
+                      <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${workerProfile.is_line_notification_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1165,6 +1180,19 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
             <video src={playingVideo} controls autoPlay playsInline className="w-full max-h-[80vh] object-contain" />
           </div>
         )}
+
+        {/* 📱 スタッフ専用 LINE公式アカウント連携モーダル */}
+        <LineLinkModal
+          isOpen={showLineModal}
+          onClose={() => setShowLineModal(false)}
+          worker={workerProfile || currentUser}
+          onLinkedSuccess={async () => {
+            if (workerProfile?.id) {
+              const { data } = await supabase.from('workers').select('*').eq('id', workerProfile.id).maybeSingle();
+              if (data) setWorkerProfile(data);
+            }
+          }}
+        />
       </div>
     </main>
   );

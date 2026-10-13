@@ -21,12 +21,16 @@ interface LineLinkModalProps {
   onLinkedSuccess?: () => void;
 }
 
-export const RAKUMARU_LINE_CONSTANTS = {
-  accountName: 'みんなのらくまる労務',
-  basicId: '@622tslqk',
-  addFriendUrl: 'https://line.me/R/ti/p/@622tslqk',
-  qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https%3A%2F%2Fline.me%2FR%2Fti%2Fp%2F%40622tslqk'
+export const AGRI_PROFIT_LINE_CONSTANTS = {
+  accountName: 'アグリプロフィット公式',
+  basicId: '@543tdbfc',
+  addFriendUrl: 'https://lin.ee/RD1vp8c',
+  qrCodeUrl: 'https://qr-official.line.me/gs/M_543tdbfc_GW.png?from=page&searchId=543tdbfc',
+  getOaMessageUrl: (pin: string) => `https://line.me/R/oaMessage/@543tdbfc/?${pin}`
 };
+
+// 互換性エイリアス
+export const RAKUMARU_LINE_CONSTANTS = AGRI_PROFIT_LINE_CONSTANTS;
 
 /**
  * 📱 スタッフ専用 LINE公式アカウント ワンタイムPIN連携モーダル
@@ -359,6 +363,20 @@ export const LineLinkModal: React.FC<LineLinkModalProps> = ({
                     )}
                   </button>
                 </div>
+
+                {/* スマホ用：ワンタップでLINEが開いてコード入力済みの状態にする強力導線 */}
+                {pin && (
+                  <a
+                    href={AGRI_PROFIT_LINE_CONSTANTS.getOaMessageUrl(pin)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-3.5 bg-[#06C755] hover:bg-[#05b34c] text-white font-black rounded-xl text-center flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-98 cursor-pointer text-xs sm:text-sm"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span>LINEを開いてそのまま送信（1秒連携）</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
 
                 {/* 自動検知アニメーション */}
                 <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 pt-1">

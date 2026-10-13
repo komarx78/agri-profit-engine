@@ -30,11 +30,11 @@ export async function POST(req: Request) {
     if (event.type === 'follow') {
       const welcomeText = 
 `友だち追加ありがとうございます！🎉
-【みんなのらくまる労務 / 農業クラウド】公式通知アカウントです。
+【アグリプロフィット】公式通知アカウントです🌱
 
 📱 画面に表示されている【4桁の連携コード】をこのトークにそのまま送信してください。
 
-連携が完了すると、退勤打刻の忘れ防止通知や重要なお知らせがこのLINEに自動で届きます！🌱`;
+連携が完了すると、退勤打刻の忘れ防止通知や作業・業務連絡がこのLINEに自動で届きます！🌾`;
       await replyMessage(replyToken, welcomeText);
       return NextResponse.json({ status: 'followed' }, { status: 200 });
     }
@@ -219,13 +219,13 @@ const FARM_RICH_MENUS: Record<string, { farmUserId: string; companyName: string;
 
       await replyMessage(
         replyToken, 
-        `🎉 【みんなのらくまる労務 / 農業クラウド】\n${matchedWorker.name} 様、LINE連携が正常に完了いたしました！\n\n今後、退勤打刻の忘れ防止通知や、重要な業務連絡がこのLINEに自動で届きます。今日も一日お疲れ様です！🌱`
+        `🎉【アグリプロフィット】\n${matchedWorker.name} 様、LINE連携が正常に完了いたしました！\n\n今後、退勤打刻の忘れ防止通知や、重要な作業・業務連絡がこのLINEに自動で届きます。今日も一日お疲れ様です！🌱`
       );
       return NextResponse.json({ status: 'success', worker_name: matchedWorker.name }, { status: 200 });
     }
 
     // 6. 【未一致時のスマート案内メッセージ】
-    const helpMsg = `agri-profit 現場クラウドです🌱\n\n【所属農園のLINE連携】\nあなたの農園コードを送信してください：\n・株式会社KAP ➔ 「kap」\n・佐原農園株式会社 ➔ 「sahara」\n\n送信すると、画面下のメニューが自社専用の打刻メニューに切り替わります！\n\n※スタッフ個人の通知連携は「お名前」または「4桁の暗証番号」を送信してください。\n※管理者の方は「管理者連携」と送信してください。`;
+    const helpMsg = `アグリプロフィット 現場クラウドです🌱\n\n【所属農園のLINE連携】\nあなたの農園コードを送信してください：\n・株式会社KAP ➔ 「kap」\n・佐原農園株式会社 ➔ 「sahara」\n\n送信すると、画面下のメニューが自社専用の打刻メニューに切り替わります！\n\n※スタッフ個人の通知連携は「お名前」または「4桁の連携コード」を送信してください。\n※管理者の方は「管理者連携」と送信してください。`;
     await replyMessage(replyToken, helpMsg);
     return NextResponse.json({ status: 'help_sent' }, { status: 200 });
 
