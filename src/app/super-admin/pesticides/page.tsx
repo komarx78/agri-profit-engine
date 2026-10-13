@@ -1,14 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Database, Upload, FileText, CheckCircle2, AlertTriangle, Loader2, Search, ArrowLeft, Trash2, ExternalLink, Calendar } from 'lucide-react';
+import { Database, Upload, FileText, CheckCircle2, AlertTriangle, Loader2, Search, ArrowLeft, Trash2, ExternalLink, Calendar, X } from 'lucide-react';
 import Papa from 'papaparse';
 import { createBrowserClient } from '@supabase/ssr';
 import Link from 'next/link';
 
 export default function AdminPesticidesPage() {
   const [basicFile, setBasicFile] = useState<File | null>(null);
-  const [usageFile, setUsageFile] = useState<File | null>(null);
+  const [usageFiles, setUsageFiles] = useState<File[]>([]);
   
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
@@ -156,82 +156,132 @@ export default function AdminPesticidesPage() {
     }
   };
 
-  // 2. 適用部CSVのインポート処理（文字コード自動判定・完全サニタイズ・進捗表示）
+  // 適用部ファイルの選択ハンドラー（複数ファイル対応・重複防止）
+  const handleUsageFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    const newFiles = Array.from(e.target.files);
+    setUsageFiles(prev => {
+      const combined = [...prev];
+      for (const f of newFiles) {
+        if (!combined.some(item => item.name === f.name)) {
+          combined.push(f);
+        }
+      }
+      return combined;
+    });
+    e.target.value = '';
+  };
+
+  const handleRemoveUsageFile = (index: number) => {
+    setUsageFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleClearUsageFiles = () => {
+    setUsageFiles([]);
+  };
+
+  // 2. 適用部CSVのインポート処理（複数ファイル・文字コード自動判定・完全サニタイズ・進捗表示）
   const handleImportUsage = async () => {
-    if (!usageFile) return;
+    if (usageFiles.length === 0) return;
+
+    // 事前確認：適用部データを全クリアして最新化するか？
+    const shouldClear = window.confirm(
+      `適用部（${usageFiles.length}ファイル）をインポートします。\n\n既存の古い適用部データをクリアして、完全に最新のデータに入れ直しますか？\n（「キャンセル」を押すと、既存データを残したまま追加登録されます）`
+    );
+
     setLoading(true);
-    setStatus({ type: 'info', message: '適用部CSVを安全にデコード中...' });
 
     try {
-      const csvText = await readFileTextSafely(usageFile);
+      if (shouldClear) {
+        setStatus({ type: 'info', message: '古い適用部データをクリーンアップ中...' });
+        const { error: clearErr } = await supabase
+          .from('m_pesticide_usages')
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000');
+        if (clearErr) throw clearErr;
+      }
 
-      Papa.parse(csvText, {
-        header: true,
-        skipEmptyLines: true,
-        complete: async (results) => {
-          try {
-            const data = results.data.map((row: any) => {
-              const vals = Object.values(row);
-              return {
-                registration_no: cleanText(getValue(row, ['登録番号', 'registration_no']) || vals[0] || ''),
-                crop_name: cleanText(getValue(row, ['作物名', 'crop_name']) || vals[5] || ''),
-                target_pest: cleanText(getValue(row, ['適用病害虫雑草名', '適用病害虫', 'target_pest']) || vals[7] || ''),
-                usage_time: cleanText(getValue(row, ['使用時期', 'usage_time']) || vals[11] || ''),
-                usage_method: cleanText(getValue(row, ['使用方法', 'usage_method']) || vals[13] || ''),
-                usage_amount: cleanText(getValue(row, ['希釈倍数使用量', '希釈倍率', '使用量', 'usage_amount']) || vals[9] || ''),
-                usage_count: cleanText(getValue(row, ['本剤の使用回数', '使用回数', 'usage_count']) || vals[12] || ''),
-                application_place: cleanText(getValue(row, ['適用場所', 'application_place']) || vals[6] || ''),
-                usage_purpose: cleanText(getValue(row, ['使用目的', 'usage_purpose']) || vals[8] || ''),
-                spray_amount: cleanText(getValue(row, ['散布液量', 'spray_amount']) || vals[10] || ''),
-                fumigation_time: cleanText(getValue(row, ['くん蒸時間', 'fumigation_time']) || vals[14] || ''),
-                fumigation_temp: cleanText(getValue(row, ['くん蒸温度', 'fumigation_temp']) || vals[15] || ''),
-                applicable_soil: cleanText(getValue(row, ['適用土壌', 'applicable_soil']) || vals[16] || ''),
-                applicable_region: cleanText(getValue(row, ['適用地帯名', 'applicable_region']) || vals[17] || ''),
-                applicable_pesticide: cleanText(getValue(row, ['適用農薬名', 'applicable_pesticide']) || vals[18] || ''),
-                mix_count: cleanText(getValue(row, ['混合数', 'mix_count']) || vals[19] || ''),
-                active_ingredient_count_1: cleanText(getValue(row, ['有効成分①', '有効成分1']) || vals[20] || ''),
-                active_ingredient_count_2: cleanText(getValue(row, ['有効成分②', '有効成分2']) || vals[21] || ''),
-                active_ingredient_count_3: cleanText(getValue(row, ['有効成分③', '有効成分3']) || vals[22] || ''),
-                active_ingredient_count_4: cleanText(getValue(row, ['有効成分④', '有効成分4']) || vals[23] || ''),
-                active_ingredient_count_5: cleanText(getValue(row, ['有効成分⑤', '有効成分5']) || vals[24] || '')
-              };
-            }).filter((item: any) => item.registration_no && item.crop_name);
+      let grandTotalInserted = 0;
 
-            if (data.length === 0) throw new Error('有効な適用部データが1件も見つかりませんでした。');
+      for (let fIdx = 0; fIdx < usageFiles.length; fIdx++) {
+        const file = usageFiles[fIdx];
+        const filePrefix = usageFiles.length > 1 ? `[${fIdx + 1}/${usageFiles.length}ファイル目: ${file.name}] ` : '';
 
-            const total = data.length;
-            const chunkSize = 500;
+        setStatus({ type: 'info', message: `${filePrefix}CSVを安全にデコード中...` });
 
-            for (let i = 0; i < total; i += chunkSize) {
-              const chunk = data.slice(i, i + chunkSize);
-              const processed = Math.min(i + chunkSize, total);
-              const percent = Math.round((processed / total) * 100);
-              setStatus({ 
-                type: 'info', 
-                message: `適用部データを追加中... (${processed.toLocaleString()} / ${total.toLocaleString()}件 - ${percent}%)` 
-              });
-              const { error } = await supabase.from('m_pesticide_usages').insert(chunk);
-              if (error) throw error;
-            }
+        const csvText = await readFileTextSafely(file);
 
-            setStatus({ type: 'success', message: `🎉 適用部のインポートが完了しました！（全${total.toLocaleString()}件）` });
-            setUsageFile(null);
-            fetchDbStats();
-          } catch (error: any) {
-            console.error(error);
-            setStatus({ type: 'error', message: `エラーが発生しました: ${error.message}` });
-          } finally {
-            setLoading(false);
-          }
-        },
-        error: (err) => {
-          setLoading(false);
-          setStatus({ type: 'error', message: `CSVの解析に失敗しました: ${err.message}` });
+        // PromiseでPapaParseをラップして同期的に実行
+        const parsedRows: any[] = await new Promise((resolve, reject) => {
+          Papa.parse(csvText, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => resolve(results.data),
+            error: (err) => reject(err)
+          });
+        });
+
+        const data = parsedRows.map((row: any) => {
+          const vals = Object.values(row);
+          return {
+            registration_no: cleanText(getValue(row, ['登録番号', 'registration_no']) || vals[0] || ''),
+            crop_name: cleanText(getValue(row, ['作物名', 'crop_name']) || vals[5] || ''),
+            target_pest: cleanText(getValue(row, ['適用病害虫雑草名', '適用病害虫', 'target_pest']) || vals[7] || ''),
+            usage_time: cleanText(getValue(row, ['使用時期', 'usage_time']) || vals[11] || ''),
+            usage_method: cleanText(getValue(row, ['使用方法', 'usage_method']) || vals[13] || ''),
+            usage_amount: cleanText(getValue(row, ['希釈倍数使用量', '希釈倍率', '使用量', 'usage_amount']) || vals[9] || ''),
+            usage_count: cleanText(getValue(row, ['本剤の使用回数', '使用回数', 'usage_count']) || vals[12] || ''),
+            application_place: cleanText(getValue(row, ['適用場所', 'application_place']) || vals[6] || ''),
+            usage_purpose: cleanText(getValue(row, ['使用目的', 'usage_purpose']) || vals[8] || ''),
+            spray_amount: cleanText(getValue(row, ['散布液量', 'spray_amount']) || vals[10] || ''),
+            fumigation_time: cleanText(getValue(row, ['くん蒸時間', 'fumigation_time']) || vals[14] || ''),
+            fumigation_temp: cleanText(getValue(row, ['くん蒸温度', 'fumigation_temp']) || vals[15] || ''),
+            applicable_soil: cleanText(getValue(row, ['適用土壌', 'applicable_soil']) || vals[16] || ''),
+            applicable_region: cleanText(getValue(row, ['適用地帯名', 'applicable_region']) || vals[17] || ''),
+            applicable_pesticide: cleanText(getValue(row, ['適用農薬名', 'applicable_pesticide']) || vals[18] || ''),
+            mix_count: cleanText(getValue(row, ['混合数', 'mix_count']) || vals[19] || ''),
+            active_ingredient_count_1: cleanText(getValue(row, ['有効成分①', '有効成分1']) || vals[20] || ''),
+            active_ingredient_count_2: cleanText(getValue(row, ['有効成分②', '有効成分2']) || vals[21] || ''),
+            active_ingredient_count_3: cleanText(getValue(row, ['有効成分③', '有効成分3']) || vals[22] || ''),
+            active_ingredient_count_4: cleanText(getValue(row, ['有効成分④', '有効成分4']) || vals[23] || ''),
+            active_ingredient_count_5: cleanText(getValue(row, ['有効成分⑤', '有効成分5']) || vals[24] || '')
+          };
+        }).filter((item: any) => item.registration_no && item.crop_name);
+
+        if (data.length === 0) {
+          console.warn(`${file.name}: 有効な適用部データが見つかりませんでした。`);
+          continue;
         }
+
+        const total = data.length;
+        const chunkSize = 500;
+
+        for (let i = 0; i < total; i += chunkSize) {
+          const chunk = data.slice(i, i + chunkSize);
+          const processed = Math.min(i + chunkSize, total);
+          const percent = Math.round((processed / total) * 100);
+          setStatus({ 
+            type: 'info', 
+            message: `${filePrefix}データを追加中... (${processed.toLocaleString()} / ${total.toLocaleString()}件 - ${percent}%)` 
+          });
+          const { error } = await supabase.from('m_pesticide_usages').insert(chunk);
+          if (error) throw error;
+        }
+
+        grandTotalInserted += data.length;
+      }
+
+      setStatus({ 
+        type: 'success', 
+        message: `🎉 適用部（${usageFiles.length}ファイル）のインポートが完了しました！（合計: ${grandTotalInserted.toLocaleString()}件）` 
       });
-    } catch (err: any) {
+      setUsageFiles([]);
+      fetchDbStats();
+    } catch (error: any) {
+      console.error(error);
+      setStatus({ type: 'error', message: `適用部のインポート中にエラーが発生しました: ${error.message}` });
+    } finally {
       setLoading(false);
-      setStatus({ type: 'error', message: `ファイルの読み込みに失敗しました: ${err.message}` });
     }
   };
 
@@ -368,7 +418,7 @@ export default function AdminPesticidesPage() {
           </div>
         </div>
 
-        {/* 2. 適用部インポート */}
+        {/* 2. 適用部インポート（2ファイル一括対応） */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm transition-all hover:border-slate-300">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
@@ -379,19 +429,81 @@ export default function AdminPesticidesPage() {
               <Trash2 className="w-4 h-4" />
             </button>
           </div>
-          <p className="text-xs font-bold text-slate-400 mb-6 leading-relaxed">
-            対象作物や使用量などの適用情報を読み込みます。<br/>
-            ファイル名例: <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-600">tekiyou.csv</code>
-          </p>
+
+          <div className="bg-teal-50/70 border border-teal-200 rounded-xl p-3 mb-4">
+            <p className="text-xs font-black text-teal-900 mb-0.5 flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+              FAMIC適用部は2ファイル（tekiyou1.csv & tekiyou2.csv）構成
+            </p>
+            <p className="text-2xs text-teal-700 leading-relaxed font-bold">
+              2つのファイルをまとめて同時に選択（またはドラッグ＆ドロップ）してください。2ファイル連続で自動インポートされます（1ファイルのみの更新も可能です）。
+            </p>
+          </div>
+
           <div className="space-y-4">
-            <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center relative hover:bg-slate-50 transition-colors">
-              <input type="file" accept=".csv" onChange={(e) => setUsageFile(e.target.files?.[0] || null)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" disabled={loading} />
-              <FileText className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-              <p className="text-sm font-bold text-slate-600">{usageFile ? usageFile.name : 'クリックしてCSVファイルを選択'}</p>
+            <div className="border-2 border-dashed border-teal-300 bg-teal-50/20 hover:bg-teal-50/50 rounded-xl p-6 text-center relative transition-colors">
+              <input 
+                type="file" 
+                accept=".csv" 
+                multiple 
+                onChange={handleUsageFilesChange} 
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+                disabled={loading} 
+              />
+              <FileText className="w-8 h-8 text-teal-500 mx-auto mb-2" />
+              <p className="text-sm font-black text-slate-700">
+                {usageFiles.length > 0 ? `📁 ${usageFiles.length}個のCSVファイルを選択中` : 'クリックまたはドラッグしてCSVを選択'}
+              </p>
+              <p className="text-2xs font-bold text-slate-400 mt-1">
+                ※ 複数ファイル（tekiyou1.csv と tekiyou2.csv）を同時に選択可能です
+              </p>
             </div>
-            <button onClick={handleImportUsage} disabled={!usageFile || loading} className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 px-4 rounded-xl transition-colors disabled:opacity-50">
-              <Upload className="w-4 h-4 inline-block mr-2 -mt-1" />
-              適用部を追加する
+
+            {/* 選択されたファイル一覧表示 */}
+            {usageFiles.length > 0 && (
+              <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-600 px-1">
+                  <span>セットされたファイル ({usageFiles.length}件):</span>
+                  <button 
+                    type="button" 
+                    onClick={handleClearUsageFiles} 
+                    className="text-rose-500 hover:underline text-2xs cursor-pointer"
+                    disabled={loading}
+                  >
+                    選択解除
+                  </button>
+                </div>
+                <div className="space-y-1.5">
+                  {usageFiles.map((file, idx) => (
+                    <div key={idx} className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 shadow-2xs">
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="w-5 h-5 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-2xs shrink-0">{idx + 1}</span>
+                        <span className="truncate">{file.name}</span>
+                        <span className="text-2xs text-slate-400 font-medium">({(file.size / 1024 / 1024).toFixed(1)} MB)</span>
+                      </div>
+                      {!loading && (
+                        <button 
+                          type="button" 
+                          onClick={() => handleRemoveUsageFile(idx)} 
+                          className="text-slate-400 hover:text-rose-500 p-1 rounded transition-colors"
+                          title="このファイルを削除"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <button 
+              onClick={handleImportUsage} 
+              disabled={usageFiles.length === 0 || loading} 
+              className="w-full bg-teal-600 hover:bg-teal-700 text-white font-black py-3.5 px-4 rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer text-sm"
+            >
+              <Upload className="w-4 h-4 inline-block mr-1" />
+              <span>{usageFiles.length > 1 ? `適用部（${usageFiles.length}ファイル一括）を更新する` : '適用部を更新する'}</span>
             </button>
           </div>
         </div>
