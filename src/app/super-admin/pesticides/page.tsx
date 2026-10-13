@@ -42,6 +42,43 @@ export default function AdminPesticidesPage() {
     fetchDbStats();
   }, []);
 
+  // 🧹 鉄壁サニタイズ（PostgreSQLの NULバイト \u0000 拒絶および制御文字エラーを根絶）
+  const cleanText = (val: any): string => {
+    if (val === null || val === undefined) return '';
+    return String(val)
+      .replace(/\0/g, '') // NUL文字 (0x00) を完全除去
+      .replace(/\\u0000/g, '') // エスケープされた \u0000 を除去
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // 改行・タブ以外の制御文字を除去
+      .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '') // 孤立サロゲートを除去
+      .trim();
+  };
+
+  // 🛡️ 文字コード自動判定 ＆ 安全デコード（UTF-8 BOM / UTF-8 / Shift-JIS / CP932 を全自動判別）
+  const readFileTextSafely = async (file: File): Promise<string> => {
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+
+    // 1. UTF-8 BOM (0xEF, 0xBB, 0xBF)
+    if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+      return new TextDecoder('utf-8').decode(bytes.slice(3));
+    }
+
+    // 2. UTF-8 で厳格デコード試行 (fatal: true)
+    try {
+      const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+      return utf8Decoder.decode(bytes);
+    } catch {
+      // 3. 失敗した場合は Shift-JIS (Windows-31J / CP932) でデコード
+      try {
+        const sjisDecoder = new TextDecoder('shift-jis');
+        return sjisDecoder.decode(bytes);
+      } catch {
+        // 4. 万が一のフォールバック
+        return new TextDecoder('utf-8').decode(bytes);
+      }
+    }
+  };
+
   const getValue = (row: any, possibleKeys: string[]) => {
     for (const k of Object.keys(row)) {
       const cleanKey = k.replace(/[\s　]+/g, '').replace(/["']/g, '');
@@ -55,113 +92,147 @@ export default function AdminPesticidesPage() {
     return '';
   };
 
-  // 1. 基本部CSVのインポート処理（最強フォールバック搭載）
+  // 1. 基本部CSVのインポート処理（文字コード自動判定・完全サニタイズ・進捗表示）
   const handleImportBasic = async () => {
     if (!basicFile) return;
     setLoading(true);
-    setStatus({ type: 'info', message: '基本部CSVを読み込んでいます...' });
+    setStatus({ type: 'info', message: '基本部CSVを安全にデコード中...' });
 
-    Papa.parse(basicFile, {
-      header: true,
-      skipEmptyLines: true,
-      encoding: 'Shift-JIS',
-      complete: async (results) => {
-        try {
-          const rawData = results.data.map((row: any) => {
-            // もしヘッダー名が完全に化けていても、列の順番（インデックス）で強制的に取得する最強フォールバック
-            const vals = Object.values(row);
-            return {
-              registration_no: String(getValue(row, ['登録番号', 'registration_no']) || vals[0] || '').trim(),
-              pesticide_type: String(getValue(row, ['農薬の種類', 'pesticide_type']) || vals[1] || '').trim(),
-              pesticide_name: String(getValue(row, ['農薬の名称', 'pesticide_name']) || vals[2] || '').trim(),
-              applicant_name: String(getValue(row, ['登録を有する者の名称', '登録を有する者の略称', 'applicant_name']) || vals[3] || '').trim(),
-              purpose: String(getValue(row, ['用途', 'purpose']) || vals[8] || '').trim()
-            };
-          }).filter((item: any) => item.registration_no && item.pesticide_name);
+    try {
+      const csvText = await readFileTextSafely(basicFile);
 
-          if (rawData.length === 0) throw new Error('有効なデータが1件も見つかりませんでした。');
+      Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+        complete: async (results) => {
+          try {
+            const rawData = results.data.map((row: any) => {
+              const vals = Object.values(row);
+              return {
+                registration_no: cleanText(getValue(row, ['登録番号', 'registration_no']) || vals[0] || ''),
+                pesticide_type: cleanText(getValue(row, ['農薬の種類', 'pesticide_type']) || vals[1] || ''),
+                pesticide_name: cleanText(getValue(row, ['農薬の名称', 'pesticide_name']) || vals[2] || ''),
+                applicant_name: cleanText(getValue(row, ['登録を有する者の名称', '登録を有する者の略称', 'applicant_name']) || vals[3] || ''),
+                purpose: cleanText(getValue(row, ['用途', 'purpose']) || vals[8] || '')
+              };
+            }).filter((item: any) => item.registration_no && item.pesticide_name);
 
-          const uniqueData = Array.from(new Map(rawData.map((item: any) => [item.registration_no, item])).values());
-          setStatus({ type: 'info', message: `${uniqueData.length}件のデータをデータベースに保存中...` });
+            if (rawData.length === 0) throw new Error('有効な基本部データが1件も見つかりませんでした。');
 
-          const chunkSize = 1000;
-          for (let i = 0; i < uniqueData.length; i += chunkSize) {
-            const chunk = uniqueData.slice(i, i + chunkSize);
-            const { error } = await supabase.from('m_pesticides').upsert(chunk, { onConflict: 'registration_no' });
-            if (error) throw error;
+            const uniqueData = Array.from(new Map(rawData.map((item: any) => [item.registration_no, item])).values());
+            const total = uniqueData.length;
+            const chunkSize = 500;
+
+            for (let i = 0; i < total; i += chunkSize) {
+              const chunk = uniqueData.slice(i, i + chunkSize);
+              const processed = Math.min(i + chunkSize, total);
+              const percent = Math.round((processed / total) * 100);
+              setStatus({ 
+                type: 'info', 
+                message: `基本部データを保存中... (${processed.toLocaleString()} / ${total.toLocaleString()}件 - ${percent}%)` 
+              });
+              const { error } = await supabase.from('m_pesticides').upsert(chunk, { onConflict: 'registration_no' });
+              if (error) throw error;
+            }
+
+            setStatus({ type: 'success', message: `🎉 基本部のインポートが完了しました！（全${total.toLocaleString()}件）` });
+            setBasicFile(null);
+            fetchDbStats();
+          } catch (error: any) {
+            console.error(error);
+            setStatus({ type: 'error', message: `エラーが発生しました: ${error.message}` });
+          } finally {
+            setLoading(false);
           }
-
-          setStatus({ type: 'success', message: `基本部のインポートが完了しました。(${uniqueData.length}件)` });
-          setBasicFile(null);
-          fetchDbStats();
-        } catch (error: any) {
-          setStatus({ type: 'error', message: `エラーが発生しました: ${error.message}` });
-        } finally {
+        },
+        error: (err) => {
           setLoading(false);
+          setStatus({ type: 'error', message: `CSVの解析に失敗しました: ${err.message}` });
         }
-      }
-    });
+      });
+    } catch (err: any) {
+      setLoading(false);
+      setStatus({ type: 'error', message: `ファイルの読み込みに失敗しました: ${err.message}` });
+    }
   };
 
+  // 2. 適用部CSVのインポート処理（文字コード自動判定・完全サニタイズ・進捗表示）
   const handleImportUsage = async () => {
     if (!usageFile) return;
     setLoading(true);
-    setStatus({ type: 'info', message: '適用部CSVを読み込んでいます...' });
+    setStatus({ type: 'info', message: '適用部CSVを安全にデコード中...' });
 
-    Papa.parse(usageFile, {
-      header: true,
-      skipEmptyLines: true,
-      encoding: 'Shift-JIS',
-      complete: async (results) => {
-        try {
-          const data = results.data.map((row: any) => {
-            const vals = Object.values(row);
-            return {
-              registration_no: String(getValue(row, ['登録番号', 'registration_no']) || vals[0] || '').trim(),
-              crop_name: String(getValue(row, ['作物名', 'crop_name']) || vals[5] || '').trim(),
-              target_pest: String(getValue(row, ['適用病害虫雑草名', '適用病害虫', 'target_pest']) || vals[7] || '').trim(),
-              usage_time: String(getValue(row, ['使用時期', 'usage_time']) || vals[11] || '').trim(),
-              usage_method: String(getValue(row, ['使用方法', 'usage_method']) || vals[13] || '').trim(),
-              usage_amount: String(getValue(row, ['希釈倍数使用量', '希釈倍率', '使用量', 'usage_amount']) || vals[9] || '').trim(),
-              usage_count: String(getValue(row, ['本剤の使用回数', '使用回数', 'usage_count']) || vals[12] || '').trim(),
-              application_place: String(getValue(row, ['適用場所', 'application_place']) || vals[6] || '').trim(),
-              usage_purpose: String(getValue(row, ['使用目的', 'usage_purpose']) || vals[8] || '').trim(),
-              spray_amount: String(getValue(row, ['散布液量', 'spray_amount']) || vals[10] || '').trim(),
-              fumigation_time: String(getValue(row, ['くん蒸時間', 'fumigation_time']) || vals[14] || '').trim(),
-              fumigation_temp: String(getValue(row, ['くん蒸温度', 'fumigation_temp']) || vals[15] || '').trim(),
-              applicable_soil: String(getValue(row, ['適用土壌', 'applicable_soil']) || vals[16] || '').trim(),
-              applicable_region: String(getValue(row, ['適用地帯名', 'applicable_region']) || vals[17] || '').trim(),
-              applicable_pesticide: String(getValue(row, ['適用農薬名', 'applicable_pesticide']) || vals[18] || '').trim(),
-              mix_count: String(getValue(row, ['混合数', 'mix_count']) || vals[19] || '').trim(),
-              active_ingredient_count_1: String(getValue(row, ['有効成分①', '有効成分1']) || vals[20] || '').trim(),
-              active_ingredient_count_2: String(getValue(row, ['有効成分②', '有効成分2']) || vals[21] || '').trim(),
-              active_ingredient_count_3: String(getValue(row, ['有効成分③', '有効成分3']) || vals[22] || '').trim(),
-              active_ingredient_count_4: String(getValue(row, ['有効成分④', '有効成分4']) || vals[23] || '').trim(),
-              active_ingredient_count_5: String(getValue(row, ['有効成分⑤', '有効成分5']) || vals[24] || '').trim()
-            };
-          }).filter((item: any) => item.registration_no && item.crop_name);
+    try {
+      const csvText = await readFileTextSafely(usageFile);
 
-          if (data.length === 0) throw new Error('有効なデータが1件も見つかりませんでした。');
+      Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+        complete: async (results) => {
+          try {
+            const data = results.data.map((row: any) => {
+              const vals = Object.values(row);
+              return {
+                registration_no: cleanText(getValue(row, ['登録番号', 'registration_no']) || vals[0] || ''),
+                crop_name: cleanText(getValue(row, ['作物名', 'crop_name']) || vals[5] || ''),
+                target_pest: cleanText(getValue(row, ['適用病害虫雑草名', '適用病害虫', 'target_pest']) || vals[7] || ''),
+                usage_time: cleanText(getValue(row, ['使用時期', 'usage_time']) || vals[11] || ''),
+                usage_method: cleanText(getValue(row, ['使用方法', 'usage_method']) || vals[13] || ''),
+                usage_amount: cleanText(getValue(row, ['希釈倍数使用量', '希釈倍率', '使用量', 'usage_amount']) || vals[9] || ''),
+                usage_count: cleanText(getValue(row, ['本剤の使用回数', '使用回数', 'usage_count']) || vals[12] || ''),
+                application_place: cleanText(getValue(row, ['適用場所', 'application_place']) || vals[6] || ''),
+                usage_purpose: cleanText(getValue(row, ['使用目的', 'usage_purpose']) || vals[8] || ''),
+                spray_amount: cleanText(getValue(row, ['散布液量', 'spray_amount']) || vals[10] || ''),
+                fumigation_time: cleanText(getValue(row, ['くん蒸時間', 'fumigation_time']) || vals[14] || ''),
+                fumigation_temp: cleanText(getValue(row, ['くん蒸温度', 'fumigation_temp']) || vals[15] || ''),
+                applicable_soil: cleanText(getValue(row, ['適用土壌', 'applicable_soil']) || vals[16] || ''),
+                applicable_region: cleanText(getValue(row, ['適用地帯名', 'applicable_region']) || vals[17] || ''),
+                applicable_pesticide: cleanText(getValue(row, ['適用農薬名', 'applicable_pesticide']) || vals[18] || ''),
+                mix_count: cleanText(getValue(row, ['混合数', 'mix_count']) || vals[19] || ''),
+                active_ingredient_count_1: cleanText(getValue(row, ['有効成分①', '有効成分1']) || vals[20] || ''),
+                active_ingredient_count_2: cleanText(getValue(row, ['有効成分②', '有効成分2']) || vals[21] || ''),
+                active_ingredient_count_3: cleanText(getValue(row, ['有効成分③', '有効成分3']) || vals[22] || ''),
+                active_ingredient_count_4: cleanText(getValue(row, ['有効成分④', '有効成分4']) || vals[23] || ''),
+                active_ingredient_count_5: cleanText(getValue(row, ['有効成分⑤', '有効成分5']) || vals[24] || '')
+              };
+            }).filter((item: any) => item.registration_no && item.crop_name);
 
-          setStatus({ type: 'info', message: `${data.length}件のデータを追加保存中...` });
+            if (data.length === 0) throw new Error('有効な適用部データが1件も見つかりませんでした。');
 
-          const chunkSize = 1000;
-          for (let i = 0; i < data.length; i += chunkSize) {
-            const chunk = data.slice(i, i + chunkSize);
-            const { error } = await supabase.from('m_pesticide_usages').insert(chunk);
-            if (error) throw error;
+            const total = data.length;
+            const chunkSize = 500;
+
+            for (let i = 0; i < total; i += chunkSize) {
+              const chunk = data.slice(i, i + chunkSize);
+              const processed = Math.min(i + chunkSize, total);
+              const percent = Math.round((processed / total) * 100);
+              setStatus({ 
+                type: 'info', 
+                message: `適用部データを追加中... (${processed.toLocaleString()} / ${total.toLocaleString()}件 - ${percent}%)` 
+              });
+              const { error } = await supabase.from('m_pesticide_usages').insert(chunk);
+              if (error) throw error;
+            }
+
+            setStatus({ type: 'success', message: `🎉 適用部のインポートが完了しました！（全${total.toLocaleString()}件）` });
+            setUsageFile(null);
+            fetchDbStats();
+          } catch (error: any) {
+            console.error(error);
+            setStatus({ type: 'error', message: `エラーが発生しました: ${error.message}` });
+          } finally {
+            setLoading(false);
           }
-
-          setStatus({ type: 'success', message: `適用部のインポートが完了しました。(${data.length}件)` });
-          setUsageFile(null);
-          fetchDbStats();
-        } catch (error: any) {
-          setStatus({ type: 'error', message: `エラーが発生しました: ${error.message}` });
-        } finally {
+        },
+        error: (err) => {
           setLoading(false);
+          setStatus({ type: 'error', message: `CSVの解析に失敗しました: ${err.message}` });
         }
-      }
-    });
+      });
+    } catch (err: any) {
+      setLoading(false);
+      setStatus({ type: 'error', message: `ファイルの読み込みに失敗しました: ${err.message}` });
+    }
   };
 
   const handleClearUsages = async () => {
