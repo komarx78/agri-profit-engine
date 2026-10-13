@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { 
   PieChart, Pie, Cell, 
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -10,10 +11,30 @@ import {
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { Activity, Clock, Sprout, TrendingUp, Banknote, UserCheck, CalendarDays, MapPin, Calculator, Settings2 } from 'lucide-react';
+import { 
+  Activity, Clock, Sprout, TrendingUp, Banknote, UserCheck, 
+  CalendarDays, MapPin, Calculator, Settings2, AlertCircle, 
+  CheckCircle2, ArrowRight, Share2, Copy, Check, ExternalLink 
+} from 'lucide-react';
 
 // --- 直感的なグラフ用の色設定 ---
 const COLORS = ['#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6', '#14b8a6', '#f43f5e'];
+
+// --- 金額フォーマッター（端数四捨五入・マイナス時は上品な▲表記） ---
+const formatCurrency = (val: number) => {
+  const rounded = Math.round(val || 0);
+  if (rounded < 0) {
+    return `▲¥${Math.abs(rounded).toLocaleString()}`;
+  }
+  return `¥${rounded.toLocaleString()}`;
+};
+
+const formatYAxisTenThousand = (val: number) => {
+  const rounded = Math.round((val || 0) / 10000);
+  if (rounded === 0) return '¥0';
+  if (rounded < 0) return `▲¥${Math.abs(rounded)}万`;
+  return `¥${rounded}万`;
+};
 
 export default function DashboardPage() {
   // 表示モード (実績のみ or 予定込み)
@@ -30,6 +51,11 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState({ sales: 0, laborCost: 0, materialCost: 0, profit: 0, margin: 0 });
   const [tenantId, setTenantId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+
+  // 現場クイックアラート用ステート
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
+  const [todayWorkCount, setTodayWorkCount] = useState<number>(0);
+  const [copiedUrl, setCopiedUrl] = useState<boolean>(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -67,6 +93,13 @@ export default function DashboardPage() {
 
         const rawWorkLogs = workRes.data || [];
         const rawSalesLogs = salesRes.data || [];
+
+        // --- 未承認日報件数 ＆ 本日作業件数の集計 ---
+        const pendingCount = rawWorkLogs.filter((log: any) => log.status === 'pending').length;
+        const todayStr = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+        const todayCount = rawWorkLogs.filter((log: any) => log.work_date === todayStr).length;
+        setPendingApprovalsCount(pendingCount);
+        setTodayWorkCount(todayCount);
 
         // --- フィルタリング (予実分離) ---
         const workLogs = rawWorkLogs.filter((log: any) => 
@@ -178,13 +211,16 @@ export default function DashboardPage() {
 
         const finalTotalMaterialCost = calcMaterialCost(totalSales);
 
-        // サマリー設定
-        const totalProfit = totalSales - (totalLaborCost + finalTotalMaterialCost);
-        const profitMargin = totalSales > 0 ? (totalProfit / totalSales) * 100 : 0;
+        // サマリー設定（端数を完全に四捨五入して整数化）
+        const roundedSales = Math.round(totalSales);
+        const roundedLabor = Math.round(totalLaborCost);
+        const roundedMaterial = Math.round(finalTotalMaterialCost);
+        const totalProfit = roundedSales - (roundedLabor + roundedMaterial);
+        const profitMargin = roundedSales > 0 ? (totalProfit / roundedSales) * 100 : 0;
         setSummary({ 
-          sales: totalSales, 
-          laborCost: totalLaborCost, 
-          materialCost: finalTotalMaterialCost, 
+          sales: roundedSales, 
+          laborCost: roundedLabor, 
+          materialCost: roundedMaterial, 
           profit: totalProfit, 
           margin: profitMargin 
         });
@@ -295,13 +331,13 @@ export default function DashboardPage() {
         <div className="bg-slate-900/95 backdrop-blur-md text-slate-100 p-4 rounded-xl shadow-2xl border border-slate-700 font-bold text-sm min-w-[200px]">
           <p className="text-base text-emerald-400 mb-2 border-b border-slate-700 pb-1">{label}</p>
           <div className="space-y-1">
-            <div className="flex justify-between"><span className="text-slate-400">売上:</span><span className="text-white">¥{data.売上?.toLocaleString() || 0}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">コスト:</span><span className="text-rose-400">¥{data.コスト?.toLocaleString() || 0}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">売上:</span><span className="text-white">¥{Math.round(data.売上 || 0).toLocaleString()}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">コスト:</span><span className="text-rose-400">¥{Math.round(data.コスト || 0).toLocaleString()}</span></div>
             <div className="border-t border-slate-700 my-1.5"></div>
-            <div className="flex justify-between items-center"><span className="text-slate-400">純利益:</span><span className={`text-lg ${data.利益 >= 0 ? 'text-amber-400' : 'text-rose-500'}`}>¥{data.利益?.toLocaleString() || 0}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">利益率:</span><span className="text-blue-300">{data.利益率 || 0}%</span></div>
+            <div className="flex justify-between items-center"><span className="text-slate-400">純利益:</span><span className={`text-lg font-black ${data.利益 >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatCurrency(data.利益)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">利益率:</span><span className="text-blue-300">{Math.round(data.利益率 || 0)}%</span></div>
             {data.時給換算 !== undefined && (
-              <div className="flex justify-between mt-2 pt-2 border-t border-slate-700/50"><span className="text-slate-400">時給換算:</span><span className="text-emerald-300">¥{data.時給換算.toLocaleString()}/h</span></div>
+              <div className="flex justify-between mt-2 pt-2 border-t border-slate-700/50"><span className="text-slate-400">時給換算:</span><span className="text-emerald-300">¥{Math.round(data.時給換算 || 0).toLocaleString()}/h</span></div>
             )}
           </div>
         </div>
@@ -311,105 +347,120 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-8 pb-16 pt-4 sm:pt-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-6 pb-16 pt-3 sm:pt-6">
       
-      {/* ページヘッダー＆直感的なコントロールパネル */}
-      <div className="flex flex-col gap-6 border-b-2 border-slate-200 pb-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-          <div className="flex-1 w-full md:w-auto">
-            <h1 className="text-2xl md:text-4xl font-black text-slate-800 tracking-tight mb-2">経営ダッシュボード</h1>
-            <p className="text-sm md:text-base text-slate-500 font-medium">作業・売上データから農園の健康状態（P&L）をリアルタイムに可視化します。</p>
-
-            {/* 現場用URL（農園専用URL）の表示 */}
-            {tenantId && (
-              <div className="mt-4 bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm w-full md:max-w-2xl">
-                <div>
-                  <h3 className="font-black text-emerald-800 flex items-center gap-2 text-sm">
-                    <UserCheck className="w-4 h-4" /> 🌾 貴農園専用・現場タブレット用URL
-                  </h3>
-                  <p className="text-xs text-emerald-600 mt-1 font-medium">
-                    ※この専用URLを現場の従業員に配布（LINE送信等）してください。現場端末で開くだけで貴農園のスタッフ一覧が表示されます。
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-                  <input 
-                    type="text" 
-                    readOnly
-                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/portal?farm=${tenantId}`}
-                    className="flex-1 sm:w-64 px-3 py-2 bg-white border border-emerald-200 rounded-lg text-xs font-mono text-slate-600 focus:outline-none"
-                    onClick={(e) => e.currentTarget.select()}
-                  />
-                  <button 
-                    onClick={() => {
-                      const farmUrl = `${window.location.origin}/portal?farm=${tenantId}`;
-                      navigator.clipboard.writeText(farmUrl);
-                      alert('【貴農園専用URL】をコピーしました！\n\n' + farmUrl + '\n\n現場タブレットや従業員のスマホでこのURLを開くだけで、貴農園のスタッフ選択・打刻画面が即座に表示されます。');
-                    }}
-                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors whitespace-nowrap shadow-sm active:scale-95"
-                  >
-                    コピー
-                  </button>
-                </div>
-              </div>
-            )}
+      {/* ページヘッダー＆クイックコントロール */}
+      <div className="flex flex-col gap-4 border-b border-slate-200 pb-5">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800">
+                農業経営司令塔
+              </span>
+              <span className="text-xs text-slate-400 font-bold">P&L 損益・採算リアルタイム分析</span>
+            </div>
+            <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+              経営ダッシュボード
+            </h1>
           </div>
           
-          {/* シンプルな経費率設定 */}
-          <div className="hidden md:flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200">
-            <span className="text-sm font-bold text-slate-600">経費率(資材等)設定:</span>
-            <div className="flex items-center gap-1">
-              <span className="text-slate-400 text-sm">売上の</span>
-              <input 
-                type="number" 
-                value={estimateRate}
-                onChange={(e) => setEstimateRate(Number(e.target.value) || 0)}
-                className="bg-slate-100 rounded-lg w-14 px-2 py-1 text-center font-black text-amber-600 outline-none focus:ring-2 focus:ring-amber-400 transition-shadow"
-              />
-              <span className="text-slate-400 text-sm">%</span>
+          {/* 右上アクションエリア：現場URLクイック配布 ＆ 経費率設定 */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {tenantId && (
+              <button
+                onClick={async () => {
+                  const farmUrl = `${window.location.origin}/portal/${tenantId}`;
+                  try {
+                    await navigator.clipboard.writeText(farmUrl);
+                    setCopiedUrl(true);
+                    setTimeout(() => setCopiedUrl(false), 2500);
+                  } catch (e) {
+                    console.error(e);
+                  }
+                }}
+                className="flex items-center gap-2 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition-all shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer"
+                title="現場タブレットや従業員用ポータルのURLをコピー"
+              >
+                {copiedUrl ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="text-emerald-700 font-black">現場URLをコピーしました！</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>📱 現場ポータルURLをコピー</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl shadow-2xs border border-slate-200">
+              <span className="text-xs font-bold text-slate-500">概算経費率:</span>
+              <div className="flex items-center gap-1">
+                <span className="text-slate-400 text-xs">売上の</span>
+                <input 
+                  type="number" 
+                  value={estimateRate}
+                  onChange={(e) => setEstimateRate(Number(e.target.value) || 0)}
+                  className="bg-slate-100 rounded-lg w-12 px-1.5 py-0.5 text-center font-black text-xs text-amber-600 outline-none focus:ring-2 focus:ring-amber-400"
+                />
+                <span className="text-slate-500 text-xs font-bold">%</span>
+              </div>
             </div>
           </div>
         </div>
-        
-        {/* 大きく直感的な「予実切り替え」タブ */}
-        <div className="flex justify-center w-full">
-          <div className="bg-slate-100/80 p-1.5 rounded-2xl flex items-center shadow-inner border border-slate-200/60 max-w-md w-full">
+
+        {/* 朝イチ現場アラートバー ＆ 予実切り替えタブ */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-2xl border border-slate-200/80">
+          {/* 左側：現場即応アクションアラート */}
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+            {pendingApprovalsCount > 0 ? (
+              <Link
+                href={tenantId ? `/admin/approvals?farm=${tenantId}` : '/admin/approvals'}
+                className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-xl text-xs font-black text-amber-900 transition-colors shadow-2xs group"
+              >
+                <AlertCircle className="w-4 h-4 text-amber-600 animate-pulse shrink-0" />
+                <span>未承認の日報が <strong className="text-sm text-amber-950 underline">{pendingApprovalsCount}件</strong> あります</span>
+                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform shrink-0" />
+              </Link>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-800">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>未承認の日報はありません（承認完了済）</span>
+              </div>
+            )}
+            
+            <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-500 font-medium border-l border-slate-200 pl-3">
+              <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span>本日の作業実績: <strong className="text-slate-800 font-bold">{todayWorkCount}件</strong></span>
+            </div>
+          </div>
+
+          {/* 右側：予実切り替えスイッチ */}
+          <div className="bg-slate-200/70 p-1 rounded-xl flex items-center shadow-inner w-full sm:w-auto">
             <button
               onClick={() => setDataViewMode('actualOnly')}
-              className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all duration-300 flex items-center justify-center gap-2 ${
+              className={`py-1.5 px-3.5 rounded-lg font-black text-xs transition-all flex items-center justify-center gap-1.5 ${
                 dataViewMode === 'actualOnly' 
-                  ? 'bg-white text-emerald-600 shadow-[0_2px_10px_rgba(0,0,0,0.08)] scale-100' 
-                  : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 scale-95'
+                  ? 'bg-white text-emerald-700 shadow-xs' 
+                  : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              <div className={`w-2 h-2 rounded-full ${dataViewMode === 'actualOnly' ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
-              確定した【実績】のみ
+              <div className={`w-1.5 h-1.5 rounded-full ${dataViewMode === 'actualOnly' ? 'bg-emerald-500' : 'bg-slate-400'}`}></div>
+              確定実績のみ
             </button>
-            
             <button
               onClick={() => setDataViewMode('includePlanned')}
-              className={`flex-1 py-3 px-4 rounded-xl font-black text-sm transition-all duration-300 flex items-center justify-center gap-2 ${
+              className={`py-1.5 px-3.5 rounded-lg font-black text-xs transition-all flex items-center justify-center gap-1.5 ${
                 dataViewMode === 'includePlanned' 
-                  ? 'bg-white text-amber-600 shadow-[0_2px_10px_rgba(0,0,0,0.08)] scale-100' 
-                  : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 scale-95'
+                  ? 'bg-white text-amber-700 shadow-xs' 
+                  : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              <div className={`w-2 h-2 rounded-full ${dataViewMode === 'includePlanned' ? 'bg-amber-500' : 'bg-slate-300'}`}></div>
-              予定＋実績【予想】
+              <div className={`w-1.5 h-1.5 rounded-full ${dataViewMode === 'includePlanned' ? 'bg-amber-500' : 'bg-slate-400'}`}></div>
+              予定＋実績 (着地予想)
             </button>
-          </div>
-        </div>
-        
-        {/* モバイル用の経費率設定 (画面が小さい時だけ表示) */}
-        <div className="md:hidden flex items-center justify-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200 w-fit mx-auto">
-          <span className="text-sm font-bold text-slate-600">経費率:</span>
-          <div className="flex items-center gap-1">
-            <input 
-              type="number" 
-              value={estimateRate}
-              onChange={(e) => setEstimateRate(Number(e.target.value) || 0)}
-              className="bg-slate-100 rounded-lg w-14 px-2 py-1 text-center font-black text-amber-600 outline-none"
-            />
-            <span className="text-slate-400 text-sm">%</span>
           </div>
         </div>
       </div>
@@ -417,35 +468,81 @@ export default function DashboardPage() {
       {isLoading ? (
         <div className="h-64 flex items-center justify-center">
           <div className="animate-pulse flex flex-col items-center">
-            <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p className="text-slate-500 font-bold tracking-widest">集計中...</p>
+            <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-slate-500 font-bold tracking-widest text-sm">集計中...</p>
           </div>
         </div>
       ) : (
         <>
-          {/* --- サマリー (P&L) カード群 --- */}
+          {/* --- 洗練されたエグゼクティブKPIサマリー (P&L) --- */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden group">
-              <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
-              <div className="text-blue-100 font-bold mb-1 flex items-center gap-2"><Banknote className="w-4 h-4" /> 総売上</div>
-              <div className="text-3xl font-black tracking-tight">¥{summary.sales.toLocaleString()}</div>
+            
+            {/* 1. 総売上 */}
+            <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs hover:shadow-xs transition-shadow relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-black text-slate-500 flex items-center gap-1.5">
+                  <Banknote className="w-4 h-4 text-blue-600 shrink-0" /> 総売上
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100">
+                  確定販売額
+                </span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                ¥{summary.sales.toLocaleString()}
+              </div>
+              <p className="text-[11px] text-slate-400 font-medium mt-1">
+                販売管理システム連携データ
+              </p>
             </div>
             
-            <div className="bg-gradient-to-br from-rose-500 to-pink-600 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden group">
-              <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
-              <div className="text-rose-100 font-bold mb-1 flex items-center gap-2"><Activity className="w-4 h-4" /> 総コスト (人件費＋資材)</div>
-              <div className="text-3xl font-black tracking-tight">¥{(summary.laborCost + summary.materialCost).toLocaleString()}</div>
+            {/* 2. 総コスト */}
+            <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs hover:shadow-xs transition-shadow relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-black text-slate-500 flex items-center gap-1.5">
+                  <Activity className="w-4 h-4 text-rose-500 shrink-0" /> 総コスト
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                  人件費＋概算資材
+                </span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                ¥{(summary.laborCost + summary.materialCost).toLocaleString()}
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium mt-1">
+                <span>人件費: ¥{summary.laborCost.toLocaleString()}</span>
+                <span className="text-slate-300">|</span>
+                <span>資材等: ¥{summary.materialCost.toLocaleString()}</span>
+              </div>
             </div>
             
-            <div className="bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden group lg:col-span-2">
-              <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rounded-full group-hover:scale-150 transition-transform duration-500"></div>
-              <div className="text-amber-100 font-bold mb-1 flex items-center gap-2"><TrendingUp className="w-4 h-4" /> 営業利益 (純利益)</div>
-              <div className="flex items-baseline gap-4">
-                <div className="text-4xl font-black tracking-tight">¥{summary.profit.toLocaleString()}</div>
-                <div className="text-lg font-bold bg-white/20 px-3 py-1 rounded-full backdrop-blur-sm">
-                  利益率 {summary.margin.toFixed(1)}%
+            {/* 3 & 4. 営業利益 (純利益) */}
+            <div className={`rounded-2xl p-5 border shadow-2xs hover:shadow-xs transition-shadow relative overflow-hidden lg:col-span-2 ${
+              summary.profit >= 0 
+                ? 'bg-gradient-to-br from-emerald-50/60 to-teal-50/30 border-emerald-200' 
+                : 'bg-gradient-to-br from-rose-50/80 to-amber-50/30 border-rose-200'
+            }`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-xs font-black flex items-center gap-1.5 ${summary.profit >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
+                  <TrendingUp className="w-4 h-4 shrink-0" /> 営業利益 (純利益)
+                </span>
+                <div className={`text-xs font-black px-2.5 py-0.5 rounded-full border shadow-2xs ${
+                  summary.profit >= 0 
+                    ? 'bg-emerald-600 text-white border-emerald-700' 
+                    : 'bg-rose-600 text-white border-rose-700'
+                }`}>
+                  {summary.profit >= 0 ? '黒字' : '赤字'} 利益率 {summary.margin.toFixed(1)}%
                 </div>
               </div>
+              <div className="flex items-baseline gap-3">
+                <div className={`text-3xl sm:text-4xl font-black tracking-tight ${summary.profit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  {formatCurrency(summary.profit)}
+                </div>
+              </div>
+              <p className={`text-[11px] font-medium mt-1 ${summary.profit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                {summary.profit >= 0 
+                  ? '※総売上から人件費および資材経費を差し引いた差引純利益です。' 
+                  : '※現在は先行投資またはコスト先行状態です（▲表記は赤字を表します）。'}
+              </p>
             </div>
           </div>
 
@@ -472,9 +569,9 @@ export default function DashboardPage() {
                   <ComposedChart data={monthlyTrendData} margin={{ top: 20, right: 20, bottom: 0, left: 20 }}>
                     <CartesianGrid stroke="#f1f5f9" vertical={false} />
                     <XAxis dataKey="month" tick={{fill: '#64748b', fontWeight: 'bold'}} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={(val) => `¥${(val/10000).toFixed(0)}万`} tick={{fill: '#64748b'}} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={formatYAxisTenThousand} tick={{fill: '#64748b'}} axisLine={false} tickLine={false} />
                     <Tooltip 
-                      formatter={(val: any, name: any) => [`¥${val.toLocaleString()}`, String(name || '')]}
+                      formatter={(val: any, name: any) => [`¥${Math.round(val || 0).toLocaleString()}`, String(name || '')]}
                       contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }}
                     />
                     <Legend wrapperStyle={{ paddingTop: '20px', fontWeight: 'bold' }} />
@@ -514,7 +611,7 @@ export default function DashboardPage() {
                     <BarChart data={profitabilityData} margin={{ top: 0, right: 0, left: -20, bottom: 40 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 'bold' }} angle={-45} textAnchor="end" />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(val) => `¥${(val/10000).toFixed(0)}万`} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={formatYAxisTenThousand} />
                       <Tooltip content={<CustomProfitTooltip />} cursor={{fill: '#f8fafc'}} />
                       <Bar dataKey="利益" radius={[6, 6, 0, 0]} maxBarSize={50}>
                         {profitabilityData.map((entry, idx) => (
@@ -549,7 +646,7 @@ export default function DashboardPage() {
                     <BarChart data={fieldData} margin={{ top: 0, right: 0, left: -20, bottom: 40 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 'bold' }} angle={-45} textAnchor="end" />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(val) => `¥${(val/10000).toFixed(0)}万`} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={formatYAxisTenThousand} />
                       <Tooltip content={<CustomProfitTooltip />} cursor={{fill: '#f8fafc'}} />
                       <Bar dataKey="利益" radius={[6, 6, 0, 0]} maxBarSize={50}>
                         {fieldData.map((entry, idx) => (
@@ -581,7 +678,7 @@ export default function DashboardPage() {
                     <BarChart data={workerProductivityData} margin={{ top: 0, right: 0, left: -20, bottom: 40 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 'bold' }} angle={-45} textAnchor="end" />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(val) => `¥${val.toLocaleString()}`} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={formatCurrency} />
                       <Tooltip 
                         formatter={(val: any, name: any) => [`¥${val.toLocaleString()}/h`, String(name || '')]}
                         cursor={{fill: '#f8fafc'}}

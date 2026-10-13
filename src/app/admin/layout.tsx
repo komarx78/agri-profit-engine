@@ -139,19 +139,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       title: '日々の現場・作業日誌',
       items: [
         { name: 'ダッシュボード', path: tenantId ? `/admin/dashboard?farm=${tenantId}` : '/admin/dashboard', icon: LayoutDashboard },
-        { name: '作付け・作業 統合司令塔', path: tenantId ? `/admin/cultivations?farm=${tenantId}` : '/admin/cultivations', icon: Sprout },
-        { name: 'タスク・スケジュール管理', path: tenantId ? `/admin/tasks?farm=${tenantId}` : '/admin/tasks', icon: Calendar },
-        { name: '作業承認インボックス', path: tenantId ? `/admin/approvals?farm=${tenantId}` : '/admin/approvals', icon: Inbox },
+        { name: '作付け・作業日誌', path: tenantId ? `/admin/cultivations?farm=${tenantId}` : '/admin/cultivations', icon: Sprout },
+        { name: 'タスク・作業予定', path: tenantId ? `/admin/tasks?farm=${tenantId}` : '/admin/tasks', icon: Calendar },
+        { name: '日報・作業承認', path: tenantId ? `/admin/approvals?farm=${tenantId}` : '/admin/approvals', icon: Inbox },
       ]
     },
     {
       title: '栽培計画・マップ・分析',
       items: [
-        { name: '作付地図 (圃場マップ)', path: tenantId ? `/admin/map?farm=${tenantId}` : '/admin/map', icon: MapPin },
-        { name: '栽培・予実管理表', path: tenantId ? `/admin/cultivation-schedule?farm=${tenantId}` : '/admin/cultivation-schedule', icon: Calendar },
+        { name: '作付地図・圃場', path: tenantId ? `/admin/map?farm=${tenantId}` : '/admin/map', icon: MapPin },
+        { name: '栽培計画・予実', path: tenantId ? `/admin/cultivation-schedule?farm=${tenantId}` : '/admin/cultivation-schedule', icon: Calendar },
         { name: '作目別 採算分析', path: tenantId ? `/admin/crop-analysis?farm=${tenantId}` : '/admin/crop-analysis', icon: PieChart },
         { name: '育苗スケジュール', path: tenantId ? `/admin/nursery-schedule?farm=${tenantId}` : '/admin/nursery-schedule', icon: Table },
-        { name: '必要資材自動集計', path: tenantId ? `/admin/material-requirements?farm=${tenantId}` : '/admin/material-requirements', icon: Calculator },
+        { name: '資材必要量集計', path: tenantId ? `/admin/material-requirements?farm=${tenantId}` : '/admin/material-requirements', icon: Calculator },
       ]
     },
     {
@@ -273,10 +273,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </Link>
                 <button 
                   onClick={handleCopyUrl}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-emerald-600 font-bold bg-emerald-50 hover:bg-emerald-100 transition-colors text-left mt-1.5"
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors shadow-xs border border-emerald-200 mt-1.5"
                 >
-                  {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-                  従業員用URLをコピー
+                  {copied ? <Check className="w-4 h-4 text-emerald-600 shrink-0" /> : <Copy className="w-4 h-4 text-emerald-600 shrink-0" />}
+                  <span className="whitespace-nowrap">{copied ? 'URLをコピー完了！' : '従業員用URLをコピー'}</span>
                 </button>
               </>
             )}
@@ -364,10 +364,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </Link>
               <button 
                 onClick={handleCopyUrl}
-                className="w-full mt-1.5 flex items-center gap-3 px-4 py-2.5 rounded-xl text-emerald-600 font-bold bg-emerald-50 hover:bg-emerald-100 transition-colors text-left shadow-sm"
+                className="w-full mt-1.5 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors shadow-xs border border-emerald-200"
               >
-                {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-                従業員用URLをコピー
+                {copied ? <Check className="w-4 h-4 text-emerald-600 shrink-0" /> : <Copy className="w-4 h-4 text-emerald-600 shrink-0" />}
+                <span className="whitespace-nowrap">{copied ? 'URLをコピー完了！' : '従業員用URLをコピー'}</span>
               </button>
             </>
           )}
