@@ -3,12 +3,23 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft, Coffee, Briefcase, FlaskConical, Wheat, Truck } from 'lucide-react';
+import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft, Coffee, Briefcase, FlaskConical, Wheat, Truck, Smartphone, MessageSquare } from 'lucide-react';
 import Papa from 'papaparse';
 import { autoTranslateMasterData } from '@/app/actions/translate';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { LineLinkModal } from '@/components/LineLinkModal';
 
 type MasterType = 'materials' | 'pesticides' | 'fertilizers' | 'sales_prices' | 'crops' | 'fields' | 'workers' | 'departments' | 'sales_channels';
+
+// 4桁英数字のLINE専用連携コード生成（視認性の高い32文字）
+const generateLineLinkCode = (): string => {
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  let code = '';
+  for (let i = 0; i < 4; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+};
 
 const MATERIAL_CATEGORIES = [
   '諸材料費',
@@ -31,6 +42,7 @@ export default function MastersPage() {
   const [channels, setChannels] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [uploadStatus, setUploadStatus] = useState<{type: string, message: string} | null>(null);
+  const [selectedWorkerForLine, setSelectedWorkerForLine] = useState<any | null>(null);
 
   // モーダル・CRUD状態管理
   const [modalType, setModalType] = useState<MasterType | null>(null);
@@ -82,7 +94,27 @@ export default function MastersPage() {
       
       setCrops(cRes.data || []);
       setFields(fRes.data || []);
-      setWorkers(wRes.data || []);
+
+      // 未連携スタッフにLINE専用連携コードが未発行の場合、自動発行して画面＆DBに即時反映
+      const rawWorkers = wRes.data || [];
+      const populatedWorkers = rawWorkers.map(w => {
+        if (!w.line_user_id && (!w.line_link_pin || w.line_link_pin.trim() === '')) {
+          const generatedCode = generateLineLinkCode();
+          supabase
+            .from('workers')
+            .update({ 
+              line_link_pin: generatedCode,
+              line_link_pin_expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+            })
+            .eq('id', w.id)
+            .then(() => {})
+            .catch(() => {});
+          return { ...w, line_link_pin: generatedCode };
+        }
+        return w;
+      });
+      setWorkers(populatedWorkers);
+
       setDepartments(dRes.data || []);
       setMaterials(mRes.data || []);
       setSalesPrices(spRes.data || []);
@@ -660,10 +692,10 @@ export default function MastersPage() {
                 {fields.length === 0 ? <p className="text-slate-400 text-sm">データなし</p> : null}
                 {fields.map(f => (
                   <div key={f.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
-                    <div>
+                    <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
                       <span className="font-bold text-slate-700">{f.name}</span>
-                      {f.area_size && <span className="text-[10px] text-slate-500 ml-2 font-bold">{f.area_size}a</span>}
-                      {f.polygon_coordinates && <span className="text-[10px] bg-emerald-100 text-emerald-700 ml-2 px-1.5 py-0.5 rounded font-bold border border-emerald-200">マップ連携済</span>}
+                      {f.area_size && <span className="text-[10px] text-slate-500 font-bold whitespace-nowrap">{f.area_size}a</span>}
+                      {f.polygon_coordinates && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold border border-emerald-200 whitespace-nowrap shrink-0 inline-block">マップ連携済</span>}
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => handleOpenModal('fields', f)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
@@ -685,30 +717,52 @@ export default function MastersPage() {
               <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
                 {workers.length === 0 ? <p className="text-slate-400 text-sm">データなし</p> : null}
                 {workers.map(w => (
-                  <div key={w.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
-                    <div>
+                  <div key={w.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors gap-2">
+                    <div className="space-y-1.5 flex-1 min-w-0 pr-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-slate-700">{w.name}</span>
-                        <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-300 px-1.5 py-0.5 rounded font-mono font-bold" title="現場アプリ・打刻用暗証番号（4桁）">
+                        <span className="font-bold text-slate-800 text-sm">{w.name}</span>
+                        <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-300 px-1.5 py-0.5 rounded font-mono font-bold whitespace-nowrap" title="現場打刻・ログイン用暗証番号（4桁）">
                           打刻PIN: {w.pin_code || '0000'}
                         </span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap text-xs">
                         {w.line_user_id ? (
-                          <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">
-                            LINE連携済
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-black flex items-center gap-1 border border-emerald-300 whitespace-nowrap">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> LINE連携済
                           </span>
                         ) : (
-                          <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded font-bold" title="LINE未連携">
-                            LINE未連携{w.line_link_pin ? ` (連携コード: ${w.line_link_pin})` : ''}
-                          </span>
+                          <div 
+                            onClick={() => setSelectedWorkerForLine(w)} 
+                            className="flex items-center gap-1.5 flex-wrap cursor-pointer group/line" 
+                            title="クリックしてこのスタッフ専用のLINE連携案内を開く"
+                          >
+                            <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold border border-amber-300 whitespace-nowrap">
+                              LINE未連携
+                            </span>
+                            <span className="text-[11px] font-mono font-black text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded shadow-2xs whitespace-nowrap flex items-center gap-1 transition-colors" title="スタッフが公式LINEに送信する専用コード">
+                              <span className="text-[9px] text-emerald-600 font-bold">LINEコード:</span>
+                              <strong className="text-emerald-950 font-mono tracking-wider font-black">{w.line_link_pin || '----'}</strong>
+                            </span>
+                          </div>
                         )}
+                        <span className="text-xs text-slate-400 whitespace-nowrap">時給: ¥{w.hourly_wage}</span>
                       </div>
-                      <div className="text-xs text-slate-400 mt-1">時給: ¥{w.hourly_wage}</div>
                     </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleOpenModal('workers', w)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
+                    <div className="flex items-center gap-1 shrink-0">
+                      {!w.line_user_id && (
+                        <button 
+                          onClick={() => setSelectedWorkerForLine(w)} 
+                          className="px-2 py-1 text-emerald-700 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                          title="このスタッフ専用のLINE連携QR・コード案内を表示"
+                        >
+                          <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="hidden sm:inline">LINE案内</span>
+                        </button>
+                      )}
+                      <button onClick={() => handleOpenModal('workers', w)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg opacity-60 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleDelete('workers', w.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                      <button onClick={() => handleDelete('workers', w.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg opacity-60 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -1712,6 +1766,14 @@ export default function MastersPage() {
           </div>
         </div>
       )}
+
+      {/* 📱 管理者用：各スタッフのLINE連携案内モーダル */}
+      <LineLinkModal
+        isOpen={!!selectedWorkerForLine}
+        onClose={() => setSelectedWorkerForLine(null)}
+        worker={selectedWorkerForLine}
+        onLinkedSuccess={fetchMasters}
+      />
     </div>
   );
 }
