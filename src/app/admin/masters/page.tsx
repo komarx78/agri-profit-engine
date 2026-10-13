@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft, Coffee, Briefcase, FlaskConical, Wheat, Truck, Smartphone, MessageSquare } from 'lucide-react';
+import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft, Coffee, Briefcase, FlaskConical, Wheat, Truck, Smartphone, MessageSquare, Search, Table, LayoutGrid } from 'lucide-react';
 import Papa from 'papaparse';
 import { autoTranslateMasterData } from '@/app/actions/translate';
 import { getCurrentTenantId } from '@/lib/tenant';
@@ -58,6 +58,12 @@ export default function MastersPage() {
 
   // 販売価格マスタの表示モード ('byCrop' | 'byChannel')
   const [priceViewMode, setPriceViewMode] = useState<'byCrop' | 'byChannel'>('byCrop');
+
+  // 生産・資材統合管理コンソール用の状態管理
+  const [materialSearchQuery, setMaterialSearchQuery] = useState("");
+  const [materialActiveTab, setMaterialActiveTab] = useState<'all' | 'pesticide' | 'fertilizer' | 'other'>('all');
+  const [materialViewMode, setMaterialViewMode] = useState<'card' | 'table'>('table');
+  const [pesticideSubFilter, setPesticideSubFilter] = useState<'all' | 'insecticide' | 'fungicide' | 'herbicide'>('all');
 
   const fileInputRefMats = useRef<HTMLInputElement>(null);
   const fileInputRefPesticides = useRef<HTMLInputElement>(null);
@@ -633,6 +639,49 @@ export default function MastersPage() {
   };
   const groupedSalesPrices = getGroupedSalesPrices();
 
+  // 生産・資材の統合フィルタリングロジック
+  const countAll = materials.length;
+  const countPesticide = materials.filter(m => m.material_type === 'pesticide' || m.category === '農薬費').length;
+  const countFertilizer = materials.filter(m => m.material_type === 'fertilizer' || m.category === '肥料費').length;
+  const countOther = materials.filter(m => m.material_type !== 'pesticide' && m.material_type !== 'fertilizer' && m.category !== '農薬費' && m.category !== '肥料費').length;
+
+  const filteredMaterials = materials.filter(m => {
+    // 1. 分類タブによるフィルタ
+    const isPest = m.material_type === 'pesticide' || m.category === '農薬費';
+    const isFert = m.material_type === 'fertilizer' || m.category === '肥料費';
+    const isOth = !isPest && !isFert;
+
+    if (materialActiveTab === 'pesticide' && !isPest) return false;
+    if (materialActiveTab === 'fertilizer' && !isFert) return false;
+    if (materialActiveTab === 'other' && !isOth) return false;
+
+    // 2. 農薬選択時のサブフィルター（殺虫・殺菌・除草）
+    if (materialActiveTab === 'pesticide' && pesticideSubFilter !== 'all') {
+      const typeStr = `${m.pesticide_type || ''} ${m.specification || ''} ${m.name || ''}`.toLowerCase();
+      if (pesticideSubFilter === 'insecticide' && !typeStr.includes('殺虫') && !typeStr.includes('インセクト')) return false;
+      if (pesticideSubFilter === 'fungicide' && !typeStr.includes('殺菌') && !typeStr.includes('ファンジ')) return false;
+      if (pesticideSubFilter === 'herbicide' && !typeStr.includes('除草') && !typeStr.includes('ハービ')) return false;
+    }
+
+    // 3. リアルタイム検索クエリ（品名、公的登録番号、RAC、成分、規格、カテゴリ）
+    if (materialSearchQuery.trim()) {
+      const q = materialSearchQuery.trim().toLowerCase();
+      const matchName = (m.name || '').toLowerCase().includes(q);
+      const matchSpec = (m.specification || '').toLowerCase().includes(q);
+      const matchRac = (m.rac_code || '').toLowerCase().includes(q);
+      const matchCategory = (m.category || '').toLowerCase().includes(q);
+      const matchDilution = (m.dilution || '').toLowerCase().includes(q);
+      const matchUsage = (m.fertilizer_usage || '').toLowerCase().includes(q);
+      const matchNpk = `${m.n_percent || 0}-${m.p_percent || 0}-${m.k_percent || 0}`.includes(q);
+      
+      if (!matchName && !matchSpec && !matchRac && !matchCategory && !matchDilution && !matchUsage && !matchNpk) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-12 relative">
       <div>
@@ -804,194 +853,426 @@ export default function MastersPage() {
               
 
 
-          {/* 単価・生産資材マスタ（3大分離） */}
-          <div className="flex items-center justify-between mt-12 mb-4">
-            <h2 className="text-xl font-bold text-slate-700 border-b-2 border-slate-200 pb-1">生産・資材マスタ（3大分類）</h2>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            {/* 1. 農薬マスタ */}
-            {(() => {
-              const pesticideList = materials.filter(m => m.material_type === 'pesticide' || m.category === '農薬費');
-              return (
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
-                  <CardHeader icon={FlaskConical} title={`💊 農薬マスタ (${pesticideList.length})`} type="pesticides" />
-                  
-                  <div className="space-y-2.5 overflow-y-auto flex-1 mb-4 pr-1">
-                    {pesticideList.length === 0 ? <p className="text-slate-400 text-sm">農薬データなし（農薬検索から一括追加も可能）</p> : null}
-                    {pesticideList.map(m => (
-                      <div key={m.id} className="p-3 bg-slate-50 hover:bg-slate-100/90 rounded-xl border border-slate-200/80 transition-colors group space-y-1.5">
-                        {/* 上段: 品名 ＆ 金額 ＆ 操作ボタン */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="font-bold text-slate-800 text-sm leading-snug flex-1 min-w-0 break-words">
+          {/* 生産・資材マスタ（統合コンソール・フルワイド） */}
+          <div className="mt-12 bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
+            {/* ヘッダー部: タイトル ＆ 新規追加ボタングループ */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <FlaskConical className="w-6 h-6 text-emerald-600 shrink-0" />
+                  <h2 className="text-xl font-black text-slate-800 tracking-tight">生産・資材マスタ 統合管理コンソール</h2>
+                  <span className="text-xs bg-emerald-100 text-emerald-800 font-black px-2.5 py-0.5 rounded-full border border-emerald-300">
+                    全 {countAll} 件
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1 font-medium">
+                  農薬・肥料・生産資材を一元管理。リアルタイム検索や分類フィルター、一覧表（Excel風）で直感操作できます。
+                </p>
+              </div>
+
+              {/* 新規登録ボタングループ */}
+              <div className="flex items-center gap-2 flex-wrap shrink-0">
+                <button 
+                  onClick={() => handleOpenModal('pesticides')}
+                  className="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  title="新しい農薬を登録（公的DB検索からも可能）"
+                >
+                  <Plus className="w-4 h-4" />農薬を追加
+                </button>
+                <button 
+                  onClick={() => handleOpenModal('fertilizers')}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  title="新しい肥料・施肥資材を登録"
+                >
+                  <Plus className="w-4 h-4" />肥料を追加
+                </button>
+                <button 
+                  onClick={() => handleOpenModal('materials')}
+                  className="bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  title="マルチや防虫ネットなどの資材を登録"
+                >
+                  <Plus className="w-4 h-4" />その他資材
+                </button>
+              </div>
+            </div>
+
+            {/* コントロールツールバー: 検索窓 ＋ 分類タブ ＋ 表示切替 */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+              {/* 検索窓 */}
+              <div className="relative flex-1 min-w-[240px] max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={materialSearchQuery}
+                  onChange={(e) => setMaterialSearchQuery(e.target.value)}
+                  placeholder="商品名・公的登録番号・RAC・成分比率等で検索..."
+                  className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all placeholder:text-slate-400"
+                />
+                {materialSearchQuery && (
+                  <button 
+                    onClick={() => setMaterialSearchQuery("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-0.5 rounded-full hover:bg-slate-100"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* 分類タブ */}
+              <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 overflow-x-auto shrink-0">
+                <button
+                  onClick={() => { setMaterialActiveTab('all'); setPesticideSubFilter('all'); }}
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
+                    materialActiveTab === 'all' 
+                      ? 'bg-slate-800 text-white shadow-2xs' 
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  すべて ({countAll})
+                </button>
+                <button
+                  onClick={() => setMaterialActiveTab('pesticide')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                    materialActiveTab === 'pesticide' 
+                      ? 'bg-teal-600 text-white shadow-2xs' 
+                      : 'text-slate-600 hover:text-teal-700 hover:bg-teal-50'
+                  }`}
+                >
+                  💊 農薬 ({countPesticide})
+                </button>
+                <button
+                  onClick={() => setMaterialActiveTab('fertilizer')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                    materialActiveTab === 'fertilizer' 
+                      ? 'bg-emerald-600 text-white shadow-2xs' 
+                      : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50'
+                  }`}
+                >
+                  🌱 肥料 ({countFertilizer})
+                </button>
+                <button
+                  onClick={() => setMaterialActiveTab('other')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                    materialActiveTab === 'other' 
+                      ? 'bg-amber-600 text-white shadow-2xs' 
+                      : 'text-slate-600 hover:text-amber-700 hover:bg-amber-50'
+                  }`}
+                >
+                  📦 その他資材 ({countOther})
+                </button>
+              </div>
+
+              {/* 表示切替スイッチ (一覧表 ⇄ カード) */}
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center bg-white p-1 rounded-lg border border-slate-200">
+                  <button
+                    onClick={() => setMaterialViewMode('table')}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      materialViewMode === 'table'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                    title="Excel風の一覧テーブルで一望"
+                  >
+                    <Table className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">一覧表</span>
+                  </button>
+                  <button
+                    onClick={() => setMaterialViewMode('card')}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      materialViewMode === 'card'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                    title="カード形式でゆったり確認"
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">カード</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* 農薬タブ選択時のサブフィルター（殺虫・殺菌・除草） */}
+            {materialActiveTab === 'pesticide' && (
+              <div className="flex items-center gap-1.5 text-xs text-slate-500 pl-1 flex-wrap">
+                <span className="font-bold text-[11px] text-slate-400">農薬絞り込み:</span>
+                <button
+                  onClick={() => setPesticideSubFilter('all')}
+                  className={`px-2 py-0.5 rounded-md font-bold text-[11px] transition-colors cursor-pointer ${
+                    pesticideSubFilter === 'all' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-200 bg-slate-100'
+                  }`}
+                >
+                  すべて ({countPesticide})
+                </button>
+                <button
+                  onClick={() => setPesticideSubFilter('insecticide')}
+                  className={`px-2 py-0.5 rounded-md font-bold text-[11px] transition-colors cursor-pointer ${
+                    pesticideSubFilter === 'insecticide' ? 'bg-rose-600 text-white' : 'text-rose-700 hover:bg-rose-100 bg-rose-50 border border-rose-200'
+                  }`}
+                >
+                  🦟 殺虫剤
+                </button>
+                <button
+                  onClick={() => setPesticideSubFilter('fungicide')}
+                  className={`px-2 py-0.5 rounded-md font-bold text-[11px] transition-colors cursor-pointer ${
+                    pesticideSubFilter === 'fungicide' ? 'bg-sky-600 text-white' : 'text-sky-700 hover:bg-sky-100 bg-sky-50 border border-sky-200'
+                  }`}
+                >
+                  🍄 殺菌剤
+                </button>
+                <button
+                  onClick={() => setPesticideSubFilter('herbicide')}
+                  className={`px-2 py-0.5 rounded-md font-bold text-[11px] transition-colors cursor-pointer ${
+                    pesticideSubFilter === 'herbicide' ? 'bg-amber-600 text-white' : 'text-amber-800 hover:bg-amber-100 bg-amber-50 border border-amber-200'
+                  }`}
+                >
+                  🌿 除草剤
+                </button>
+              </div>
+            )}
+
+            {/* メイン一覧（テーブル or カード） */}
+            {filteredMaterials.length === 0 ? (
+              <div className="p-12 text-center bg-slate-50 rounded-xl border border-slate-200">
+                <p className="text-slate-500 font-bold text-sm">
+                  {materialSearchQuery 
+                    ? `「${materialSearchQuery}」に一致する資材は見つかりませんでした。` 
+                    : '資材データが登録されていません。'}
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  上のボタン、またはCSV一括追加から登録してください。
+                </p>
+              </div>
+            ) : materialViewMode === 'table' ? (
+              /* 📊 一覧テーブル表示（Excel風） */
+              <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-2xs max-h-[580px] overflow-y-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-200 sticky top-0 z-10 backdrop-blur-xs">
+                    <tr>
+                      <th className="py-2.5 px-3 whitespace-nowrap">分類</th>
+                      <th className="py-2.5 px-3 min-w-[180px]">品名</th>
+                      <th className="py-2.5 px-3 min-w-[140px]">公的登録番号・仕様</th>
+                      <th className="py-2.5 px-3 min-w-[150px]">成分・RAC・希釈</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">用途・荷姿</th>
+                      <th className="py-2.5 px-3 text-right whitespace-nowrap">単価 (税込)</th>
+                      <th className="py-2.5 px-3 text-center whitespace-nowrap">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {filteredMaterials.map(m => {
+                      const isPest = m.material_type === 'pesticide' || m.category === '農薬費';
+                      const isFert = m.material_type === 'fertilizer' || m.category === '肥料費';
+                      return (
+                        <tr key={m.id} className="hover:bg-slate-50 transition-colors group">
+                          {/* 分類バッジ */}
+                          <td className="py-2 px-3 whitespace-nowrap">
+                            {isPest ? (
+                              <span className="text-[10px] bg-teal-100 text-teal-800 px-2 py-0.5 rounded font-black border border-teal-200">農薬</span>
+                            ) : isFert ? (
+                              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-black border border-emerald-200">肥料</span>
+                            ) : (
+                              <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-bold border border-slate-200">{m.category || '資材'}</span>
+                            )}
+                          </td>
+                          {/* 品名 */}
+                          <td className="py-2 px-3 font-bold text-slate-800 text-sm">
                             {m.name}
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
-                            <span className="font-mono font-bold text-teal-700 text-sm whitespace-nowrap">
-                              ¥{Number(m.default_price || 0).toLocaleString()}
-                            </span>
-                            <div className="flex items-center opacity-60 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => handleOpenModal('pesticides', m)} className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded" title="編集">
+                          </td>
+                          {/* 登録番号・仕様 */}
+                          <td className="py-2 px-3">
+                            {m.specification ? (
+                              <span className="text-[10px] bg-slate-800 text-amber-300 px-1.5 py-0.5 rounded font-mono font-bold inline-block shadow-2xs">
+                                {m.specification}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300">-</span>
+                            )}
+                          </td>
+                          {/* 成分・RAC・希釈 */}
+                          <td className="py-2 px-3">
+                            <div className="flex flex-wrap items-center gap-1">
+                              {m.rac_code && (
+                                <span className="text-[10px] bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded font-bold border border-rose-200 whitespace-nowrap">
+                                  RAC: {m.rac_code}
+                                </span>
+                              )}
+                              {m.dilution && (
+                                <span className="text-[10px] bg-teal-50 text-teal-800 px-1.5 py-0.5 rounded font-bold border border-teal-200 whitespace-nowrap">
+                                  {m.dilution}
+                                </span>
+                              )}
+                              {(m.n_percent !== undefined || m.p_percent !== undefined || m.k_percent !== undefined) && (
+                                <span className="text-[10px] bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded font-black border border-emerald-300 font-mono whitespace-nowrap">
+                                  N-P-K: {m.n_percent || 0}-{m.p_percent || 0}-{m.k_percent || 0}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          {/* 用途・荷姿 */}
+                          <td className="py-2 px-3 text-slate-600 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              {m.fertilizer_usage && (
+                                <span className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-bold border border-blue-200">
+                                  {m.fertilizer_usage}
+                                </span>
+                              )}
+                              {m.max_count ? (
+                                <span className="text-[10px] bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded font-bold border border-amber-200">
+                                  上限{m.max_count}回
+                                </span>
+                              ) : null}
+                              <span className="text-xs text-slate-500">
+                                {m.bag_weight_kg ? `${m.bag_weight_kg}kg/袋` : m.unit ? `(${m.unit})` : ''}
+                              </span>
+                            </div>
+                          </td>
+                          {/* 単価 */}
+                          <td className="py-2 px-3 text-right font-mono font-bold text-slate-800 text-sm whitespace-nowrap">
+                            ¥{Number(m.default_price || 0).toLocaleString()}
+                          </td>
+                          {/* 操作 */}
+                          <td className="py-2 px-3 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => handleOpenModal(isPest ? 'pesticides' : isFert ? 'fertilizers' : 'materials', m)}
+                                className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors cursor-pointer"
+                                title="編集"
+                              >
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
-                              <button onClick={() => handleDelete('materials', m.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="削除">
+                              <button
+                                onClick={() => handleDelete('materials', m.id)}
+                                className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                                title="削除"
+                              >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              /* 🗂️ カード表示モード（フルワイドグリッド） */
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 max-h-[580px] overflow-y-auto pr-1">
+                {filteredMaterials.map(m => {
+                  const isPest = m.material_type === 'pesticide' || m.category === '農薬費';
+                  const isFert = m.material_type === 'fertilizer' || m.category === '肥料費';
+                  return (
+                    <div key={m.id} className="p-3.5 bg-slate-50 hover:bg-slate-100/90 rounded-xl border border-slate-200/80 transition-colors group space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-0.5 flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            {isPest ? (
+                              <span className="text-[9px] bg-teal-100 text-teal-800 px-1.5 py-0.2 rounded font-black border border-teal-200 shrink-0">農薬</span>
+                            ) : isFert ? (
+                              <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-black border border-emerald-200 shrink-0">肥料</span>
+                            ) : (
+                              <span className="text-[9px] bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded font-bold border border-slate-300 shrink-0">{m.category || '資材'}</span>
+                            )}
+                            <span className="font-bold text-slate-800 text-sm leading-snug break-words">
+                              {m.name}
+                            </span>
                           </div>
                         </div>
-
-                        {/* 下段: 詳細タグ群（RAC、希釈/使用量、上限回数、単位） */}
-                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                          {m.rac_code && (
-                            <span className="text-[10px] bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded font-bold border border-rose-200 whitespace-nowrap">
-                              RAC: {m.rac_code}
-                            </span>
-                          )}
-                          {m.dilution && (
-                            <span className="text-[10px] bg-teal-50 text-teal-800 px-1.5 py-0.5 rounded font-bold border border-teal-200 whitespace-nowrap">
-                              {m.dilution}
-                            </span>
-                          )}
-                          {m.max_count ? (
-                            <span className="text-[10px] bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded font-bold border border-amber-200 whitespace-nowrap">
-                              上限{m.max_count}回
-                            </span>
-                          ) : null}
-                          <span className="text-[11px] text-slate-400 font-medium whitespace-nowrap">
-                            ({m.unit || '本'})
+                        <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                          <span className="font-mono font-bold text-slate-800 text-sm whitespace-nowrap">
+                            ¥{Number(m.default_price || 0).toLocaleString()}
                           </span>
+                          <div className="flex items-center opacity-70 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => handleOpenModal(isPest ? 'pesticides' : isFert ? 'fertilizers' : 'materials', m)} className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded" title="編集">
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => handleDelete('materials', m.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="削除">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                  <CsvActionButtons type="pesticides" inputRef={fileInputRefPesticides} />
-                </div>
-              );
-            })()}
 
-            {/* 2. 肥料マスタ */}
-            {(() => {
-              const fertilizerList = materials.filter(m => m.material_type === 'fertilizer' || m.category === '肥料費');
-              return (
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
-                  <CardHeader icon={Sprout} title={`🌱 肥料マスタ (${fertilizerList.length})`} type="fertilizers" />
-                  
-                  <div className="space-y-2.5 overflow-y-auto flex-1 mb-4 pr-1">
-                    {fertilizerList.length === 0 ? <p className="text-slate-400 text-sm">肥料データなし</p> : null}
-                    {fertilizerList.map(m => (
-                      <div key={m.id} className="p-3 bg-slate-50 hover:bg-slate-100/90 rounded-xl border border-slate-200/80 transition-colors group space-y-1.5">
-                        {/* 上段: 品名 ＆ 金額 ＆ 操作ボタン */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="font-bold text-slate-800 text-sm leading-snug flex-1 min-w-0 break-words">
-                            {m.name}
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
-                            <span className="font-mono font-bold text-emerald-800 text-sm whitespace-nowrap">
-                              ¥{Number(m.default_price || 0).toLocaleString()}
-                            </span>
-                            <div className="flex items-center opacity-60 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => handleOpenModal('fertilizers', m)} className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded" title="編集">
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button onClick={() => handleDelete('materials', m.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="削除">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
+                      {m.specification && (
+                        <div>
+                          <span className="text-[10px] bg-slate-800 text-amber-300 px-2 py-0.5 rounded font-mono font-bold inline-flex items-center shadow-2xs max-w-full truncate" title={m.specification}>
+                            {m.specification}
+                          </span>
                         </div>
+                      )}
 
-                        {/* 中段: 公的登録番号・規格（FAMIC登録等）があれば独立バッジで目立たせる */}
-                        {m.specification && (
-                          <div className="pt-0.5">
-                            <span className="text-[10px] bg-slate-800 text-amber-300 px-2 py-0.5 rounded font-mono font-bold inline-flex items-center shadow-2xs max-w-full truncate" title={m.specification}>
-                              {m.specification}
-                            </span>
-                          </div>
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                        {m.rac_code && (
+                          <span className="text-[10px] bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded font-bold border border-rose-200 whitespace-nowrap">
+                            RAC: {m.rac_code}
+                          </span>
                         )}
-
-                        {/* 下段: N-P-K比率、用途、袋容量 */}
-                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                          {(m.n_percent !== undefined || m.p_percent !== undefined || m.k_percent !== undefined) && (
-                            <span className="text-[10px] bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded font-black border border-emerald-300 font-mono whitespace-nowrap">
-                              N-P-K: {m.n_percent || 0}-{m.p_percent || 0}-{m.k_percent || 0}
-                            </span>
-                          )}
-                          {m.fertilizer_usage && (
-                            <span className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-bold border border-blue-200 whitespace-nowrap">
-                              {m.fertilizer_usage}
-                            </span>
-                          )}
-                          {m.bag_weight_kg && (
-                            <span className="text-[11px] text-slate-500 font-medium whitespace-nowrap">
-                              {m.bag_weight_kg}kg/袋
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <CsvActionButtons type="fertilizers" inputRef={fileInputRefFertilizers} />
-                </div>
-              );
-            })()}
-
-            {/* 3. その他資材マスタ */}
-            {(() => {
-              const otherMaterials = materials.filter(m => m.material_type !== 'pesticide' && m.material_type !== 'fertilizer' && m.category !== '農薬費' && m.category !== '肥料費');
-              return (
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
-                  <CardHeader icon={Package} title={`📦 その他資材 (${otherMaterials.length})`} type="materials" />
-                  
-                  <div className="space-y-2.5 overflow-y-auto flex-1 mb-4 pr-1">
-                    {otherMaterials.length === 0 ? <p className="text-slate-400 text-sm">その他資材データなし</p> : null}
-                    {otherMaterials.map(m => (
-                      <div key={m.id} className="p-3 bg-slate-50 hover:bg-slate-100/90 rounded-xl border border-slate-200/80 transition-colors group space-y-1.5">
-                        {/* 上段: 品名 ＆ 金額 ＆ 操作ボタン */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="font-bold text-slate-800 text-sm leading-snug flex-1 min-w-0 break-words">
-                            {m.name}
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
-                            <span className="font-mono font-bold text-slate-700 text-sm whitespace-nowrap">
-                              ¥{Number(m.default_price || 0).toLocaleString()}
-                            </span>
-                            <div className="flex items-center opacity-60 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => handleOpenModal('materials', m)} className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded" title="編集">
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button onClick={() => handleDelete('materials', m.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="削除">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* 下段: カテゴリ・仕様・単位 */}
-                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                          <span className="text-[10px] bg-slate-200/80 text-slate-700 px-1.5 py-0.5 rounded font-bold border border-slate-300/50 whitespace-nowrap">
-                            {m.category || '諸材料費'}
+                        {m.dilution && (
+                          <span className="text-[10px] bg-teal-50 text-teal-800 px-1.5 py-0.5 rounded font-bold border border-teal-200 whitespace-nowrap">
+                            {m.dilution}
                           </span>
-                          {m.specification && (
-                            <span className="text-[11px] text-slate-600 font-medium">
-                              {m.specification}
-                            </span>
-                          )}
-                          {m.unit && (
-                            <span className="text-[11px] text-slate-400 font-medium whitespace-nowrap">
-                              ({m.unit})
-                            </span>
-                          )}
-                        </div>
+                        )}
+                        {(m.n_percent !== undefined || m.p_percent !== undefined || m.k_percent !== undefined) && (
+                          <span className="text-[10px] bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded font-black border border-emerald-300 font-mono whitespace-nowrap">
+                            N-P-K: {m.n_percent || 0}-{m.p_percent || 0}-{m.k_percent || 0}
+                          </span>
+                        )}
+                        {m.fertilizer_usage && (
+                          <span className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-bold border border-blue-200 whitespace-nowrap">
+                            {m.fertilizer_usage}
+                          </span>
+                        )}
+                        {m.max_count ? (
+                          <span className="text-[10px] bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded font-bold border border-amber-200 whitespace-nowrap">
+                            上限{m.max_count}回
+                          </span>
+                        ) : null}
+                        <span className="text-[11px] text-slate-500 font-medium whitespace-nowrap">
+                          {m.bag_weight_kg ? `${m.bag_weight_kg}kg/袋` : m.unit ? `(${m.unit})` : ''}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                  <CsvActionButtons type="materials" inputRef={fileInputRefMats} />
-                </div>
-              );
-            })()}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
+            {/* フッター: CSV一括処理バー */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 text-xs">
+              <span className="text-slate-400 font-medium">
+                表示中: <strong className="text-slate-700">{filteredMaterials.length}</strong> 件 / 全 {countAll} 件
+              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* 隠しファイル入力（各タイプ別） */}
+                <input type="file" accept=".csv" className="hidden" ref={fileInputRefMats} onChange={(e) => handleFileUpload(e, 'materials')} />
+                <input type="file" accept=".csv" className="hidden" ref={fileInputRefPesticides} onChange={(e) => handleFileUpload(e, 'pesticides')} />
+                <input type="file" accept=".csv" className="hidden" ref={fileInputRefFertilizers} onChange={(e) => handleFileUpload(e, 'fertilizers')} />
+
+                <button 
+                  onClick={() => handleDownloadTemplate(materialActiveTab === 'pesticide' ? 'pesticides' : materialActiveTab === 'fertilizer' ? 'fertilizers' : 'materials')}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />雛形DL
+                </button>
+                <button 
+                  onClick={() => handleExportData(materialActiveTab === 'pesticide' ? 'pesticides' : materialActiveTab === 'fertilizer' ? 'fertilizers' : 'materials')}
+                  className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />データDL
+                </button>
+                <button 
+                  onClick={() => {
+                    if (materialActiveTab === 'pesticide') fileInputRefPesticides.current?.click();
+                    else if (materialActiveTab === 'fertilizer') fileInputRefFertilizers.current?.click();
+                    else fileInputRefMats.current?.click();
+                  }}
+                  className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                >
+                  <Upload className="w-3.5 h-3.5" />CSV一括追加
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* 販売・出荷マスタ */}
