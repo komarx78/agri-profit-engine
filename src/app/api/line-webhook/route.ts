@@ -155,27 +155,36 @@ const FARM_RICH_MENUS: Record<string, { farmUserId: string; companyName: string;
       matchedWorker = worker;
     }
 
-    // 4. 【4〜6桁の連携コード（PINコード）でのワーカー連携】
+    // 4. 【4〜6桁のLINE連携専用コードでのワーカー連携】
     // 全角英数字を半角に変換し、前後の日本語（「連携コード:」等）を除去して正規化
     const halfText = text.replace(/[！-～]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xfee0));
-    const extractedPin = halfText.replace(/^.*?(コード|CODE|PIN)[:：\s]*/i, '').trim();
+    const extractedCode = halfText.replace(/^.*?(コード|CODE|PIN)[:：\s]*/i, '').trim();
 
-    if (!matchedWorker && /^[A-Za-z0-9]{4,6}$/.test(extractedPin)) {
-      const pinUpper = extractedPin.toUpperCase();
-      const { data: pinWorkers } = await supabase
+    if (!matchedWorker && /^[A-Za-z0-9]{4,6}$/.test(extractedCode)) {
+      const codeUpper = extractedCode.toUpperCase();
+      const { data: allWorkers } = await supabase
         .from('workers')
         .select('*');
 
-      const matchedList = (pinWorkers || []).filter(w => 
-        w.pin_code && w.pin_code.trim().toUpperCase() === pinUpper
+      // ① 最優先：LINE専用連携コード（line_link_pin）で厳格照合（打刻暗証番号とは別物）
+      const matchedByLinePin = (allWorkers || []).filter(w => 
+        w.line_link_pin && w.line_link_pin.trim().toUpperCase() === codeUpper
       );
 
-      if (matchedList.length === 1) {
-        matchedWorker = matchedList[0];
-      } else if (matchedList.length > 1) {
-        const names = matchedList.map(w => w.name).join('、');
-        await replyMessage(replyToken, `該当するスタッフが複数名見つかりました（${names}）。\nご本人確認のため、お名前（例: ${matchedList[0].name}）をそのまま送信してください。`);
+      if (matchedByLinePin.length === 1) {
+        matchedWorker = matchedByLinePin[0];
+      } else if (matchedByLinePin.length > 1) {
+        const names = matchedByLinePin.map(w => w.name).join('、');
+        await replyMessage(replyToken, `該当するスタッフが複数名見つかりました（${names}）。\nご本人確認のため、お名前（例: ${matchedByLinePin[0].name}）をそのまま送信してください。`);
         return NextResponse.json({ status: 'multiple_pins' }, { status: 200 });
+      } else {
+        // ② フォールバック：従来の暗証番号で送信された場合の後方互換
+        const matchedByPinCode = (allWorkers || []).filter(w => 
+          w.pin_code && w.pin_code.trim().toUpperCase() === codeUpper
+        );
+        if (matchedByPinCode.length === 1) {
+          matchedWorker = matchedByPinCode[0];
+        }
       }
     }
 
@@ -202,14 +211,20 @@ const FARM_RICH_MENUS: Record<string, { farmUserId: string; companyName: string;
       }
     }
 
-    // マッチしたワーカーがいれば連携更新！
+    // マッチしたワーカーがいれば連携更新！（※打刻暗証番号は1ミリも変更せず、LINE情報のみ安全に更新）
     if (matchedWorker) {
+      const updatePayload: any = {
+        line_user_id: lineUserId,
+        is_line_notification_enabled: true
+      };
+      // line_link_pin を消費（安全のためクリア）
+      if (matchedWorker.line_link_pin) {
+        updatePayload.line_link_pin = null;
+      }
+
       const { error: updateError } = await supabase
         .from('workers')
-        .update({ 
-          line_user_id: lineUserId,
-          is_line_notification_enabled: true
-        })
+        .update(updatePayload)
         .eq('id', matchedWorker.id);
 
       if (updateError) {

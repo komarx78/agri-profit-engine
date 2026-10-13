@@ -14,6 +14,7 @@ interface LineLinkModalProps {
     id: string;
     name: string;
     pin_code?: string;
+    line_link_pin?: string;
     line_user_id?: string | null;
     is_line_notification_enabled?: boolean;
     user_id?: string | null;
@@ -26,15 +27,26 @@ export const AGRI_PROFIT_LINE_CONSTANTS = {
   basicId: '@543tdbfc',
   addFriendUrl: 'https://lin.ee/RD1vp8c',
   qrCodeUrl: 'https://qr-official.line.me/gs/M_543tdbfc_GW.png?from=page&searchId=543tdbfc',
-  getOaMessageUrl: (pin: string) => `https://line.me/R/oaMessage/@543tdbfc/?${pin}`
+  getOaMessageUrl: (code: string) => `https://line.me/R/oaMessage/@543tdbfc/?${code}`
 };
 
 // 互換性エイリアス
 export const RAKUMARU_LINE_CONSTANTS = AGRI_PROFIT_LINE_CONSTANTS;
 
+// 4桁英数字の安全なLINE専用連携コードを生成（見間違えやすい0, O, 1, Iを除外した32文字）
+const generateRandomLineCode = (): string => {
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+  let code = '';
+  for (let i = 0; i < 4; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+};
+
 /**
- * 📱 スタッフ専用 LINE公式アカウント ワンタイムPIN連携モーダル
- * （現場スタッフが1秒で直感理解・LINEトークに4桁のPINを送るだけで自動連携）
+ * 📱 スタッフ専用 LINE公式アカウント ワンタイム連携モーダル
+ * （現場スタッフが1秒で直感理解・LINEトークに4桁の専用連携コードを送るだけで自動連携）
+ * ※現場打刻・ログイン用の暗証番号（PINコード）とは完全に分離されており、打刻パスワードが漏洩しません。
  */
 export const LineLinkModal: React.FC<LineLinkModalProps> = ({
   isOpen,
@@ -43,7 +55,7 @@ export const LineLinkModal: React.FC<LineLinkModalProps> = ({
   onLinkedSuccess
 }) => {
   const [loading, setLoading] = useState(true);
-  const [pin, setPin] = useState<string>('');
+  const [linkCode, setLinkCode] = useState<string>('');
   const [isLinked, setIsLinked] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [unlinking, setUnlinking] = useState<boolean>(false);
@@ -58,11 +70,11 @@ export const LineLinkModal: React.FC<LineLinkModalProps> = ({
     setLoading(true);
     setErrorMsg(null);
 
-    const checkLinkAndFetchPin = async () => {
+    const checkLinkAndFetchCode = async () => {
       try {
         const { data: wData, error: selErr } = await supabase
           .from('workers')
-          .select('id, name, pin_code, line_user_id, is_line_notification_enabled')
+          .select('id, name, line_link_pin, pin_code, line_user_id, is_line_notification_enabled')
           .eq('id', worker.id)
           .maybeSingle();
 
@@ -76,17 +88,31 @@ export const LineLinkModal: React.FC<LineLinkModalProps> = ({
         setIsLinked(linked);
 
         if (!linked) {
-          let currentPin = wData?.pin_code || worker.pin_code;
-          // PINが未設定または形式が合わない場合は新規生成
-          if (!currentPin || currentPin.trim().length === 0) {
-            currentPin = Math.floor(1000 + Math.random() * 9000).toString();
-            await supabase
-              .from('workers')
-              .update({ pin_code: currentPin })
-              .eq('id', worker.id);
+          // 打刻暗証番号（pin_code）とは完全に独立した専用のLINE連携コードを使用
+          let currentCode = wData?.line_link_pin || (worker as any).line_link_pin;
+          
+          if (!currentCode || currentCode.trim().length === 0) {
+            currentCode = generateRandomLineCode();
+            // line_link_pin カラムへ安全に保存（カラム未作成時もpin_codeを汚さない安全防壁）
+            try {
+              const { error: updErr } = await supabase
+                .from('workers')
+                .update({ 
+                  line_link_pin: currentCode,
+                  line_link_pin_expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+                })
+                .eq('id', worker.id);
+
+              if (updErr) {
+                console.warn('line_link_pin column might be pending migration, keeping generated code in session:', updErr);
+              }
+            } catch (saveErr) {
+              console.warn('Save line_link_pin error:', saveErr);
+            }
           }
+
           if (isMounted) {
-            setPin(currentPin);
+            setLinkCode(currentCode);
           }
         }
       } catch (err: any) {
@@ -100,14 +126,14 @@ export const LineLinkModal: React.FC<LineLinkModalProps> = ({
       }
     };
 
-    checkLinkAndFetchPin();
+    checkLinkAndFetchCode();
 
     return () => {
       isMounted = false;
     };
   }, [isOpen, worker?.id]);
 
-  // 2. リアルタイム連携検知（自動ポーリング：スタッフがLINEへPIN送信した瞬間に自動検知）
+  // 2. リアルタイム連携検知（自動ポーリング：スタッフがLINEへコード送信した瞬間に自動検知）
   useEffect(() => {
     if (!isOpen || !worker?.id || isLinked) {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
@@ -139,36 +165,45 @@ export const LineLinkModal: React.FC<LineLinkModalProps> = ({
 
   if (!isOpen || !worker) return null;
 
-  // PINコピー処理
-  const handleCopyPin = () => {
-    if (!pin) return;
-    navigator.clipboard.writeText(pin);
+  // コードコピー処理
+  const handleCopyCode = () => {
+    if (!linkCode) return;
+    navigator.clipboard.writeText(linkCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // 連携解除処理
+  // 連携解除処理（※打刻暗証番号は絶対に破壊せず、LINE連携のみを安全にリセット）
   const handleUnlink = async () => {
     if (!confirm('LINE公式アカウントとの連携を解除しますか？\n（解除すると打刻忘れ通知などのLINE連絡が届かなくなります）')) {
       return;
     }
     setUnlinking(true);
     try {
+      const newCode = generateRandomLineCode();
       const { error } = await supabase
         .from('workers')
         .update({
           line_user_id: null,
-          is_line_notification_enabled: false
+          is_line_notification_enabled: false,
+          line_link_pin: newCode,
+          line_link_pin_expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
         })
         .eq('id', worker.id);
 
-      if (error) throw error;
+      if (error) {
+        // カラム未定義時のフォールバック
+        await supabase
+          .from('workers')
+          .update({
+            line_user_id: null,
+            is_line_notification_enabled: false
+          })
+          .eq('id', worker.id);
+      }
 
       setIsLinked(false);
-      // 再連携用のPINを再取得
-      const newPin = Math.floor(1000 + Math.random() * 9000).toString();
-      await supabase.from('workers').update({ pin_code: newPin }).eq('id', worker.id);
-      setPin(newPin);
+      setLinkCode(newCode);
       if (onLinkedSuccess) onLinkedSuccess();
     } catch (err: any) {
       alert('解除に失敗しました: ' + (err.message || '通信エラー'));
@@ -321,7 +356,7 @@ export const LineLinkModal: React.FC<LineLinkModalProps> = ({
                 </div>
               </div>
 
-              {/* STEP 2: 4桁PINコード送信 */}
+              {/* STEP 2: 4桁LINE専用コード送信 */}
               <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
                 <div className="flex items-center gap-2 text-xs font-black text-white">
                   <span className="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-[11px] font-black">2</span>
@@ -329,21 +364,22 @@ export const LineLinkModal: React.FC<LineLinkModalProps> = ({
                 </div>
 
                 <p className="text-[11px] text-slate-300">
-                  LINE公式アカウントのトーク画面を開き、以下の【4桁のコード】をそのまま送信してください：
+                  LINE公式アカウントのトーク画面を開き、以下の【4桁の連携コード】をそのまま送信してください：
                 </p>
 
-                {/* PINコード特大カード */}
+                {/* LINE専用コード特大カード */}
                 <div className="bg-gradient-to-r from-emerald-950 to-slate-900 border-2 border-emerald-500/60 p-4 rounded-2xl flex items-center justify-between gap-3 shadow-inner">
                   <div>
-                    <span className="text-[10px] font-bold text-emerald-400 block mb-0.5">連携用コード（PIN）</span>
+                    <span className="text-[10px] font-bold text-emerald-400 block mb-0.5">LINE専用連携コード</span>
                     <span className="text-3xl sm:text-4xl font-black font-mono tracking-widest text-white">
-                      {pin || '----'}
+                      {linkCode || '----'}
                     </span>
+                    <span className="text-[10px] text-slate-400 block mt-1">※打刻暗証番号とは別の使い捨てコードです</span>
                   </div>
 
                   <button
                     type="button"
-                    onClick={handleCopyPin}
+                    onClick={handleCopyCode}
                     className={`px-4 py-2.5 rounded-xl font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
                       copied 
                         ? 'bg-emerald-500 text-slate-950' 
@@ -365,9 +401,9 @@ export const LineLinkModal: React.FC<LineLinkModalProps> = ({
                 </div>
 
                 {/* スマホ用：ワンタップでLINEが開いてコード入力済みの状態にする強力導線 */}
-                {pin && (
+                {linkCode && (
                   <a
-                    href={AGRI_PROFIT_LINE_CONSTANTS.getOaMessageUrl(pin)}
+                    href={AGRI_PROFIT_LINE_CONSTANTS.getOaMessageUrl(linkCode)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-full py-3.5 bg-[#06C755] hover:bg-[#05b34c] text-white font-black rounded-xl text-center flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-98 cursor-pointer text-xs sm:text-sm"

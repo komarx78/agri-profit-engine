@@ -689,16 +689,16 @@ export default function MastersPage() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-700">{w.name}</span>
-                        <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-mono font-bold" title="LINE連携用暗証番号（4桁）">
-                          PIN: {w.pin_code || '0000'}
+                        <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-300 px-1.5 py-0.5 rounded font-mono font-bold" title="現場アプリ・打刻用暗証番号（4桁）">
+                          打刻PIN: {w.pin_code || '0000'}
                         </span>
                         {w.line_user_id ? (
                           <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">
                             LINE連携済
                           </span>
                         ) : (
-                          <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
-                            LINE未連携
+                          <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded font-bold" title="LINE未連携">
+                            LINE未連携{w.line_link_pin ? ` (連携コード: ${w.line_link_pin})` : ''}
                           </span>
                         )}
                       </div>
@@ -1232,7 +1232,7 @@ export default function MastersPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">ログイン暗証番号 (4桁)</label>
+                      <label className="block text-xs font-bold text-slate-500 mb-1">現場打刻・ログイン暗証番号 (4桁数字)</label>
                       <input 
                         type="text" 
                         maxLength={4}
@@ -1241,6 +1241,7 @@ export default function MastersPage() {
                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold tracking-widest text-center"
                         placeholder="0000"
                       />
+                      <p className="text-[10px] text-slate-400 mt-1">※現場アプリでの打刻専用PINです（LINE連携コードとは別物です）</p>
                     </div>
                   </div>
                     <div className="col-span-2 mt-4">
