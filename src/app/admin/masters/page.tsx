@@ -721,21 +721,6 @@ export default function MastersPage() {
     a.click();
     URL.revokeObjectURL(url);
   };
-      
-    if (data.length === 0) {
-      alert("エクスポートするデータがありません。");
-      return;
-    }
-    
-    const csv = Papa.unparse(data);
-    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `export_current_${type}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
 
   const CardHeader = ({ icon: Icon, title, type }: { icon: any, title: string, type: MasterType }) => {
     let helpContent = "";
