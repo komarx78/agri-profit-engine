@@ -19,6 +19,25 @@ export async function POST(req: Request) {
     }
 
     const event = body.events[0];
+    const lineUserId = event.source?.userId;
+    const replyToken = event.replyToken;
+
+    if (!lineUserId || !replyToken) {
+      return NextResponse.json({ status: 'ignored_no_user' }, { status: 200 });
+    }
+
+    // 0. 友だち追加イベント (follow)
+    if (event.type === 'follow') {
+      const welcomeText = 
+`友だち追加ありがとうございます！🎉
+【みんなのらくまる労務 / 農業クラウド】公式通知アカウントです。
+
+📱 画面に表示されている【4桁の連携コード】をこのトークにそのまま送信してください。
+
+連携が完了すると、退勤打刻の忘れ防止通知や重要なお知らせがこのLINEに自動で届きます！🌱`;
+      await replyMessage(replyToken, welcomeText);
+      return NextResponse.json({ status: 'followed' }, { status: 200 });
+    }
     
     // メッセージイベントのみ処理
     if (event.type !== 'message' || event.message.type !== 'text') {
@@ -27,8 +46,6 @@ export async function POST(req: Request) {
 
     const rawText = event.message.text || '';
     const text = rawText.trim();
-    const lineUserId = event.source?.userId;
-    const replyToken = event.replyToken;
 
     // 受信内容を即座にDBログへ記録（監査・追跡用）
     try {
@@ -40,10 +57,6 @@ export async function POST(req: Request) {
       });
     } catch (logErr) {
       console.error('Log insert error:', logErr);
-    }
-
-    if (!lineUserId || !replyToken) {
-      return NextResponse.json({ status: 'ignored_no_user' }, { status: 200 });
     }
 
 // 各農園の専用リッチメニュー設定（SaaS個別バインド）
@@ -142,19 +155,26 @@ const FARM_RICH_MENUS: Record<string, { farmUserId: string; companyName: string;
       matchedWorker = worker;
     }
 
-    // 4. 【4桁の暗証番号（PINコード）でのワーカー連携】
-    if (!matchedWorker && /^\d{4}$/.test(text)) {
+    // 4. 【4〜6桁の連携コード（PINコード）でのワーカー連携】
+    // 全角英数字を半角に変換し、前後の日本語（「連携コード:」等）を除去して正規化
+    const halfText = text.replace(/[！-～]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xfee0));
+    const extractedPin = halfText.replace(/^.*?(コード|CODE|PIN)[:：\s]*/i, '').trim();
+
+    if (!matchedWorker && /^[A-Za-z0-9]{4,6}$/.test(extractedPin)) {
+      const pinUpper = extractedPin.toUpperCase();
       const { data: pinWorkers } = await supabase
         .from('workers')
-        .select('*')
-        .eq('pin_code', text);
+        .select('*');
 
-      if (pinWorkers && pinWorkers.length === 1) {
-        matchedWorker = pinWorkers[0];
-      } else if (pinWorkers && pinWorkers.length > 1) {
-        // 暗証番号が重複している場合は氏名も要求
-        const names = pinWorkers.map(w => w.name).join('、');
-        await replyMessage(replyToken, `該当するスタッフが複数名見つかりました（${names}）。\nご本人確認のため、お名前（例: ${pinWorkers[0].name}）をそのまま送信してください。`);
+      const matchedList = (pinWorkers || []).filter(w => 
+        w.pin_code && w.pin_code.trim().toUpperCase() === pinUpper
+      );
+
+      if (matchedList.length === 1) {
+        matchedWorker = matchedList[0];
+      } else if (matchedList.length > 1) {
+        const names = matchedList.map(w => w.name).join('、');
+        await replyMessage(replyToken, `該当するスタッフが複数名見つかりました（${names}）。\nご本人確認のため、お名前（例: ${matchedList[0].name}）をそのまま送信してください。`);
         return NextResponse.json({ status: 'multiple_pins' }, { status: 200 });
       }
     }
@@ -197,7 +217,10 @@ const FARM_RICH_MENUS: Record<string, { farmUserId: string; companyName: string;
         return NextResponse.json({ status: 'error' }, { status: 500 });
       }
 
-      await replyMessage(replyToken, `【✅ 連携完了】\n${matchedWorker.name} さんのアカウントとLINEの連携が完了しました！\n\n以後、退勤の押し忘れがある場合に、こちらへ自動的にお知らせをお届けいたします。お仕事お疲れ様です！🌱`);
+      await replyMessage(
+        replyToken, 
+        `🎉 【みんなのらくまる労務 / 農業クラウド】\n${matchedWorker.name} 様、LINE連携が正常に完了いたしました！\n\n今後、退勤打刻の忘れ防止通知や、重要な業務連絡がこのLINEに自動で届きます。今日も一日お疲れ様です！🌱`
+      );
       return NextResponse.json({ status: 'success', worker_name: matchedWorker.name }, { status: 200 });
     }
 

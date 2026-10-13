@@ -25,6 +25,7 @@ import { executeAttendanceWithRetry } from '@/lib/attendanceClient';
 import { reportSystemError } from '@/lib/errorReporter';
 import { translateSingleText } from '@/app/actions/translate';
 import { PwaBottomBanner } from '@/components/PwaInstallPrompt';
+import { LineLinkModal } from '@/components/LineLinkModal';
 import Link from 'next/link';
 import { getJSTDate, getJSTTime, formatDisplayTime, parseTimeToMinutes, getAttendancePeriod, getDateListBetween } from '@/lib/dateUtils';
 
@@ -77,6 +78,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
   const [boardPosts, setBoardPosts] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<any>(null);
   const [showWorkerGate, setShowWorkerGate] = useState(true);
+  const [showLineModal, setShowLineModal] = useState(false);
   const [showBoardModal, setShowBoardModal] = useState(false);
   const [allBoardPosts, setAllBoardPosts] = useState<any[]>([]);
   const [boardFilter, setBoardFilter] = useState<'all' | 'work' | 'life' | 'general'>('all');
@@ -3008,6 +3010,41 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                   )}
                 </div>
               )}
+
+              {/* 📱 提案⑥: 公式LINE通知連携ステータスバー */}
+              <div className="mb-4 bg-slate-50 border border-slate-200 p-3 rounded-2xl flex items-center justify-between gap-2 shadow-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-[#06C755] flex items-center justify-center text-white shrink-0 shadow-xs">
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current"><path d="M12 2C6.48 2 2 5.82 2 10.53c0 4.23 3.64 7.77 8.56 8.41.33.07.78.22.89.5.1.25.07.64-.03 1.05-.16.63-.53 2.05-.53 2.05s-.16.65.25.79c.41.14.94-.23 1.3-.5 3.09-2.27 6.09-4.8 7.98-7.39C21.6 13.56 22 12.09 22 10.53 22 5.82 17.52 2 12 2z"/></svg>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-black text-slate-800">公式LINE通知</span>
+                      {workerProfile?.line_user_id ? (
+                        <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded-md">連携中</span>
+                      ) : (
+                        <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded-md">未連携</span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-500 truncate">
+                      {workerProfile?.line_user_id 
+                        ? '打刻忘れアラートや業務連絡を受信中' 
+                        : '友だち追加＋PIN送信で1分連携'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowLineModal(true)}
+                  className={`px-3 py-1.5 rounded-xl font-black text-xs shrink-0 transition-all cursor-pointer shadow-xs ${
+                    workerProfile?.line_user_id
+                      ? 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                      : 'bg-[#06C755] hover:bg-[#05b34c] text-white active:scale-95'
+                  }`}
+                >
+                  {workerProfile?.line_user_id ? '設定・解除' : '連携する'}
+                </button>
+              </div>
 
               <h2 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2">
                 <Clock className="w-5 h-5 text-blue-500" /> {t('attendancePortal', language)}
@@ -6467,6 +6504,22 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
 
         </div>
       )}
+
+      {/* 📱 スタッフ専用 LINE公式アカウント連携モーダル */}
+      <LineLinkModal
+        isOpen={showLineModal}
+        onClose={() => setShowLineModal(false)}
+        worker={workerProfile || currentUser}
+        onLinkedSuccess={async () => {
+          if (workerProfile?.id) {
+            const { data } = await supabase.from('workers').select('*').eq('id', workerProfile.id).maybeSingle();
+            if (data) {
+              setWorkerProfile((prev: any) => ({ ...prev, ...data }));
+              setCurrentUser((prev: any) => ({ ...prev, ...data }));
+            }
+          }
+        }}
+      />
 
       {/* 📱 ページの最下部に配置するアプリ化案内バナー（画面に被らない安全配置） */}
       <PwaBottomBanner language={language} />
