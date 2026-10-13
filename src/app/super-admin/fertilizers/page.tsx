@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Database, Upload, FileText, CheckCircle2, AlertTriangle, 
   Loader2, Search, ArrowLeft, Trash2, Plus, Edit2, RefreshCw, 
-  Layers, FlaskConical, Check, X, ShieldAlert, Copy, CheckCheck, ExternalLink
+  Layers, FlaskConical, Check, X, ShieldAlert, Copy, CheckCheck, ExternalLink,
+  FileCheck, ShieldCheck
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { createBrowserClient } from '@supabase/ssr';
@@ -15,6 +16,7 @@ export default function AdminFertilizersPage() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   // 統計・データステート
   const [totalCount, setTotalCount] = useState<number>(0);
@@ -24,7 +26,37 @@ export default function AdminFertilizersPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [tableMissing, setTableMissing] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
-  const [overwriteMode, setOverwriteMode] = useState(false);
+
+  // 🖱️ ドラッグ＆ドロップ イベントハンドラー
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const droppedFile = e.dataTransfer.files[0];
+      if (droppedFile.name.toLowerCase().endsWith('.csv') || droppedFile.type.includes('csv') || droppedFile.type.includes('text')) {
+        setFile(droppedFile);
+        setStatus({ 
+          type: 'info', 
+          message: `📁 「${droppedFile.name}」を正常に認識しました。右側の「CSVを一括登録する」ボタンを押して登録を開始してください。` 
+        });
+      } else {
+        setStatus({ type: 'error', message: '⚠️ CSV形式（.csv）のファイルのみ対応しています。' });
+      }
+    }
+  };
 
   // 手動追加・編集モーダル
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -336,14 +368,8 @@ export default function AdminFertilizersPage() {
       });
       const uniqueData = Array.from(uniqueMap.values());
 
-      // 完全上書きモードが有効な場合は既存データをクリア
-      if (overwriteMode) {
-        setStatus({ type: 'info', message: '既存のデータをクリアしています...' });
-        await supabase.from('m_fertilizers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      }
-
       const total = uniqueData.length;
-      setStatus({ type: 'info', message: `${total.toLocaleString()}件の肥料データをSupabaseに一括登録しています...` });
+      setStatus({ type: 'info', message: `${total.toLocaleString()}件の肥料データをSupabaseに安全スマート登録（差分更新・追加）しています...` });
 
       const chunkSize = 400;
       for (let i = 0; i < total; i += chunkSize) {
@@ -685,34 +711,124 @@ CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR
           </div>
         </div>
 
+        {/* 💡 肥料マスタの更新手順（3ステップ公式ガイド） */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <h3 className="text-xs font-black text-emerald-400 uppercase tracking-wider">
+              公的肥料マスターの更新手順（誰でも1分でできる3ステップ）
+            </h3>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* ステップ1 */}
+            <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono text-xs font-black flex items-center justify-center">1</span>
+                  <span className="text-xs font-bold text-white">公的CSVデータを取得</span>
+                </div>
+                <p className="text-2xs text-slate-400 leading-relaxed">
+                  右上の「農水省 肥料検索へ」または「FAMIC公式」から、全国の登録肥料データ（例: <code className="text-emerald-300 font-mono">1.全件.csv</code> や登録銘柄一覧）をダウンロードします。
+                </p>
+              </div>
+            </div>
+
+            {/* ステップ2 */}
+            <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 font-mono text-xs font-black flex items-center justify-center">2</span>
+                  <span className="text-xs font-bold text-white">ファイルをドラッグ＆ドロップ</span>
+                </div>
+                <p className="text-2xs text-slate-400 leading-relaxed">
+                  下の点線枠にCSVファイルを投入します。文字コード（Shift-JIS、Excelで保存したUTF-8 BOM付き）はシステムが全自動判別します。
+                </p>
+              </div>
+            </div>
+
+            {/* ステップ3 */}
+            <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="w-5 h-5 rounded-full bg-teal-500/20 text-teal-400 font-mono text-xs font-black flex items-center justify-center">3</span>
+                  <span className="text-xs font-bold text-white">一括登録を実行</span>
+                </div>
+                <p className="text-2xs text-slate-400 leading-relaxed">
+                  「CSVを一括登録する」をクリックすれば、最新マスタを安全に自動更新・新規追加（スマートマージ）します。既存データを破壊せず、約5万件が1〜2分で登録完了します。
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
           <div className="md:col-span-2">
-            <label className="border-2 border-dashed border-slate-700 hover:border-emerald-500/50 bg-slate-900/50 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition-colors text-center">
-              <FileText className="w-10 h-10 text-slate-500 mb-2" />
-              <span className="text-sm font-bold text-slate-200">
-                {file ? file.name : 'ここに肥料CSVファイルをドラッグ＆ドロップ、またはクリックして選択'}
-              </span>
-              <span className="text-xs text-slate-500 mt-1">
-                ※「AN 21」等の成分コードから自動で「N: 21%」に変換・抽出して登録します
-              </span>
-              <input
-                type="file"
-                accept=".csv"
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    setFile(e.target.files[0]);
-                  }
-                }}
-              />
-            </label>
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center transition-all text-center cursor-pointer ${
+                isDragging
+                  ? 'border-emerald-400 bg-emerald-950/50 ring-4 ring-emerald-500/30 scale-[1.01]'
+                  : file
+                  ? 'border-emerald-500/60 bg-emerald-950/20'
+                  : 'border-slate-700 hover:border-emerald-500/50 bg-slate-900/50'
+              }`}
+            >
+              <label className="w-full flex flex-col items-center justify-center cursor-pointer">
+                {file ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-lg shadow-emerald-950/50">
+                      <FileCheck className="w-6 h-6 animate-pulse" />
+                    </div>
+                    <div>
+                      <span className="text-base font-black text-white block">
+                        {file.name}
+                      </span>
+                      <span className="text-xs text-emerald-400 font-mono font-bold mt-0.5 inline-block bg-emerald-950/60 px-2.5 py-0.5 rounded-full border border-emerald-800/60">
+                        {(file.size / (1024 * 1024)).toFixed(2)} MB / CSVファイル認識完了・登録準備OK ✨
+                      </span>
+                    </div>
+                    <span className="text-2xs text-slate-400 mt-1 underline hover:text-slate-200">
+                      別のファイルに変更する場合はここをクリックまたはドロップ
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <FileText className={`w-10 h-10 mb-2 transition-colors ${isDragging ? 'text-emerald-400 animate-pulse' : 'text-slate-500'}`} />
+                    <span className="text-sm font-bold text-slate-200">
+                      {isDragging ? '🎉 ファイルをここに離してください！' : 'ここに肥料CSVファイルをドラッグ＆ドロップ、またはクリックして選択'}
+                    </span>
+                    <span className="text-xs text-slate-500 mt-1">
+                      ※「1.全件.csv」など農水省・FAMIC公的フォーマットに対応（UTF-8 BOM / Shift-JIS 自動判別）
+                    </span>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      const selected = e.target.files[0];
+                      setFile(selected);
+                      setStatus({ 
+                        type: 'info', 
+                        message: `📁 「${selected.name}」を正常に認識しました。右側の「CSVを一括登録する」ボタンを押して登録を開始してください。` 
+                      });
+                    }
+                  }}
+                />
+              </label>
+            </div>
           </div>
 
           <div className="space-y-3">
             <button
               onClick={handleImportCSV}
               disabled={!file || loading}
-              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 transition-all disabled:opacity-40 disabled:cursor-not-allowed text-base"
+              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 transition-all disabled:opacity-40 disabled:cursor-not-allowed text-base cursor-pointer"
             >
               {loading ? (
                 <>
@@ -727,16 +843,13 @@ CREATE POLICY "Allow public delete on m_fertilizers" ON public.m_fertilizers FOR
               )}
             </button>
 
-            <div className="pt-1">
-              <label className="flex items-center gap-2 text-xs font-bold text-slate-300 hover:text-white cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={overwriteMode}
-                  onChange={(e) => setOverwriteMode(e.target.checked)}
-                  className="w-4 h-4 rounded text-emerald-500 bg-slate-900 border-slate-700 focus:ring-emerald-500"
-                />
-                <span>既存データを全削除して総入れ替え（完全上書き）</span>
-              </label>
+            {/* 🛡️ 安全スマートマージ・データ保護ガイダンス（危険な全削除チェックボックスを完全排除） */}
+            <div className="bg-slate-900/80 border border-emerald-900/40 rounded-xl p-3 flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <div className="text-2xs text-slate-400 leading-relaxed">
+                <span className="font-bold text-slate-200 block text-xs mb-0.5">スマート差分更新（データ保護中）</span>
+                同一登録番号の肥料は最新情報で自動更新され、新規の肥料は安全に追加されます。過去の施肥履歴やマスタを誤って全削除する危険はありません。
+              </div>
             </div>
 
             {progress && (
