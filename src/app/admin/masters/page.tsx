@@ -687,9 +687,20 @@ export default function MastersPage() {
                 {workers.map(w => (
                   <div key={w.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-700">{w.name}</span>
-                        <span className="text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded font-bold">PIN: {w.pin_code || '0000'}</span>
+                        <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-mono font-bold" title="LINE連携用暗証番号（4桁）">
+                          PIN: {w.pin_code || '0000'}
+                        </span>
+                        {w.line_user_id ? (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">
+                            LINE連携済
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
+                            LINE未連携
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-slate-400 mt-1">時給: ¥{w.hourly_wage}</div>
                     </div>

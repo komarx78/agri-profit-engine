@@ -227,14 +227,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="md:hidden bg-white border-b border-slate-200 p-4 space-y-2 shadow-lg absolute top-16 left-0 right-0 w-full z-40">
           {/* モバイル用 農園コードバナー */}
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-3">
-            <div className="flex items-center justify-between text-xs font-bold text-emerald-900 mb-1.5">
-              <span className="flex items-center gap-1">
-                <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
-                現場アプリ用 農園コード
+            <div className="flex items-center justify-between gap-1 text-xs font-bold text-emerald-900 mb-1.5">
+              <span className="flex items-center gap-1 font-black whitespace-nowrap min-w-0">
+                <Smartphone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>農園コード</span>
               </span>
               <button
                 onClick={() => { setIsMobileMenuOpen(false); setIsPosterOpen(true); }}
-                className="text-[11px] text-emerald-700 underline font-bold"
+                className="text-[11px] text-emerald-700 underline font-bold shrink-0 whitespace-nowrap cursor-pointer hover:text-emerald-900"
               >
                 ポスター印刷
               </button>
@@ -311,18 +311,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           {/* 現場アプリ用 農園コード常設カード */}
           <div className="mt-3 p-2.5 bg-white border border-emerald-200 rounded-xl shadow-2xs">
-            <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 mb-1">
-              <span className="flex items-center gap-1 text-emerald-800">
-                <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
-                現場アプリ用 農園コード
+            <div className="flex items-center justify-between gap-1 text-[11px] font-bold text-slate-600 mb-1.5">
+              <span className="flex items-center gap-1 text-emerald-900 font-black whitespace-nowrap min-w-0">
+                <Smartphone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="truncate">農園コード</span>
               </span>
               <button
                 onClick={() => setIsPosterOpen(true)}
-                className="text-[10px] text-emerald-700 hover:text-emerald-800 font-bold underline flex items-center gap-0.5 cursor-pointer"
+                className="text-[10px] text-emerald-700 hover:text-emerald-800 font-bold underline flex items-center gap-0.5 shrink-0 whitespace-nowrap cursor-pointer hover:bg-emerald-50 px-1 py-0.5 rounded transition-colors"
                 title="現場掲示用ポスターを印刷"
               >
-                <Printer className="w-3 h-3" />
-                ポスター印刷
+                <Printer className="w-3 h-3 shrink-0" />
+                <span>ポスター印刷</span>
               </button>
             </div>
             <div className="flex items-center justify-between bg-emerald-50/90 px-2.5 py-1.5 rounded-lg border border-emerald-100">
@@ -331,7 +331,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </span>
               <button
                 onClick={handleCopyFarmCode}
-                className="text-xs text-emerald-700 hover:text-emerald-900 font-bold flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-emerald-100 transition-colors cursor-pointer"
+                className="text-xs text-emerald-700 hover:text-emerald-900 font-bold flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-emerald-100 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
                 title="農園コードをコピー"
               >
                 {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
