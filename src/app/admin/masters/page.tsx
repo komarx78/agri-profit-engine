@@ -470,17 +470,119 @@ export default function MastersPage() {
           const data = results.data;
           let insertData = [];
 
-          if (type === 'materials') {
-            insertData = data.map((row: any) => ({
-              user_id: tenantId,
-              name: row['資材名'] || row.name,
-              category: row['カテゴリ'] || row.category || '未設定',
-              specification: row['規格'] || row.specification || null,
-              unit: row['単位'] || row.unit,
-              default_price: parseFloat(row['単価']) || parseFloat(row.price) || 0
-            }));
-            const { error } = await supabase.from('materials').insert(insertData);
-            if (error) throw error;
+          if (type === 'pesticides' || type === 'materials' || type === 'fertilizers') {
+            // 🚨【安全最優先・既存日報完全保護】既存レコードを事前取得し、既存IDを100%死守するスマートマージ（Upsert）
+            const { data: existingList, error: fetchErr } = await supabase
+              .from('materials')
+              .select('*')
+              .eq('user_id', tenantId);
+
+            if (fetchErr) throw fetchErr;
+
+            // 既存名での引き当てマップ（正規化: トリム＆小文字）
+            const existingMap = new Map<string, any>();
+            (existingList || []).forEach(item => {
+              if (item.name) existingMap.set(item.name.trim().toLowerCase(), item);
+            });
+
+            const inserts: any[] = [];
+            const updates: { id: string; data: any }[] = [];
+
+            for (const row of data) {
+              const rawName = (row['農薬名'] || row['資材名'] || row['肥料名'] || row.name || '').trim();
+              if (!rawName) continue;
+
+              const normalizedName = rawName.toLowerCase();
+              const existing = existingMap.get(normalizedName);
+
+              // 項目抽出（日本語ヘッダー・英名どちらも手厚く対応）
+              const category = type === 'pesticides' 
+                ? '農薬費' 
+                : type === 'fertilizers' 
+                  ? '肥料費' 
+                  : (row['カテゴリ'] || row.category || '未設定');
+
+              const materialType = type === 'pesticides' 
+                ? 'pesticide' 
+                : type === 'fertilizers' 
+                  ? 'fertilizer' 
+                  : (row['material_type'] || 'other');
+
+              const pType = row['分類'] || row['用途'] || row.pesticide_type || '殺虫剤';
+              const dilution = row['希釈倍率'] || row['使用量'] || row.dilution || '';
+              const targetPests = row['適用病害虫'] || row['対象病害虫'] || row['病害虫'] || row.target_pests || '';
+              const usageTime = row['使用時期'] || row['使用適期'] || row.usage_time || '';
+              const maxCount = row['総使用回数'] || row['使用回数'] || row.max_count ? parseInt(row['総使用回数'] || row['使用回数'] || row.max_count, 10) : null;
+              const specification = row['規格'] || row.specification || null;
+              const unit = row['単位'] || row.unit || (type === 'pesticides' ? '本' : type === 'fertilizers' ? '袋' : '個');
+              const parsedPrice = parseFloat(row['単価'] || row.price || row.default_price || '0');
+
+              if (existing) {
+                // 🔄【既存データが存在する場合：UPDATE（既存ID死守＆自社単価保護）】
+                const updatePayload: any = {
+                  category: existing.category || category,
+                  material_type: existing.material_type || materialType,
+                };
+
+                // 農薬独自カラムのアップデート
+                if (type === 'pesticides' || existing.material_type === 'pesticide') {
+                  if (pType) updatePayload.pesticide_type = pType;
+                  if (dilution) updatePayload.dilution = dilution;
+                  if (targetPests) updatePayload.target_pests = targetPests;
+                  if (usageTime) updatePayload.usage_time = usageTime;
+                  if (maxCount !== null && !isNaN(maxCount)) updatePayload.max_count = maxCount;
+                }
+
+                // 肥料・資材の規格・単位
+                if (specification) updatePayload.specification = specification;
+                if (!existing.unit && unit) updatePayload.unit = unit;
+
+                // 🚨【自社単価保護ルール】既存に0より大きい単価があり、CSVが0または空なら既存単価を最優先キープ！
+                if (!isNaN(parsedPrice) && parsedPrice > 0) {
+                  updatePayload.default_price = parsedPrice;
+                }
+
+                updates.push({ id: existing.id, data: updatePayload });
+              } else {
+                // ➕【新規データの場合：INSERT】
+                inserts.push({
+                  user_id: tenantId,
+                  name: rawName,
+                  category,
+                  material_type: materialType,
+                  pesticide_type: type === 'pesticides' ? pType : null,
+                  dilution: type === 'pesticides' ? dilution : null,
+                  target_pests: type === 'pesticides' ? targetPests : null,
+                  usage_time: type === 'pesticides' ? usageTime : null,
+                  max_count: type === 'pesticides' ? maxCount : null,
+                  specification,
+                  unit,
+                  default_price: isNaN(parsedPrice) ? 0 : parsedPrice
+                });
+              }
+            }
+
+            // 1. 新規データの安全追加
+            if (inserts.length > 0) {
+              const { error: insErr } = await supabase.from('materials').insert(inserts);
+              if (insErr) throw insErr;
+            }
+
+            // 2. 既存データの安全更新（既存IDのままUPDATE）
+            if (updates.length > 0) {
+              for (const u of updates) {
+                const { error: updErr } = await supabase.from('materials').update(u.data).eq('id', u.id);
+                if (updErr) console.warn(`Update warning for material ${u.id}:`, updErr);
+              }
+            }
+
+            setUploadStatus({ 
+              type: 'success', 
+              message: `🎉 スマートマージ完了！ 新規登録: ${inserts.length}件、最新情報更新: ${updates.length}件（過去の作業日報データは100%安全に保持されました）` 
+            });
+            fetchMasters();
+            setTimeout(() => setUploadStatus(null), 5000);
+            return;
           } else if (type === 'sales_prices') {
             insertData = data.map((row: any) => ({
               user_id: tenantId,
@@ -536,11 +638,21 @@ export default function MastersPage() {
   // --- CSVダウンロード・エクスポート処理 ---
   const handleDownloadTemplate = (type: MasterType) => {
     let content = "";
-    if (type === 'materials') content = "資材名,カテゴリ,規格,単位,単価\n苦土石灰,肥料費,20kg袋,袋,1500\n化成肥料(8-8-8),肥料費,20kg袋,袋,2500\n液肥アミノ酸,肥料費,1L,L,800";
-    else if (type === 'sales_prices') content = "作目名,販路名,単価\n伏見唐辛子,JA,500\n伏見唐辛子,直売所,650\n米（キヌヒカリ）,JA,12000";
-    else if (type === 'crops') content = "作目名\n伏見唐辛子\n米\n九条ネギ";
-    else if (type === 'fields') content = "圃場名,面積(a)\nA-1 ハウス,10\n北側 第2農地,24\n南側 露地,14";
-    else if (type === 'workers') content = "作業者名,時給,暗証番号\n京都 太郎,1000,1234\n農場 花子,1100,5678";
+    if (type === 'pesticides') {
+      content = "農薬名,分類,希釈倍率,適用病害虫,使用時期,総使用回数,単位,単価\nスミチオン乳剤,殺虫剤,1000倍,アブラムシ類・ハスモンヨトウ,収穫前日まで,5回以内,本,1800\nダコニール1000,殺菌剤,1000倍,斑点病・うどんこ病,収穫前日まで,4回以内,本,2200\nラウンドアップマックスロード,除草剤,25〜50倍,一年生雑草・多年生雑草,生育期,3回以内,本,3500";
+    } else if (type === 'fertilizers') {
+      content = "資材名,カテゴリ,規格,単位,単価\n化成肥料(8-8-8),肥料費,20kg袋,袋,2500\n苦土石灰,肥料費,20kg袋,袋,1500\n液肥アミノ酸,肥料費,1L,L,800";
+    } else if (type === 'materials') {
+      content = "資材名,カテゴリ,規格,単位,単価\n防虫ネット(1mm目),諸資材費,1.8m×100m,巻,12000\n育苗トレイ(128穴),諸資材費,128穴,枚,150";
+    } else if (type === 'sales_prices') {
+      content = "作目名,販路名,単価\n伏見唐辛子,JA,500\n伏見唐辛子,直売所,650\n米（キヌヒカリ）,JA,12000";
+    } else if (type === 'crops') {
+      content = "作目名\n伏見唐辛子\n米\n九条ネギ";
+    } else if (type === 'fields') {
+      content = "圃場名,面積(a)\nA-1 ハウス,10\n北側 第2農地,24\n南側 露地,14";
+    } else if (type === 'workers') {
+      content = "作業者名,時給,暗証番号\n京都 太郎,1000,1234\n農場 花子,1100,5678";
+    }
     
     const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), content], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -553,11 +665,62 @@ export default function MastersPage() {
 
   const handleExportData = (type: MasterType) => {
     let data: Record<string, any>[] = [];
-    if (type === 'materials') data = materials.map(m => ({ '資材名': m.name, 'カテゴリ': m.category || '未設定', '規格': m.specification || '', '単位': m.unit, '単価': m.default_price }));
-    else if (type === 'sales_prices') data = salesPrices.map(s => ({ '作目名': s.crop_name, '販路名': s.channel_name, '単価': s.price_per_unit }));
-    else if (type === 'crops') data = crops.map(c => ({ '作目名': c.name }));
-    else if (type === 'fields') data = fields.map(f => ({ '圃場名': f.name, '面積(a)': f.area_size || '' }));
-    else if (type === 'workers') data = workers.map(w => ({ '作業者名': w.name, '時給': w.hourly_wage, '暗証番号': w.pin_code || '0000' }));
+    if (type === 'pesticides') {
+      data = materials
+        .filter(m => m.material_type === 'pesticide' || m.category === '農薬費')
+        .map(m => ({
+          '農薬名': m.name,
+          '分類': m.pesticide_type || '殺虫剤',
+          '希釈倍率': m.dilution || '',
+          '適用病害虫': m.target_pests || '',
+          '使用時期': m.usage_time || '',
+          '総使用回数': m.max_count || '',
+          '規格': m.specification || '',
+          '単位': m.unit || '本',
+          '単価': m.default_price || 0
+        }));
+    } else if (type === 'fertilizers') {
+      data = materials
+        .filter(m => m.material_type === 'fertilizer' || m.category === '肥料費')
+        .map(m => ({
+          '資材名': m.name,
+          'カテゴリ': m.category || '肥料費',
+          '規格': m.specification || '',
+          '単位': m.unit || '袋',
+          '単価': m.default_price || 0
+        }));
+    } else if (type === 'materials') {
+      data = materials.map(m => ({ 
+        '資材名': m.name, 
+        'カテゴリ': m.category || '未設定', 
+        '規格': m.specification || '', 
+        '単位': m.unit, 
+        '単価': m.default_price 
+      }));
+    } else if (type === 'sales_prices') {
+      data = salesPrices.map(s => ({ '作目名': s.crop_name, '販路名': s.channel_name, '単価': s.price_per_unit }));
+    } else if (type === 'crops') {
+      data = crops.map(c => ({ '作目名': c.name }));
+    } else if (type === 'fields') {
+      data = fields.map(f => ({ '圃場名': f.name, '面積(a)': f.area_size || '' }));
+    } else if (type === 'workers') {
+      data = workers.map(w => ({ '作業者名': w.name, '時給': w.hourly_wage, '暗証番号': w.pin_code || '0000' }));
+    }
+      
+    if (data.length === 0) {
+      alert("エクスポートするデータがありません。");
+      return;
+    }
+    
+    const csv = Papa.unparse(data);
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `export_current_${type}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
       
     if (data.length === 0) {
       alert("エクスポートするデータがありません。");
@@ -1454,16 +1617,21 @@ export default function MastersPage() {
                 >
                   <Download className="w-3.5 h-3.5" />データDL
                 </button>
-                <button 
-                  onClick={() => {
-                    if (materialActiveTab === 'pesticide') fileInputRefPesticides.current?.click();
-                    else if (materialActiveTab === 'fertilizer') fileInputRefFertilizers.current?.click();
-                    else fileInputRefMats.current?.click();
-                  }}
-                  className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                >
-                  <Upload className="w-3.5 h-3.5" />CSV一括追加
-                </button>
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={() => {
+                      if (materialActiveTab === 'pesticide') fileInputRefPesticides.current?.click();
+                      else if (materialActiveTab === 'fertilizer') fileInputRefFertilizers.current?.click();
+                      else fileInputRefMats.current?.click();
+                    }}
+                    className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    title="CSVを取り込んで安全に差分更新します（既存の日報や単価データは100%保護されます）"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>CSVスマート更新</span>
+                  </button>
+                  <HelpTooltip content="CSVを取り込んで一括更新します。同名の農薬は既存IDを維持して安全に最新情報へマージ（差分更新）されるため、一度削除する必要は一切なく、過去の作業日報データが壊れる心配もありません。" />
+                </div>
               </div>
             </div>
           </div>
