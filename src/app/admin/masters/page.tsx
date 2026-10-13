@@ -569,17 +569,17 @@ export default function MastersPage() {
     else if (type === 'workers') helpContent = "農作業を行うスタッフを登録します。時給を設定すると、ダッシュボードで人件費として自動計算されます。";
 
     return (
-      <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-        <div className="flex items-center gap-2 text-slate-800 font-bold text-lg">
-          <Icon className="w-5 h-5 text-emerald-600" />
-          {title}
+      <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3 gap-2">
+        <div className="flex items-center gap-1.5 text-slate-800 font-bold text-base sm:text-lg min-w-0">
+          <Icon className="w-5 h-5 text-emerald-600 shrink-0" />
+          <span className="truncate">{title}</span>
           <HelpTooltip content={helpContent} />
         </div>
         <button 
           onClick={() => handleOpenModal(type)}
-          className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-3 py-1 rounded-lg text-sm font-bold flex items-center gap-1 transition-colors"
+          className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2.5 py-1 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-1 transition-colors shrink-0 whitespace-nowrap cursor-pointer shadow-2xs"
         >
-          <Plus className="w-4 h-4" />追加
+          <Plus className="w-3.5 h-3.5" />追加
         </button>
       </div>
     );
@@ -818,29 +818,50 @@ export default function MastersPage() {
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
                   <CardHeader icon={FlaskConical} title={`💊 農薬マスタ (${pesticideList.length})`} type="pesticides" />
                   
-                  <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
+                  <div className="space-y-2.5 overflow-y-auto flex-1 mb-4 pr-1">
                     {pesticideList.length === 0 ? <p className="text-slate-400 text-sm">農薬データなし（農薬検索から一括追加も可能）</p> : null}
                     {pesticideList.map(m => (
-                      <div key={m.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
-                        <div>
-                          <div className="font-bold text-slate-700">{m.name}</div>
-                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                            {m.rac_code && <span className="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold border border-rose-200">RAC: {m.rac_code}</span>}
-                            {m.dilution && <span className="text-[10px] bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded font-bold">{m.dilution}</span>}
-                            {m.max_count ? <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">上限{m.max_count}回</span> : null}
-                            <span className="text-xs text-slate-400">({m.unit || '本'})</span>
+                      <div key={m.id} className="p-3 bg-slate-50 hover:bg-slate-100/90 rounded-xl border border-slate-200/80 transition-colors group space-y-1.5">
+                        {/* 上段: 品名 ＆ 金額 ＆ 操作ボタン */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-bold text-slate-800 text-sm leading-snug flex-1 min-w-0 break-words">
+                            {m.name}
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                            <span className="font-mono font-bold text-teal-700 text-sm whitespace-nowrap">
+                              ¥{Number(m.default_price || 0).toLocaleString()}
+                            </span>
+                            <div className="flex items-center opacity-60 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => handleOpenModal('pesticides', m)} className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded" title="編集">
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => handleDelete('materials', m.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="削除">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div className="font-bold text-teal-700 text-sm">¥{m.default_price || 0}</div>
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => handleOpenModal('pesticides', m)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => handleDelete('materials', m.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+
+                        {/* 下段: 詳細タグ群（RAC、希釈/使用量、上限回数、単位） */}
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                          {m.rac_code && (
+                            <span className="text-[10px] bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded font-bold border border-rose-200 whitespace-nowrap">
+                              RAC: {m.rac_code}
+                            </span>
+                          )}
+                          {m.dilution && (
+                            <span className="text-[10px] bg-teal-50 text-teal-800 px-1.5 py-0.5 rounded font-bold border border-teal-200 whitespace-nowrap">
+                              {m.dilution}
+                            </span>
+                          )}
+                          {m.max_count ? (
+                            <span className="text-[10px] bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded font-bold border border-amber-200 whitespace-nowrap">
+                              上限{m.max_count}回
+                            </span>
+                          ) : null}
+                          <span className="text-[11px] text-slate-400 font-medium whitespace-nowrap">
+                            ({m.unit || '本'})
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -857,39 +878,56 @@ export default function MastersPage() {
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
                   <CardHeader icon={Sprout} title={`🌱 肥料マスタ (${fertilizerList.length})`} type="fertilizers" />
                   
-                  <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
+                  <div className="space-y-2.5 overflow-y-auto flex-1 mb-4 pr-1">
                     {fertilizerList.length === 0 ? <p className="text-slate-400 text-sm">肥料データなし</p> : null}
                     {fertilizerList.map(m => (
-                      <div key={m.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
-                        <div>
-                          <div className="font-bold text-slate-700 flex items-center gap-1.5 flex-wrap">
-                            <span>{m.name}</span>
-                            {m.specification && (
-                              <span className="text-[10px] bg-slate-900 text-amber-300 px-1.5 py-0.5 rounded font-mono font-bold">
-                                {m.specification}
-                              </span>
-                            )}
+                      <div key={m.id} className="p-3 bg-slate-50 hover:bg-slate-100/90 rounded-xl border border-slate-200/80 transition-colors group space-y-1.5">
+                        {/* 上段: 品名 ＆ 金額 ＆ 操作ボタン */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-bold text-slate-800 text-sm leading-snug flex-1 min-w-0 break-words">
+                            {m.name}
                           </div>
-                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                            {(m.n_percent !== undefined || m.p_percent !== undefined || m.k_percent !== undefined) && (
-                              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-black border border-emerald-200">
-                                N-P-K: {m.n_percent || 0}-{m.p_percent || 0}-{m.k_percent || 0}
-                              </span>
-                            )}
-                            {m.fertilizer_usage && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold">{m.fertilizer_usage}</span>}
-                            {m.bag_weight_kg && <span className="text-xs text-slate-400">{m.bag_weight_kg}kg/袋</span>}
+                          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                            <span className="font-mono font-bold text-emerald-800 text-sm whitespace-nowrap">
+                              ¥{Number(m.default_price || 0).toLocaleString()}
+                            </span>
+                            <div className="flex items-center opacity-60 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => handleOpenModal('fertilizers', m)} className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded" title="編集">
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => handleDelete('materials', m.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="削除">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div className="font-bold text-emerald-700 text-sm">¥{m.default_price || 0}</div>
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => handleOpenModal('fertilizers', m)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => handleDelete('materials', m.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+
+                        {/* 中段: 公的登録番号・規格（FAMIC登録等）があれば独立バッジで目立たせる */}
+                        {m.specification && (
+                          <div className="pt-0.5">
+                            <span className="text-[10px] bg-slate-800 text-amber-300 px-2 py-0.5 rounded font-mono font-bold inline-flex items-center shadow-2xs max-w-full truncate" title={m.specification}>
+                              {m.specification}
+                            </span>
                           </div>
+                        )}
+
+                        {/* 下段: N-P-K比率、用途、袋容量 */}
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                          {(m.n_percent !== undefined || m.p_percent !== undefined || m.k_percent !== undefined) && (
+                            <span className="text-[10px] bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded font-black border border-emerald-300 font-mono whitespace-nowrap">
+                              N-P-K: {m.n_percent || 0}-{m.p_percent || 0}-{m.k_percent || 0}
+                            </span>
+                          )}
+                          {m.fertilizer_usage && (
+                            <span className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-bold border border-blue-200 whitespace-nowrap">
+                              {m.fertilizer_usage}
+                            </span>
+                          )}
+                          {m.bag_weight_kg && (
+                            <span className="text-[11px] text-slate-500 font-medium whitespace-nowrap">
+                              {m.bag_weight_kg}kg/袋
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -906,27 +944,45 @@ export default function MastersPage() {
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[500px]">
                   <CardHeader icon={Package} title={`📦 その他資材 (${otherMaterials.length})`} type="materials" />
                   
-                  <div className="space-y-2 overflow-y-auto flex-1 mb-4 pr-1">
+                  <div className="space-y-2.5 overflow-y-auto flex-1 mb-4 pr-1">
                     {otherMaterials.length === 0 ? <p className="text-slate-400 text-sm">その他資材データなし</p> : null}
                     {otherMaterials.map(m => (
-                      <div key={m.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-100 flex justify-between items-center group transition-colors">
-                        <div>
-                          <div className="font-bold text-slate-700">{m.name}</div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-bold">{m.category || '諸材料費'}</span>
-                            <span className="text-xs text-slate-400">{m.specification ? `${m.specification} ` : ''}({m.unit})</span>
+                      <div key={m.id} className="p-3 bg-slate-50 hover:bg-slate-100/90 rounded-xl border border-slate-200/80 transition-colors group space-y-1.5">
+                        {/* 上段: 品名 ＆ 金額 ＆ 操作ボタン */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-bold text-slate-800 text-sm leading-snug flex-1 min-w-0 break-words">
+                            {m.name}
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                            <span className="font-mono font-bold text-slate-700 text-sm whitespace-nowrap">
+                              ¥{Number(m.default_price || 0).toLocaleString()}
+                            </span>
+                            <div className="flex items-center opacity-60 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => handleOpenModal('materials', m)} className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded" title="編集">
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => handleDelete('materials', m.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="削除">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div className="font-bold text-slate-700 text-sm">¥{m.default_price || 0}</div>
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => handleOpenModal('materials', m)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg">
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => handleDelete('materials', m.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+
+                        {/* 下段: カテゴリ・仕様・単位 */}
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                          <span className="text-[10px] bg-slate-200/80 text-slate-700 px-1.5 py-0.5 rounded font-bold border border-slate-300/50 whitespace-nowrap">
+                            {m.category || '諸材料費'}
+                          </span>
+                          {m.specification && (
+                            <span className="text-[11px] text-slate-600 font-medium">
+                              {m.specification}
+                            </span>
+                          )}
+                          {m.unit && (
+                            <span className="text-[11px] text-slate-400 font-medium whitespace-nowrap">
+                              ({m.unit})
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
