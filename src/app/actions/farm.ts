@@ -1431,6 +1431,7 @@ export async function getMaterialRequirementsPageData(tenantId: string) {
     }
 
     const inventoryMap = compRes.data?.settings?.material_inventory || {};
+    const planMaterialMap = compRes.data?.settings?.plan_material_overrides || {};
 
     return {
       success: true,
@@ -1439,11 +1440,55 @@ export async function getMaterialRequirementsPageData(tenantId: string) {
       fields: fRes.data || [],
       plans: pRes.data || [],
       cropStandards,
-      inventoryMap
+      inventoryMap,
+      planMaterialMap
     };
   } catch (err: any) {
     console.error('getMaterialRequirementsPageData error:', err);
     return { success: false, error: err.message || 'データの取得に失敗しました。' };
+  }
+}
+
+// 畑（作付け計画）ごとの個別資材リスト（10aあたり使用量）を保存・解除するサーバーアクション
+export async function savePlanMaterialOverrideAction(
+  tenantId: string,
+  planId: string,
+  materialsList: Array<{ material_id: string; amount: number }> | null
+) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const { data: comp } = await supabase
+      .from('company_settings')
+      .select('id, settings')
+      .or(`user_id.eq.${ownerId},id.eq.${ownerId},user_id.eq.${tenantId},id.eq.${tenantId}`)
+      .maybeSingle();
+
+    if (comp) {
+      const currentSettings = comp.settings || {};
+      const currentOverrides = { ...(currentSettings.plan_material_overrides || {}) };
+      if (materialsList === null) {
+        delete currentOverrides[planId];
+      } else {
+        currentOverrides[planId] = materialsList;
+      }
+      const nextSettings = {
+        ...currentSettings,
+        plan_material_overrides: currentOverrides
+      };
+      const { error } = await supabase
+        .from('company_settings')
+        .update({ settings: nextSettings })
+        .eq('id', comp.id);
+      if (error) throw error;
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('savePlanMaterialOverrideAction error:', err);
+    return { success: false, error: err.message || '畑ごとの個別資材設定の保存に失敗しました。' };
   }
 }
 

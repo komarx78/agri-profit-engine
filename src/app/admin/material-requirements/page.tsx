@@ -5,6 +5,7 @@ import { getCurrentTenantId } from '@/lib/tenant';
 import {
   getMaterialRequirementsPageData,
   saveTenantCropStandardAction,
+  savePlanMaterialOverrideAction,
   saveMaterialInventoryAction,
   quickCreateMaterialAction
 } from '@/app/actions/farm';
@@ -23,12 +24,15 @@ import {
   Sprout,
   ShoppingCart,
   Banknote,
-  Settings2,
   RefreshCw,
   Check,
   X,
   Calendar,
-  Boxes
+  MapPin,
+  Copy,
+  RotateCcw,
+  ArrowDownUp,
+  Sparkles
 } from 'lucide-react';
 
 // 作付け計画の variety カラムから JSONメタデータ等を除去して綺麗な品種名だけを取り出す
@@ -80,26 +84,35 @@ export default function MaterialRequirementsPage() {
   const [plans, setPlans] = useState<any[]>([]);
   const [cropStandards, setCropStandards] = useState<any[]>([]);
   const [inventoryMap, setInventoryMap] = useState<Record<string, { stock?: number; ordered?: boolean }>>({});
+  // 畑（作付け計画ID）ごとの個別資材設定マップ: { [planId]: Array<{ material_id: string, amount: number }> }
+  const [planMaterialMap, setPlanMaterialMap] = useState<Record<string, Array<{ material_id: string; amount: number }>>>({});
 
   const [isLoading, setIsLoading] = useState(true);
   const [year, setYear] = useState(new Date().getFullYear());
 
-  // 画面モード: 'shopping' (買い物・注文リスト) | 'setup' (作目ごとに使う肥料・資材を設定)
-  const [viewMode, setViewMode] = useState<'shopping' | 'setup'>('shopping');
+  // 畑（圃場）フィルター: 'all' または field.id
+  const [selectedFieldId, setSelectedFieldId] = useState<string>('all');
   // 時期フィルター: 'all' (通年すべて) | 'spring' (1〜7月開始の作付け) | 'autumn' (8〜12月開始の作付け)
   const [seasonFilter, setSeasonFilter] = useState<'all' | 'spring' | 'autumn'>('all');
   // カテゴリフィルター
   const [kindFilter, setKindFilter] = useState<'all' | 'fertilizer' | 'material' | 'pesticide'>('all');
+  // 上下配置の切り替え（false = STEP1:畑ごとの準備が上 ➔ STEP2:買い物まとめ表が下 / true = 買い物まとめ表を一番上に表示）
+  const [showShoppingTableFirst, setShowShoppingTableFirst] = useState<boolean>(false);
 
-  // 作目別の資材設定追加用ローカルステート
-  const [selectedAddMaterialByCrop, setSelectedAddMaterialByCrop] = useState<Record<string, string>>({});
-  const [selectedAddAmountByCrop, setSelectedAddAmountByCrop] = useState<Record<string, string>>({});
-  const [savingCropId, setSavingCropId] = useState<string | null>(null);
+  // 各作付けカードでの資材追加用ローカルステート（キーは plan.id）
+  const [selectedAddMaterialByPlan, setSelectedAddMaterialByPlan] = useState<Record<string, string>>({});
+  const [selectedAddAmountByPlan, setSelectedAddAmountByPlan] = useState<Record<string, string>>({});
+  // 追加時に「同じ野菜のすべての畑に反映('crop')」か「この畑だけ個別に設定('plan')」か（デフォルトはすでに個別設定中なら'plan'、そうでなければ'crop'）
+  const [addScopeByPlan, setAddScopeByPlan] = useState<Record<string, 'crop' | 'plan'>>({});
+
+  const [savingTargetId, setSavingTargetId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   // 新規資材クイック登録モーダル用ステート
   const [isNewMatModalOpen, setIsNewMatModalOpen] = useState(false);
+  const [newMatTargetPlanId, setNewMatTargetPlanId] = useState<string>('');
   const [newMatTargetCropId, setNewMatTargetCropId] = useState<string>('');
+  const [newMatApplyScope, setNewMatApplyScope] = useState<'crop' | 'plan'>('crop');
   const [newMatName, setNewMatName] = useState('');
   const [newMatKind, setNewMatKind] = useState<'fertilizer' | 'material' | 'pesticide'>('fertilizer');
   const [newMatUnit, setNewMatUnit] = useState('袋');
@@ -137,6 +150,7 @@ export default function MaterialRequirementsPage() {
         setPlans(res.plans || []);
         setCropStandards(res.cropStandards || []);
         setInventoryMap(res.inventoryMap || {});
+        setPlanMaterialMap((res as any).planMaterialMap || {});
       }
     } catch (err) {
       console.error(err);
@@ -145,8 +159,8 @@ export default function MaterialRequirementsPage() {
     }
   };
 
-  // 対象年度・時期フィルターに合致する作付け計画一覧
-  const activePlans = useMemo(() => {
+  // 年度・時期に合致する全計画（畑フィルター適用前）
+  const seasonFilteredPlans = useMemo(() => {
     return plans.filter((p: any) => {
       const matchYear = !p.year || Number(p.year) === year;
       if (!matchYear) return false;
@@ -157,58 +171,70 @@ export default function MaterialRequirementsPage() {
     });
   }, [plans, year, seasonFilter]);
 
-  // 作付け計画に含まれる作目一覧（計画がある作目を優先表示）
-  const plannedCropSummaryList = useMemo(() => {
-    const map = new Map<string, { cropId: string; cropName: string; totalAreaAcre: number; plans: any[]; materialsPer10a: Array<{ material_id: string; amount: number }> }>();
-
-    activePlans.forEach((p: any) => {
-      const cropId = p.crop_id;
-      if (!cropId) return;
-      const cropObj = p.crops || crops.find((c: any) => c.id === cropId);
-      const cropName = cropObj?.name || '名称未設定';
+  // 畑ごとのピルボタン一覧（作付けがある畑を面積・計画数付きで集計）
+  const fieldPillList = useMemo(() => {
+    const map = new Map<string, { fieldId: string; fieldName: string; areaAcre: number; planCount: number }>();
+    seasonFilteredPlans.forEach((p: any) => {
+      const fid = p.field_id || 'unassigned';
+      const fieldObj = p.fields || fields.find((f: any) => f.id === p.field_id);
+      const fname = fieldObj?.name || '畑未指定';
       const area = getPlanAreaAcre(p, fields);
-      const std = cropStandards.find((s: any) => s.crop_id === cropId);
-      const mats = Array.isArray(std?.materials_per_10a) ? std.materials_per_10a : [];
-
-      if (!map.has(cropId)) {
-        map.set(cropId, {
-          cropId,
-          cropName,
-          totalAreaAcre: 0,
-          plans: [],
-          materialsPer10a: mats
-        });
+      if (!map.has(fid)) {
+        map.set(fid, { fieldId: fid, fieldName: fname, areaAcre: area, planCount: 0 });
       }
-      const entry = map.get(cropId)!;
-      entry.totalAreaAcre = Math.round((entry.totalAreaAcre + area) * 10) / 10;
-      entry.plans.push({ ...p, resolvedAreaAcre: area });
-      entry.materialsPer10a = mats;
+      const item = map.get(fid)!;
+      item.planCount += 1;
     });
+    return Array.from(map.values());
+  }, [seasonFilteredPlans, fields]);
 
-    // 計画がまだない登録作目も後ろに追加（設定タブでいつでも設定できるようにする）
-    crops.forEach((c: any) => {
-      if (!map.has(c.id)) {
-        const std = cropStandards.find((s: any) => s.crop_id === c.id);
-        const mats = Array.isArray(std?.materials_per_10a) ? std.materials_per_10a : [];
-        map.set(c.id, {
-          cropId: c.id,
-          cropName: c.name,
-          totalAreaAcre: 0,
-          plans: [],
-          materialsPer10a: mats
-        });
+  // 畑フィルターも適用した現在表示対象の作付け計画一覧
+  const activePlans = useMemo(() => {
+    return seasonFilteredPlans
+      .filter((p: any) => {
+        if (selectedFieldId === 'all') return true;
+        const fid = p.field_id || 'unassigned';
+        return fid === selectedFieldId;
+      })
+      .sort((a: any, b: any) => (Number(a.start_month) || 1) - (Number(b.start_month) || 1));
+  }, [seasonFilteredPlans, selectedFieldId]);
+
+  // ある作付け計画(plan)で有効な 10aあたり資材リストを取得（畑個別設定があれば優先、なければ作目標準）
+  const getEffectiveMaterialsForPlan = (plan: any): {
+    isCustomOverride: boolean;
+    list: Array<{ material_id: string; amount: number }>;
+  } => {
+    if (plan?.id && Array.isArray(planMaterialMap[plan.id])) {
+      return {
+        isCustomOverride: true,
+        list: planMaterialMap[plan.id]
+      };
+    }
+    const std = cropStandards.find((s: any) => s.crop_id === plan?.crop_id);
+    const mats = Array.isArray(std?.materials_per_10a) ? std.materials_per_10a : [];
+    return {
+      isCustomOverride: false,
+      list: mats
+    };
+  };
+
+  // 同じ作目がいくつの畑（作付け計画）にあるかをカウント
+  const cropPlanCountMap = useMemo(() => {
+    const counts: Record<string, number> = {};
+    seasonFilteredPlans.forEach((p: any) => {
+      if (p.crop_id) {
+        counts[p.crop_id] = (counts[p.crop_id] || 0) + 1;
       }
     });
+    return counts;
+  }, [seasonFilteredPlans]);
 
-    return Array.from(map.values()).sort((a, b) => b.totalAreaAcre - a.totalAreaAcre);
-  }, [activePlans, crops, fields, cropStandards]);
+  // 資材が1つも設定されていない作付け計画の数
+  const unconfiguredPlansCount = useMemo(() => {
+    return activePlans.filter(p => getEffectiveMaterialsForPlan(p).list.length === 0).length;
+  }, [activePlans, planMaterialMap, cropStandards]);
 
-  // 作付け計画があるのに、使う肥料・資材が1つも設定されていない作目
-  const unconfiguredPlannedCrops = useMemo(() => {
-    return plannedCropSummaryList.filter(c => c.totalAreaAcre > 0 && c.materialsPer10a.length === 0);
-  }, [plannedCropSummaryList]);
-
-  // 資材ごとの必要量・買い物リスト集計
+  // 資材ごとの必要量・買い物リスト集計（STEP 1の畑ごとの設定と100%連動）
   const shoppingList = useMemo(() => {
     const reqMap: Record<
       string,
@@ -234,6 +260,7 @@ export default function MaterialRequirementsPage() {
           startMonth: number;
           endMonth: number;
           cleanVariety: string;
+          isCustomOverride: boolean;
         }>;
       }
     > = {};
@@ -242,15 +269,15 @@ export default function MaterialRequirementsPage() {
       const areaAcre = getPlanAreaAcre(plan, fields);
       if (areaAcre <= 0) return;
 
-      const std = cropStandards.find((s: any) => s.crop_id === plan.crop_id);
-      if (!std || !Array.isArray(std.materials_per_10a)) return;
+      const { isCustomOverride, list } = getEffectiveMaterialsForPlan(plan);
+      if (!list || list.length === 0) return;
 
       const cropObj = plan.crops || crops.find((c: any) => c.id === plan.crop_id);
       const cropName = cropObj?.name || '作目';
       const fieldObj = plan.fields || fields.find((f: any) => f.id === plan.field_id);
       const fieldName = fieldObj?.name || '畑未指定';
 
-      std.materials_per_10a.forEach((m: any) => {
+      list.forEach((m: any) => {
         const mat = materials.find((x: any) => x.id === m.material_id);
         if (!mat) return;
         const per10a = Number(m.amount) || 0;
@@ -291,14 +318,14 @@ export default function MaterialRequirementsPage() {
           calculatedAmount: calcAmt,
           startMonth: sMonth,
           endMonth: eMonth,
-          cleanVariety: cleanVarietyLabel(plan.variety)
+          cleanVariety: cleanVarietyLabel(plan.variety),
+          isCustomOverride
         });
       });
     });
 
     return Object.values(reqMap)
       .map(item => {
-        // 袋・巻・本・箱などは端数を切り上げて「買う数」を算出
         const recommendedBuyUnitCount = Math.ceil(Math.round(item.totalExactAmount * 100) / 100);
         const shortageToBuy = Math.max(0, recommendedBuyUnitCount - item.currentStock);
         const estimatedCost = shortageToBuy * item.unitPrice;
@@ -312,13 +339,12 @@ export default function MaterialRequirementsPage() {
       })
       .filter(item => kindFilter === 'all' || item.kind === kindFilter)
       .sort((a, b) => a.earliestMonth - b.earliestMonth);
-  }, [activePlans, fields, cropStandards, crops, materials, inventoryMap, kindFilter]);
+  }, [activePlans, fields, cropStandards, planMaterialMap, crops, materials, inventoryMap, kindFilter]);
 
   // 全体サマリー計算
   const summaryStats = useMemo(() => {
-    const totalPlannedArea = Math.round(
-      activePlans.reduce((sum, p) => sum + getPlanAreaAcre(p, fields), 0) * 10
-    ) / 10;
+    const totalPlannedArea =
+      Math.round(activePlans.reduce((sum, p) => sum + getPlanAreaAcre(p, fields), 0) * 10) / 10;
     const uniqueCropCount = new Set(activePlans.map(p => p.crop_id).filter(Boolean)).size;
     const uniqueFieldCount = new Set(activePlans.map(p => p.field_id).filter(Boolean)).size;
     const totalItemsCount = shoppingList.length;
@@ -335,15 +361,14 @@ export default function MaterialRequirementsPage() {
     };
   }, [activePlans, fields, shoppingList]);
 
-  // 作目ごとの 10aあたり使用資材リストを更新してDB保存するハンドラ
+  // A) 作目共通（同じ野菜のすべての畑に反映）の資材リストを保存
   const handleUpdateCropMaterials = async (
     cropId: string,
     newMaterialsList: Array<{ material_id: string; amount: number }>
   ) => {
     if (!tenantId || !cropId) return;
-    setSavingCropId(cropId);
+    setSavingTargetId(cropId);
 
-    // 楽観的UI更新
     setCropStandards(prev => {
       const exists = prev.some(s => s.crop_id === cropId);
       if (exists) {
@@ -355,37 +380,85 @@ export default function MaterialRequirementsPage() {
     const res = await saveTenantCropStandardAction(tenantId, cropId, {
       materials_per_10a: newMaterialsList
     });
-    setSavingCropId(null);
+    setSavingTargetId(null);
 
     if (res.success) {
-      showToast('10aあたりの使用量を保存し、必要量を再計算しました！');
+      showToast('同じ野菜の畑すべてに使用量を反映し、買い物リストを再計算しました！');
     } else {
       alert('保存に失敗しました: ' + (res.error || ''));
     }
   };
 
-  // 特定の作目・資材の 10aあたり数量を直接変更
-  const handleChangeAmountPer10a = async (cropId: string, materialId: string, newAmount: number) => {
-    const std = cropStandards.find(s => s.crop_id === cropId);
-    const currentList: Array<{ material_id: string; amount: number }> = Array.isArray(std?.materials_per_10a)
-      ? [...std.materials_per_10a]
-      : [];
+  // B) 特定の畑（作付け計画 planId）だけの個別資材リストを保存・解除
+  const handleUpdatePlanOverrideMaterials = async (
+    planId: string,
+    newMaterialsList: Array<{ material_id: string; amount: number }> | null,
+    customToast?: string
+  ) => {
+    if (!tenantId || !planId) return;
+    setSavingTargetId(planId);
+
+    setPlanMaterialMap(prev => {
+      const next = { ...prev };
+      if (newMaterialsList === null) {
+        delete next[planId];
+      } else {
+        next[planId] = newMaterialsList;
+      }
+      return next;
+    });
+
+    const res = await savePlanMaterialOverrideAction(tenantId, planId, newMaterialsList);
+    setSavingTargetId(null);
+
+    if (res.success) {
+      showToast(
+        customToast ||
+          (newMaterialsList === null
+            ? 'この畑の個別設定を解除し、野菜の共通設定に戻しました！'
+            : 'この畑だけの個別設定として保存し、買い物リストを再計算しました！')
+      );
+    } else {
+      alert('保存に失敗しました: ' + (res.error || ''));
+    }
+  };
+
+  // カード内で資材の数量変更・追加を行う統合ハンドラ（scope: 'crop' = 同じ野菜すべて / 'plan' = この畑だけ）
+  const handleUpsertMaterialOnPlan = async (
+    plan: any,
+    materialId: string,
+    newAmount: number,
+    scope: 'crop' | 'plan'
+  ) => {
+    const { list } = getEffectiveMaterialsForPlan(plan);
+    const currentList = [...list];
     const idx = currentList.findIndex(x => x.material_id === materialId);
     if (idx >= 0) {
       currentList[idx] = { ...currentList[idx], amount: Math.max(0, newAmount) };
     } else {
       currentList.push({ material_id: materialId, amount: Math.max(0, newAmount) });
     }
-    await handleUpdateCropMaterials(cropId, currentList);
+
+    if (scope === 'plan') {
+      await handleUpdatePlanOverrideMaterials(plan.id, currentList);
+    } else {
+      await handleUpdateCropMaterials(plan.crop_id, currentList);
+    }
   };
 
-  // 特定の作目から資材設定を削除
-  const handleRemoveMaterialFromCrop = async (cropId: string, materialId: string) => {
-    const std = cropStandards.find(s => s.crop_id === cropId);
-    const currentList: Array<{ material_id: string; amount: number }> = Array.isArray(std?.materials_per_10a)
-      ? std.materials_per_10a.filter((x: any) => x.material_id !== materialId)
-      : [];
-    await handleUpdateCropMaterials(cropId, currentList);
+  // カード内で資材を削除するハンドラ
+  const handleRemoveMaterialOnPlan = async (plan: any, materialId: string, scope: 'crop' | 'plan') => {
+    const { list } = getEffectiveMaterialsForPlan(plan);
+    const nextList = list.filter(x => x.material_id !== materialId);
+    if (scope === 'plan') {
+      await handleUpdatePlanOverrideMaterials(
+        plan.id,
+        nextList,
+        'この畑から該当の資材を外しました（他の畑には影響しません）！'
+      );
+    } else {
+      await handleUpdateCropMaterials(plan.crop_id, nextList);
+    }
   };
 
   // 手持ち在庫数・注文済フラグ・単価の即時更新
@@ -414,7 +487,7 @@ export default function MaterialRequirementsPage() {
     await saveMaterialInventoryAction(tenantId, materialId, patch);
   };
 
-  // 新しい肥料・資材をその場でマスタ登録＆作目に紐付け
+  // 新しい肥料・資材をその場でマスタ登録＆指定の畑（または作目全体）に紐付け
   const handleCreateNewMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tenantId || !newMatName.trim()) return;
@@ -435,8 +508,15 @@ export default function MaterialRequirementsPage() {
         const createdMat = res.data;
         setMaterials(prev => [...prev, createdMat]);
 
-        // 作目が指定されていればそのまま10a基準にも追加
-        if (newMatTargetCropId) {
+        const targetPlan = plans.find(p => p.id === newMatTargetPlanId);
+        if (targetPlan && newMatApplyScope === 'plan') {
+          const { list } = getEffectiveMaterialsForPlan(targetPlan);
+          const nextList = [
+            ...list,
+            { material_id: createdMat.id, amount: Math.max(0.1, Number(newMatAmountPer10a) || 1) }
+          ];
+          await handleUpdatePlanOverrideMaterials(targetPlan.id, nextList);
+        } else if (newMatTargetCropId) {
           const std = cropStandards.find(s => s.crop_id === newMatTargetCropId);
           const currentList = Array.isArray(std?.materials_per_10a) ? [...std.materials_per_10a] : [];
           currentList.push({
@@ -446,7 +526,7 @@ export default function MaterialRequirementsPage() {
           await handleUpdateCropMaterials(newMatTargetCropId, currentList);
         }
 
-        showToast(`「${createdMat.name}」を登録しました！`);
+        showToast(`「${createdMat.name}」を登録して反映しました！`);
         setIsNewMatModalOpen(false);
         setNewMatName('');
         setNewMatPrice('');
@@ -459,8 +539,653 @@ export default function MaterialRequirementsPage() {
     }
   };
 
+  // ============================================================================
+  // 共通セクション描画関数: ① 畑・作付けごとの準備カード一覧 / ② 買い物・注文まとめ表
+  // ============================================================================
+
+  // セクションA: 📍 畑 × 作付けごとの肥料・資材 準備リスト
+  const renderFieldPlanCardsSection = () => (
+    <section id="field-plans-section" className="space-y-4 print:hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-emerald-50/90 border border-emerald-200 rounded-2xl px-4 py-3.5">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 bg-emerald-700 text-white rounded-lg text-xs font-black">
+              手順 1
+            </span>
+            <h2 className="text-base sm:text-lg font-black text-slate-900">
+              📍 畑・作付けごとに「使う肥料・資材」を決める（{activePlans.length}件）
+            </h2>
+          </div>
+          <p className="text-xs font-bold text-slate-600">
+            各畑のカードの中で、使う肥料やマルチを直接追加・変更できます。<strong>「同じ野菜のすべての畑に一括反映」</strong>も、ハウスや露地の違いに合わせた<strong>「この畑だけ個別調整」</strong>もワンクリックで選べます。
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            const firstPlan = activePlans[0];
+            setNewMatTargetPlanId(firstPlan?.id || '');
+            setNewMatTargetCropId(firstPlan?.crop_id || crops[0]?.id || '');
+            setNewMatApplyScope('crop');
+            setIsNewMatModalOpen(true);
+          }}
+          className="px-3.5 py-2 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-black shrink-0 flex items-center gap-1.5 shadow-2xs cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>新しい肥料・資材をマスタ登録</span>
+        </button>
+      </div>
+
+      {activePlans.length === 0 ? (
+        <div className="bg-white rounded-3xl border border-slate-200 p-10 text-center space-y-2">
+          <Sprout className="w-10 h-10 text-emerald-500 mx-auto" />
+          <p className="text-sm font-black text-slate-800">
+            この条件（{year}年）に該当する作付け計画がありません
+          </p>
+          <p className="text-xs font-bold text-slate-500">
+            「作付けこよみ」で畑の作付け計画を登録すると、ここに自動で畑ごとのカードが表示されます。
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          {activePlans.map((plan: any) => {
+            const areaAcre = getPlanAreaAcre(plan, fields);
+            const fieldObj = plan.fields || fields.find((f: any) => f.id === plan.field_id);
+            const fieldName = fieldObj?.name || '畑未指定';
+            const cropObj = plan.crops || crops.find((c: any) => c.id === plan.crop_id);
+            const cropName = cropObj?.name || '作目未設定';
+            const cleanVar = cleanVarietyLabel(plan.variety);
+            const sMonth = Number(plan.start_month) || 1;
+            const eMonth = Number(plan.end_month) || sMonth;
+
+            const { isCustomOverride, list: effectiveMaterials } = getEffectiveMaterialsForPlan(plan);
+            const sameCropTotalCount = cropPlanCountMap[plan.crop_id] || 1;
+            const currentAddScope: 'crop' | 'plan' =
+              addScopeByPlan[plan.id] || (isCustomOverride ? 'plan' : 'crop');
+            const selectedMatId = selectedAddMaterialByPlan[plan.id] || '';
+            const selectedAmt = selectedAddAmountByPlan[plan.id] ?? '1';
+            const isSavingThis = savingTargetId === plan.id || savingTargetId === plan.crop_id;
+
+            return (
+              <div
+                key={plan.id}
+                className={`bg-white rounded-3xl border-2 shadow-2xs p-4 sm:p-5 flex flex-col justify-between gap-4 transition-all ${
+                  isCustomOverride
+                    ? 'border-indigo-300 bg-indigo-50/10'
+                    : effectiveMaterials.length === 0
+                    ? 'border-amber-300'
+                    : 'border-slate-200'
+                }`}
+              >
+                <div className="space-y-3">
+                  {/* カードヘッダー：畑名・面積・作目・時期 ＋ 個別調整切替ボタン */}
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 pb-3 border-b border-slate-100">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-2.5 py-1 bg-slate-800 text-white rounded-xl text-xs font-black flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                          {fieldName}（{areaAcre}a）
+                        </span>
+                        <span className="text-base font-black text-slate-900">
+                          🌱 {cropName}
+                          {cleanVar ? `（${cleanVar}）` : ''}
+                        </span>
+                        <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold">
+                          📅 {sMonth}月〜{eMonth}月
+                        </span>
+                      </div>
+
+                      {/* 連動状態の分かりやすい表示 */}
+                      <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                        {isCustomOverride ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-black text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg">
+                            <Sparkles className="w-3 h-3" />
+                            この畑（{fieldName}）専用の個別設定中
+                          </span>
+                        ) : sameCropTotalCount > 1 ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500">
+                            🔄 「{cropName}」の全{sameCropTotalCount}畑で同じ10a基準を共有中
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500">
+                            📌 10aあたりの使用量から {areaAcre}a 分を自動計算
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 右上アクション：個別調整への切替 ／ 共通設定への復帰・一括コピー */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {isSavingThis && (
+                        <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> 保存中
+                        </span>
+                      )}
+
+                      {sameCropTotalCount > 1 && !isCustomOverride && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddScopeByPlan(prev => ({ ...prev, [plan.id]: 'plan' }));
+                            handleUpdatePlanOverrideMaterials(
+                              plan.id,
+                              [...effectiveMaterials],
+                              `「${fieldName}」を個別調整モードに切り替えました！この畑だけ自由に変更できます。`
+                            );
+                          }}
+                          className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-xl text-[11px] font-black transition-colors cursor-pointer"
+                          title="同じ野菜でもハウスと露地などで使う資材・量を変えたい場合に押してください"
+                        >
+                          📍 この畑だけ個別に調整する
+                        </button>
+                      )}
+
+                      {isCustomOverride && (
+                        <div className="flex items-center gap-1">
+                          {sameCropTotalCount > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleUpdateCropMaterials(plan.crop_id, [...effectiveMaterials]);
+                                handleUpdatePlanOverrideMaterials(
+                                  plan.id,
+                                  null,
+                                  `この畑の設定を「${cropName}」のすべての畑にも一括反映しました！`
+                                );
+                                setAddScopeByPlan(prev => ({ ...prev, [plan.id]: 'crop' }));
+                              }}
+                              className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-[11px] font-black flex items-center gap-1 transition-colors cursor-pointer"
+                              title={`他の「${cropName}」の畑にもこの内容をそのまま反映します`}
+                            >
+                              <Copy className="w-3 h-3" />
+                              他の{cropName}の畑にも反映
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAddScopeByPlan(prev => ({ ...prev, [plan.id]: 'crop' }));
+                              handleUpdatePlanOverrideMaterials(plan.id, null);
+                            }}
+                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                            title="個別調整をやめて、野菜の共通設定に戻します"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            共通に戻す
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* この畑で使う肥料・資材リスト */}
+                  {effectiveMaterials.length === 0 ? (
+                    <div className="p-4 bg-amber-50/70 border border-dashed border-amber-300 rounded-2xl text-xs font-bold text-amber-900 text-center">
+                      ⚠️ まだこの畑（{cropName}）で使う肥料・資材が登録されていません。すぐ下の欄から選んで追加してください。
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {effectiveMaterials.map((m, idx) => {
+                        const mat = materials.find(x => x.id === m.material_id);
+                        const unit = mat?.unit || '袋';
+                        const kind = getMaterialKind(mat);
+                        const kindTag =
+                          kind === 'fertilizer'
+                            ? { text: '肥料', cls: 'bg-teal-50 text-teal-800 border-teal-200' }
+                            : kind === 'pesticide'
+                            ? { text: '農薬', cls: 'bg-rose-50 text-rose-800 border-rose-200' }
+                            : { text: '資材', cls: 'bg-blue-50 text-blue-800 border-blue-200' };
+                        const calcForThisField =
+                          Math.round(((areaAcre / 10) * (Number(m.amount) || 0)) * 10) / 10;
+
+                        return (
+                          <div
+                            key={`${m.material_id}-${idx}`}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-slate-50 border border-slate-200/90 rounded-2xl"
+                          >
+                            <div className="min-w-0 flex-1 flex items-center gap-2">
+                              <span
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-black border shrink-0 ${kindTag.cls}`}
+                              >
+                                {kindTag.text}
+                              </span>
+                              <div className="min-w-0">
+                                <span className="text-sm font-black text-slate-900 block truncate">
+                                  {mat ? mat.name : '不明な資材'}
+                                </span>
+                                <span className="text-[11px] font-bold text-slate-500">
+                                  この畑（{areaAcre}a）での必要量:{' '}
+                                  <strong className="text-amber-700 text-xs">
+                                    {calcForThisField} {unit}
+                                  </strong>
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-1.5 shrink-0">
+                              <span className="text-[11px] font-bold text-slate-500">10aに</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.5"
+                                value={m.amount}
+                                onChange={e =>
+                                  handleUpsertMaterialOnPlan(
+                                    plan,
+                                    m.material_id,
+                                    Number(e.target.value),
+                                    isCustomOverride ? 'plan' : currentAddScope
+                                  )
+                                }
+                                className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right text-sm font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                              />
+                              <span className="text-xs font-bold text-slate-600 w-6">{unit}</span>
+
+                              {/* 同じ野菜が複数畑にあり、まだ共通設定中の場合は「この畑だけ外す」もワンクリックで可能 */}
+                              {sameCropTotalCount > 1 && !isCustomOverride && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveMaterialOnPlan(plan, m.material_id, 'plan')}
+                                  className="px-2 py-1 text-[10px] font-black text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors cursor-pointer"
+                                  title="他の畑には残したまま、この畑からだけ外します"
+                                >
+                                  この畑だけ外す
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleRemoveMaterialOnPlan(
+                                    plan,
+                                    m.material_id,
+                                    isCustomOverride ? 'plan' : 'crop'
+                                  )
+                                }
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                title={
+                                  isCustomOverride
+                                    ? 'この畑から削除'
+                                    : `「${cropName}」の基準から削除`
+                                }
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* カード下部：その場で肥料・資材を追加するフォーム */}
+                <div className="pt-3 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <label className="text-[11px] font-black text-slate-600">
+                      ＋ この畑（{fieldName} / {cropName}）に使う肥料・資材を追加
+                    </label>
+
+                    {/* 同じ野菜が複数畑にある場合、追加先を「全畑共通」か「この畑だけ」か選べる */}
+                    {sameCropTotalCount > 1 && (
+                      <div className="flex items-center bg-slate-100 p-0.5 rounded-lg text-[10px] font-black">
+                        <button
+                          type="button"
+                          onClick={() => setAddScopeByPlan(prev => ({ ...prev, [plan.id]: 'crop' }))}
+                          className={`px-2 py-1 rounded-md transition-colors cursor-pointer ${
+                            currentAddScope === 'crop'
+                              ? 'bg-emerald-600 text-white'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          🔄 {cropName}の畑すべてに反映
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAddScopeByPlan(prev => ({ ...prev, [plan.id]: 'plan' }))}
+                          className={`px-2 py-1 rounded-md transition-colors cursor-pointer ${
+                            currentAddScope === 'plan'
+                              ? 'bg-indigo-600 text-white'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          📍 この畑（{fieldName}）だけ
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <select
+                      value={selectedMatId}
+                      onChange={e => {
+                        if (e.target.value === '__NEW__') {
+                          setNewMatTargetPlanId(plan.id);
+                          setNewMatTargetCropId(plan.crop_id);
+                          setNewMatApplyScope(currentAddScope);
+                          setIsNewMatModalOpen(true);
+                          return;
+                        }
+                        setSelectedAddMaterialByPlan(prev => ({
+                          ...prev,
+                          [plan.id]: e.target.value
+                        }));
+                      }}
+                      className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+                    >
+                      <option value="">追加する肥料・マルチ・資材を選択...</option>
+                      {materials.map(mat => (
+                        <option key={mat.id} value={mat.id}>
+                          [{mat.category || '資材'}] {mat.name}（単位: {mat.unit || '袋'}）
+                        </option>
+                      ))}
+                      <option value="__NEW__">✨ ＋ リストにない新しい肥料・資材を登録する...</option>
+                    </select>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-500 whitespace-nowrap">10aに</span>
+                      <input
+                        type="number"
+                        min="0.1"
+                        step="0.5"
+                        value={selectedAmt}
+                        onChange={e =>
+                          setSelectedAddAmountByPlan(prev => ({
+                            ...prev,
+                            [plan.id]: e.target.value
+                          }))
+                        }
+                        className="w-16 px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-right text-xs font-black text-slate-800"
+                      />
+                      <button
+                        type="button"
+                        disabled={!selectedMatId}
+                        onClick={() => {
+                          if (!selectedMatId) return;
+                          handleUpsertMaterialOnPlan(
+                            plan,
+                            selectedMatId,
+                            Math.max(0.1, Number(selectedAmt) || 1),
+                            currentAddScope
+                          );
+                          setSelectedAddMaterialByPlan(prev => ({ ...prev, [plan.id]: '' }));
+                        }}
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-xs font-black whitespace-nowrap transition-colors cursor-pointer"
+                      >
+                        ＋ 追加
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+
+  // セクションB: 🛒 買い物・注文まとめ表（手順1の結果がリアルタイムで合算される一覧表）
+  const renderShoppingSummarySection = () => (
+    <section id="shopping-summary-section" className="space-y-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-amber-50/90 border border-amber-200 rounded-2xl px-4 py-3.5 print:hidden">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 bg-amber-600 text-white rounded-lg text-xs font-black">
+              手順 2
+            </span>
+            <h2 className="text-base sm:text-lg font-black text-slate-900">
+              🛒 買い物・注文まとめ表（在庫差引・概算金額：{shoppingList.length}品目）
+            </h2>
+          </div>
+          <p className="text-xs font-bold text-slate-600">
+            各畑で設定した肥料・資材が自動で合算されています。「② いまある在庫」と「単価」を入れると、<strong>今回買う数と金額</strong>がすぐに計算されます。
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* カテゴリ絞り込み */}
+          <div className="flex items-center bg-white border border-amber-200 p-1 rounded-xl text-xs font-bold">
+            {(
+              [
+                { id: 'all', label: 'すべて' },
+                { id: 'fertilizer', label: '🔬 肥料' },
+                { id: 'material', label: '📦 資材・マルチ' },
+                { id: 'pesticide', label: '🧪 農薬' }
+              ] as const
+            ).map(k => (
+              <button
+                key={k.id}
+                type="button"
+                onClick={() => setKindFilter(k.id)}
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  kindFilter === k.id
+                    ? 'bg-amber-600 text-white font-black'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {k.label}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer"
+          >
+            <Printer className="w-4 h-4" />
+            <span>この注文表を印刷</span>
+          </button>
+        </div>
+      </div>
+
+      {shoppingList.length === 0 ? (
+        <div className="bg-white rounded-3xl border border-slate-200 p-8 text-center space-y-2">
+          <ShoppingCart className="w-8 h-8 text-amber-500 mx-auto" />
+          <p className="text-sm font-black text-slate-800">
+            まだ集計できる肥料・資材がありません
+          </p>
+          <p className="text-xs font-bold text-slate-500">
+            「手順 1：畑・作付けごとに使う肥料・資材を決める」の各カードで資材を追加すると、ここに自動で買い物リストが作成されます。
+          </p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-2xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-slate-600 bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3.5 font-black">肥料・資材名（使う畑の内訳）</th>
+                  <th className="px-4 py-3.5 font-black text-right whitespace-nowrap">
+                    ① 畑での必要量
+                  </th>
+                  <th className="px-4 py-3.5 font-black text-right whitespace-nowrap">
+                    🏠 ② いまある在庫
+                  </th>
+                  <th className="px-4 py-3.5 font-black text-right whitespace-nowrap bg-amber-50/60 text-amber-900">
+                    🛒 ③ 今回買う数
+                  </th>
+                  <th className="px-4 py-3.5 font-black text-right whitespace-nowrap">
+                    💴 単価
+                  </th>
+                  <th className="px-4 py-3.5 font-black text-right whitespace-nowrap">
+                    概算金額（小計）
+                  </th>
+                  <th className="px-4 py-3.5 font-black text-center whitespace-nowrap print:hidden">
+                    注文チェック
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {shoppingList.map(item => {
+                  const unitLabel = item.material.unit || '袋';
+                  const kindBadge =
+                    item.kind === 'fertilizer'
+                      ? { label: '🔬 肥料', cls: 'bg-teal-50 text-teal-800 border-teal-200' }
+                      : item.kind === 'pesticide'
+                      ? { label: '🧪 農薬', cls: 'bg-rose-50 text-rose-800 border-rose-200' }
+                      : { label: '📦 資材', cls: 'bg-blue-50 text-blue-800 border-blue-200' };
+
+                  return (
+                    <tr
+                      key={item.material.id}
+                      className={`transition-colors ${
+                        item.isOrdered ? 'bg-emerald-50/30' : 'hover:bg-slate-50/70'
+                      }`}
+                    >
+                      {/* 資材名 ＋ どの畑で何袋使うかの内訳タグ */}
+                      <td className="px-4 py-3.5 align-top">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-black border ${kindBadge.cls}`}
+                          >
+                            {kindBadge.label}
+                          </span>
+                          <span className="text-base font-black text-slate-900">
+                            {item.material.name}
+                          </span>
+                          <span className="text-xs font-bold text-slate-500">
+                            （📅 {item.earliestMonth}月〜）
+                          </span>
+                        </div>
+
+                        {/* 内訳バッジ：どの畑でどれだけ使うか一目で分かる */}
+                        <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                          {item.details.map((d, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 rounded-lg text-[11px] font-bold"
+                            >
+                              📍 {d.fieldName}（{d.cropName} {d.areaAcre}a）:{' '}
+                              <strong className="text-slate-900">
+                                {Number(d.calculatedAmount.toFixed(1))}
+                                {unitLabel}
+                              </strong>
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+
+                      {/* ① 畑での必要量 */}
+                      <td className="px-4 py-3.5 text-right align-middle whitespace-nowrap">
+                        <div className="text-base font-black text-slate-800">
+                          {item.recommendedBuyUnitCount.toLocaleString()}{' '}
+                          <span className="text-xs font-bold text-slate-500">{unitLabel}</span>
+                        </div>
+                        {item.totalExactAmount !== item.recommendedBuyUnitCount && (
+                          <div className="text-[10px] font-bold text-slate-400">
+                            (計算値 {item.totalExactAmount}
+                            {unitLabel} を切上)
+                          </div>
+                        )}
+                      </td>
+
+                      {/* ② いまある手持ち在庫 */}
+                      <td className="px-4 py-3.5 text-right align-middle whitespace-nowrap">
+                        <div className="inline-flex items-center justify-end gap-1">
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={item.currentStock}
+                            onChange={e =>
+                              handleUpdateInventoryOrPrice(item.material.id, {
+                                stock: Number(e.target.value)
+                              })
+                            }
+                            className="w-16 px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-right text-sm font-black text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          />
+                          <span className="text-xs font-bold text-slate-500">{unitLabel}</span>
+                        </div>
+                      </td>
+
+                      {/* ③ 今回買う数（不足分） */}
+                      <td className="px-4 py-3.5 text-right align-middle whitespace-nowrap bg-amber-50/40">
+                        {item.shortageToBuy > 0 ? (
+                          <div className="text-xl font-black text-amber-600">
+                            {item.shortageToBuy.toLocaleString()}{' '}
+                            <span className="text-xs font-bold">{unitLabel}</span>
+                          </div>
+                        ) : (
+                          <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-black">
+                            ✨ 在庫で足ります
+                          </span>
+                        )}
+                      </td>
+
+                      {/* ④ 単価 */}
+                      <td className="px-4 py-3.5 text-right align-middle whitespace-nowrap">
+                        <div className="inline-flex items-center justify-end gap-1">
+                          <span className="text-xs font-bold text-slate-400">¥</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="10"
+                            value={item.unitPrice || ''}
+                            placeholder="単価"
+                            onChange={e =>
+                              handleUpdateInventoryOrPrice(item.material.id, {
+                                unitPrice: Number(e.target.value)
+                              })
+                            }
+                            className="w-20 px-2 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-right text-xs font-black text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                          />
+                        </div>
+                      </td>
+
+                      {/* ⑤ 概算金額 */}
+                      <td className="px-4 py-3.5 text-right align-middle whitespace-nowrap">
+                        <div className="text-base font-black text-emerald-700">
+                          ¥{item.estimatedCost.toLocaleString()}
+                        </div>
+                      </td>
+
+                      {/* ⑥ 注文済チェック */}
+                      <td className="px-4 py-3.5 text-center align-middle whitespace-nowrap print:hidden">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleUpdateInventoryOrPrice(item.material.id, {
+                              ordered: !item.isOrdered
+                            })
+                          }
+                          className={`px-3 py-1.5 rounded-xl text-xs font-black inline-flex items-center gap-1 transition-all cursor-pointer ${
+                            item.isOrdered
+                              ? 'bg-emerald-600 text-white shadow-2xs'
+                              : 'bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200'
+                          }`}
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>{item.isOrdered ? '注文済' : '注文済にする'}</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {/* 合計フッター */}
+              <tfoot className="bg-slate-50 border-t-2 border-slate-200">
+                <tr>
+                  <td colSpan={3} className="px-4 py-3.5 text-right text-xs font-black text-slate-600">
+                    今回買い足す品目: {summaryStats.itemsToBuyCount} 品目 ／ 注文金額 合計（目安）
+                  </td>
+                  <td colSpan={3} className="px-4 py-3.5 text-right text-xl font-black text-emerald-700">
+                    ¥{summaryStats.totalEstimatedCost.toLocaleString()}
+                  </td>
+                  <td className="print:hidden" />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+
   return (
-    <div className="max-w-[95vw] mx-auto px-4 sm:px-6 space-y-6 pb-16 pt-4 sm:pt-6 relative">
+    <div className="max-w-[95vw] mx-auto px-4 sm:px-6 space-y-5 pb-16 pt-4 sm:pt-6 relative">
       {/* トースト通知 */}
       {toastMsg && (
         <div className="fixed bottom-6 right-6 z-50 bg-emerald-700 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 text-sm font-black print:hidden">
@@ -469,22 +1194,22 @@ export default function MaterialRequirementsPage() {
         </div>
       )}
 
-      {/* 1. ヘッダー ＆ 年度切替・注文メモ印刷ボタン */}
+      {/* 1. ヘッダー ＆ 年度切替・並び順切替・印刷ボタン */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2.5">
             <Calculator className="w-7 h-7 text-amber-600 shrink-0" />
-            <span>肥料・資材の必要量（買い物・注文リスト）</span>
+            <span>肥料・資材の必要量（畑ごとの準備 ＆ 買い物リスト）</span>
             <span className="print:hidden">
-              <HelpTooltip content="「作付けこよみ（計画）」の面積から、今年買うべき肥料やマルチ・資材の数を自動計算します。この画面上で「10aあたり何袋使うか」や「いま納屋にある在庫数」を直接入力・調整でき、そのまま農協（JA）や資材店への注文メモとして印刷できます。" />
+              <HelpTooltip content="1画面で「手順1：畑・作付けごとに使う肥料や資材を決める」➔「手順2：全体の買い物・注文まとめ表で在庫を引いて注文数を出す」が連動して完結します。" />
             </span>
           </h1>
-          <p className="text-xs md:text-sm text-slate-500 mt-1.5 font-bold">
-            作付け面積 × 10aあたり使用量から、「手持ち在庫を引いた今回買う数」と「概算金額」を自動計算します。
+          <p className="text-xs md:text-sm text-slate-500 mt-1 font-bold">
+            【手順1】畑・作付けごとに使う肥料やマルチを決める ➔ 【手順2】自動で合算された買い物まとめ表で在庫を引いて注文する（1画面連動）
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 print:hidden">
+        <div className="flex flex-wrap items-center gap-2 print:hidden">
           {/* 年度セレクター */}
           <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
             <button
@@ -506,16 +1231,18 @@ export default function MaterialRequirementsPage() {
             </button>
           </div>
 
+          {/* 上下入れ替えボタン（買い物まとめ表を一番上にしたい時にもワンクリック対応） */}
           <button
             type="button"
-            onClick={() => {
-              setNewMatTargetCropId(plannedCropSummaryList[0]?.cropId || '');
-              setIsNewMatModalOpen(true);
-            }}
+            onClick={() => setShowShoppingTableFirst(prev => !prev)}
             className="px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
           >
-            <Plus className="w-4 h-4 text-emerald-600" />
-            <span>新しい肥料・資材を登録</span>
+            <ArrowDownUp className="w-4 h-4 text-indigo-600" />
+            <span>
+              {showShoppingTableFirst
+                ? '📍 畑ごとの準備を上に表示する'
+                : '🛒 買い物まとめ表を上に表示する'}
+            </span>
           </button>
 
           <button
@@ -524,7 +1251,7 @@ export default function MaterialRequirementsPage() {
             className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
           >
             <Printer className="w-4 h-4" />
-            <span>注文メモ（買い物リスト）を印刷</span>
+            <span>注文メモを印刷</span>
           </button>
 
           <button
@@ -538,135 +1265,44 @@ export default function MaterialRequirementsPage() {
         </div>
       </div>
 
-      {/* 2. 4つの要点サマリーカード（一目で今年の必要規模と予算がわかる） */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
-            <Sprout className="w-4 h-4 text-emerald-600" />
-            <span>対象の作付け計画（{year}年）</span>
-          </div>
-          <div className="mt-1.5 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-slate-800">{summaryStats.uniqueCropCount}</span>
-            <span className="text-xs font-bold text-slate-500">
-              作目 / 延べ <strong className="text-slate-800">{summaryStats.totalPlannedArea}a</strong>（{summaryStats.uniqueFieldCount}圃場）
+      {/* 2. 畑（圃場）ごとの絞り込みピルバー ＆ 時期切替（育苗スケジュールと完全統一！） */}
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-3 print:hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          {/* 畑ピルボタン */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs font-black text-slate-500 mr-1 flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+              畑で絞り込み:
             </span>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
-            <Package className="w-4 h-4 text-blue-600" />
-            <span>必要な肥料・資材の種類</span>
-          </div>
-          <div className="mt-1.5 flex items-baseline justify-between gap-2">
-            <div>
-              <span className="text-2xl font-black text-slate-800">{summaryStats.totalItemsCount}</span>
-              <span className="text-xs font-bold text-slate-500 ml-1">品目</span>
-            </div>
-            {unconfiguredPlannedCrops.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedFieldId('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                selectedFieldId === 'all'
+                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              すべての圃場 ({seasonFilteredPlans.length}件)
+            </button>
+            {fieldPillList.map(f => (
               <button
+                key={f.fieldId}
                 type="button"
-                onClick={() => setViewMode('setup')}
-                className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-[11px] font-black transition-colors cursor-pointer print:hidden"
+                onClick={() => setSelectedFieldId(f.fieldId)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  selectedFieldId === f.fieldId
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
               >
-                ⚠️ {unconfiguredPlannedCrops.length}作目が未設定 ➔
+                📍 {f.fieldName} ({f.areaAcre}a)
               </button>
-            )}
+            ))}
           </div>
-        </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
-            <ShoppingCart className="w-4 h-4 text-amber-600" />
-            <span>今回買い足す品目数（在庫差引後）</span>
-          </div>
-          <div className="mt-1.5 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-amber-600">{summaryStats.itemsToBuyCount}</span>
-            <span className="text-xs font-bold text-slate-500">
-              品目を注文予定（全{summaryStats.totalItemsCount}品目中）
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-emerald-200 bg-gradient-to-br from-white to-emerald-50/40 shadow-2xs">
-          <div className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
-            <Banknote className="w-4 h-4 text-emerald-600" />
-            <span>買い足し概算金額（予算合計）</span>
-          </div>
-          <div className="mt-1.5 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-emerald-700">
-              ¥{summaryStats.totalEstimatedCost.toLocaleString()}
-            </span>
-            <span className="text-[11px] font-bold text-slate-400">（注文数 × 単価）</span>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. 作付け計画があるのに資材未設定の作目がある場合の親切ガイドバナー */}
-      {unconfiguredPlannedCrops.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <p className="text-sm font-black text-amber-950">
-                作付け計画がある作目のうち、まだ「使う肥料・資材」が登録されていない作目があります：
-              </p>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {unconfiguredPlannedCrops.map(c => (
-                  <span
-                    key={c.cropId}
-                    className="px-2.5 py-0.5 bg-white border border-amber-300 text-amber-900 rounded-lg text-xs font-black"
-                  >
-                    🌱 {c.cropName}（計画 {c.totalAreaAcre}a）
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setViewMode(viewMode === 'setup' ? 'shopping' : 'setup')}
-            className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shrink-0 shadow-2xs transition-colors cursor-pointer"
-          >
-            {viewMode === 'setup' ? '🛒 買い物リストに戻る' : '⚙️ この画面で使う肥料・資材を設定する ➔'}
-          </button>
-        </div>
-      )}
-
-      {/* 4. モード切替タブ ＆ 時期・カテゴリ絞り込みバー */}
-      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-3 print:hidden">
-        {/* 左側: 2大モード切替（買い物リスト vs 作目別設定） */}
-        <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1 self-start">
-          <button
-            type="button"
-            onClick={() => setViewMode('shopping')}
-            className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-black flex items-center gap-1.5 transition-all cursor-pointer ${
-              viewMode === 'shopping'
-                ? 'bg-white text-amber-700 shadow-2xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <ShoppingCart className="w-4 h-4" />
-            <span>① 買い物・注文リスト ({shoppingList.length})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('setup')}
-            className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-black flex items-center gap-1.5 transition-all cursor-pointer ${
-              viewMode === 'setup'
-                ? 'bg-white text-emerald-700 shadow-2xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Settings2 className="w-4 h-4" />
-            <span>② 作目ごとに使う肥料・資材を設定 ({plannedCropSummaryList.length})</span>
-          </button>
-        </div>
-
-        {/* 右側: 時期フィルター ＆ 資材区分フィルター */}
-        <div className="flex flex-wrap items-center gap-2">
           {/* 時期フィルター */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold">
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold shrink-0 self-start">
             <span className="px-2 text-slate-400 font-black flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" />
               時期:
@@ -682,470 +1318,109 @@ export default function MaterialRequirementsPage() {
                 key={s.id}
                 type="button"
                 onClick={() => setSeasonFilter(s.id)}
-                className={`px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                  seasonFilter === s.id ? 'bg-slate-800 text-white font-black' : 'text-slate-600 hover:text-slate-900'
+                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                  seasonFilter === s.id
+                    ? 'bg-slate-800 text-white font-black'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 {s.label}
               </button>
             ))}
           </div>
-
-          {/* 資材カテゴリフィルター（買い物リスト表示時のみ） */}
-          {viewMode === 'shopping' && (
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold">
-              {(
-                [
-                  { id: 'all', label: 'すべて' },
-                  { id: 'fertilizer', label: '🔬 肥料' },
-                  { id: 'material', label: '📦 資材・マルチ' },
-                  { id: 'pesticide', label: '🧪 農薬' }
-                ] as const
-              ).map(k => (
-                <button
-                  key={k.id}
-                  type="button"
-                  onClick={() => setKindFilter(k.id)}
-                  className={`px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                    kindFilter === k.id ? 'bg-amber-600 text-white font-black' : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {k.label}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
-      {/* 5. メインコンテンツ */}
+      {/* 3. 4つの要点サマリーバー（クリックで注文まとめ表や準備リストへスムーズ移動） */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+          <div className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+            <Sprout className="w-4 h-4 text-emerald-600" />
+            <span>表示中の畑・作付け計画</span>
+          </div>
+          <div className="mt-1.5 flex items-baseline justify-between gap-2">
+            <div>
+              <span className="text-2xl font-black text-slate-800">{activePlans.length}</span>
+              <span className="text-xs font-bold text-slate-500 ml-1">
+                作付け（延べ <strong className="text-slate-800">{summaryStats.totalPlannedArea}a</strong>）
+              </span>
+            </div>
+            {unconfiguredPlansCount > 0 && (
+              <span className="px-2 py-0.5 bg-amber-100 text-amber-900 rounded-lg text-[11px] font-black">
+                未設定 {unconfiguredPlansCount}件
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+          <div className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+            <Package className="w-4 h-4 text-blue-600" />
+            <span>集計された肥料・資材の種類</span>
+          </div>
+          <div className="mt-1.5 flex items-baseline gap-2">
+            <span className="text-2xl font-black text-slate-800">{summaryStats.totalItemsCount}</span>
+            <span className="text-xs font-bold text-slate-500">品目</span>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+          <div className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+            <ShoppingCart className="w-4 h-4 text-amber-600" />
+            <span>今回買い足す品目数（在庫差引後）</span>
+          </div>
+          <div className="mt-1.5 flex items-baseline justify-between gap-2">
+            <div>
+              <span className="text-2xl font-black text-amber-600">{summaryStats.itemsToBuyCount}</span>
+              <span className="text-xs font-bold text-slate-500 ml-1">品目を注文予定</span>
+            </div>
+            <a
+              href="#shopping-summary-section"
+              className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-[11px] font-black transition-colors print:hidden"
+            >
+              🛒 注文表を見る ⬇
+            </a>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-emerald-200 bg-gradient-to-br from-white to-emerald-50/40 shadow-2xs">
+          <div className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+            <Banknote className="w-4 h-4 text-emerald-600" />
+            <span>買い足し概算金額（予算合計）</span>
+          </div>
+          <div className="mt-1.5 flex items-baseline gap-1.5">
+            <span className="text-2xl font-black text-emerald-700">
+              ¥{summaryStats.totalEstimatedCost.toLocaleString()}
+            </span>
+            <span className="text-[11px] font-bold text-slate-400">（買う数 × 単価）</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. メインコンテンツ：1画面で「手順1：畑・作付けごとの準備」と「手順2：買い物・注文まとめ表」を連動表示 */}
       {isLoading ? (
         <div className="p-16 flex flex-col items-center justify-center gap-2 text-amber-600">
           <Loader2 className="w-8 h-8 animate-spin" />
-          <p className="text-xs font-bold text-slate-500">作付け計画と資材データを集計しています...</p>
+          <p className="text-xs font-bold text-slate-500">畑ごとの作付け計画と資材データを集計しています...</p>
         </div>
-      ) : viewMode === 'shopping' ? (
-        /* ========================================================================= */
-        /* 🛒 モード①: 買い物・注文リスト（在庫差引・切り上げ購入数・概算金額・内訳） */
-        /* ========================================================================= */
-        <div className="space-y-5">
-          {shoppingList.length === 0 ? (
-            <div className="bg-white rounded-3xl shadow-2xs border border-slate-200 p-12 text-center space-y-4">
-              <Boxes className="w-12 h-12 text-amber-500 mx-auto" />
-              <div className="space-y-1">
-                <h3 className="text-base font-black text-slate-800">
-                  まだこの条件で計算できる肥料・資材の設定がありません
-                </h3>
-                <p className="text-xs font-bold text-slate-500 max-w-lg mx-auto leading-relaxed">
-                  わざわざ別のマスタ画面へ移動しなくても、すぐ隣の「<strong>② 作目ごとに使う肥料・資材を設定</strong>」タブから、各作物に使う肥料やマルチをその場で登録できます！
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setViewMode('setup')}
-                className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-sm transition-colors cursor-pointer"
-              >
-                ⚙️ 作目ごとに使う肥料・資材を設定する ➔
-              </button>
-            </div>
-          ) : (
-            shoppingList.map(item => {
-              const kindBadge =
-                item.kind === 'fertilizer'
-                  ? { label: '🔬 肥料', cls: 'bg-teal-50 text-teal-800 border-teal-200' }
-                  : item.kind === 'pesticide'
-                  ? { label: '🧪 農薬', cls: 'bg-rose-50 text-rose-800 border-rose-200' }
-                  : { label: '📦 農業資材', cls: 'bg-blue-50 text-blue-800 border-blue-200' };
-
-              const unitLabel = item.material.unit || '袋';
-
-              return (
-                <div
-                  key={item.material.id}
-                  className={`bg-white rounded-3xl shadow-2xs border-2 overflow-hidden transition-all ${
-                    item.isOrdered
-                      ? 'border-emerald-300 bg-emerald-50/10'
-                      : item.shortageToBuy > 0
-                      ? 'border-slate-200'
-                      : 'border-slate-200 opacity-90'
-                  }`}
-                >
-                  {/* カード上部：資材名・手持ち在庫入力・今回買う数・単価・概算金額 */}
-                  <div className="bg-slate-50/80 border-b border-slate-100 p-4 sm:p-5 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-                    {/* 左：資材名・区分・使う時期 */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`px-2.5 py-0.5 rounded-lg text-xs font-black border ${kindBadge.cls}`}>
-                          {kindBadge.label}
-                        </span>
-                        <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-slate-200/70 text-slate-700">
-                          📅 {item.earliestMonth}月頃の作付けから使用
-                        </span>
-                        {item.material.specification && (
-                          <span className="text-xs font-bold text-slate-500">
-                            （規格: {item.material.specification}）
-                          </span>
-                        )}
-                        {item.isOrdered && (
-                          <span className="px-2.5 py-0.5 rounded-lg text-xs font-black bg-emerald-600 text-white flex items-center gap-1">
-                            <Check className="w-3.5 h-3.5" /> 注文・手配済
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="text-lg sm:text-xl font-black text-slate-900">{item.material.name}</h3>
-                    </div>
-
-                    {/* 右：必要量 ➔ 手持ち在庫 ➔ 今回買う数 ➔ 単価・金額 ➔ 注文済ボタン */}
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 items-center bg-white p-3 rounded-2xl border border-slate-200/90 shadow-2xs">
-                      {/* ① 計算上の必要量 */}
-                      <div className="px-2">
-                        <div className="text-[10px] font-bold text-slate-400">① 畑の面積からの必要量</div>
-                        <div className="text-base font-black text-slate-800 mt-0.5">
-                          {item.recommendedBuyUnitCount.toLocaleString()}{' '}
-                          <span className="text-xs font-bold text-slate-500">{unitLabel}</span>
-                        </div>
-                        {item.totalExactAmount !== item.recommendedBuyUnitCount && (
-                          <div className="text-[10px] font-bold text-slate-400">
-                            (計算値 {item.totalExactAmount} {unitLabel} を切上)
-                          </div>
-                        )}
-                      </div>
-
-                      {/* ② いま納屋にある在庫数 */}
-                      <div className="px-2 border-l border-slate-100">
-                        <label className="text-[10px] font-bold text-slate-500 block">
-                          🏠 ② いまある手持ち在庫
-                        </label>
-                        <div className="flex items-center gap-1 mt-1">
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={item.currentStock}
-                            onChange={e =>
-                              handleUpdateInventoryOrPrice(item.material.id, {
-                                stock: Number(e.target.value)
-                              })
-                            }
-                            className="w-16 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-right text-sm font-black text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                          />
-                          <span className="text-xs font-bold text-slate-500">{unitLabel}</span>
-                        </div>
-                      </div>
-
-                      {/* ③ 今回買い足す数（注文数） */}
-                      <div className="px-2 border-l border-slate-100">
-                        <div className="text-[10px] font-black text-amber-700">🛒 ③ 今回買う数（不足分）</div>
-                        {item.shortageToBuy > 0 ? (
-                          <div className="text-xl font-black text-amber-600 mt-0.5">
-                            {item.shortageToBuy.toLocaleString()}{' '}
-                            <span className="text-xs font-bold">{unitLabel}</span>
-                          </div>
-                        ) : (
-                          <div className="text-xs font-black text-emerald-600 mt-1">
-                            ✨ 在庫で足ります (0{unitLabel})
-                          </div>
-                        )}
-                      </div>
-
-                      {/* ④ 単価 ＆ 概算金額 */}
-                      <div className="px-2 border-l border-slate-100">
-                        <label className="text-[10px] font-bold text-slate-500 block">
-                          💴 1{unitLabel}の単価 / 概算額
-                        </label>
-                        <div className="flex items-center gap-1 mt-1">
-                          <span className="text-xs font-bold text-slate-400">¥</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="10"
-                            value={item.unitPrice || ''}
-                            placeholder="単価"
-                            onChange={e =>
-                              handleUpdateInventoryOrPrice(item.material.id, {
-                                unitPrice: Number(e.target.value)
-                              })
-                            }
-                            className="w-20 px-2 py-1 bg-slate-50 border border-slate-300 rounded-lg text-right text-xs font-black text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                          />
-                        </div>
-                        <div className="text-[11px] font-black text-emerald-700 mt-1">
-                          小計: ¥{item.estimatedCost.toLocaleString()}
-                        </div>
-                      </div>
-
-                      {/* ⑤ 注文済チェックボタン */}
-                      <div className="px-2 border-l border-slate-100 flex justify-end print:hidden">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleUpdateInventoryOrPrice(item.material.id, {
-                              ordered: !item.isOrdered
-                            })
-                          }
-                          className={`w-full py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                            item.isOrdered
-                              ? 'bg-emerald-600 text-white shadow-2xs'
-                              : 'bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-800 border border-slate-200'
-                          }`}
-                        >
-                          <Check className="w-4 h-4" />
-                          <span>{item.isOrdered ? '注文・手配済' : '注文済にする'}</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* カード下部：どの畑・どの作物で何袋使うかの内訳テーブル（その場で10a基準も修正可能！） */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                      <thead className="text-xs text-slate-500 bg-white border-b border-slate-100">
-                        <tr>
-                          <th className="px-5 py-2.5 font-bold">使う畑（面積）</th>
-                          <th className="px-5 py-2.5 font-bold">作目・作付け時期</th>
-                          <th className="px-5 py-2.5 font-bold text-right">
-                            10a（1反）あたりの使用量 <span className="text-[10px] text-amber-600 font-black print:hidden">※直接変更可</span>
-                          </th>
-                          <th className="px-5 py-2.5 font-bold text-right">この畑での必要量</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {item.details.map((detail, dIdx) => (
-                          <tr key={dIdx} className="hover:bg-slate-50/60">
-                            <td className="px-5 py-2.5 font-black text-slate-800">
-                              📍 {detail.fieldName}{' '}
-                              <span className="text-xs text-slate-500 font-bold ml-1">({detail.areaAcre}a)</span>
-                            </td>
-                            <td className="px-5 py-2.5 font-bold text-slate-700">
-                              🌱 {detail.cropName}
-                              {detail.cleanVariety && (
-                                <span className="text-xs text-slate-500 ml-1">({detail.cleanVariety})</span>
-                              )}
-                              <span className="text-xs text-slate-400 ml-2">
-                                [{detail.startMonth}月〜{detail.endMonth}月]
-                              </span>
-                            </td>
-                            <td className="px-5 py-2.5 text-right">
-                              <div className="inline-flex items-center justify-end gap-1.5">
-                                <span className="text-[11px] text-slate-400 font-bold">10aあたり</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.5"
-                                  value={detail.amountPer10a}
-                                  onChange={e =>
-                                    handleChangeAmountPer10a(
-                                      detail.cropId,
-                                      item.material.id,
-                                      Number(e.target.value)
-                                    )
-                                  }
-                                  className="w-16 px-2 py-1 bg-amber-50/60 border border-amber-300 rounded-lg text-right text-xs font-black text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                                  title="ここを変えると、この作目の10aあたり使用基準がすぐに更新されます"
-                                />
-                                <span className="text-xs font-bold text-slate-600">{unitLabel}</span>
-                              </div>
-                            </td>
-                            <td className="px-5 py-2.5 text-right font-black text-slate-900">
-                              {Number(detail.calculatedAmount.toFixed(1)).toLocaleString()} {unitLabel}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-            })
-          )}
+      ) : showShoppingTableFirst ? (
+        <div className="space-y-8">
+          {renderShoppingSummarySection()}
+          {renderFieldPlanCardsSection()}
         </div>
       ) : (
-        /* ========================================================================= */
-        /* ⚙️ モード②: 作目ごとに使う肥料・資材をその場で設定（マスタ画面への移動不要！） */
-        /* ========================================================================= */
-        <div className="space-y-4">
-          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="text-xs sm:text-sm font-bold text-emerald-950">
-              💡 <strong>作目ごとに「10a（1反）あたりどの肥料・資材を何袋（何巻）使うか」</strong>をここで直接登録・変更できます。登録するとすぐに「① 買い物・注文リスト」に反映されます。
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setNewMatTargetCropId(plannedCropSummaryList[0]?.cropId || '');
-                setIsNewMatModalOpen(true);
-              }}
-              className="px-3.5 py-2 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-black shrink-0 cursor-pointer"
-            >
-              ＋ 選択肢にない新しい肥料・資材を登録する
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {plannedCropSummaryList.map(cropItem => {
-              const selectedMatId = selectedAddMaterialByCrop[cropItem.cropId] || '';
-              const selectedAmt = selectedAddAmountByCrop[cropItem.cropId] ?? '1';
-
-              return (
-                <div
-                  key={cropItem.cropId}
-                  className="bg-white rounded-3xl border border-slate-200 shadow-2xs p-5 flex flex-col justify-between gap-4"
-                >
-                  <div className="space-y-3">
-                    {/* 作目ヘッダー */}
-                    <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-100">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-base font-black text-slate-900">🌱 {cropItem.cropName}</span>
-                        {cropItem.totalAreaAcre > 0 ? (
-                          <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-black">
-                            今年度の作付面積: 合計 {cropItem.totalAreaAcre}a（{cropItem.plans.length}圃場）
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-0.5 bg-slate-100 text-slate-500 rounded-lg text-xs font-bold">
-                            今年度の作付計画なし
-                          </span>
-                        )}
-                      </div>
-                      {savingCropId === cropItem.cropId && (
-                        <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> 保存中...
-                        </span>
-                      )}
-                    </div>
-
-                    {/* 登録済みの10aあたり資材一覧 */}
-                    {cropItem.materialsPer10a.length === 0 ? (
-                      <div className="p-4 bg-amber-50/60 border border-dashed border-amber-200 rounded-2xl text-xs font-bold text-amber-900 text-center">
-                        まだ「{cropItem.cropName}」で使う肥料・資材が設定されていません。下の欄から追加してください。
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {cropItem.materialsPer10a.map((m, idx) => {
-                          const mat = materials.find(x => x.id === m.material_id);
-                          const unit = mat?.unit || '袋';
-                          const totalForCrop =
-                            Math.round(((cropItem.totalAreaAcre / 10) * (Number(m.amount) || 0)) * 10) / 10;
-                          return (
-                            <div
-                              key={`${m.material_id}-${idx}`}
-                              className="flex items-center justify-between gap-2 p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl"
-                            >
-                              <div className="min-w-0 flex-1">
-                                <span className="text-sm font-black text-slate-800 block truncate">
-                                  {mat ? mat.name : '不明な資材'}
-                                </span>
-                                {cropItem.totalAreaAcre > 0 && (
-                                  <span className="text-[11px] font-bold text-slate-500">
-                                    {cropItem.totalAreaAcre}a 全体で <strong className="text-amber-700">{totalForCrop}{unit}</strong> 必要
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <span className="text-xs font-bold text-slate-500">10aあたり</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.5"
-                                  value={m.amount}
-                                  onChange={e =>
-                                    handleChangeAmountPer10a(
-                                      cropItem.cropId,
-                                      m.material_id,
-                                      Number(e.target.value)
-                                    )
-                                  }
-                                  className="w-16 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right text-sm font-black text-slate-800"
-                                />
-                                <span className="text-xs font-bold text-slate-600 w-7">{unit}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveMaterialFromCrop(cropItem.cropId, m.material_id)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                                  title="この資材設定を外す"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* この作目に使う肥料・資材を追加するフォーム */}
-                  <div className="pt-3 border-t border-slate-100 space-y-2">
-                    <label className="text-[11px] font-black text-slate-500 block">
-                      ＋「{cropItem.cropName}」で使う肥料・マルチ・資材を追加する
-                    </label>
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                      <select
-                        value={selectedMatId}
-                        onChange={e =>
-                          setSelectedAddMaterialByCrop(prev => ({
-                            ...prev,
-                            [cropItem.cropId]: e.target.value
-                          }))
-                        }
-                        className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                      >
-                        <option value="">資材・肥料を選択してください...</option>
-                        {materials.map(mat => (
-                          <option key={mat.id} value={mat.id}>
-                            [{mat.category || '資材'}] {mat.name}（単位: {mat.unit || '袋'}）
-                          </option>
-                        ))}
-                      </select>
-
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-slate-500 whitespace-nowrap">10aに</span>
-                        <input
-                          type="number"
-                          min="0.1"
-                          step="0.5"
-                          value={selectedAmt}
-                          onChange={e =>
-                            setSelectedAddAmountByCrop(prev => ({
-                              ...prev,
-                              [cropItem.cropId]: e.target.value
-                            }))
-                          }
-                          className="w-16 px-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-right text-xs font-black text-slate-800"
-                        />
-                        <button
-                          type="button"
-                          disabled={!selectedMatId}
-                          onClick={() => {
-                            if (!selectedMatId) return;
-                            handleChangeAmountPer10a(
-                              cropItem.cropId,
-                              selectedMatId,
-                              Math.max(0.1, Number(selectedAmt) || 1)
-                            );
-                            setSelectedAddMaterialByCrop(prev => ({ ...prev, [cropItem.cropId]: '' }));
-                          }}
-                          className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-xs font-black whitespace-nowrap transition-colors cursor-pointer"
-                        >
-                          ＋ 追加
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        <div className="space-y-8">
+          {renderFieldPlanCardsSection()}
+          {renderShoppingSummarySection()}
         </div>
       )}
 
-      {/* 6. 新しい肥料・資材をその場で登録するモーダル */}
+      {/* 5. 新しい肥料・資材をその場で登録するモーダル */}
       {isNewMatModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-black text-slate-900">
-                ✨ 新しい肥料・資材を登録
-              </h3>
+              <h3 className="text-base font-black text-slate-900">✨ 新しい肥料・資材を登録</h3>
               <button
                 type="button"
                 onClick={() => setIsNewMatModalOpen(false)}
@@ -1227,7 +1502,7 @@ export default function MaterialRequirementsPage() {
 
               <div className="pt-2 border-t border-slate-100 space-y-2">
                 <label className="block text-xs font-black text-slate-600">
-                  同時に作目の「10aあたり使用量」にも追加する（任意）
+                  登録と同時に作付けへ追加する（任意）
                 </label>
                 <div className="flex items-center gap-2">
                   <select
