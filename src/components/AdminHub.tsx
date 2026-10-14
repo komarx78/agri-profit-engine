@@ -134,9 +134,9 @@ export default function AdminHub({ onSwitchToHome, initialNav = 'cultivations' }
     {
       title: '連携システム・マスタ',
       items: [
+        { id: 'hr', name: '👥 スタッフ・出退勤・給料', icon: Users, path: tenantId ? `/hr?farm=${tenantId}` : '/hr' },
         { id: 'sales', name: '📦 販売管理システム', icon: ShoppingCart, path: tenantId ? `/sales-management?farm=${tenantId}` : '/sales-management', external: true },
         { id: 'accounting', name: '💳 経理・購買システム', icon: Receipt, path: tenantId ? `/accounting-management?farm=${tenantId}` : '/accounting-management', external: true },
-        { id: 'hr', name: '👥 労務・人事システム', icon: Users, path: tenantId ? `/hr?farm=${tenantId}` : '/hr', external: true },
         { id: 'masters', name: '⚙️ マスタ管理全般', icon: Database, path: tenantId ? `/admin/masters?farm=${tenantId}` : '/admin/masters' },
         { id: 'settings', name: '🏢 自社情報設定', icon: Settings, path: tenantId ? `/admin/settings?farm=${tenantId}` : '/admin/settings' },
       ]
@@ -206,7 +206,7 @@ export default function AdminHub({ onSwitchToHome, initialNav = 'cultivations' }
                       key={item.id}
                       onClick={() => {
                         setSelectedNav(item.id);
-                        if (['tasks', 'approvals', 'map', 'schedule', 'crop-analysis', 'nursery', 'materials', 'masters', 'settings'].includes(item.id)) {
+                        if (['tasks', 'approvals', 'map', 'schedule', 'crop-analysis', 'nursery', 'materials', 'masters', 'settings', 'hr'].includes(item.id)) {
                           router.push(item.path);
                         }
                       }}

@@ -177,9 +177,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     {
       title: 'ほかのシステム・設定',
       items: [
+        { name: '👥 スタッフ・出退勤・給料', path: farmQ('/hr'), icon: Users },
         { name: '📦 販売管理システム', path: farmQ('/sales-management'), icon: ShoppingCart, external: true },
         { name: '💳 経理・購買システム', path: farmQ('/accounting-management'), icon: Receipt, external: true },
-        { name: '👥 労務・人事システム', path: farmQ('/hr'), icon: Users, external: true },
         { name: '⚙️ マスタ管理全般', path: farmQ('/admin/masters'), icon: Database },
         { name: '🏢 自社情報設定', path: farmQ('/admin/settings'), icon: Settings },
       ]
@@ -230,7 +230,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans">
       
-      <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:hidden sticky top-0 z-50">
+      <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:hidden sticky top-0 z-50 print:hidden">
         <div className="flex items-center gap-2 min-w-0">
           <Link href="/" className="flex items-center gap-1.5 text-emerald-700 font-black text-base shrink-0">
             <Cloud className="w-5 h-5" />
@@ -248,7 +248,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </header>
 
       {isMobileMenuOpen && (
-        <div className="md:hidden bg-white border-b border-slate-200 p-4 space-y-2 shadow-lg absolute top-16 left-0 right-0 w-full z-40">
+        <div className="md:hidden bg-white border-b border-slate-200 p-4 space-y-2 shadow-lg absolute top-16 left-0 right-0 w-full z-40 print:hidden">
           {/* モバイル用 農園コードバナー */}
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-3">
             <div className="flex items-center justify-between gap-1 text-xs font-bold text-emerald-900 mb-1.5">
@@ -308,7 +308,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       )}
 
-      <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col sticky top-0 h-screen">
+      <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col sticky top-0 h-screen print:hidden">
         <div className="p-4 border-b border-slate-100 bg-emerald-50/40">
           <Link href="/" className="flex items-center justify-between text-slate-500 hover:text-emerald-700 text-xs font-bold transition-colors mb-2">
             <span className="flex items-center gap-1.5"><Cloud className="w-3.5 h-3.5 text-emerald-600" /> Cloud Portal</span>

@@ -1581,4 +1581,367 @@ export async function quickCreateMaterialAction(
   }
 }
 
+// ==========================================
+// 6) 👥 スタッフ・出退勤・給料・有給管理（統合HR画面用サーバーアクション群）
+// ==========================================
+export async function getHrManagementDataAction(tenantId: string, targetMonth?: string, targetDate?: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const nowJst = new Date(Date.now() + 9 * 3600 * 1000);
+    const todayStr = targetDate || nowJst.toISOString().substring(0, 10);
+    const monthStr = targetMonth || todayStr.substring(0, 7);
+
+    // 対象月の前後を含む広めの範囲（締め日ズレ対応のため前月1日〜翌月10日）を取得
+    const [y, m] = monthStr.split('-').map(Number);
+    const rangeStart = new Date(Date.UTC(y, m - 2, 1)).toISOString().substring(0, 10);
+    const rangeEnd = new Date(Date.UTC(y, m, 10)).toISOString().substring(0, 10);
+
+    const [workersRes, deptsRes, compRes, attRes, workRes] = await Promise.all([
+      supabase.from('workers').select('*').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).order('name'),
+      supabase.from('departments').select('*').or(`tenant_id.eq.${ownerId},tenant_id.eq.${tenantId}`).order('name'),
+      supabase.from('company_settings').select('*').or(`user_id.eq.${ownerId},id.eq.${ownerId},user_id.eq.${tenantId},id.eq.${tenantId}`).limit(1).maybeSingle(),
+      supabase.from('attendance_logs').select('*').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).gte('date', rangeStart).lte('date', rangeEnd).order('date', { ascending: false }).order('clock_in', { ascending: false }),
+      supabase.from('work_logs').select('id, worker_id, work_date, work_type, task_title, duration_minutes, harvest_amount, status, crops(name), fields(name)').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).gte('work_date', rangeStart).lte('work_date', rangeEnd)
+    ]);
+
+    const workersList = workersRes.data || [];
+    const workerIds = workersList.map((w: any) => w.id).filter(Boolean);
+
+    // 指定日（targetDate）がrange外の場合も確実に取得
+    let attendanceLogs = attRes.data || [];
+    let workLogs = workRes.data || [];
+    if (todayStr < rangeStart || todayStr > rangeEnd) {
+      const [dayAtt, dayWork] = await Promise.all([
+        supabase.from('attendance_logs').select('*').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).eq('date', todayStr),
+        supabase.from('work_logs').select('id, worker_id, work_date, work_type, task_title, duration_minutes, harvest_amount, status, crops(name), fields(name)').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).eq('work_date', todayStr)
+      ]);
+      if (dayAtt.data) attendanceLogs = [...dayAtt.data, ...attendanceLogs];
+      if (dayWork.data) workLogs = [...dayWork.data, ...workLogs];
+    }
+
+    // 有給・休暇申請と残業申請を取得
+    let leaveRequests: any[] = [];
+    let overtimeRequests: any[] = [];
+    if (workerIds.length > 0) {
+      const [leaveRes, overRes] = await Promise.all([
+        supabase.from('leave_requests').select('*').in('worker_id', workerIds).order('created_at', { ascending: false }).limit(100),
+        supabase.from('overtime_requests').select('*').in('worker_id', workerIds).order('created_at', { ascending: false }).limit(100)
+      ]);
+      leaveRequests = leaveRes.data || [];
+      overtimeRequests = overRes.data || [];
+    }
+
+    const hrProfiles = compRes.data?.settings?.worker_hr_profiles || {};
+    const enrichedWorkers = workersList.map((w: any) => {
+      const prof = hrProfiles[w.id] || {};
+      return {
+        ...w,
+        hourly_wage: Number(w.hourly_wage ?? prof.hourly_wage ?? 1000),
+        employment_type: w.employment_type || w.type || prof.employment_type || 'パート・アルバイト',
+        phone: w.phone || prof.phone || '',
+        paid_leave_balance: Number(w.paid_leave_balance ?? prof.paid_leave_balance ?? 10),
+        paid_leave_carryover: Number(w.paid_leave_carryover ?? prof.paid_leave_carryover ?? 0),
+        notes: prof.notes || ''
+      };
+    });
+
+    return {
+      success: true,
+      ownerId,
+      companyName: compRes.data?.company_name || '当農園',
+      closingDay: Number(compRes.data?.attendance_closing_day || 0),
+      paymentDayRule: compRes.data?.payment_day_rule || '翌月25日払い',
+      workers: enrichedWorkers,
+      departments: deptsRes.data || [],
+      attendanceLogs,
+      workLogs,
+      leaveRequests,
+      overtimeRequests
+    };
+  } catch (err: any) {
+    console.error('getHrManagementDataAction error:', err);
+    return { success: false, error: err.message || '勤怠・スタッフ情報の取得に失敗しました。' };
+  }
+}
+
+// 出退勤記録の手動追加・修正（退勤押し忘れ修正・休憩時間修正・新規打刻追加）
+export async function saveAttendanceRecordAction(
+  tenantId: string,
+  payload: {
+    id?: string;
+    worker_id: string;
+    date: string;
+    clock_in_time: string;   // "08:00" 形式
+    clock_out_time?: string; // "17:00" 形式（空欄なら勤務中）
+    total_break_minutes: number;
+  }
+) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+    if (!payload.worker_id || !payload.date || !payload.clock_in_time) {
+      return { success: false, error: 'スタッフ・日付・出勤時刻は必須です。' };
+    }
+
+    const clockInIso = `${payload.date}T${payload.clock_in_time.slice(0, 5)}:00+09:00`;
+    const clockOutIso = payload.clock_out_time && payload.clock_out_time.trim()
+      ? `${payload.date}T${payload.clock_out_time.slice(0, 5)}:00+09:00`
+      : null;
+
+    if (payload.id) {
+      const { error } = await supabase
+        .from('attendance_logs')
+        .update({
+          worker_id: payload.worker_id,
+          date: payload.date,
+          clock_in: clockInIso,
+          clock_out: clockOutIso,
+          total_break_minutes: Math.max(0, Number(payload.total_break_minutes) || 0)
+        })
+        .eq('id', payload.id);
+      if (error) throw error;
+    } else {
+      // 同日・同スタッフの既存レコードがあれば上書き、なければ新規追加
+      const { data: existing } = await supabase
+        .from('attendance_logs')
+        .select('id')
+        .eq('worker_id', payload.worker_id)
+        .eq('date', payload.date)
+        .maybeSingle();
+
+      if (existing?.id) {
+        const { error } = await supabase
+          .from('attendance_logs')
+          .update({
+            clock_in: clockInIso,
+            clock_out: clockOutIso,
+            total_break_minutes: Math.max(0, Number(payload.total_break_minutes) || 0)
+          })
+          .eq('id', existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('attendance_logs')
+          .insert([{
+            user_id: ownerId,
+            worker_id: payload.worker_id,
+            date: payload.date,
+            clock_in: clockInIso,
+            clock_out: clockOutIso,
+            total_break_minutes: Math.max(0, Number(payload.total_break_minutes) || 0)
+          }]);
+        if (error) throw error;
+      }
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('saveAttendanceRecordAction error:', err);
+    return { success: false, error: err.message || '出退勤データの保存に失敗しました。' };
+  }
+}
+
+export async function deleteAttendanceRecordAction(tenantId: string, attendanceId: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const { error } = await supabase
+      .from('attendance_logs')
+      .delete()
+      .eq('id', attendanceId);
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('deleteAttendanceRecordAction error:', err);
+    return { success: false, error: err.message || '出退勤データの削除に失敗しました。' };
+  }
+}
+
+// 有給・休暇申請の承認 / 却下
+export async function updateLeaveRequestStatusAction(
+  tenantId: string,
+  requestId: string,
+  newStatus: '承認' | '却下'
+) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const { error } = await supabase
+      .from('leave_requests')
+      .update({ status: newStatus })
+      .eq('id', requestId);
+    if (error) throw error;
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('updateLeaveRequestStatusAction error:', err);
+    return { success: false, error: err.message || '休暇申請のステータス更新に失敗しました。' };
+  }
+}
+
+// 残業申請の承認 / 却下
+export async function updateOvertimeRequestStatusAction(
+  tenantId: string,
+  requestId: string,
+  newStatus: 'approved' | 'rejected'
+) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const { error } = await supabase
+      .from('overtime_requests')
+      .update({ status: newStatus })
+      .eq('id', requestId);
+    if (error) throw error;
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('updateOvertimeRequestStatusAction error:', err);
+    return { success: false, error: err.message || '残業申請のステータス更新に失敗しました。' };
+  }
+}
+
+// スタッフの登録・編集（時給・PIN・雇用形態・有給残日数・メモ）
+export async function saveWorkerFromHrAction(
+  tenantId: string,
+  payload: {
+    id?: string;
+    name: string;
+    hourly_wage: number;
+    pin_code: string;
+    role: string;
+    department_id?: string;
+    employment_type?: string;
+    phone?: string;
+    paid_leave_balance?: number;
+    paid_leave_carryover?: number;
+    notes?: string;
+  }
+) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+    if (!payload.name || !payload.name.trim()) {
+      return { success: false, error: 'スタッフ名を入力してください。' };
+    }
+
+    const coreData: Record<string, any> = {
+      user_id: ownerId,
+      name: payload.name.trim(),
+      hourly_wage: Number(payload.hourly_wage) || 1000,
+      pin_code: String(payload.pin_code || '0000').replace(/[^0-9]/g, '').padStart(4, '0').slice(0, 4),
+      role: payload.role || 'worker'
+    };
+    if (payload.department_id) coreData.department_id = payload.department_id;
+
+    let workerId = payload.id;
+    if (workerId) {
+      const { error } = await supabase
+        .from('workers')
+        .update(coreData)
+        .eq('id', workerId);
+      if (error) {
+        const { department_id, ...minimalData } = coreData;
+        const { error: retryErr } = await supabase.from('workers').update(minimalData).eq('id', workerId);
+        if (retryErr) throw retryErr;
+      }
+    } else {
+      const { data, error } = await supabase
+        .from('workers')
+        .insert([coreData])
+        .select('id')
+        .single();
+      if (error) {
+        const { department_id, ...minimalData } = coreData;
+        const { data: retryData, error: retryErr } = await supabase.from('workers').insert([minimalData]).select('id').single();
+        if (retryErr) throw retryErr;
+        workerId = retryData?.id;
+      } else {
+        workerId = data?.id;
+      }
+    }
+
+    // 有給残日数カラムが存在する環境ではworkersテーブル側も更新を試行
+    if (workerId && (payload.paid_leave_balance !== undefined || payload.paid_leave_carryover !== undefined)) {
+      await supabase
+        .from('workers')
+        .update({
+          paid_leave_balance: Number(payload.paid_leave_balance ?? 10),
+          paid_leave_carryover: Number(payload.paid_leave_carryover ?? 0)
+        })
+        .eq('id', workerId);
+    }
+
+    // 拡張プロフィール（雇用区分・電話番号・有給残日数・メモ）を company_settings.settings.worker_hr_profiles に確実に保存
+    if (workerId) {
+      const { data: comp } = await supabase
+        .from('company_settings')
+        .select('id, settings')
+        .or(`user_id.eq.${ownerId},id.eq.${ownerId},user_id.eq.${tenantId},id.eq.${tenantId}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (comp) {
+        const currentSettings = comp.settings || {};
+        const currentProfiles = currentSettings.worker_hr_profiles || {};
+        currentProfiles[workerId] = {
+          ...(currentProfiles[workerId] || {}),
+          hourly_wage: Number(payload.hourly_wage) || 1000,
+          employment_type: payload.employment_type || 'パート・アルバイト',
+          phone: payload.phone || '',
+          paid_leave_balance: Number(payload.paid_leave_balance ?? 10),
+          paid_leave_carryover: Number(payload.paid_leave_carryover ?? 0),
+          notes: payload.notes || '',
+          updatedAt: new Date().toISOString()
+        };
+        await supabase
+          .from('company_settings')
+          .update({
+            settings: {
+              ...currentSettings,
+              worker_hr_profiles: currentProfiles
+            }
+          })
+          .eq('id', comp.id);
+      }
+    }
+
+    return { success: true, workerId };
+  } catch (err: any) {
+    console.error('saveWorkerFromHrAction error:', err);
+    return { success: false, error: err.message || 'スタッフ情報の保存に失敗しました。' };
+  }
+}
+
+export async function deleteWorkerFromHrAction(tenantId: string, workerId: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const { error } = await supabase
+      .from('workers')
+      .delete()
+      .eq('id', workerId)
+      .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`);
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('deleteWorkerFromHrAction error:', err);
+    return { success: false, error: err.message || 'スタッフの削除に失敗しました。' };
+  }
+}
+
+
 
