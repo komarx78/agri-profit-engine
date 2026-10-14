@@ -406,17 +406,17 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
           </p>
         </Link>
 
-        {/* ⑤ 🧪 農薬スマートカルテ & 成分重複ガード */}
-        <Link href={tenantId ? `/farm/pesticide-check?farm=${tenantId}` : '/farm/pesticide-check'} className="group bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-amber-300 transition-all flex flex-col relative overflow-hidden">
+        {/* ⑤ 🧪 散布管理 & 農薬残回数チェック */}
+        <Link href={tenantId ? `/admin/cultivations?farm=${tenantId}&tab=spray` : '/admin/cultivations?tab=spray'} className="group bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-amber-300 transition-all flex flex-col relative overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
               <FlaskConical className="w-6 h-6" />
             </div>
             <span className="text-[10px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-md">公的FAMIC</span>
           </div>
-          <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-amber-600 transition-colors">🧪 農薬スマートカルテ</h3>
+          <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-amber-600 transition-colors">🧪 散布管理（農薬残回数）</h3>
           <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
-            作物名・農薬名から適用病害虫・希釈倍率を即座に逆引き照合。同一有効成分の重複使用回数を自動警告。
+            作物名・圃場ごとの農薬使用回数と残回数を自動集計。公的FAMICからの農薬検索・追加や防除日誌出力に対応。
           </p>
         </Link>
 

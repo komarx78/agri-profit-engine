@@ -313,8 +313,9 @@ export default function PesticideCheckPage() {
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link 
-              href={tenantId ? `/portal/${tenantId}` : '/'} 
+              href={tenantId ? `/admin/cultivations?farm=${tenantId}&tab=spray` : '/admin/cultivations?tab=spray'} 
               className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
+              title="農園管理画面へ戻る"
             >
               <ArrowLeft className="w-5 h-5" />
             </Link>
@@ -334,10 +335,11 @@ export default function PesticideCheckPage() {
 
           <div className="flex items-center gap-2">
             <Link 
-              href="/super-admin/pesticides"
-              className="text-xs font-bold text-slate-400 hover:text-slate-200 bg-slate-800/80 hover:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 transition-colors"
+              href={tenantId ? `/admin/cultivations?farm=${tenantId}&tab=spray` : '/admin/cultivations?tab=spray'}
+              className="text-xs font-bold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 px-3.5 py-2 rounded-xl border border-slate-700 transition-colors flex items-center gap-1.5"
             >
-              マスタ管理
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>農園の散布管理へ戻る</span>
             </Link>
           </div>
         </div>

@@ -156,7 +156,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { name: '作業予定（タスク）', path: farmQ('/admin/tasks'), icon: Calendar },
         { name: '日報の確認・承認', path: farmQ('/admin/approvals'), icon: Inbox },
         { name: '作業日誌', path: farmQ('/admin/cultivations', 'tab=history'), icon: BookOpen, matchTab: 'diary' },
-        { name: '💊 農薬検索・防除AI', path: farmQ('/farm/pesticide-check'), icon: FlaskConical },
       ]
     },
     {

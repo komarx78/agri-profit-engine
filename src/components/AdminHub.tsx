@@ -137,10 +137,8 @@ export default function AdminHub({ onSwitchToHome, initialNav = 'cultivations' }
         { id: 'sales', name: '📦 販売管理システム', icon: ShoppingCart, path: tenantId ? `/sales-management?farm=${tenantId}` : '/sales-management', external: true },
         { id: 'accounting', name: '💳 経理・購買システム', icon: Receipt, path: tenantId ? `/accounting-management?farm=${tenantId}` : '/accounting-management', external: true },
         { id: 'hr', name: '👥 労務・人事システム', icon: Users, path: tenantId ? `/hr?farm=${tenantId}` : '/hr', external: true },
-        { id: 'pesticide', name: '💊 農薬検索・防除AI', icon: FlaskConical, path: tenantId ? `/farm/pesticide-check?farm=${tenantId}` : '/farm/pesticide-check', external: true },
         { id: 'masters', name: '⚙️ マスタ管理全般', icon: Database, path: tenantId ? `/admin/masters?farm=${tenantId}` : '/admin/masters' },
         { id: 'settings', name: '🏢 自社情報設定', icon: Settings, path: tenantId ? `/admin/settings?farm=${tenantId}` : '/admin/settings' },
-        { id: 'super-admin', name: '🛡️ スーパー管理者 (HQ)', icon: ShieldAlert, path: '/super-admin', external: true },
       ]
     }
   ];
