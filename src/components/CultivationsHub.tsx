@@ -209,8 +209,14 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [companyName, setCompanyName] = useState('');
 
-  // --- タブ4: 予定ステート ---
+  // --- タブ5: 作業予定（タスク）ステート ---
   const [plannedTasks, setPlannedTasks] = useState<any[]>([]);
+  const [taskSearchQuery, setTaskSearchQuery] = useState('');
+  const [taskUrgencyFilter, setTaskUrgencyFilter] = useState<'all' | 'overdue' | 'today' | 'upcoming'>('all');
+  const [taskGroupMode, setTaskGroupMode] = useState<'date' | 'field' | 'crop' | 'type'>('date');
+  const [taskFieldFilter, setTaskFieldFilter] = useState<string>('all');
+  const [taskCropFilter, setTaskCropFilter] = useState<string>('all');
+  const [collapsedTaskGroups, setCollapsedTaskGroups] = useState<Record<string, boolean>>({});
 
   // 公的肥料マスタ初期60件のオンデマンド高速取得（フルスキャンソート回避）
   const ensureOfficialFertilizersLoaded = async () => {
@@ -752,6 +758,161 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     return result;
   }, [filteredWorkLogs, historyGroupMode]);
 
+  // --- 作業予定（タスク）の期限・緊急度判定ヘルパー ---
+  const todayJstStr = useMemo(() => getJSTDate(), []);
+  const getTaskUrgency = (dateStr?: string): 'overdue' | 'today' | 'upcoming' => {
+    if (!dateStr) return 'upcoming';
+    if (dateStr < todayJstStr) return 'overdue';
+    if (dateStr === todayJstStr) return 'today';
+    return 'upcoming';
+  };
+
+  // --- 作業予定（タスク）フィルタリング ---
+  const filteredPlannedTasks = useMemo(() => {
+    return plannedTasks.filter(task => {
+      const urgency = getTaskUrgency(task.work_date);
+      if (taskUrgencyFilter !== 'all' && urgency !== taskUrgencyFilter) return false;
+
+      if (taskFieldFilter !== 'all' && task.field_id !== taskFieldFilter && (task.fields?.name || '圃場未指定') !== taskFieldFilter) {
+        return false;
+      }
+      if (taskCropFilter !== 'all' && task.crop_id !== taskCropFilter && (task.crops?.name || '作目未指定') !== taskCropFilter) {
+        return false;
+      }
+
+      if (taskSearchQuery.trim()) {
+        const q = taskSearchQuery.toLowerCase();
+        const mType = task.work_type?.toLowerCase().includes(q);
+        const mField = task.fields?.name?.toLowerCase().includes(q);
+        const mCrop = task.crops?.name?.toLowerCase().includes(q);
+        const mWorker = task.workers?.name?.toLowerCase().includes(q);
+        const mMemo = task.memo?.toLowerCase().includes(q);
+        const mDate = task.work_date?.toLowerCase().includes(q);
+        if (!mType && !mField && !mCrop && !mWorker && !mMemo && !mDate) return false;
+      }
+      return true;
+    });
+  }, [plannedTasks, taskUrgencyFilter, taskFieldFilter, taskCropFilter, taskSearchQuery, todayJstStr]);
+
+  // --- 作業予定（タスク）集計サマリー ---
+  const taskSummary = useMemo(() => {
+    let totalMinutes = 0;
+    let overdueCount = 0;
+    let todayCount = 0;
+    let upcomingCount = 0;
+
+    filteredPlannedTasks.forEach(task => {
+      totalMinutes += Number(task.duration_minutes) || 0;
+      const u = getTaskUrgency(task.work_date);
+      if (u === 'overdue') overdueCount++;
+      else if (u === 'today') todayCount++;
+      else upcomingCount++;
+    });
+
+    return {
+      totalCount: filteredPlannedTasks.length,
+      totalMinutes,
+      overdueCount,
+      todayCount,
+      upcomingCount
+    };
+  }, [filteredPlannedTasks, todayJstStr]);
+
+  // --- 作業予定（タスク）4大まとめ表示（グルーピング）データ ---
+  const groupedPlannedTasks = useMemo(() => {
+    const groupsMap = new Map<string, {
+      key: string;
+      title: string;
+      subtitle: string;
+      urgency: 'overdue' | 'today' | 'upcoming' | 'mixed';
+      tasks: any[];
+      totalMinutes: number;
+      overdueCount: number;
+      todayCount: number;
+      upcomingCount: number;
+      subItemsSet: Set<string>;
+    }>();
+
+    filteredPlannedTasks.forEach(task => {
+      let key = '';
+      let title = '';
+      let subItem = '';
+
+      const fieldName = task.fields?.name || '圃場未指定';
+      const cropName = task.crops?.name || '作目未設定';
+      const workType = task.work_type || '予定作業';
+      const workDate = task.work_date || '日付未設定';
+      const u = getTaskUrgency(task.work_date);
+
+      if (taskGroupMode === 'date') {
+        key = workDate;
+        title = formatDateWithDay(workDate);
+        subItem = `${fieldName} (${cropName})`;
+      } else if (taskGroupMode === 'field') {
+        key = fieldName;
+        title = fieldName;
+        subItem = `${cropName}・${workType}`;
+      } else if (taskGroupMode === 'crop') {
+        key = cropName;
+        title = cropName;
+        subItem = `${fieldName}・${workType}`;
+      } else {
+        key = workType;
+        title = workType;
+        subItem = `${fieldName} (${cropName})`;
+      }
+
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, {
+          key,
+          title,
+          subtitle: '',
+          urgency: u,
+          tasks: [],
+          totalMinutes: 0,
+          overdueCount: 0,
+          todayCount: 0,
+          upcomingCount: 0,
+          subItemsSet: new Set<string>()
+        });
+      }
+
+      const grp = groupsMap.get(key)!;
+      grp.tasks.push(task);
+      grp.totalMinutes += Number(task.duration_minutes) || 0;
+      if (u === 'overdue') grp.overdueCount++;
+      else if (u === 'today') grp.todayCount++;
+      else grp.upcomingCount++;
+      if (subItem && subItem !== '作目未設定' && subItem !== '圃場未指定') {
+        grp.subItemsSet.add(subItem);
+      }
+    });
+
+    const result = Array.from(groupsMap.values()).map(g => {
+      let urgency: 'overdue' | 'today' | 'upcoming' = 'upcoming';
+      if (g.overdueCount > 0) urgency = 'overdue';
+      else if (g.todayCount > 0) urgency = 'today';
+
+      return {
+        ...g,
+        urgency,
+        subtitle: Array.from(g.subItemsSet).slice(0, 5).join('・') + (g.subItemsSet.size > 5 ? ` 他${g.subItemsSet.size - 5}件` : '')
+      };
+    });
+
+    if (taskGroupMode === 'date') {
+      // 日付順（古い未完了＝期限切れや今日の予定が上、または日付の昇順・降順で見やすく整理）
+      result.sort((a, b) => a.key.localeCompare(b.key));
+    } else {
+      // 圃場・作目・作業別の場合は、期限切れを含むグループを優先しつつ件数順
+      result.sort((a, b) => {
+        if (b.overdueCount !== a.overdueCount) return b.overdueCount - a.overdueCount;
+        return b.tasks.length - a.tasks.length;
+      });
+    }
+    return result;
+  }, [filteredPlannedTasks, taskGroupMode, todayJstStr]);
+
   // --- 肥料管理フィルタリング ---
   const filteredFertilizers = useMemo(() => {
     // 1. 「自社マスタ登録済のみ」タブの場合: 自農園マスタ（materials）から直接生成
@@ -1137,7 +1298,8 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     }
   };
 
-  // 作業記録の直接新規登録処理
+  // 作業記録・予定の直接新規登録処理
+  const [directAddStatusMode, setDirectAddStatusMode] = useState<'completed' | 'planned'>('completed');
   const handleDirectAddWorkLog = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsDirectAdding(true);
@@ -1155,14 +1317,14 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
           work_type: directAddWorkType,
           duration_minutes: parseInt(directAddDuration, 10) || 60,
           memo: directAddMemo ? directAddMemo.trim() : `[直接登録] ${directAddWorkType}`,
-          status: 'completed',
+          status: directAddStatusMode,
           created_at: new Date().toISOString()
         }]);
 
       if (error) throw error;
       setIsDirectAddModalOpen(false);
       setDirectAddMemo('');
-      setToastMessage('新規作業記録を登録しました！');
+      setToastMessage(directAddStatusMode === 'planned' ? '新規の作業予定（タスク）を登録しました！' : '新規作業記録を登録しました！');
       fetchAllData();
     } catch (err: any) {
       console.error(err);
@@ -1172,11 +1334,19 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     }
   };
 
-  // タスク完了処理
+  // タスク完了処理（単一・即時UI反映）
   const handleCompleteTask = async (taskId: string) => {
     try {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) throw new Error('テナントIDが特定できません');
+
+      // 即時ローカルステート反映（0秒レスポンス）
+      const targetTask = plannedTasks.find(t => t.id === taskId);
+      setPlannedTasks(prev => prev.filter(t => t.id !== taskId));
+      if (targetTask) {
+        setWorkLogs(prev => [{ ...targetTask, status: 'completed' }, ...prev]);
+      }
+
       const { error } = await supabase
         .from('work_logs')
         .update({ status: 'completed' })
@@ -1185,10 +1355,40 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
 
       if (error) throw error;
       setToastMessage('予定作業を完了（実績化）しました！');
-      fetchAllData();
     } catch (err: any) {
       console.error(err);
       alert('タスク完了の更新に失敗しました');
+      fetchAllData();
+    }
+  };
+
+  // グループ内タスクの一括完了処理
+  const handleBatchCompleteTasks = async (taskIds: string[], groupLabel: string) => {
+    if (taskIds.length === 0) return;
+    if (!window.confirm(`「${groupLabel}」の予定タスク（全 ${taskIds.length} 件）をまとめて完了（実績化）しますか？`)) return;
+    try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error('テナントIDが特定できません');
+
+      // 即時ローカルステート反映
+      const completedItems = plannedTasks
+        .filter(t => taskIds.includes(t.id))
+        .map(t => ({ ...t, status: 'completed' }));
+      setPlannedTasks(prev => prev.filter(t => !taskIds.includes(t.id)));
+      setWorkLogs(prev => [...completedItems, ...prev]);
+
+      const { error } = await supabase
+        .from('work_logs')
+        .update({ status: 'completed' })
+        .in('id', taskIds)
+        .eq('user_id', tenantId);
+
+      if (error) throw error;
+      setToastMessage(`「${groupLabel}」の予定 ${taskIds.length}件 を一括完了（実績化）しました！`);
+    } catch (err: any) {
+      console.error(err);
+      alert('一括完了の更新に失敗しました');
+      fetchAllData();
     }
   };
 
@@ -1953,7 +2153,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                     </button>
                     <button
                       type="button"
-                      onClick={() => setIsDirectAddModalOpen(true)}
+                      onClick={() => { setDirectAddStatusMode('completed'); setIsDirectAddModalOpen(true); }}
                       className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -2271,41 +2471,440 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
             </div>
           )}
 
-          {/* TAB 4: 作業予定 (タスク) */}
+          {/* TAB 5: 作業予定 (タスク) */}
           {activeMainTab === 'tasks' && (
             <div className="space-y-4">
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
-                {plannedTasks.map(task => (
-                  <div key={task.id} className="p-4 hover:bg-amber-50/40 transition-colors flex items-center justify-between gap-4">
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-black text-amber-800">{task.work_date}</span>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-100 text-amber-800">
-                          {task.work_type}
-                        </span>
-                        <span className="text-xs font-bold text-slate-700">{task.fields?.name}</span>
-                        <span className="text-xs font-bold text-emerald-600">{task.crops?.name}</span>
-                      </div>
-                      {task.memo && <p className="text-xs text-slate-500 truncate">{task.memo}</p>}
-                    </div>
-
+              {/* 1. コントロールパネル（まとめ切替 ＋ 期限・圃場・作目絞り込み ＋ 予定追加ボタン） */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
+                {/* 上段: 4大まとめ表示切替 ＆ 作業予定の新規追加ボタン */}
+                <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] font-black text-slate-400 mr-1 flex items-center gap-1">
+                      <Folder className="w-3.5 h-3.5 text-slate-400" />
+                      まとめ表示:
+                    </span>
                     <button
                       type="button"
-                      onClick={() => handleCompleteTask(task.id)}
-                      className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors shadow-2xs shrink-0"
+                      onClick={() => { setTaskGroupMode('date'); setCollapsedTaskGroups({}); }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${
+                        taskGroupMode === 'date'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>完了にする</span>
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>予定日順 (標準)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setTaskGroupMode('field'); setCollapsedTaskGroups({}); }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${
+                        taskGroupMode === 'field'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                      <span>圃場（畑）ごとにまとめる</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setTaskGroupMode('crop'); setCollapsedTaskGroups({}); }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${
+                        taskGroupMode === 'crop'
+                          ? 'bg-teal-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <Sprout className="w-3.5 h-3.5" />
+                      <span>作目ごとにまとめる</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setTaskGroupMode('type'); setCollapsedTaskGroups({}); }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${
+                        taskGroupMode === 'type'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <List className="w-3.5 h-3.5" />
+                      <span>作業内容ごとにまとめる</span>
                     </button>
                   </div>
-                ))}
 
-                {plannedTasks.length === 0 && (
-                  <div className="p-12 text-center text-slate-400 font-bold text-sm">
-                    現在、予定されている作業タスクはありません。
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => { setDirectAddStatusMode('planned'); setIsDirectAddModalOpen(true); }}
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>作業予定（タスク）を追加</span>
+                    </button>
                   </div>
-                )}
+                </div>
+
+                {/* 下段: 絞り込みフィルタ（期限ステータス・圃場・作目・フリーワード） */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2 flex-wrap flex-1">
+                    <select
+                      value={taskUrgencyFilter}
+                      onChange={(e: any) => setTaskUrgencyFilter(e.target.value)}
+                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-400"
+                    >
+                      <option value="all">📋 すべての期限</option>
+                      <option value="overdue">🚨 期限超過（未完了）のみ</option>
+                      <option value="today">📌 本日の作業予定のみ</option>
+                      <option value="upcoming">📅 明日以降の予定のみ</option>
+                    </select>
+
+                    <select
+                      value={taskFieldFilter}
+                      onChange={(e) => setTaskFieldFilter(e.target.value)}
+                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-400"
+                    >
+                      <option value="all">📍 すべての圃場</option>
+                      {fields.map(f => (
+                        <option key={f.id} value={f.id}>{f.name}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={taskCropFilter}
+                      onChange={(e) => setTaskCropFilter(e.target.value)}
+                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-400"
+                    >
+                      <option value="all">🌱 すべての作目</option>
+                      {crops.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+
+                    <div className="relative flex-1 min-w-[180px] sm:max-w-xs">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="作業名・圃場・メモで検索..."
+                        value={taskSearchQuery}
+                        onChange={e => setTaskSearchQuery(e.target.value)}
+                        className="w-full pl-8 pr-7 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-amber-400"
+                      />
+                      {taskSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setTaskSearchQuery('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {(taskUrgencyFilter !== 'all' || taskFieldFilter !== 'all' || taskCropFilter !== 'all' || taskSearchQuery) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTaskUrgencyFilter('all');
+                          setTaskFieldFilter('all');
+                          setTaskCropFilter('all');
+                          setTaskSearchQuery('');
+                        }}
+                        className="px-2.5 py-1.5 text-[11px] font-black text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg border border-rose-200 transition-colors cursor-pointer"
+                      >
+                        条件クリア
+                      </button>
+                    )}
+                  </div>
+
+                  {groupedPlannedTasks.length > 1 && (
+                    <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                      <button
+                        type="button"
+                        onClick={() => setCollapsedTaskGroups({})}
+                        className="px-2.5 py-1.5 text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+                      >
+                        すべて開く
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allClosed: Record<string, boolean> = {};
+                          groupedPlannedTasks.forEach(g => { allClosed[g.key] = true; });
+                          setCollapsedTaskGroups(allClosed);
+                        }}
+                        className="px-2.5 py-1.5 text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+                      >
+                        すべて折りたたむ
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {/* 2. 集計サマリーバー（未完了タスク数・予定作業時間・緊急度内訳） */}
+              <div className="bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-slate-400">未完了タスク:</span>
+                    <span className="text-sm font-black text-white">{taskSummary.totalCount} 件</span>
+                    <span className="text-[11px] font-bold text-slate-400">（{groupedPlannedTasks.length} グループ）</span>
+                  </div>
+                  <div className="h-4 w-px bg-slate-700 hidden sm:block" />
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-[11px] font-bold text-slate-400">予定作業時間:</span>
+                    <span className="text-sm font-black text-amber-300">{formatMinutesReadable(taskSummary.totalMinutes)}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap text-xs font-black">
+                  <button
+                    type="button"
+                    onClick={() => setTaskUrgencyFilter(taskUrgencyFilter === 'overdue' ? 'all' : 'overdue')}
+                    className={`px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                      taskUrgencyFilter === 'overdue'
+                        ? 'bg-rose-600 text-white border-rose-400 ring-2 ring-rose-400/50'
+                        : 'bg-rose-500/20 text-rose-300 border-rose-500/30 hover:bg-rose-500/30'
+                    }`}
+                  >
+                    🚨 期限超過: {taskSummary.overdueCount}件
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTaskUrgencyFilter(taskUrgencyFilter === 'today' ? 'all' : 'today')}
+                    className={`px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                      taskUrgencyFilter === 'today'
+                        ? 'bg-amber-500 text-slate-950 border-amber-300 ring-2 ring-amber-400/50'
+                        : 'bg-amber-500/20 text-amber-300 border-amber-500/30 hover:bg-amber-500/30'
+                    }`}
+                  >
+                    📌 本日予定: {taskSummary.todayCount}件
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTaskUrgencyFilter(taskUrgencyFilter === 'upcoming' ? 'all' : 'upcoming')}
+                    className={`px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                      taskUrgencyFilter === 'upcoming'
+                        ? 'bg-emerald-600 text-white border-emerald-400 ring-2 ring-emerald-400/50'
+                        : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30'
+                    }`}
+                  >
+                    📅 明日以降: {taskSummary.upcomingCount}件
+                  </button>
+                </div>
+              </div>
+
+              {/* 3. グループ別タスクカード一覧 */}
+              {groupedPlannedTasks.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 font-bold text-sm">
+                  条件に一致する予定作業タスクはありません。
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {groupedPlannedTasks.map(group => {
+                    const isCollapsed = !!collapsedTaskGroups[group.key];
+                    const headerAccent =
+                      group.urgency === 'overdue'
+                        ? 'border-l-4 border-l-rose-500 bg-rose-50/40'
+                        : group.urgency === 'today'
+                        ? 'border-l-4 border-l-amber-500 bg-amber-50/50'
+                        : 'border-l-4 border-l-emerald-500 bg-slate-50/80';
+
+                    return (
+                      <div key={group.key} className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                        {/* グループ見出しバー */}
+                        <div className={`w-full px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 transition-colors ${headerAccent}`}>
+                          <button
+                            type="button"
+                            onClick={() => setCollapsedTaskGroups(prev => ({ ...prev, [group.key]: !prev[group.key] }))}
+                            className="flex items-center gap-2.5 min-w-0 flex-1 text-left cursor-pointer"
+                          >
+                            {isCollapsed ? (
+                              <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 text-slate-700 shrink-0" />
+                            )}
+                            <span className="text-sm font-black text-slate-900 truncate">
+                              {taskGroupMode === 'field' && '📍 '}
+                              {taskGroupMode === 'crop' && '🌱 '}
+                              {taskGroupMode === 'date' && '📅 '}
+                              {taskGroupMode === 'type' && '🏷️ '}
+                              {group.title}
+                            </span>
+                            {group.subtitle && (
+                              <span className="text-xs font-bold text-slate-500 truncate hidden md:inline">
+                                ― {group.subtitle}
+                              </span>
+                            )}
+                          </button>
+
+                          <div className="flex items-center gap-2 shrink-0 flex-wrap pl-6 sm:pl-0">
+                            {group.overdueCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-md text-[11px] font-black bg-rose-100 text-rose-800 border border-rose-200">
+                                🚨 期限超過 {group.overdueCount}件
+                              </span>
+                            )}
+                            {group.todayCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-md text-[11px] font-black bg-amber-100 text-amber-800 border border-amber-200">
+                                📌 本日 {group.todayCount}件
+                              </span>
+                            )}
+                            <span className="px-2.5 py-0.5 rounded-md text-xs font-black bg-slate-200/80 text-slate-800">
+                              計 {group.tasks.length}件
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-md text-xs font-black bg-amber-100 text-amber-900 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {formatMinutesReadable(group.totalMinutes)}
+                            </span>
+
+                            {group.tasks.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleBatchCompleteTasks(group.tasks.map((t: any) => t.id), group.title)}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-black flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                                title="このグループの予定をすべて完了（実績化）します"
+                              >
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>一括完了 ({group.tasks.length}件)</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* グループ内のタスク明細行 */}
+                        {!isCollapsed && (
+                          <div className="divide-y divide-slate-100 border-t border-slate-100">
+                            {group.tasks.map((task: any) => {
+                              const u = getTaskUrgency(task.work_date);
+                              const cat = getLogCategory(task);
+                              const { badges, cleanNote } = parseStructuredMemo(task.memo);
+
+                              const urgencyBadge =
+                                u === 'overdue'
+                                  ? { label: '🚨 期限超過', cls: 'bg-rose-100 text-rose-800 border-rose-200' }
+                                  : u === 'today'
+                                  ? { label: '📌 本日予定', cls: 'bg-amber-100 text-amber-900 border-amber-300' }
+                                  : { label: '📅 予定', cls: 'bg-slate-100 text-slate-700 border-slate-200' };
+
+                              const typeBadgeStyle =
+                                cat === 'spray'
+                                  ? 'bg-rose-100 text-rose-800 border-rose-200'
+                                  : cat === 'fert'
+                                  ? 'bg-teal-100 text-teal-800 border-teal-200'
+                                  : 'bg-amber-100 text-amber-900 border-amber-200';
+
+                              return (
+                                <div key={task.id} className="px-4 py-3.5 hover:bg-amber-50/30 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                  <div className="space-y-1.5 min-w-0 flex-1">
+                                    {/* 1行目: 緊急度・日付・作業内容・圃場・作目・担当者 */}
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className={`px-2 py-0.5 rounded-md text-[11px] font-black border ${urgencyBadge.cls}`}>
+                                        {urgencyBadge.label}
+                                      </span>
+
+                                      {taskGroupMode !== 'date' && (
+                                        <span className="text-xs font-black text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md font-mono">
+                                          📅 {task.work_date}
+                                        </span>
+                                      )}
+
+                                      <span className={`px-2.5 py-0.5 rounded-md text-xs font-black border ${typeBadgeStyle}`}>
+                                        {cat === 'spray' ? '🧪 ' : cat === 'fert' ? '🔬 ' : '🚜 '}
+                                        {task.work_type}
+                                      </span>
+
+                                      {taskGroupMode !== 'field' && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                                          <MapPin className="w-3 h-3 text-slate-500" />
+                                          {task.fields?.name || '圃場未指定'}
+                                        </span>
+                                      )}
+
+                                      {taskGroupMode !== 'crop' && task.crops?.name && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                          <Sprout className="w-3 h-3 text-emerald-600" />
+                                          {task.crops.name}
+                                        </span>
+                                      )}
+
+                                      {task.workers?.name && (
+                                        <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                                          <User className="w-3 h-3 text-slate-400" />
+                                          {task.workers.name}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* 2行目: 構造化バッジ＋クリーンメモ */}
+                                    {(badges.length > 0 || cleanNote) && (
+                                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                        {badges.map((b, idx) => {
+                                          const bClass =
+                                            b.tone === 'rose' ? 'bg-rose-50 text-rose-800 border-rose-200' :
+                                            b.tone === 'teal' ? 'bg-teal-50 text-teal-800 border-teal-200' :
+                                            b.tone === 'blue' ? 'bg-blue-50 text-blue-800 border-blue-200' :
+                                            b.tone === 'amber' ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                                            'bg-slate-100 text-slate-700 border-slate-200';
+                                          return (
+                                            <span key={idx} className={`px-2 py-0.5 rounded-md text-xs font-bold border ${bClass}`}>
+                                              {b.text}
+                                            </span>
+                                          );
+                                        })}
+                                        {cleanNote && (
+                                          <span className="text-xs text-slate-600 font-medium break-all">
+                                            {cleanNote}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* 右側: 予定時間 ＆ 完了・訂正・削除ボタン */}
+                                  <div className="flex items-center justify-end gap-2 shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
+                                    <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-slate-100 text-slate-700 flex items-center gap-1">
+                                      <Clock className="w-3 h-3 text-slate-400" />
+                                      {task.duration_minutes || 60}分
+                                    </span>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCompleteTask(task.id)}
+                                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                                    >
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                      <span>完了にする</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditModal(task)}
+                                      className="px-2.5 py-1.5 text-xs font-black text-blue-600 hover:bg-blue-50 rounded-xl border border-blue-200 transition-colors cursor-pointer"
+                                      title="予定日や圃場・作業内容を訂正"
+                                    >
+                                      訂正
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteWorkLog(task.id)}
+                                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                      title="予定を削除"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </>
@@ -2533,16 +3132,19 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
         </div>
       )}
 
-      {/* 履歴直接登録モーダル */}
+      {/* 履歴・予定直接登録モーダル */}
       {isDirectAddModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
             <h3 className="text-base font-black text-slate-800 mb-4 flex items-center gap-2">
-              <Plus className="w-5 h-5 text-blue-600" /> 作業履歴の直接追加
+              <Plus className={`w-5 h-5 ${directAddStatusMode === 'planned' ? 'text-amber-600' : 'text-blue-600'}`} />
+              {directAddStatusMode === 'planned' ? '作業予定（タスク）の追加' : '作業履歴の直接追加'}
             </h3>
             <form onSubmit={handleDirectAddWorkLog} className="space-y-4">
               <div>
-                <label className="text-xs font-bold text-slate-500 block mb-1">作業日</label>
+                <label className="text-xs font-bold text-slate-500 block mb-1">
+                  {directAddStatusMode === 'planned' ? '予定日' : '作業日'}
+                </label>
                 <input 
                   type="date" 
                   value={directAddDate} 
@@ -2591,7 +3193,9 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                 </div>
               </div>
               <div>
-                <label className="text-xs font-bold text-slate-500 block mb-1">作業時間 (分)</label>
+                <label className="text-xs font-bold text-slate-500 block mb-1">
+                  {directAddStatusMode === 'planned' ? '予定時間 (分)' : '作業時間 (分)'}
+                </label>
                 <input 
                   type="number" 
                   value={directAddDuration} 
@@ -2619,9 +3223,13 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                 <button
                   type="submit"
                   disabled={isDirectAdding}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-black transition-colors"
+                  className={`px-5 py-2 disabled:opacity-50 text-white rounded-xl text-xs font-black transition-colors cursor-pointer ${
+                    directAddStatusMode === 'planned'
+                      ? 'bg-amber-600 hover:bg-amber-700'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
                 >
-                  {isDirectAdding ? '登録中...' : '履歴を登録'}
+                  {isDirectAdding ? '登録中...' : directAddStatusMode === 'planned' ? '予定を登録' : '履歴を登録'}
                 </button>
               </div>
             </form>
