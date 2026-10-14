@@ -263,7 +263,7 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
                 </div>
               </div>
               <Link 
-                href={tenantId ? `/hr/paid-leave?farm=${tenantId}` : '/hr/paid-leave'} 
+                href={tenantId ? `/hr?farm=${tenantId}` : '/hr'} 
                 className="inline-flex items-center justify-center gap-1 text-indigo-700 hover:text-white text-xs font-black px-4 py-2.5 bg-indigo-100 hover:bg-indigo-600 rounded-xl transition-all shadow-sm shrink-0 self-start sm:self-auto"
               >
                 有給管理で承認する ➔
