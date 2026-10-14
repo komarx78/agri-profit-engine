@@ -1033,19 +1033,20 @@ export async function completePortalTask(
 
     const updatePayload: any = {
       status: 'completed',
-      approval_status: 'pending',
-      completed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      approval_status: 'pending'
     };
 
     if (options?.durationMinutes !== undefined && options.durationMinutes !== null && !isNaN(options.durationMinutes)) {
       updatePayload.duration_minutes = Number(options.durationMinutes);
     }
-    if (options?.memo !== undefined && options.memo !== null) {
-      updatePayload.memo = options.memo;
+    let nextMemo = options?.memo !== undefined && options.memo !== null ? String(options.memo).trim() : '';
+    if (options?.harvestAmount !== undefined && options.harvestAmount !== null && !isNaN(options.harvestAmount) && Number(options.harvestAmount) > 0) {
+      nextMemo = nextMemo
+        ? `[収穫量: ${Number(options.harvestAmount)}kg] ${nextMemo}`
+        : `[収穫量: ${Number(options.harvestAmount)}kg]`;
     }
-    if (options?.harvestAmount !== undefined && options.harvestAmount !== null && !isNaN(options.harvestAmount)) {
-      updatePayload.harvest_amount = Number(options.harvestAmount);
+    if (nextMemo || (options?.memo !== undefined && options.memo !== null)) {
+      updatePayload.memo = nextMemo;
     }
     if (options?.workerId) {
       updatePayload.worker_id = options.workerId;
@@ -1107,9 +1108,7 @@ export async function reopenPortalTask(tenantId: string, taskId: string) {
       .from('work_logs')
       .update({
         status: 'planned',
-        approval_status: null,
-        completed_at: null,
-        updated_at: new Date().toISOString()
+        approval_status: null
       })
       .eq('id', taskId);
     if (ownerId && ownerId !== 'null' && ownerId !== 'undefined') {

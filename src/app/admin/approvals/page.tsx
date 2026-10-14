@@ -178,7 +178,8 @@ export default function ApprovalsPage() {
           p.startsWith('散布水量:') ||
           p.startsWith('合計N:') ||
           p.startsWith('総費用:') ||
-          p.startsWith('費用:')
+          p.startsWith('費用:') ||
+          p.startsWith('収穫量:')
         ) {
           badges.push(p);
         } else {
@@ -237,9 +238,19 @@ export default function ApprovalsPage() {
     setEditCropId(log.crop_id || '');
     setEditWorkerId(log.worker_id || '');
     setEditDuration(String(log.duration_minutes ?? 0));
-    setEditHarvestAmount(log.harvest_amount !== null && log.harvest_amount !== undefined ? String(log.harvest_amount) : '');
+
+    const rawMemo = String(log.memo || '');
+    const harvestMatch = rawMemo.match(/\[?収穫量:\s*([0-9.]+)\s*kg\]?/i);
+    if (log.harvest_amount !== null && log.harvest_amount !== undefined) {
+      setEditHarvestAmount(String(log.harvest_amount));
+    } else if (harvestMatch && harvestMatch[1]) {
+      setEditHarvestAmount(harvestMatch[1]);
+    } else {
+      setEditHarvestAmount('');
+    }
+
     setEditMaterialQty(log.material_quantity !== null && log.material_quantity !== undefined ? String(log.material_quantity) : '');
-    setEditMemo(log.memo || '');
+    setEditMemo(rawMemo.replace(/\[収穫量:\s*[0-9.]+\s*kg\]\s*/gi, '').trim());
     setRejectReasonInput('');
     setIsRejectMode(startInRejectMode);
   };
@@ -251,8 +262,7 @@ export default function ApprovalsPage() {
       let query = supabase
         .from('work_logs')
         .update({
-          approval_status: newStatus,
-          updated_at: new Date().toISOString()
+          approval_status: newStatus
         })
         .eq('id', id);
 
@@ -288,8 +298,7 @@ export default function ApprovalsPage() {
       let query = supabase
         .from('work_logs')
         .update({
-          approval_status: 'approved',
-          updated_at: new Date().toISOString()
+          approval_status: 'approved'
         })
         .in('id', targetIds);
 
@@ -314,7 +323,12 @@ export default function ApprovalsPage() {
     setIsSubmittingModal(true);
     try {
       const activeTenantId = tenantId || (await getCurrentTenantId());
-      let finalMemo = editMemo.trim();
+      let finalMemo = editMemo.replace(/\[収穫量:\s*[0-9.]+\s*kg\]\s*/gi, '').trim();
+      if (editHarvestAmount !== '' && !isNaN(Number(editHarvestAmount)) && Number(editHarvestAmount) > 0) {
+        finalMemo = finalMemo
+          ? `[収穫量: ${Number(editHarvestAmount)}kg] ${finalMemo}`
+          : `[収穫量: ${Number(editHarvestAmount)}kg]`;
+      }
       if (targetStatus === 'rejected' && rejectReasonInput.trim()) {
         finalMemo = finalMemo
           ? `${finalMemo}\n【⚠️差し戻し理由: ${rejectReasonInput.trim()}】`
@@ -329,11 +343,9 @@ export default function ApprovalsPage() {
         crop_id: editCropId || null,
         worker_id: editWorkerId || null,
         duration_minutes: Math.max(0, parseInt(editDuration, 10) || 0),
-        harvest_amount: editHarvestAmount !== '' ? Number(editHarvestAmount) : null,
         material_quantity: editMaterialQty !== '' ? Number(editMaterialQty) : null,
         memo: finalMemo || null,
-        approval_status: targetStatus,
-        updated_at: new Date().toISOString()
+        approval_status: targetStatus
       };
 
       let query = supabase.from('work_logs').update(updatePayload).eq('id', inspectingLog.id);
