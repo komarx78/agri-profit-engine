@@ -910,6 +910,13 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
 
   // --- 履歴フィルタリング ---
   const filteredWorkLogs = useMemo(() => {
+    const normalizeForSearch = (s?: string) =>
+      (s || '')
+        .normalize('NFKC')
+        .toLowerCase()
+        .replace(/[\u3041-\u3096]/g, m => String.fromCharCode(m.charCodeAt(0) + 0x60))
+        .replace(/[\s　・･()（）\[\]【】「」『』\-ー]/g, '');
+
     return workLogs.filter(log => {
       const cat = getLogCategory(log);
       if (historyTypeFilter === 'sprayOnly' && cat !== 'spray') return false;
@@ -919,18 +926,32 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
       if (historyFieldFilter !== 'all' && log.field_id !== historyFieldFilter && (log.fields?.name || '圃場未指定') !== historyFieldFilter) {
         return false;
       }
-      if (historyCropFilter !== 'all' && log.crop_id !== historyCropFilter && (log.crops?.name || '作目未指定') !== historyCropFilter) {
-        return false;
+      if (historyCropFilter !== 'all') {
+        const isCropMatch = log.crop_id === historyCropFilter || (log.crops?.name || '作目未指定') === historyCropFilter;
+        // 農薬散布・施肥記録で作目未指定（log.crop_idが空）のものは、検索クエリで特定資材が指定されている場合は弾かない
+        const isUnassignedSprayOrFert = !log.crop_id && (cat === 'spray' || cat === 'fert') && historySearchQuery.trim().length > 0;
+        if (!isCropMatch && !isUnassignedSprayOrFert) {
+          return false;
+        }
       }
 
       if (historySearchQuery.trim()) {
-        const q = historySearchQuery.toLowerCase();
-        const mType = log.work_type?.toLowerCase().includes(q);
-        const mField = log.fields?.name?.toLowerCase().includes(q);
-        const mCrop = log.crops?.name?.toLowerCase().includes(q);
-        const mWorker = log.workers?.name?.toLowerCase().includes(q);
-        const mMemo = log.memo?.toLowerCase().includes(q);
-        const mDate = log.work_date?.toLowerCase().includes(q);
+        const qRaw = historySearchQuery.toLowerCase().trim();
+        const qNorm = normalizeForSearch(historySearchQuery);
+
+        const matchField = (val?: string) => {
+          if (!val) return false;
+          if (val.toLowerCase().includes(qRaw)) return true;
+          if (qNorm && normalizeForSearch(val).includes(qNorm)) return true;
+          return false;
+        };
+
+        const mType = matchField(log.work_type);
+        const mField = matchField(log.fields?.name);
+        const mCrop = matchField(log.crops?.name);
+        const mWorker = matchField(log.workers?.name);
+        const mMemo = matchField(log.memo);
+        const mDate = matchField(log.work_date);
         if (!mType && !mField && !mCrop && !mWorker && !mMemo && !mDate) return false;
       }
       return true;
@@ -2612,10 +2633,14 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      const allHaveSelectedCrop = (pest.usedLogs || []).every(
+                                        (l: any) => l.crop_id && l.crop_id === selectedSprayCropId
+                                      );
                                       setHistoryTypeFilter('sprayOnly');
-                                      setHistoryCropFilter(selectedSprayCropId || 'all');
+                                      setHistoryCropFilter(allHaveSelectedCrop && selectedSprayCropId ? selectedSprayCropId : 'all');
                                       setHistoryFieldFilter(selectedSprayTargetFieldId || 'all');
                                       setHistorySearchQuery(pest.name);
+                                      setCollapsedHistoryGroups({});
                                       setActiveMainTab('history');
                                       window.scrollTo({ top: 0, behavior: 'smooth' });
                                     }}
