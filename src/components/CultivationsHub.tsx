@@ -92,6 +92,8 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
 
   // マスタ
   const [crops, setCrops] = useState<any[]>([]);
+  // 作目ごとの栽培基準（10aあたり苗数など）。必要苗数は決め打ちではなく必ずここから計算する
+  const [cropStandards, setCropStandards] = useState<any[]>([]);
   const [fields, setFields] = useState<any[]>([]);
   const [farmRegisteredPesticides, setFarmRegisteredPesticides] = useState<any[]>([]);
 
@@ -348,6 +350,17 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
 
       setFields(fetchedFields);
       setCrops(fetchedCrops);
+
+      // 自社の作目に紐づく栽培基準だけを取得（crop_id で自社に限定）
+      if (fetchedCrops.length > 0) {
+        const { data: stdData } = await supabase
+          .from('crop_standards')
+          .select('*')
+          .in('crop_id', fetchedCrops.map((c: any) => c.id));
+        setCropStandards(stdData || []);
+      } else {
+        setCropStandards([]);
+      }
 
       let initialCropId = selectedSprayCropId;
       if (fetchedCrops.length > 0 && !initialCropId) {
@@ -712,6 +725,22 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
     return '';
   };
 
+  // 畑の実際の面積(a)。登録が無い場合は null（勝手に10aとみなさない）
+  const getRealFieldAreaA = (f: any): number | null => {
+    if (!f) return null;
+    if (Number(f.area_size) > 0) return Number(f.area_size);
+    if (Number(f.area_sqm) > 0) return Math.round((Number(f.area_sqm) / 100) * 10) / 10;
+    return null;
+  };
+
+  // 作目マスタの「10aあたり必要苗数」。未設定・0 の場合は null（苗を使わない作目 or 未設定）
+  const getSeedlingsPer10a = (cropId: string | null | undefined): number | null => {
+    if (!cropId) return null;
+    const std = cropStandards.find((s: any) => s.crop_id === cropId && !s.variety) || cropStandards.find((s: any) => s.crop_id === cropId);
+    const v = Number(std?.seedlings_per_10a);
+    return v > 0 ? v : null;
+  };
+
   // varietyカラムに安全に格納された旬・ステージメタデータのパーサー（DBスキーマエラー完全防止）
   const parsePlanVarietyMeta = (rawVariety: string | null | undefined, startM: number, endM: number) => {
     const raw = String(rawVariety || '');
@@ -886,7 +915,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
             harvestStartTerm: meta.harvestStartTerm,
             plantingDate: meta.plantingDate,
             targetYieldKg: meta.targetYieldKg,
-            calculatedSeedlings: p.calculated_seedlings ? Number(p.calculated_seedlings) : Math.round((areaAcre / 10) * 4000),
+            calculatedSeedlings: p.calculated_seedlings ? Number(p.calculated_seedlings) : 0,
             year: Number(p.year) || selectedScheduleYear,
             periodLabel: `${sMonth}月${getTermLabel(meta.startTerm)}〜${eMonth}月${getTermLabel(meta.endTerm)}`
           };
@@ -1160,7 +1189,8 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
       if (!tenantId) throw new Error('テナント情報が取得できませんでした。');
 
       const targetField = fields.find(f => f.id === planFormFieldId);
-      const areaAcre = targetField?.area_size ? Number(targetField.area_size) : 10;
+      const realAreaA = getRealFieldAreaA(targetField);
+      const seedlingsPer10a = getSeedlingsPer10a(planFormCropId);
 
       // 旬・ステージ・定植日メタデータをvarietyカラムへ安全に構造化格納（DBスキーマ変更不要・エラーゼロ）
       // 編集時は既存METAを引き継ぐ（予実ボードで設定した目標単価 tp 等を消さない）
@@ -1193,7 +1223,9 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
         year: selectedScheduleYear,
         start_month: Number(planFormStartMonth),
         end_month: Number(planFormEndMonth),
-        calculated_area: areaAcre
+        calculated_area: realAreaA,
+        // 必要苗数 ＝ 実際の面積(a) ÷ 10 × 作目マスタの10aあたり苗数（どちらか未登録なら null ＝ 未計算）
+        calculated_seedlings: realAreaA && seedlingsPer10a ? Math.ceil((realAreaA / 10) * seedlingsPer10a) : null
       };
 
       if (editingPlanId) {
@@ -6783,13 +6815,24 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
               {/* 4. 圃場面積からの必要苗数・目標収量サポート表示 */}
               {(() => {
                 const fObj = fields.find(f => f.id === planFormFieldId);
-                const areaVal = fObj?.area_size ? Number(fObj.area_size) : 10;
-                const estSeedlings = Math.round((areaVal / 10) * 4000);
+                const areaVal = getRealFieldAreaA(fObj);
+                const spp = getSeedlingsPer10a(planFormCropId);
+                const estSeedlings = areaVal && spp ? Math.ceil((areaVal / 10) * spp) : null;
                 return (
                   <div className="bg-slate-50 px-3.5 py-2.5 rounded-2xl border border-slate-200 flex items-center justify-between gap-3 text-xs">
                     <div>
-                      <span className="text-[10px] font-bold text-slate-400 block">🌱 面積({areaVal}a)からの概算必要苗数目安</span>
-                      <span className="font-black text-slate-800">約 {estSeedlings.toLocaleString()} 本 <span className="text-[10px] font-bold text-slate-400">(4,000株/10a換算)</span></span>
+                      <span className="text-[10px] font-bold text-slate-400 block">🌱 植え付けに必要な苗の数（畑の面積 × 作目マスタの10aあたり苗数）</span>
+                      {estSeedlings !== null ? (
+                        <span className="font-black text-slate-800">約 {estSeedlings.toLocaleString()} 本 <span className="text-[10px] font-bold text-slate-400">({areaVal}a × {spp!.toLocaleString()}本/10a)</span></span>
+                      ) : (
+                        <span className="font-bold text-amber-700 text-[11px] leading-snug block">
+                          {!planFormFieldId || !planFormCropId
+                            ? '畑と作目を選ぶと計算します'
+                            : !areaVal
+                              ? 'この畑の面積が未登録のため計算できません（マスタ管理 → 圃場で登録）'
+                              : '苗を使わない作目か、10aあたりの苗数が未設定です（マスタ管理 → 作目で設定）'}
+                        </span>
+                      )}
                     </div>
                     <div className="w-36">
                       <label className="text-[10px] font-bold text-slate-500 block mb-0.5">目標収穫量 (kg・任意)</label>

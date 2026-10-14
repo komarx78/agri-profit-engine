@@ -11,6 +11,9 @@ import { LineLinkModal } from '@/components/LineLinkModal';
 
 type MasterType = 'materials' | 'pesticides' | 'fertilizers' | 'sales_prices' | 'crops' | 'fields' | 'workers' | 'departments' | 'sales_channels';
 
+// 🌱 作目ごとの育苗基準（crop_standards の追加列。育苗スケジュールの「まく日」「トレイ枚数」「種の粒数」の自動計算に使う）
+const NURSERY_STANDARD_KEYS = ['nursery_days', 'nursery_days_spring', 'nursery_days_summer', 'nursery_days_autumn', 'nursery_days_winter', 'potting_days', 'germination_days', 'germination_rate', 'tray_cells', 'seeds_per_cell'] as const;
+
 // 4桁英数字のLINE専用連携コード生成（視認性の高い32文字）
 const generateLineLinkCode = (): string => {
   const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -156,6 +159,8 @@ export default function MastersPage() {
         if (standard) {
           initial.seedlings_per_10a = standard.seedlings_per_10a;
           initial.materials_per_10a = standard.materials_per_10a || [];
+          // 🌱 育苗基準（SQL未実行の環境では undefined のまま＝未設定扱い）
+          NURSERY_STANDARD_KEYS.forEach(k => { initial[k] = standard[k] ?? ''; });
         } else {
           initial.materials_per_10a = [];
         }
@@ -272,6 +277,7 @@ export default function MastersPage() {
       if (table === 'crops') {
         delete dataToSave.seedlings_per_10a;
         delete dataToSave.materials_per_10a;
+        NURSERY_STANDARD_KEYS.forEach(k => { delete dataToSave[k]; });
       }
 
       // sales_prices 保存時
@@ -342,15 +348,24 @@ export default function MastersPage() {
       }
       
       // 作目の場合は基準値も保存
+      let nurseryColumnsMissing = false;
       if (table === 'crops' && insertedId) {
+        const hasNurseryInput = NURSERY_STANDARD_KEYS.some(k => formData[k] !== undefined && formData[k] !== '' && formData[k] !== null);
         // formData.seedlings_per_10a が入力されていれば保存、なければ削除
-        if (formData.seedlings_per_10a || formData.seedlings_per_10a === 0 || formData.materials_per_10a) {
-          const standardData = {
+        if (formData.seedlings_per_10a || formData.seedlings_per_10a === 0 || formData.materials_per_10a || hasNurseryInput) {
+          const baseStandardData = {
             crop_id: insertedId,
             variety: formData.variety || null,
             seedlings_per_10a: Number(formData.seedlings_per_10a) || 0,
             materials_per_10a: formData.materials_per_10a || []
           };
+          // 🌱 育苗基準（空欄は null ＝「未設定」として保存。勝手な初期値は入れない）
+          const nurseryData: Record<string, number | null> = {};
+          NURSERY_STANDARD_KEYS.forEach(k => {
+            const v = formData[k];
+            nurseryData[k] = v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v);
+          });
+          const standardData = { ...baseStandardData, ...nurseryData };
           
           // 一旦既存の基準があるか確認
           const { data: existingStandard } = await supabase
@@ -358,14 +373,43 @@ export default function MastersPage() {
             .select('id')
             .eq('crop_id', insertedId)
             .is('variety', null) // シンプル化のため一旦variety=nullの基本基準として扱う
-            .single();
+            .maybeSingle();
             
-          if (existingStandard) {
-            await supabase.from('crop_standards').update(standardData).eq('id', existingStandard.id);
-          } else {
-            await supabase.from('crop_standards').insert([standardData]);
+          const runSave = (payload: any) => existingStandard
+            ? supabase.from('crop_standards').update(payload).eq('id', existingStandard.id)
+            : supabase.from('crop_standards').insert([payload]);
+
+          const { error: stdErr } = await runSave(standardData);
+          if (stdErr) {
+            const msg = `${stdErr.message || ''} ${(stdErr as any).details || ''}`;
+            // 季節別育苗日数の列だけまだ無い場合は、基本の6列＋baseStandardDataで保存を試みる
+            if (/nursery_days_(spring|summer|autumn|winter)/i.test(msg)) {
+              const withoutSeasonal = { ...standardData };
+              delete (withoutSeasonal as any).nursery_days_spring;
+              delete (withoutSeasonal as any).nursery_days_summer;
+              delete (withoutSeasonal as any).nursery_days_autumn;
+              delete (withoutSeasonal as any).nursery_days_winter;
+              const { error: retrySeasonalErr } = await runSave(withoutSeasonal);
+              if (!retrySeasonalErr) {
+                alert('基本の育苗基準は保存しました。\n※「季節ごとの育苗日数（春・夏・秋・冬）」を保存するには、更新された「18_育苗基準カラム追加.sql」をSupabaseで一度実行してください。');
+              } else {
+                const { error: retryErr } = await runSave(baseStandardData);
+                if (retryErr) throw retryErr;
+                nurseryColumnsMissing = hasNurseryInput;
+              }
+            } else if (/column|schema cache|nursery_days|germination|tray_cells|seeds_per_cell|potting_days/i.test(msg)) {
+              const { error: retryErr } = await runSave(baseStandardData);
+              if (retryErr) throw retryErr;
+              nurseryColumnsMissing = hasNurseryInput;
+            } else {
+              throw stdErr;
+            }
           }
         }
+      }
+
+      if (nurseryColumnsMissing) {
+        alert('作目と10aあたりの苗数は保存しました。\n\nただし「育苗の基準（育苗日数・発芽率・トレイなど）」は、まだ保存先の準備（データベースの設定）ができていないため保存されていません。\nお手数ですが、管理者の方にお渡ししたSQLを実行してから、もう一度保存してください。');
       }
       
       setUploadStatus({ type: 'success', message: '保存・翻訳完了しました！' });
@@ -1818,7 +1862,76 @@ export default function MastersPage() {
                       className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold"
                       placeholder="例: 4000"
                     />
-                    <p className="text-xs text-slate-400 mt-1">※ 栽培計画入力時に、圃場面積×この値で必要苗数が自動計算されます。</p>
+                    <p className="text-xs text-slate-400 mt-1">※ 「作付けこよみ（計画）」で登録した畑の面積×この値で、必要な苗の数が自動計算されます。苗を使わない作目（じかまき）は空欄のままにしてください。</p>
+                  </div>
+
+                  {/* 🌱 育苗の基準（育苗スケジュールの自動計算用） */}
+                  <div className="mt-4 pt-4 border-t border-slate-200 space-y-3">
+                    <div>
+                      <div className="text-sm font-black text-slate-700">🌱 育苗の基準（育苗スケジュール用）</div>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                        種の袋の裏に書かれている「発芽率」や「育苗日数の目安」を見て入れてください。分からない所は空欄のままで大丈夫です（育苗スケジュールに「未設定」と表示されます）。
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { key: 'nursery_days', label: '育苗日数（基本の目安：種まき→植え付け）', unit: '日', placeholder: '例: 30', help: '種をまいてから畑に植えるまでの基本日数。まく日の自動計算に使います。' },
+                        { key: 'germination_days', label: '発芽までの日数', unit: '日', placeholder: '例: 3', help: '種をまいてから芽が出るまでの日数。「芽が出たか確認する日」の目安に使います。' },
+                        { key: 'germination_rate', label: '発芽率', unit: '%', placeholder: '例: 85', help: '種の袋に「発芽率○%以上」と書かれています。発芽しない分を多めにまく計算に使います。' },
+                        { key: 'potting_days', label: '鉢上げまでの日数（しない場合は空欄）', unit: '日', placeholder: '例: 14', help: '種をまいてから鉢上げ（ポットへの植え替え）までの日数。' },
+                        { key: 'tray_cells', label: 'セルトレイの穴の数', unit: '穴', placeholder: '例: 128', help: '1枚のトレイの穴の数。トレイが何枚いるかの計算に使います。' },
+                        { key: 'seeds_per_cell', label: '1つの穴にまく種の数', unit: '粒', placeholder: '例: 1', help: '1粒まきなら1。2粒まいて間引くなら2。' },
+                      ].map(f => (
+                        <div key={f.key}>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">{f.label}</label>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min="0"
+                              value={formData[f.key] ?? ''}
+                              onChange={e => setFormData({ ...formData, [f.key]: e.target.value === '' ? '' : Number(e.target.value) })}
+                              className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-bold text-sm"
+                              placeholder={f.placeholder}
+                            />
+                            <span className="text-xs font-bold text-slate-500 shrink-0">{f.unit}</span>
+                          </div>
+                          <p className="text-[10px] text-slate-400 mt-1 leading-snug">{f.help}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* 季節ごとの育苗日数（任意：夏は早く冬は遅い作目向け） */}
+                    <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-2">
+                      <div>
+                        <div className="text-xs font-black text-slate-700">☀️❄️ 季節ごとの育苗日数（季節で日数が変わる作目だけ・空欄なら上の基本日数を使います）</div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          植え付け月に合わせて、まく日を自動で逆算します（春＝3〜5月、夏＝6〜8月、秋＝9〜11月、冬＝12〜2月）。
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                          { key: 'nursery_days_spring', label: '🌸 春植え（3〜5月）', placeholder: '例: 30' },
+                          { key: 'nursery_days_summer', label: '🌻 夏植え（6〜8月）', placeholder: '例: 25' },
+                          { key: 'nursery_days_autumn', label: '🍁 秋植え（9〜11月）', placeholder: '例: 30' },
+                          { key: 'nursery_days_winter', label: '❄️ 冬植え（12〜2月）', placeholder: '例: 45' },
+                        ].map(s => (
+                          <div key={s.key}>
+                            <label className="block text-[11px] font-bold text-slate-500 mb-1">{s.label}</label>
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                min="0"
+                                value={formData[s.key] ?? ''}
+                                onChange={e => setFormData({ ...formData, [s.key]: e.target.value === '' ? '' : Number(e.target.value) })}
+                                className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 font-bold text-xs"
+                                placeholder={s.placeholder}
+                              />
+                              <span className="text-[11px] font-bold text-slate-500 shrink-0">日</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                   
                   <div className="mt-4 pt-4 border-t border-slate-200">
