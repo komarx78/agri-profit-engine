@@ -1,5 +1,20 @@
 import { createBrowserClient } from '@supabase/ssr';
 
+const KNOWN_FARM_CODE_MAP: Record<string, string> = {
+  'kap': '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04',
+  'kap-101': '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04',
+  'sahara': '62163024-2c8e-4057-a872-2455dbc58d32',
+  'sahara-789': '62163024-2c8e-4057-a872-2455dbc58d32',
+};
+
+function normalizeTenantId(raw: string | null | undefined): string | null {
+  if (!raw || raw === 'null' || raw === 'undefined') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const mapped = KNOWN_FARM_CODE_MAP[trimmed.toLowerCase()];
+  return mapped || trimmed;
+}
+
 /**
  * クライアントサイドで現在のログインユーザー（テナントID）を取得する
  */
@@ -9,16 +24,17 @@ export async function getCurrentTenantId(): Promise<string | null> {
     if (typeof window !== 'undefined') {
       try {
         const urlParams = new URLSearchParams(window.location.search);
-        const urlFarm = urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId');
-        if (urlFarm && urlFarm !== 'null' && urlFarm !== 'undefined') {
+        const urlFarm = normalizeTenantId(urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId'));
+        if (urlFarm) {
           try { localStorage.setItem('agri_owner_id', urlFarm); } catch (e) {}
           return urlFarm;
         }
 
         const match = window.location.pathname.match(/\/(?:portal|work|farm)\/([a-zA-Z0-9_-]+)/);
-        if (match && match[1] && match[1] !== 'null' && match[1] !== 'undefined') {
-          try { localStorage.setItem('agri_owner_id', match[1]); } catch (e) {}
-          return match[1];
+        const pathFarm = normalizeTenantId(match?.[1]);
+        if (pathFarm) {
+          try { localStorage.setItem('agri_owner_id', pathFarm); } catch (e) {}
+          return pathFarm;
         }
       } catch (urlE) {}
     }
@@ -35,18 +51,19 @@ export async function getCurrentTenantId(): Promise<string | null> {
       if (savedWorker) {
         try {
           const w = JSON.parse(savedWorker);
-          if (w && w.user_id) return w.user_id;
+          const workerUid = normalizeTenantId(w?.user_id);
+          if (workerUid) return workerUid;
         } catch (e) {}
       }
 
       // オーナーID / テナントIDストレージからの取得
-      const ownerId = localStorage.getItem('agri_owner_id');
-      if (ownerId && ownerId !== 'null' && ownerId !== 'undefined') {
+      const ownerId = normalizeTenantId(localStorage.getItem('agri_owner_id'));
+      if (ownerId) {
         return ownerId;
       }
 
-      const savedTenant = localStorage.getItem('current_tenant_id') || localStorage.getItem('tenant_id');
-      if (savedTenant && savedTenant !== 'null' && savedTenant !== 'undefined') {
+      const savedTenant = normalizeTenantId(localStorage.getItem('current_tenant_id') || localStorage.getItem('tenant_id'));
+      if (savedTenant) {
         return savedTenant;
       }
     }

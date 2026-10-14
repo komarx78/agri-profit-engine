@@ -36,7 +36,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { CultivationActionSheet, CultivationTarget } from '@/components/CultivationActionSheet';
 import { PesticideLogReportModal } from '@/components/PesticideLogReportModal';
-import { saveWorkerShareSettings, getWorkerShareSettings, getTenantCultivationPlansAction, getTenantCropStandardsAction, saveTenantCultivationPlanAction, deleteTenantCultivationPlanAction } from '@/app/actions/farm';
+import { saveWorkerShareSettings, getWorkerShareSettings, getTenantCultivationPlansAction, getTenantCropStandardsAction, saveTenantCultivationPlanAction, deleteTenantCultivationPlanAction, getCultivationsHubDataAction } from '@/app/actions/farm';
 import { generateComprehensiveSearchKeywords, isFuzzyMatch } from '@/lib/fuzzySearch';
 import { getJSTDate } from '@/lib/dateUtils';
 import Link from 'next/link';
@@ -329,29 +329,75 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
       }
       setCurrentTenantId(tenantId);
 
-      // 🚀 【Phase 1】ファーストビュー（作付け一覧）に必須な超軽量データのみ最優先取得
-      const [fRes, cRes, pRes, compRes, stdRes] = await Promise.all([
-        supabase.from('fields').select('*').eq('user_id', tenantId).order('name'),
-        supabase.from('crops').select('*').eq('user_id', tenantId).order('name'),
-        getTenantCultivationPlansAction(tenantId),
-        supabase.from('company_settings').select('company_name').or(`user_id.eq.${tenantId},id.eq.${tenantId}`).maybeSingle(),
-        getTenantCropStandardsAction(tenantId)
-      ]);
+      // 🚀 【Phase 1】携帯（PINログイン・Anon状態・農園コード指定時）でも100%確実に全データを読み込むため Server Action を最優先実行
+      const hubRes = await getCultivationsHubDataAction(tenantId);
 
-      const fetchedFields = fRes.data || [];
-      const fetchedCrops = cRes.data || [];
-      const fetchedPlans = pRes.data || [];
-      let name = compRes?.data?.company_name || '';
+      let fetchedFields: any[] = [];
+      let fetchedCrops: any[] = [];
+      let fetchedPlans: any[] = [];
+      let fetchedStandards: any[] = [];
+      let fetchedLogs: any[] = [];
+      let fetchedMaterials: any[] = [];
+      let fetchedFertMaterials: any[] = [];
+      let name = '';
+      const effectiveTenantId = hubRes.success && hubRes.ownerId ? hubRes.ownerId : tenantId;
+      if (effectiveTenantId !== tenantId) {
+        setCurrentTenantId(effectiveTenantId);
+      }
+
+      if (hubRes.success) {
+        fetchedFields = hubRes.fields || [];
+        fetchedCrops = hubRes.crops || [];
+        fetchedPlans = hubRes.plans || [];
+        fetchedStandards = hubRes.cropStandards || [];
+        fetchedLogs = hubRes.workLogs || [];
+        fetchedMaterials = hubRes.pesticideMaterials || [];
+        fetchedFertMaterials = hubRes.fertilizerMaterials || [];
+        name = hubRes.companyName || '';
+      } else {
+        // フォールバック: クライアント直接取得
+        const [fRes, cRes, pRes, compRes, stdRes] = await Promise.all([
+          supabase.from('fields').select('*').eq('user_id', effectiveTenantId).order('name'),
+          supabase.from('crops').select('*').eq('user_id', effectiveTenantId).order('name'),
+          getTenantCultivationPlansAction(effectiveTenantId),
+          supabase.from('company_settings').select('company_name').or(`user_id.eq.${effectiveTenantId},id.eq.${effectiveTenantId}`).maybeSingle(),
+          getTenantCropStandardsAction(effectiveTenantId)
+        ]);
+        fetchedFields = fRes.data || [];
+        fetchedCrops = cRes.data || [];
+        fetchedPlans = pRes.data || [];
+        fetchedStandards = stdRes.data || [];
+        name = compRes?.data?.company_name || '';
+      }
+
+      // 万一 cultivation_plans_v2 に紐づく圃場・作目が fields / crops 配列に不足している場合も自動補完して表示漏れを0件にする
+      if (fetchedPlans.length > 0) {
+        const fieldMap = new Map<string, any>(fetchedFields.map((f: any) => [f.id, f]));
+        const cropMap = new Map<string, any>(fetchedCrops.map((c: any) => [c.id, c]));
+        for (const p of fetchedPlans) {
+          if (p.fields && p.fields.id && !fieldMap.has(p.fields.id)) {
+            fieldMap.set(p.fields.id, p.fields);
+          } else if (p.field_id && !fieldMap.has(p.field_id)) {
+            fieldMap.set(p.field_id, { id: p.field_id, name: p.field_name || '登録圃場', area_size: 10 });
+          }
+          if (p.crops && p.crops.id && !cropMap.has(p.crops.id)) {
+            cropMap.set(p.crops.id, p.crops);
+          }
+        }
+        fetchedFields = Array.from(fieldMap.values());
+        fetchedCrops = Array.from(cropMap.values());
+      }
+
       if (!name) {
-        if (tenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04') name = '株式会社KAP';
-        else if (tenantId === '62163024-2c8e-4057-a872-2455dbc58d32') name = '佐原農園株式会社';
+        if (effectiveTenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04') name = '株式会社KAP';
+        else if (effectiveTenantId === '62163024-2c8e-4057-a872-2455dbc58d32') name = '佐原農園株式会社';
         else name = '当農園';
       }
       setCompanyName(name);
 
       setFields(fetchedFields);
       setCrops(fetchedCrops);
-      setCropStandards(stdRes.data || []);
+      setCropStandards(fetchedStandards);
 
       let initialCropId = selectedSprayCropId;
       if (fetchedCrops.length > 0 && !initialCropId) {
@@ -403,23 +449,24 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
       // ⚡ ここで即座にスピナーを解除し、ファーストビューを0.2秒で表示する！
       setIsLoading(false);
 
-      // 🚀 【Phase 2】作業履歴・自社資材マスタをバックグラウンドで非同期取得（画面をブロックしない）
-      const [logsRes, matRes, fertMatRes] = await Promise.all([
-        supabase.from('work_logs').select('*, crops(name), fields(name), workers(name)').eq('user_id', tenantId).order('work_date', { ascending: false }).limit(500),
-        supabase.from('materials').select('*').eq('user_id', tenantId).or('category.eq.農薬費,material_type.eq.pesticide').order('name'),
-        supabase.from('materials').select('*').eq('user_id', tenantId).or('category.eq.肥料費,material_type.eq.fertilizer').order('name')
-      ]);
-
-      const fetchedLogs = logsRes.data || [];
-      const fetchedMaterials = matRes.data || [];
-      const fetchedFertMaterials = fertMatRes.data || [];
+      // 🚀 【Phase 2】フォールバック時のみ追加取得
+      if (!hubRes.success) {
+        const [logsRes, matRes, fertMatRes] = await Promise.all([
+          supabase.from('work_logs').select('*, crops(name), fields(name), workers(name)').eq('user_id', effectiveTenantId).order('work_date', { ascending: false }).limit(500),
+          supabase.from('materials').select('*').eq('user_id', effectiveTenantId).or('category.eq.農薬費,material_type.eq.pesticide').order('name'),
+          supabase.from('materials').select('*').eq('user_id', effectiveTenantId).or('category.eq.肥料費,material_type.eq.fertilizer').order('name')
+        ]);
+        fetchedLogs = logsRes.data || [];
+        fetchedMaterials = matRes.data || [];
+        fetchedFertMaterials = fertMatRes.data || [];
+      }
 
       setFarmRegisteredPesticides(fetchedMaterials);
       setFarmRegisteredFertilizers(fetchedFertMaterials);
 
       // 2. 過去の散布ログと作業ログの分類
-      const completedLogs = fetchedLogs.filter(l => l.status !== 'planned');
-      const plannedLogs = fetchedLogs.filter(l => l.status === 'planned');
+      const completedLogs = fetchedLogs.filter((l: any) => l.status !== 'planned');
+      const plannedLogs = fetchedLogs.filter((l: any) => l.status === 'planned');
       setWorkLogs(completedLogs);
       setPlannedTasks(plannedLogs);
 

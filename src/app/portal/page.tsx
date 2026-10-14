@@ -431,6 +431,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             }
 
             if (ownerId && typeof window !== 'undefined') {
+              setActiveFarmId(ownerId);
               try { localStorage.setItem('agri_owner_id', ownerId); } catch (e) {}
             }
           } catch (e) {
@@ -447,6 +448,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
           if (urlRequestedFarmId && session.user.id !== urlRequestedFarmId) {
             console.log('Session user is from another farm; showing WorkerGate for requested farm:', urlRequestedFarmId);
             ownerId = urlRequestedFarmId;
+            setActiveFarmId(urlRequestedFarmId);
             if (typeof window !== 'undefined') {
               try { localStorage.setItem('agri_owner_id', urlRequestedFarmId); } catch (e) {}
             }
@@ -455,6 +457,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             return;
           }
           ownerId = session.user.id;
+          setActiveFarmId(ownerId);
           if (typeof window !== 'undefined') {
             try { localStorage.setItem('agri_owner_id', ownerId); } catch (e) {}
           }
@@ -2804,6 +2807,10 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
 
           const activeOwnerId = user.user_id || activeFarmId || requestedFarmId || (typeof window !== 'undefined' ? localStorage.getItem('agri_owner_id') : '') || '';
           if (activeOwnerId) {
+            setActiveFarmId(activeOwnerId);
+            if (typeof window !== 'undefined') {
+              try { localStorage.setItem('agri_owner_id', activeOwnerId); } catch (e) {}
+            }
             fetchPortalData(activeOwnerId, isWorkerAdmin ? 'admin' : 'worker', user, closingDay).catch((err) => {
               console.warn('Background portal fetch error:', err);
             });

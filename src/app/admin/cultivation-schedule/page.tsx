@@ -21,7 +21,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { getJSTDate } from '@/lib/dateUtils';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
-import { getTenantCultivationPlansAction, saveTenantCultivationPlanAction } from '@/app/actions/farm';
+import { getTenantCultivationPlansAction, saveTenantCultivationPlanAction, getCultivationSchedulePageDataAction } from '@/app/actions/farm';
 import {
   Calendar,
   Loader2,
@@ -179,37 +179,50 @@ export default function CultivationSchedulePage() {
       }
       setTenantId(tid);
 
-      // 年またぎ・育苗期間・収穫後出荷をカバーする取得範囲
-      const rangeStart = `${year - 1}-01-01`;
-      const rangeEnd = `${year + 1}-12-31`;
+      const pageRes = await getCultivationSchedulePageDataAction(tid, year);
+      if (pageRes.success) {
+        if (pageRes.ownerId && pageRes.ownerId !== tid) {
+          setTenantId(pageRes.ownerId);
+        }
+        setFields(pageRes.fields || []);
+        setCrops(pageRes.crops || []);
+        setPlans(pageRes.plans || []);
+        setWorkLogs(pageRes.workLogs || []);
+        setSalesLogs(pageRes.salesLogs || []);
+        setMaterialCosts(pageRes.materialCosts || []);
+        setMonthlyExpenses(pageRes.monthlyExpenses || []);
+      } else {
+        // フォールバック: クライアント直接取得
+        const rangeStart = `${year - 1}-01-01`;
+        const rangeEnd = `${year + 1}-12-31`;
 
-      const [fRes, cRes, pRes, wRes, sRes, mcRes, expRes] = await Promise.all([
-        supabase.from('fields').select('*').eq('user_id', tid).order('name'),
-        supabase.from('crops').select('*').eq('user_id', tid).order('name'),
-        getTenantCultivationPlansAction(tid, year),
-        supabase
-          .from('work_logs')
-          .select('*, workers(name, hourly_wage), materials(name, default_price, category, unit)')
-          .eq('user_id', tid)
-          .gte('work_date', rangeStart)
-          .lte('work_date', rangeEnd),
-        supabase.from('sales_logs').select('*').eq('user_id', tid).gte('sales_date', rangeStart).lte('sales_date', rangeEnd),
-        supabase.from('material_costs').select('*').eq('user_id', tid).gte('expense_date', rangeStart).lte('expense_date', rangeEnd),
-        supabase.from('monthly_expenses').select('*').eq('user_id', tid)
-      ]);
+        const [fRes, cRes, pRes, wRes, sRes, mcRes, expRes] = await Promise.all([
+          supabase.from('fields').select('*').eq('user_id', tid).order('name'),
+          supabase.from('crops').select('*').eq('user_id', tid).order('name'),
+          getTenantCultivationPlansAction(tid, year),
+          supabase
+            .from('work_logs')
+            .select('*, workers(name, hourly_wage), materials(name, default_price, category, unit)')
+            .eq('user_id', tid)
+            .gte('work_date', rangeStart)
+            .lte('work_date', rangeEnd),
+          supabase.from('sales_logs').select('*').eq('user_id', tid).gte('sales_date', rangeStart).lte('sales_date', rangeEnd),
+          supabase.from('material_costs').select('*').eq('user_id', tid).gte('expense_date', rangeStart).lte('expense_date', rangeEnd),
+          supabase.from('monthly_expenses').select('*').eq('user_id', tid)
+        ]);
 
-      if (!pRes.success) throw new Error(pRes.error || '計画取得エラー');
-      if (wRes.error) throw wRes.error;
-      if (sRes.error) throw sRes.error;
+        if (!pRes.success) throw new Error(pRes.error || '計画取得エラー');
+        if (wRes.error) throw wRes.error;
+        if (sRes.error) throw sRes.error;
 
-      setFields(fRes.data || []);
-      setCrops(cRes.data || []);
-      setPlans(pRes.data || []);
-      setWorkLogs(wRes.data || []);
-      setSalesLogs(sRes.data || []);
-      // 資材経費・月次経費テーブルは未使用の農園もあるため、取得失敗時は0件として扱う
-      setMaterialCosts(mcRes.error ? [] : mcRes.data || []);
-      setMonthlyExpenses(expRes.error ? [] : expRes.data || []);
+        setFields(fRes.data || []);
+        setCrops(cRes.data || []);
+        setPlans(pRes.data || []);
+        setWorkLogs(wRes.data || []);
+        setSalesLogs(sRes.data || []);
+        setMaterialCosts(mcRes.error ? [] : mcRes.data || []);
+        setMonthlyExpenses(expRes.error ? [] : expRes.data || []);
+      }
     } catch (err: any) {
       console.error(err);
       setLoadError('データの読み込みに失敗しました。通信環境をご確認のうえ「再読み込み」を押してください。');
