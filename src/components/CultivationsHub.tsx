@@ -3064,12 +3064,12 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                                             ))}
                                           </div>
 
-                                          {/* 2. ステージ別メインバッジ（何をすべき時期か一目でわかる！） */}
+                                          {/* 2. ステージ別メインバッジ（全ステージで「1行目：作目名 ／ 2行目：旬・工程」に完全統一！） */}
                                           {stageInfo.stage === 'seedling' ? (
                                             <div className="w-full py-1 px-1 rounded-lg bg-amber-50 border border-dashed border-amber-400 text-amber-900 font-black text-[10px] leading-tight text-center">
-                                              <div className="truncate">🌰 育苗・準備</div>
+                                              <div className="truncate">🌰 {matchedPlan.cropName}</div>
                                               <div className="text-[9px] font-bold text-amber-700 truncate">
-                                                {matchedPlan.cropName}
+                                                育苗・土作り
                                               </div>
                                             </div>
                                           ) : stageInfo.stage === 'planting' ? (
@@ -3077,31 +3077,35 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                                               <div className="truncate">🌱 {matchedPlan.cropName}</div>
                                               <div className="text-[9px] font-bold text-emerald-100 truncate">
                                                 {matchedPlan.plantingDate && Number(matchedPlan.plantingDate.slice(5, 7)) === m
-                                                  ? `${Number(matchedPlan.plantingDate.slice(8, 10))}日定植`
+                                                  ? `${Number(matchedPlan.plantingDate.slice(8, 10))}日〜定植`
                                                   : `${getTermLabel(matchedPlan.startTerm)}〜定植`}
                                               </div>
                                             </div>
                                           ) : stageInfo.stage === 'harvest' ? (
                                             <div className="w-full py-1 px-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-black text-[10px] leading-tight text-center shadow-2xs">
-                                              <div className="truncate">🧺 収穫・出荷</div>
+                                              <div className="truncate">🧺 {matchedPlan.cropName}</div>
                                               <div className="text-[9px] font-bold text-amber-100 truncate">
-                                                {matchedPlan.cropName}
-                                                {m === matchedPlan.endMonth ? ` (~${getTermLabel(matchedPlan.endTerm)})` : ''}
+                                                {m === matchedPlan.harvestStartMonth && m === matchedPlan.endMonth
+                                                  ? `${getTermLabel(matchedPlan.harvestStartTerm)}〜${getTermLabel(matchedPlan.endTerm)}収穫`
+                                                  : m === matchedPlan.harvestStartMonth
+                                                  ? `${getTermLabel(matchedPlan.harvestStartTerm)}〜収穫`
+                                                  : m === matchedPlan.endMonth
+                                                  ? `〜${getTermLabel(matchedPlan.endTerm)}収穫`
+                                                  : '収穫・出荷期'}
                                               </div>
                                             </div>
                                           ) : stageInfo.stage === 'single' ? (
                                             <div className="w-full py-1 px-1 rounded-lg bg-emerald-600 text-white font-black text-[10px] leading-tight text-center shadow-2xs">
                                               <div className="truncate">🌱 {matchedPlan.cropName}</div>
                                               <div className="text-[9px] font-bold text-emerald-100 truncate">
-                                                定植〜🧺収穫
+                                                {getTermLabel(matchedPlan.startTerm)}定植〜収穫
                                               </div>
                                             </div>
                                           ) : (
                                             <div className="w-full py-1 px-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-black text-[10px] leading-tight text-center shadow-2xs">
-                                              <div className="truncate">🌿 生育・管理</div>
+                                              <div className="truncate">🌿 {matchedPlan.cropName}</div>
                                               <div className="text-[9px] font-bold text-teal-100 truncate">
-                                                {matchedPlan.cropName}
-                                                {matchedPlan.variety ? ` (${matchedPlan.variety})` : ''}
+                                                生育・管理{matchedPlan.variety ? ` (${matchedPlan.variety})` : ''}
                                               </div>
                                             </div>
                                           )}
