@@ -1784,7 +1784,7 @@ export default function WorkEntryPage({
                     onClick={() => setShowLineModal(true)}
                     className="text-xs text-slate-400 hover:text-emerald-400 underline font-bold"
                   >
-                    設定・QR確認
+                    {t('lineBtnSettings', language)}
                   </button>
                 )}
               </div>
@@ -1816,7 +1816,7 @@ export default function WorkEntryPage({
                     <div>
                       <div className="text-emerald-400 font-bold text-sm flex items-center gap-1.5">
                         <span>{t('lineLinked', language)}</span>
-                        <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 rounded-md">正常</span>
+                        <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 rounded-md">{t('lineStatusLinked', language)}</span>
                       </div>
                       <div className="text-xs text-slate-400 mt-1">{t('lineNotifyDesc', language)}</div>
                     </div>
@@ -2175,16 +2175,16 @@ export default function WorkEntryPage({
                       {t('workingTime', language)}
                     </h2>
                     <span className="text-[11px] font-bold text-sky-300/80">
-                      {duration ? `${(Number(duration) / 60).toFixed(1).replace(/\.0$/, '')} 時間 (${duration}分)` : ''}
+                      {duration ? `${(Number(duration) / 60).toFixed(1).replace(/\.0$/, '')} ${t('tc_hours', language)} (${duration}${t('tc_minutes', language)})` : ''}
                     </span>
                   </div>
                   <div className="grid grid-cols-5 gap-1.5">
                     {[
-                      { min: '30', label: '30分' },
-                      { min: '60', label: '1時間' },
-                      { min: '120', label: '2時間' },
-                      { min: '180', label: '3時間' },
-                      { min: '240', label: '4時間' },
+                      { min: '30', label: `30${t('tc_minutes', language)}` },
+                      { min: '60', label: `1${t('tc_hours', language)}` },
+                      { min: '120', label: `2${t('tc_hours', language)}` },
+                      { min: '180', label: `3${t('tc_hours', language)}` },
+                      { min: '240', label: `4${t('tc_hours', language)}` },
                     ].map((preset) => (
                       <button
                         key={preset.min}
@@ -2200,7 +2200,7 @@ export default function WorkEntryPage({
                       </button>
                     ))}
                   </div>
-                  <input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="分単位で入力（例: 90）" className="w-full py-3 px-4 text-2xl font-black text-center bg-emerald-950/80 rounded-xl border border-sky-700/50 text-white" required />
+                  <input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder={t('durationPlaceholderMin', language)} className="w-full py-3 px-4 text-2xl font-black text-center bg-emerald-950/80 rounded-xl border border-sky-700/50 text-white" required />
                 </section>
               )}
 
@@ -2217,15 +2217,15 @@ export default function WorkEntryPage({
                 >
                   <span className="flex items-center gap-2">
                     <span>📦📷💬</span>
-                    <span>資材・写真・メモ・動画を追加する（任意）</span>
+                    <span>{t('optionalDetailsToggle', language)}</span>
                     {(selectedMaterial || photoPreview || memo || videoFile) && (
                       <span className="bg-emerald-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full">
-                        入力あり
+                        {t('optionalDetailsFilled', language)}
                       </span>
                     )}
                   </span>
                   <span className="text-sm font-black">
-                    {showOptionalDetails ? '▲ 閉じる' : '▼ 開く'}
+                    {showOptionalDetails ? `▲ ${t('close', language)}` : `▼ ${t('openBtn', language)}`}
                   </span>
                 </button>
               </div>
@@ -2288,7 +2288,7 @@ export default function WorkEntryPage({
                         {lastAddedStamp && (
                           <span className="text-[11px] font-black text-emerald-400 bg-emerald-950/80 border border-emerald-500/50 px-2 py-0.5 rounded-full animate-in fade-in flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3" />
-                            <span>{lastAddedStamp} 追加済</span>
+                            <span>{lastAddedStamp} {t('stampAddedSuffix', language)}</span>
                           </span>
                         )}
                       </div>

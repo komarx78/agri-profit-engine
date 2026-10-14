@@ -2819,8 +2819,8 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4 gap-4">
         <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
         <div className="text-center">
-          <p className="text-sm font-bold text-slate-700">現場ポータルを読み込み中...</p>
-          <p className="text-xs text-slate-400 mt-1">通信状況により数秒かかる場合があります</p>
+          <p className="text-sm font-bold text-slate-700">{t('portalLoadingTitle', language)}</p>
+          <p className="text-xs text-slate-400 mt-1">{t('portalLoadingSub', language)}</p>
         </div>
       </div>
     );
@@ -2910,7 +2910,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             }`}
           >
             <Clock className="w-4 h-4" />
-            <span className="truncate">出退勤</span>
+            <span className="truncate max-w-full">{t('mobileNav_attendance', language)}</span>
           </button>
 
           <button
@@ -2929,7 +2929,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             }`}
           >
             <Sprout className="w-4 h-4" />
-            <span className="truncate">作業・出荷</span>
+            <span className="truncate max-w-full">{t('mobileNav_work', language)}</span>
           </button>
 
           <button
@@ -2948,7 +2948,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             }`}
           >
             <CalendarIcon className="w-4 h-4" />
-            <span className="truncate">予定・日報</span>
+            <span className="truncate max-w-full">{t('mobileNav_schedule', language)}</span>
             {todayTasksProgress.total - todayTasksProgress.completed > 0 && (
               <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-rose-500"></span>
             )}
@@ -2967,7 +2967,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             }`}
           >
             <MessageSquare className="w-4 h-4" />
-            <span className="truncate">連絡・動画</span>
+            <span className="truncate max-w-full">{t('mobileNav_info', language)}</span>
           </button>
         </div>
 
@@ -3029,7 +3029,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                               : t('nav_recordWorkNow', language)}
                           </h2>
                           <p className="text-xs sm:text-sm text-blue-100 font-medium truncate mt-0.5">
-                            {pendingTask ? t('nav_startTaskSub', language) : '収穫・病害虫報告・作業時間を1タップで記録'}
+                            {pendingTask ? t('nav_startTaskSub', language) : t('nav_recordWorkSub', language)}
                           </p>
                         </div>
                       </div>
@@ -3050,15 +3050,15 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                   </div>
                   <div>
                     <h2 className="text-sm sm:text-base font-black text-slate-800">
-                      本日のお仕事はすべて完了しました
+                      {t('nav_allWorkDoneTitle', language)}
                     </h2>
                     <p className="text-xs text-slate-500 font-medium">
-                      今日も1日お疲れ様でした！ゆっくりお休みください。
+                      {t('nav_allWorkDoneSub', language)}
                     </p>
                   </div>
                 </div>
                 <div className="text-xs font-bold text-slate-400 shrink-0">
-                  退勤済: {attendance?.clock_out ? formatDisplayTime(attendance.clock_out) : '--:--'}
+                  {t('live_clockedOut', language)}: {attendance?.clock_out ? formatDisplayTime(attendance.clock_out) : '--:--'}
                 </div>
               </div>
             )}
@@ -3125,17 +3125,17 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-black text-slate-800">公式LINE通知</span>
+                      <span className="text-xs font-black text-slate-800">{t('lineOfficialNotice', language)}</span>
                       {workerProfile?.line_user_id ? (
-                        <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded-md">連携中</span>
+                        <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded-md">{t('lineStatusLinked', language)}</span>
                       ) : (
-                        <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded-md">未連携</span>
+                        <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded-md">{t('lineStatusUnlinked', language)}</span>
                       )}
                     </div>
                     <p className="text-[10px] text-slate-500 truncate">
                       {workerProfile?.line_user_id 
-                        ? '打刻忘れアラートや業務連絡を受信中' 
-                        : '友だち追加＋PIN送信で1分連携'}
+                        ? t('lineStatusLinkedDesc', language) 
+                        : t('lineStatusUnlinkedDesc', language)}
                     </p>
                   </div>
                 </div>
@@ -3148,7 +3148,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                       : 'bg-[#06C755] hover:bg-[#05b34c] text-white active:scale-95'
                   }`}
                 >
-                  {workerProfile?.line_user_id ? '設定・解除' : '連携する'}
+                  {workerProfile?.line_user_id ? t('lineBtnSettings', language) : t('lineBtnConnect', language)}
                 </button>
               </div>
 
@@ -3195,7 +3195,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                     </span>
                     {closingDay > 0 && (
                       <span className="text-[10px] font-black text-blue-700 bg-blue-100/70 border border-blue-200 px-1.5 py-0.5 rounded-md">
-                        {closingDay}日締め
+                        {closingDay}{t('closingDaySuffix', language)}
                       </span>
                     )}
                   </div>
@@ -3336,19 +3336,21 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                       </div>
                     ) : (
                       <div className="bg-slate-50 p-3 rounded-xl text-center text-xs font-bold text-slate-400">
-                        有給データ取得中...
+                        {t('leave_loading', language)}
                       </div>
                     )}
 
                     {/* 直近の休暇申請状況 */}
                     {leaveRequests.length > 0 && (
                       <div className="space-y-1.5 pt-1">
-                        <span className="text-[10px] font-black text-slate-400 block">最近の申請ステータス:</span>
+                        <span className="text-[10px] font-black text-slate-400 block">{t('leave_recentStatus', language)}</span>
                         {leaveRequests.slice(0, 2).map((req, idx) => (
                           <div key={idx} className="flex items-center justify-between text-xs bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-100">
                             <div className="flex items-center gap-1.5">
                               <span className="font-bold text-slate-700">{req.start_date}</span>
-                              <span className="text-[10px] text-slate-500">({req.type})</span>
+                              <span className="text-[10px] text-slate-500">
+                                ({req.type === '有給休暇' ? t('leave_typeFull', language) : req.type === '午前半休' ? t('leave_typeAm', language) : req.type === '午後半休' ? t('leave_typePm', language) : req.type === '特別休暇' ? t('leave_typeSpecial', language) : req.type === '欠勤' ? t('leave_typeAbsence', language) : req.type})
+                              </span>
                             </div>
                             <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
                               req.status === '承認' 
@@ -3357,7 +3359,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                                 ? 'bg-rose-50 text-rose-700 border-rose-200'
                                 : 'bg-amber-50 text-amber-700 border-amber-200'
                             }`}>
-                              {req.status}
+                              {req.status === '承認' ? t('leave_statusApproved', language) : req.status === '却下' ? t('leave_statusRejected', language) : t('leave_statusPending', language)}
                             </span>
                           </div>
                         ))}
@@ -3393,7 +3395,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                     : 'bg-blue-50 text-blue-700 border-blue-200'
                 }`}>
                   <span>{todayTasksProgress.completed} / {todayTasksProgress.total}</span>
-                  <span className="text-[10px] font-bold text-slate-500">完了</span>
+                  <span className="text-[10px] font-bold text-slate-500">{t('todo_completeBtn', language)}</span>
                 </span>
               </div>
 
@@ -3564,7 +3566,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                                 type="button"
                                 onClick={() => handleQuickCompleteTask(task)}
                                 className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-95 rounded-xl text-xs font-black transition-all border border-slate-200 flex items-center gap-1 shrink-0 cursor-pointer"
-                                title="ワンタップで完了"
+                                title={t('todo_completeBtn', language)}
                               >
                                 <Check className="w-3.5 h-3.5 text-emerald-600" />
                                 <span>{t('todo_completeBtn', language)}</span>
@@ -3586,7 +3588,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                   <PlayCircle className="w-5 h-5 text-rose-500" /> {t('manualVideo', language)}
                 </h2>
                 <span className="text-[10px] font-black px-2 py-0.5 bg-rose-50 text-rose-600 rounded-lg border border-rose-100">
-                  動画 & ガイド
+                  {t('manual_badgeVideoAndGuide', language)}
                 </span>
               </div>
               <div className="space-y-2">
@@ -3603,7 +3605,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                   className="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all border border-slate-200"
                 >
                   <BookOpen className="w-3.5 h-3.5 text-slate-500" />
-                  <span>ご利用スタートガイドを見る</span>
+                  <span>{t('manual_viewStartGuide', language)}</span>
                 </button>
               </div>
             </div>
@@ -3616,17 +3618,17 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                     <Inbox className="w-5 h-5 text-amber-500" /> {t('approvalInbox', language)}
                   </h2>
                   <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-1 rounded-lg">
-                    {pendingApprovals.length}件
+                    {pendingApprovals.length}{t('report_itemsCount', language)}
                   </span>
                 </div>
                 
                 <div className="space-y-3 mb-4">
                   {pendingApprovals.length === 0 ? (
-                    <p className="text-xs text-slate-400 text-center py-4">承認待ちの項目はありません</p>
+                    <p className="text-xs text-slate-400 text-center py-4">{t('noPendingApprovals', language)}</p>
                   ) : (
                     pendingApprovals.slice(0,3).map(app => (
                       <div key={app.id} className="text-sm p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
-                        <span className="font-bold text-slate-700 truncate">{app.task_title || '作業記録'}</span>
+                        <span className="font-bold text-slate-700 truncate">{getTranslatedWorkType(app.task_title || t('workRecord', language), language)}</span>
                         <span className="text-xs text-slate-500 whitespace-nowrap ml-2">{app.workers?.name}</span>
                       </div>
                     ))
@@ -3657,7 +3659,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               </div>
               <div className="space-y-3 mb-4">
                 {boardPosts.length === 0 ? (
-                   <p className="text-xs text-slate-400 text-center py-4">新着のお知らせはありません</p>
+                   <p className="text-xs text-slate-400 text-center py-4">{t('board_noPosts', language)}</p>
                 ) : (
                   boardPosts.map(post => (
                     <div 
@@ -3706,8 +3708,8 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                     activePortalTab === 'tasks' ? 'bg-emerald-500 text-white' : 'bg-emerald-100 text-emerald-800'
                   }`}>
                     {todayTasksProgress.total - todayTasksProgress.completed > 0 
-                      ? `${todayTasksProgress.total - todayTasksProgress.completed}件` 
-                      : '完了'}
+                      ? `${todayTasksProgress.total - todayTasksProgress.completed}${t('report_itemsCount', language)}` 
+                      : t('todo_completeBtn', language)}
                   </span>
                 )}
               </button>
@@ -3753,7 +3755,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                   <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
                     activePortalTab === 'status' ? 'bg-emerald-500 text-white' : 'bg-emerald-100 text-emerald-800'
                   }`}>
-                    {currentlyWorkingCount}名
+                    {currentlyWorkingCount}{t('peopleCountUnit', language)}
                   </span>
                 )}
               </button>
@@ -3773,7 +3775,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                   <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
                     activePortalTab === 'reports' ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-800'
                   }`}>
-                    {dailyWorkLogs.length}件
+                    {dailyWorkLogs.length}{t('report_itemsCount', language)}
                   </span>
                 )}
               </button>
@@ -4316,7 +4318,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                     {t('todo_quickModalTitle', language)}
                   </h3>
                   <p className="text-xs text-slate-500 font-bold">
-                    作業実績を入力してワンタップで完了・日報化します
+                    {t('todo_quickModalSub', language)}
                   </p>
                 </div>
               </div>
@@ -4338,7 +4340,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                 <div className="flex items-center gap-2">
                   <span className="text-xl">{getCropEmoji(completingTask.crops?.name || '')}</span>
                   <span className="font-black text-slate-800 text-base">
-                    {completingTask.task_title || completingTask.work_type || '作業'}
+                    {getTranslatedWorkType(completingTask.task_title || completingTask.work_type || t('workRecord', language), language)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap text-xs">
@@ -4372,7 +4374,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                     onChange={(e) => setTaskDurationMinutes(Math.max(1, parseInt(e.target.value) || 0))}
                     className="w-32 px-3.5 py-2.5 rounded-xl border border-slate-200 text-base font-black text-slate-800 focus:border-emerald-500 focus:outline-none text-center bg-white shadow-xs"
                   />
-                  <span className="text-xs font-bold text-slate-500">分 ({Math.floor(taskDurationMinutes / 60)}時間 {taskDurationMinutes % 60}分)</span>
+                  <span className="text-xs font-bold text-slate-500">{t('tc_minutes', language)} ({Math.floor(taskDurationMinutes / 60)}{t('tc_hours', language)} {taskDurationMinutes % 60}{t('tc_minutes', language)})</span>
                 </div>
 
                 {/* プリセットボタングループ */}
@@ -4388,7 +4390,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
-                      {mins}分
+                      {mins}{t('tc_minutes', language)}
                     </button>
                   ))}
                   <button
@@ -4396,7 +4398,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                     onClick={() => setTaskDurationMinutes(prev => prev + 15)}
                     className="px-2.5 py-1 rounded-lg text-xs font-black bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 cursor-pointer"
                   >
-                    +15分
+                    +15{t('tc_minutes', language)}
                   </button>
                 </div>
               </div>
@@ -4404,12 +4406,12 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               {/* 収穫量・数量（任意） */}
               <div className="space-y-1.5">
                 <label className="text-xs font-black text-slate-700 block">
-                  {t('todo_harvestLabel', language)} <span className="text-[10px] text-slate-400 font-normal">（収穫作業時など）</span>
+                  {t('todo_harvestLabel', language)} <span className="text-[10px] text-slate-400 font-normal">{t('todo_harvestOptionalHint', language)}</span>
                 </label>
                 <input
                   type="number"
                   step="0.1"
-                  placeholder="例: 25.5 (kg / 箱)"
+                  placeholder="25.5 (kg / box)"
                   value={taskHarvestAmount}
                   onChange={(e) => setTaskHarvestAmount(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 focus:border-emerald-500 focus:outline-none bg-white shadow-xs"
@@ -4423,7 +4425,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                 </label>
                 <textarea
                   rows={3}
-                  placeholder="例: 雨天のため15分早めに終了。特に病害虫の発生なし。"
+                  placeholder={t('memoPlaceholder', language)}
                   value={taskMemo}
                   onChange={(e) => setTaskMemo(e.target.value)}
                   className="w-full p-3 rounded-xl border border-slate-200 text-xs font-medium text-slate-800 focus:border-emerald-500 focus:outline-none bg-white resize-none shadow-xs"
@@ -4439,7 +4441,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                 disabled={isSubmittingTaskComplete}
                 className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-800 bg-white hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer"
               >
-                キャンセル
+                {t('cancel', language)}
               </button>
               
               <button
@@ -4451,7 +4453,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                 {isSubmittingTaskComplete ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>保存中...</span>
+                    <span>{t('saving', language)}</span>
                   </>
                 ) : (
                   <>
@@ -4477,7 +4479,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                 className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors flex items-center gap-1.5 font-bold text-sm cursor-pointer"
               >
                 <ArrowLeft className="w-5 h-5" />
-                <span className="hidden sm:inline">ポータルに戻る</span>
+                <span className="hidden sm:inline">{t('board_backToPortal', language)}</span>
               </button>
               <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
               <div className="flex items-center gap-2">
@@ -4486,10 +4488,10 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                 </div>
                 <div>
                   <h1 className="font-black text-slate-800 text-base sm:text-lg leading-none">
-                    作業日報 専用ビューワー
+                    {t('tabWorkReports', language)}
                   </h1>
                   <span className="text-[11px] sm:text-xs font-bold text-slate-400">
-                    全スタッフの作業記録・タイムライン・圃場別/作物別集計
+                    {t('report_headerSubtitle', language)}
                   </span>
                 </div>
               </div>
@@ -4498,7 +4500,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             <button
               onClick={() => setShowReportModal(false)}
               className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-              title="閉じる"
+              title={t('close', language)}
             >
               <X className="w-5 h-5" />
             </button>
@@ -6446,7 +6448,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                       const p = getAttendancePeriod(y, m, closingDay);
                       return (
                         <span className="text-[11px] font-black text-indigo-700 bg-indigo-50 border border-indigo-200/70 px-2 py-0.5 rounded-lg">
-                          集計期間: {p.label}
+                          {t('tc_periodLabel', language)}: {p.label}
                         </span>
                       );
                     })()}
@@ -6682,7 +6684,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             }`}
           >
             <Clock className={`w-5 h-5 ${mobilePrimaryView === 'attendance' ? 'text-emerald-600 stroke-[2.5]' : ''}`} />
-            <span>出退勤</span>
+            <span className="truncate max-w-full px-0.5">{t('mobileNav_attendance', language)}</span>
           </button>
 
           <button
@@ -6701,7 +6703,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             }`}
           >
             <Sprout className={`w-5 h-5 ${mobilePrimaryView === 'work' ? 'text-blue-600 stroke-[2.5]' : ''}`} />
-            <span>作業・出荷</span>
+            <span className="truncate max-w-full px-0.5">{t('mobileNav_work', language)}</span>
           </button>
 
           <button
@@ -6720,7 +6722,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             }`}
           >
             <CalendarIcon className={`w-5 h-5 ${mobilePrimaryView === 'schedule' ? 'text-amber-600 stroke-[2.5]' : ''}`} />
-            <span>予定・日報</span>
+            <span className="truncate max-w-full px-0.5">{t('mobileNav_schedule', language)}</span>
             {todayTasksProgress.total - todayTasksProgress.completed > 0 && (
               <span className="absolute top-1 right-4 w-2 h-2 rounded-full bg-rose-500"></span>
             )}
@@ -6739,7 +6741,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             }`}
           >
             <MessageSquare className={`w-5 h-5 ${mobilePrimaryView === 'info' ? 'text-purple-600 stroke-[2.5]' : ''}`} />
-            <span>連絡・動画</span>
+            <span className="truncate max-w-full px-0.5">{t('mobileNav_info', language)}</span>
           </button>
         </div>
       </nav>
