@@ -1131,10 +1131,21 @@ export async function reopenPortalTask(tenantId: string, taskId: string) {
 // 農園単位（同じ農園のオーナー・家族・PINログインスタッフ全員）で共有し、
 // よその農園からは完全に遮断する 育苗・作付けこよみ・作目基準 サーバー窓口
 // =====================================================================
+const ownerIdMemoryCache = new Map<string, string>();
+const KNOWN_OWNER_UUIDS = new Set([
+  '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04',
+  '62163024-2c8e-4057-a872-2455dbc58d32',
+]);
+
 async function resolveOwnerId(supabase: any, tenantId: string): Promise<string | null> {
   if (!tenantId || tenantId === 'null' || tenantId === 'undefined') return null;
   const clean = tenantId.trim();
   if (!clean) return null;
+
+  const lower = clean.toLowerCase();
+  if (KNOWN_OWNER_UUIDS.has(lower)) return lower;
+  const cached = ownerIdMemoryCache.get(lower);
+  if (cached) return cached;
 
   const SHORT_MAP: Record<string, string> = {
     'kap': '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04',
@@ -1142,8 +1153,9 @@ async function resolveOwnerId(supabase: any, tenantId: string): Promise<string |
     'sahara': '62163024-2c8e-4057-a872-2455dbc58d32',
     'sahara-789': '62163024-2c8e-4057-a872-2455dbc58d32',
   };
-  if (SHORT_MAP[clean.toLowerCase()]) {
-    return SHORT_MAP[clean.toLowerCase()];
+  if (SHORT_MAP[lower]) {
+    ownerIdMemoryCache.set(lower, SHORT_MAP[lower]);
+    return SHORT_MAP[lower];
   }
 
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean);
@@ -1155,7 +1167,10 @@ async function resolveOwnerId(supabase: any, tenantId: string): Promise<string |
         .ilike('farm_code', clean)
         .limit(1)
         .maybeSingle();
-      if (compByCode?.user_id) return compByCode.user_id;
+      if (compByCode?.user_id) {
+        ownerIdMemoryCache.set(lower, compByCode.user_id);
+        return compByCode.user_id;
+      }
     } catch {}
     return null;
   }
@@ -1170,6 +1185,7 @@ async function resolveOwnerId(supabase: any, tenantId: string): Promise<string |
       .maybeSingle();
     if (comp?.user_id) ownerId = comp.user_id;
   } catch {}
+  ownerIdMemoryCache.set(lower, ownerId);
   return ownerId;
 }
 
@@ -1973,7 +1989,10 @@ export async function deleteWorkerFromHrAction(tenantId: string, workerId: strin
 // =====================================================================
 // 携帯版（PINログイン・農園コード指定時）でも100%確実に作付け一覧＆予実データを読み込む一括取得Server Action
 // =====================================================================
-export async function getCultivationsHubDataAction(tenantId: string) {
+export async function getCultivationsHubDataAction(
+  tenantId: string,
+  options?: { phase1Only?: boolean }
+) {
   try {
     const supabase = createAdminClient();
     const ownerId = await resolveOwnerId(supabase, tenantId);
@@ -1987,11 +2006,49 @@ export async function getCultivationsHubDataAction(tenantId: string) {
       ? `user_id.eq.${ownerId},id.eq.${ownerId},user_id.eq.${tenantId},id.eq.${tenantId}`
       : `user_id.eq.${ownerId},id.eq.${ownerId}`;
 
+    if (options?.phase1Only) {
+      const [fRes, cRes, pRes, compRes] = await Promise.all([
+        supabase.from('fields').select('*').or(userFilter).order('name'),
+        supabase.from('crops').select('*').or(userFilter).order('name'),
+        supabase.from('cultivation_plans_v2').select('*, fields(*), crops(*)').or(userFilter).order('start_month', { ascending: true }),
+        supabase.from('company_settings').select('company_name, settings').or(compFilter).limit(1).maybeSingle(),
+      ]);
+
+      const fields = fRes.data || [];
+      const crops = cRes.data || [];
+      const plans = pRes.data || [];
+
+      const cropIds = Array.from(new Set([...crops.map((c: any) => c.id), ...plans.map((p: any) => p.crop_id)].filter(Boolean)));
+      let cropStandards: any[] = [];
+      if (cropIds.length > 0) {
+        const { data: stdData } = await supabase
+          .from('crop_standards')
+          .select('*')
+          .in('crop_id', cropIds)
+          .order('days_after_start', { ascending: true });
+        cropStandards = stdData || [];
+      }
+
+      return {
+        success: true,
+        ownerId,
+        fields,
+        crops,
+        plans,
+        companyName: compRes?.data?.company_name || '',
+        shareSettings: compRes?.data?.settings?.worker_share_settings || null,
+        cropStandards,
+        workLogs: [],
+        pesticideMaterials: [],
+        fertilizerMaterials: []
+      };
+    }
+
     const [fRes, cRes, pRes, compRes, logsRes, matRes, fertMatRes] = await Promise.all([
       supabase.from('fields').select('*').or(userFilter).order('name'),
       supabase.from('crops').select('*').or(userFilter).order('name'),
       supabase.from('cultivation_plans_v2').select('*, fields(*), crops(*)').or(userFilter).order('start_month', { ascending: true }),
-      supabase.from('company_settings').select('company_name').or(compFilter).limit(1).maybeSingle(),
+      supabase.from('company_settings').select('company_name, settings').or(compFilter).limit(1).maybeSingle(),
       supabase.from('work_logs').select('*, crops(name), fields(name), workers(name)').or(userFilter).order('work_date', { ascending: false }).limit(500),
       supabase.from('materials').select('*').or(userFilter).or('category.eq.農薬費,material_type.eq.pesticide').order('name'),
       supabase.from('materials').select('*').or(userFilter).or('category.eq.肥料費,material_type.eq.fertilizer').order('name')
@@ -2019,6 +2076,7 @@ export async function getCultivationsHubDataAction(tenantId: string) {
       crops,
       plans,
       companyName: compRes?.data?.company_name || '',
+      shareSettings: compRes?.data?.settings?.worker_share_settings || null,
       cropStandards,
       workLogs: logsRes.data || [],
       pesticideMaterials: matRes.data || [],
@@ -2027,6 +2085,35 @@ export async function getCultivationsHubDataAction(tenantId: string) {
   } catch (err: any) {
     console.error('getCultivationsHubDataAction error:', err);
     return { success: false, error: err.message || '作付け一覧データの取得に失敗しました。' };
+  }
+}
+
+export async function getCultivationsHubPhase2Action(tenantId: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const isTenantUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((tenantId || '').trim());
+    const userFilter = isTenantUuid && tenantId !== ownerId
+      ? `user_id.eq.${ownerId},user_id.eq.${tenantId}`
+      : `user_id.eq.${ownerId}`;
+
+    const [logsRes, matRes, fertMatRes] = await Promise.all([
+      supabase.from('work_logs').select('*, crops(name), fields(name), workers(name)').or(userFilter).order('work_date', { ascending: false }).limit(500),
+      supabase.from('materials').select('*').or(userFilter).or('category.eq.農薬費,material_type.eq.pesticide').order('name'),
+      supabase.from('materials').select('*').or(userFilter).or('category.eq.肥料費,material_type.eq.fertilizer').order('name')
+    ]);
+
+    return {
+      success: true,
+      workLogs: logsRes.data || [],
+      pesticideMaterials: matRes.data || [],
+      fertilizerMaterials: fertMatRes.data || []
+    };
+  } catch (err: any) {
+    console.error('getCultivationsHubPhase2Action error:', err);
+    return { success: false, error: err.message };
   }
 }
 

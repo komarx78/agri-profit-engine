@@ -36,7 +36,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { CultivationActionSheet, CultivationTarget } from '@/components/CultivationActionSheet';
 import { PesticideLogReportModal } from '@/components/PesticideLogReportModal';
-import { saveWorkerShareSettings, getWorkerShareSettings, getTenantCultivationPlansAction, getTenantCropStandardsAction, saveTenantCultivationPlanAction, deleteTenantCultivationPlanAction, getCultivationsHubDataAction } from '@/app/actions/farm';
+import { saveWorkerShareSettings, getWorkerShareSettings, getTenantCultivationPlansAction, getTenantCropStandardsAction, saveTenantCultivationPlanAction, deleteTenantCultivationPlanAction, getCultivationsHubDataAction, getCultivationsHubPhase2Action } from '@/app/actions/farm';
 import { generateComprehensiveSearchKeywords, isFuzzyMatch } from '@/lib/fuzzySearch';
 import { getJSTDate } from '@/lib/dateUtils';
 import Link from 'next/link';
@@ -239,7 +239,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
     showTeamTotals: true
   });
 
-  // 設定の初期読み込み（ローカルキャッシュ即時反映 ＋ バックグラウンドDB同期）
+  // 設定の初期読み込み（ローカルキャッシュ即時反映・DB同期はPhase1に統合してServer Action順番待ちを解消）
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('agri_worker_share_settings');
@@ -250,23 +250,6 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
         } catch (e) {}
       }
     }
-    const loadSettings = async () => {
-      try {
-        const tenantId = await getCurrentTenantId();
-        if (tenantId) {
-          const res = await getWorkerShareSettings(tenantId);
-          if (res.success && res.data) {
-            setShareSettings(res.data);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('agri_worker_share_settings', JSON.stringify(res.data));
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to load share settings:', e);
-      }
-    };
-    loadSettings();
   }, []);
 
   const handleSaveShareSettings = async (newSettings: any) => {
@@ -318,9 +301,44 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
     }
   }, [activeMainTab]);
 
-  // データ2段階爆速取得（Phase 1: ファーストビュー0.2秒即時描画 / Phase 2: バックグラウンド取得）
+  // データ2段階爆速取得（Step 0: ローカルキャッシュ0.00秒即時描画 / Phase 1: 超軽量ファーストビュー0.15秒描画 / Phase 2: 重い500件ログ等をバックグラウンド取得）
   const fetchAllData = async () => {
-    setIsLoading(true);
+    // 圃場面積（a: アール）の正確な算出ヘルパー
+    const calculateFieldAreaAcre = (f: any): number => {
+      if (!f) return 10.0;
+      if (f.area_size !== undefined && f.area_size !== null && Number(f.area_size) > 0) {
+        return Number(f.area_size);
+      }
+      if (f.area_sqm !== undefined && f.area_sqm !== null && Number(f.area_sqm) > 0) {
+        return Math.round((Number(f.area_sqm) / 100) * 10) / 10;
+      }
+      return 10.0;
+    };
+
+    const buildCultList = (fList: any[], pList: any[], cList: any[]): CultivationItem[] => {
+      return fList.map((f: any) => {
+        const areaAcre = calculateFieldAreaAcre(f);
+        const fieldPlans = pList.filter((p: any) => p.field_id === f.id);
+        const primaryPlan = fieldPlans[0];
+        const matchedCrop = primaryPlan
+          ? (primaryPlan.crops || cList.find(c => c.id === primaryPlan.crop_id))
+          : null;
+
+        return {
+          id: primaryPlan ? primaryPlan.id : `field-${f.id}`,
+          fieldId: f.id,
+          fieldName: f.name,
+          cropId: matchedCrop?.id || primaryPlan?.crop_id || '',
+          cropName: matchedCrop?.name || primaryPlan?.variety || '未設定（休閑・準備中）',
+          areaAcre,
+          startDate: primaryPlan
+            ? `${primaryPlan.year || new Date().getFullYear()}年 ${primaryPlan.start_month || 8}月〜${primaryPlan.end_month ? `${primaryPlan.end_month}月` : ''}`
+            : '作付未設定',
+          status: primaryPlan ? 'cultivating' : 'fallow'
+        };
+      });
+    };
+
     try {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) {
@@ -329,16 +347,39 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
       }
       setCurrentTenantId(tenantId);
 
-      // 🚀 【Phase 1】携帯（PINログイン・Anon状態・農園コード指定時）でも100%確実に全データを読み込むため Server Action を最優先実行
-      const hubRes = await getCultivationsHubDataAction(tenantId);
+      // ⚡【Step 0】テナント別ローカルキャッシュがあれば 0.00秒（スピナーなし）で即時画面描画！
+      const cacheKey = `agri_cult_hub_fast_v2_${tenantId}`;
+      let hasRenderedFromCache = false;
+      if (typeof window !== 'undefined') {
+        try {
+          const rawCache = localStorage.getItem(cacheKey);
+          if (rawCache) {
+            const parsed = JSON.parse(rawCache);
+            if (parsed && Array.isArray(parsed.fields) && parsed.fields.length > 0) {
+              setFields(parsed.fields);
+              setCrops(parsed.crops || []);
+              setCropStandards(parsed.cropStandards || []);
+              setRawCultivationPlans(parsed.plans || []);
+              setCultivations(buildCultList(parsed.fields, parsed.plans || [], parsed.crops || []));
+              if (parsed.companyName) setCompanyName(parsed.companyName);
+              setIsLoading(false);
+              hasRenderedFromCache = true;
+            }
+          }
+        } catch (e) {}
+      }
+      if (!hasRenderedFromCache) {
+        setIsLoading(true);
+      }
+
+      // 🚀 【Phase 1】ファーストビューに必須な超軽量データ（fields, crops, plans, standards, company_settings）のみ最優先取得！
+      // ※重い work_logs(500件) や materials は Phase 1 から外し、画面表示を1ミリもブロックさせない
+      const hubRes = await getCultivationsHubDataAction(tenantId, { phase1Only: true });
 
       let fetchedFields: any[] = [];
       let fetchedCrops: any[] = [];
       let fetchedPlans: any[] = [];
       let fetchedStandards: any[] = [];
-      let fetchedLogs: any[] = [];
-      let fetchedMaterials: any[] = [];
-      let fetchedFertMaterials: any[] = [];
       let name = '';
       const effectiveTenantId = hubRes.success && hubRes.ownerId ? hubRes.ownerId : tenantId;
       if (effectiveTenantId !== tenantId) {
@@ -350,10 +391,13 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
         fetchedCrops = hubRes.crops || [];
         fetchedPlans = hubRes.plans || [];
         fetchedStandards = hubRes.cropStandards || [];
-        fetchedLogs = hubRes.workLogs || [];
-        fetchedMaterials = hubRes.pesticideMaterials || [];
-        fetchedFertMaterials = hubRes.fertilizerMaterials || [];
         name = hubRes.companyName || '';
+        if (hubRes.shareSettings && typeof hubRes.shareSettings === 'object') {
+          setShareSettings(hubRes.shareSettings);
+          if (typeof window !== 'undefined') {
+            try { localStorage.setItem('agri_worker_share_settings', JSON.stringify(hubRes.shareSettings)); } catch (e) {}
+          }
+        }
       } else {
         // フォールバック: クライアント直接取得
         const [fRes, cRes, pRes, compRes, stdRes] = await Promise.all([
@@ -408,49 +452,41 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
         setSelectedSprayFieldIds([fetchedFields[0].id]);
       }
 
-      // 圃場面積（a: アール）の正確な算出ヘルパー
-      const calculateFieldAreaAcre = (f: any): number => {
-        if (!f) return 10.0;
-        if (f.area_size !== undefined && f.area_size !== null && Number(f.area_size) > 0) {
-          return Number(f.area_size);
-        }
-        if (f.area_sqm !== undefined && f.area_sqm !== null && Number(f.area_sqm) > 0) {
-          return Math.round((Number(f.area_sqm) / 100) * 10) / 10;
-        }
-        return 10.0;
-      };
-
       setRawCultivationPlans(fetchedPlans);
-
-      // 1. 作付け一覧の整形（1圃場＝1アイテムを基本とし、重複分裂と嘘の初期値を排除）
-      const cultList: CultivationItem[] = fetchedFields.map((f: any) => {
-        const areaAcre = calculateFieldAreaAcre(f);
-        const fieldPlans = fetchedPlans.filter((p: any) => p.field_id === f.id);
-        const primaryPlan = fieldPlans[0];
-        const matchedCrop = primaryPlan
-          ? (primaryPlan.crops || fetchedCrops.find(c => c.id === primaryPlan.crop_id))
-          : null;
-
-        return {
-          id: primaryPlan ? primaryPlan.id : `field-${f.id}`,
-          fieldId: f.id,
-          fieldName: f.name,
-          cropId: matchedCrop?.id || primaryPlan?.crop_id || '',
-          cropName: matchedCrop?.name || primaryPlan?.variety || '未設定（休閑・準備中）',
-          areaAcre,
-          startDate: primaryPlan
-            ? `${primaryPlan.year || new Date().getFullYear()}年 ${primaryPlan.start_month || 8}月〜${primaryPlan.end_month ? `${primaryPlan.end_month}月` : ''}`
-            : '作付未設定',
-          status: primaryPlan ? 'cultivating' : 'fallow'
-        };
-      });
+      const cultList = buildCultList(fetchedFields, fetchedPlans, fetchedCrops);
       setCultivations(cultList);
 
-      // ⚡ ここで即座にスピナーを解除し、ファーストビューを0.2秒で表示する！
+      // 次回以降 0.00秒で即時描画できるようテナント固有キャッシュに保存
+      if (typeof window !== 'undefined' && fetchedFields.length > 0) {
+        try {
+          const payload = JSON.stringify({
+            fields: fetchedFields,
+            crops: fetchedCrops,
+            cropStandards: fetchedStandards,
+            plans: fetchedPlans,
+            companyName: name
+          });
+          localStorage.setItem(cacheKey, payload);
+          if (effectiveTenantId !== tenantId) {
+            localStorage.setItem(`agri_cult_hub_fast_v2_${effectiveTenantId}`, payload);
+          }
+        } catch (e) {}
+      }
+
+      // ⚡ ここで即座にスピナーを解除し、ファーストビューを爆速表示する！
       setIsLoading(false);
 
-      // 🚀 【Phase 2】フォールバック時のみ追加取得
-      if (!hubRes.success) {
+      // 🚀 【Phase 2】重い作業履歴（500件）＆自社農薬・肥料マスタは画面描画後にバックグラウンドで非同期取得
+      let fetchedLogs: any[] = [];
+      let fetchedMaterials: any[] = [];
+      let fetchedFertMaterials: any[] = [];
+
+      const phase2Res = await getCultivationsHubPhase2Action(effectiveTenantId);
+      if (phase2Res.success) {
+        fetchedLogs = phase2Res.workLogs || [];
+        fetchedMaterials = phase2Res.pesticideMaterials || [];
+        fetchedFertMaterials = phase2Res.fertilizerMaterials || [];
+      } else {
         const [logsRes, matRes, fertMatRes] = await Promise.all([
           supabase.from('work_logs').select('*, crops(name), fields(name), workers(name)').eq('user_id', effectiveTenantId).order('work_date', { ascending: false }).limit(500),
           supabase.from('materials').select('*').eq('user_id', effectiveTenantId).or('category.eq.農薬費,material_type.eq.pesticide').order('name'),

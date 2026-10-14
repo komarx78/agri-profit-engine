@@ -64,13 +64,31 @@ export function useCompany(explicitTenantId?: string | null): CompanyInfo {
         return;
       }
 
-      // テナントID固有のキャッシュ確認
+      // テナントID固有のキャッシュ確認（完全オブジェクトキャッシュがあればServer Actionキューをブロックせず0ms即時完了）
       const tenantCacheKey = `agri_company_${currentTenant}`;
+      const tenantObjCacheKey = `agri_company_obj_${currentTenant}`;
       if (typeof window !== 'undefined') {
         const cached = localStorage.getItem(tenantCacheKey);
         if (cached) {
           setCompanyName(cached);
         }
+        try {
+          const cachedObjStr = localStorage.getItem(tenantObjCacheKey);
+          if (cachedObjStr) {
+            const cachedObj = JSON.parse(cachedObjStr);
+            if (cachedObj && cachedObj.company_name) {
+              setCompanyName(cachedObj.company_name);
+              setPostalCode(cachedObj.postal_code || '');
+              setAddress(cachedObj.address || '');
+              setPhone(cachedObj.phone || '');
+              setInvoiceNumber(cachedObj.invoice_number || '');
+              setBankInfo(cachedObj.bank_info || '');
+              if (cachedObj.farm_code) setFarmCode(cachedObj.farm_code);
+              setIsLoading(false);
+              return;
+            }
+          }
+        } catch (e) {}
       }
 
       // 2. company_settings テーブルから当該テナントIDのレコードを厳格に取得（クライアントRLSで弾かれた場合はサーバーアクションで補完）
@@ -118,6 +136,17 @@ export function useCompany(explicitTenantId?: string | null): CompanyInfo {
 
         if (typeof window !== 'undefined' && name) {
           localStorage.setItem(tenantCacheKey, name);
+          try {
+            localStorage.setItem(tenantObjCacheKey, JSON.stringify({
+              company_name: name,
+              postal_code: data.postal_code || '',
+              address: data.address || '',
+              phone: data.phone || '',
+              invoice_number: data.invoice_number || '',
+              bank_info: data.bank_info || '',
+              farm_code: resolvedFarmCode,
+            }));
+          } catch (e) {}
           // 旧グローバル汚染キャッシュを消去
           localStorage.removeItem('agri_cached_company_name');
         }
