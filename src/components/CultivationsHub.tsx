@@ -114,7 +114,11 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   // --- タブ4: 履歴ステート ---
   const [workLogs, setWorkLogs] = useState<any[]>([]);
   const [historySearchQuery, setHistorySearchQuery] = useState('');
-  const [historyTypeFilter, setHistoryTypeFilter] = useState<'all' | 'sprayOnly' | 'workOnly'>('all');
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<'all' | 'sprayOnly' | 'fertOnly' | 'workOnly'>('all');
+  const [historyGroupMode, setHistoryGroupMode] = useState<'date' | 'field' | 'crop' | 'type'>('date');
+  const [historyFieldFilter, setHistoryFieldFilter] = useState<string>('all');
+  const [historyCropFilter, setHistoryCropFilter] = useState<string>('all');
+  const [collapsedHistoryGroups, setCollapsedHistoryGroups] = useState<Record<string, boolean>>({});
 
   // 履歴の訂正・編集用ステート
   const [editingLog, setEditingLog] = useState<any | null>(null);
@@ -519,24 +523,234 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     });
   }, [pesticides, sprayCategoryTab, searchSprayQuery]);
 
+  // --- 履歴カテゴリ判定ヘルパー ---
+  const getLogCategory = (log: any): 'spray' | 'fert' | 'work' => {
+    const wt = log.work_type || '';
+    const memo = log.memo || '';
+    if (wt.includes('施肥') || wt.includes('肥料') || wt.includes('元肥') || wt.includes('追肥') || memo.includes('[施肥') || memo.includes('合計N:')) {
+      return 'fert';
+    }
+    if (wt.includes('農薬') || wt.includes('防除') || wt.includes('散布') || memo.includes('[散布管理]') || memo.includes('品名:')) {
+      return 'spray';
+    }
+    return 'work';
+  };
+
+  // --- メモの構造化パーサー（システム暗号を見やすいバッジとテキストへ分解） ---
+  const parseStructuredMemo = (memoStr?: string) => {
+    if (!memoStr || !memoStr.trim()) return { badges: [] as { text: string; tone: 'rose' | 'teal' | 'blue' | 'amber' | 'slate' }[], cleanNote: '' };
+    let working = memoStr.trim();
+    const badges: { text: string; tone: 'rose' | 'teal' | 'blue' | 'amber' | 'slate' }[] = [];
+
+    // 先頭のシステムタグ除去・バッジ化
+    working = working
+      .replace(/^\[一括記録\]\s*/g, '')
+      .replace(/^\[直接登録\]\s*/g, '')
+      .replace(/^\[散布管理\]\s*/g, '');
+
+    const fertTagMatch = working.match(/^\[施肥:([^\]]+)\]\s*/);
+    if (fertTagMatch) {
+      badges.push({ text: `区分: ${fertTagMatch[1]}`, tone: 'teal' });
+      working = working.replace(fertTagMatch[0], '');
+    }
+
+    // パイプ「|」で区切られている構造化データの分解
+    const segments = working.split(/\s*\|\s*/).map(s => s.trim()).filter(Boolean);
+    const noteParts: string[] = [];
+
+    segments.forEach(seg => {
+      if (seg.startsWith('使用農薬:')) {
+        badges.push({ text: `🧪 ${seg.replace('使用農薬:', '').trim()}`, tone: 'rose' });
+      } else if (seg.startsWith('品名:')) {
+        // 例: 品名:「日農」ﾀﾞｺﾆｰﾙ1000 [成分:TPN] 数量:20本
+        const compMatch = seg.match(/\[成分:([^\]]+)\]/);
+        const qtyMatch = seg.match(/数量:([^\s]+)/);
+        const namePart = seg.replace('品名:', '').replace(/\[成分:[^\]]+\]/, '').replace(/数量:[^\s]+/, '').trim();
+        if (namePart) badges.push({ text: `🧪 ${namePart}${qtyMatch ? ` (${qtyMatch[1]})` : ''}`, tone: 'rose' });
+        if (compMatch && compMatch[1]) badges.push({ text: `成分: ${compMatch[1]}`, tone: 'slate' });
+      } else if (seg.startsWith('RAC:')) {
+        badges.push({ text: `🛡️ RAC: ${seg.replace('RAC:', '').trim()}`, tone: 'amber' });
+      } else if (seg.startsWith('散布水量:')) {
+        badges.push({ text: `💧 水量: ${seg.replace('散布水量:', '').trim()}`, tone: 'blue' });
+      } else if (/^(合計)?N:[\d.]+kg/i.test(seg)) {
+        badges.push({ text: `📊 ${seg.replace(/^合計/, '')}`, tone: 'blue' });
+      } else if (/^(総)?費用:¥[\d,]+/i.test(seg)) {
+        const costText = seg.replace(/^(総)?費用:/, '').trim();
+        if (costText !== '¥0') {
+          badges.push({ text: `💰 費用: ${costText}`, tone: 'amber' });
+        }
+      } else if (/(\d+kg|\(\d+袋\))/i.test(seg) && badges.length <= 2) {
+        badges.push({ text: `🔬 ${seg}`, tone: 'teal' });
+      } else {
+        noteParts.push(seg);
+      }
+    });
+
+    return {
+      badges,
+      cleanNote: noteParts.join(' / ')
+    };
+  };
+
+  // --- 分数を見やすい「〇時間〇分」に変換 ---
+  const formatMinutesReadable = (mins: number) => {
+    const m = Math.max(0, Math.round(mins || 0));
+    if (m === 0) return '0分';
+    const h = Math.floor(m / 60);
+    const rem = m % 60;
+    if (h === 0) return `${rem}分`;
+    if (rem === 0) return `${h}時間 (${m}分)`;
+    return `${h}時間${rem}分 (${m}分)`;
+  };
+
+  // --- 日付に曜日を付与するヘルパー ---
+  const formatDateWithDay = (dateStr?: string) => {
+    if (!dateStr) return '日付未設定';
+    const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return dateStr;
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    const days = ['日', '月', '火', '水', '木', '金', '土'];
+    const dayName = days[d.getDay()] || '';
+    return `${m[1]}年${Number(m[2])}月${Number(m[3])}日 (${dayName})`;
+  };
+
   // --- 履歴フィルタリング ---
   const filteredWorkLogs = useMemo(() => {
     return workLogs.filter(log => {
-      const isSpray = log.work_type?.includes('農薬') || log.memo?.includes('[散布管理]');
-      if (historyTypeFilter === 'sprayOnly' && !isSpray) return false;
-      if (historyTypeFilter === 'workOnly' && isSpray) return false;
+      const cat = getLogCategory(log);
+      if (historyTypeFilter === 'sprayOnly' && cat !== 'spray') return false;
+      if (historyTypeFilter === 'fertOnly' && cat !== 'fert') return false;
+      if (historyTypeFilter === 'workOnly' && cat !== 'work') return false;
+
+      if (historyFieldFilter !== 'all' && log.field_id !== historyFieldFilter && (log.fields?.name || '圃場未指定') !== historyFieldFilter) {
+        return false;
+      }
+      if (historyCropFilter !== 'all' && log.crop_id !== historyCropFilter && (log.crops?.name || '作目未指定') !== historyCropFilter) {
+        return false;
+      }
 
       if (historySearchQuery.trim()) {
         const q = historySearchQuery.toLowerCase();
         const mType = log.work_type?.toLowerCase().includes(q);
         const mField = log.fields?.name?.toLowerCase().includes(q);
         const mCrop = log.crops?.name?.toLowerCase().includes(q);
+        const mWorker = log.workers?.name?.toLowerCase().includes(q);
         const mMemo = log.memo?.toLowerCase().includes(q);
-        if (!mType && !mField && !mCrop && !mMemo) return false;
+        const mDate = log.work_date?.toLowerCase().includes(q);
+        if (!mType && !mField && !mCrop && !mWorker && !mMemo && !mDate) return false;
       }
       return true;
     });
-  }, [workLogs, historyTypeFilter, historySearchQuery]);
+  }, [workLogs, historyTypeFilter, historyFieldFilter, historyCropFilter, historySearchQuery]);
+
+  // --- 履歴集計サマリー ---
+  const historySummary = useMemo(() => {
+    let totalMinutes = 0;
+    let sprayCount = 0;
+    let fertCount = 0;
+    let workCount = 0;
+    filteredWorkLogs.forEach(log => {
+      totalMinutes += Number(log.duration_minutes) || 0;
+      const cat = getLogCategory(log);
+      if (cat === 'spray') sprayCount++;
+      else if (cat === 'fert') fertCount++;
+      else workCount++;
+    });
+    return {
+      totalCount: filteredWorkLogs.length,
+      totalMinutes,
+      sprayCount,
+      fertCount,
+      workCount
+    };
+  }, [filteredWorkLogs]);
+
+  // --- 4大まとめ表示（グルーピング）データ ---
+  const groupedWorkLogs = useMemo(() => {
+    const groupsMap = new Map<string, {
+      key: string;
+      title: string;
+      subtitle: string;
+      badgeTone: 'emerald' | 'blue' | 'teal' | 'rose' | 'slate';
+      logs: any[];
+      totalMinutes: number;
+      sprayCount: number;
+      fertCount: number;
+      workCount: number;
+      subItemsSet: Set<string>;
+    }>();
+
+    filteredWorkLogs.forEach(log => {
+      let key = '';
+      let title = '';
+      let badgeTone: 'emerald' | 'blue' | 'teal' | 'rose' | 'slate' = 'slate';
+      let subItem = '';
+
+      const fieldName = log.fields?.name || '圃場未指定';
+      const cropName = log.crops?.name || '作目未設定';
+      const workType = log.work_type || '一般作業';
+      const workDate = log.work_date || '日付未設定';
+      const cat = getLogCategory(log);
+
+      if (historyGroupMode === 'date') {
+        key = workDate;
+        title = formatDateWithDay(workDate);
+        badgeTone = 'blue';
+        subItem = `${fieldName} (${cropName})`;
+      } else if (historyGroupMode === 'field') {
+        key = fieldName;
+        title = fieldName;
+        badgeTone = 'emerald';
+        subItem = cropName;
+      } else if (historyGroupMode === 'crop') {
+        key = cropName;
+        title = cropName;
+        badgeTone = 'teal';
+        subItem = fieldName;
+      } else {
+        key = workType;
+        title = workType;
+        badgeTone = cat === 'spray' ? 'rose' : cat === 'fert' ? 'teal' : 'emerald';
+        subItem = `${fieldName} (${cropName})`;
+      }
+
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, {
+          key,
+          title,
+          subtitle: '',
+          badgeTone,
+          logs: [],
+          totalMinutes: 0,
+          sprayCount: 0,
+          fertCount: 0,
+          workCount: 0,
+          subItemsSet: new Set<string>()
+        });
+      }
+
+      const grp = groupsMap.get(key)!;
+      grp.logs.push(log);
+      grp.totalMinutes += Number(log.duration_minutes) || 0;
+      if (cat === 'spray') grp.sprayCount++;
+      else if (cat === 'fert') grp.fertCount++;
+      else grp.workCount++;
+      if (subItem && subItem !== '作目未設定' && subItem !== '圃場未指定') {
+        grp.subItemsSet.add(subItem);
+      }
+    });
+
+    const result = Array.from(groupsMap.values()).map(g => ({
+      ...g,
+      subtitle: Array.from(g.subItemsSet).slice(0, 5).join('・') + (g.subItemsSet.size > 5 ? ` 他${g.subItemsSet.size - 5}件` : '')
+    }));
+
+    // 圃場別・作目別・作業別の場合は件数が多い順、日付別の場合は新しい順
+    if (historyGroupMode !== 'date') {
+      result.sort((a, b) => b.logs.length - a.logs.length);
+    }
+    return result;
+  }, [filteredWorkLogs, historyGroupMode]);
 
   // --- 肥料管理フィルタリング ---
   const filteredFertilizers = useMemo(() => {
@@ -1668,100 +1882,392 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
           {/* TAB 4: 作業・散布履歴 */}
           {activeMainTab === 'history' && (
             <div className="space-y-4">
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <select 
-                    value={historyTypeFilter} 
-                    onChange={(e: any) => setHistoryTypeFilter(e.target.value)}
-                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
-                  >
-                    <option value="all">すべての履歴</option>
-                    <option value="sprayOnly">散布記録のみ</option>
-                    <option value="workOnly">一般作業のみ</option>
-                  </select>
-                  <input 
-                    type="text" 
-                    placeholder="履歴を検索..." 
-                    value={historySearchQuery}
-                    onChange={e => setHistorySearchQuery(e.target.value)}
-                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none flex-1 sm:w-60"
-                  />
+              {/* 1. コントロールパネル（まとめ切替 ＋ 検索・絞り込み ＋ アクション） */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
+                {/* 上段: 4大まとめ表示（グルーピング）切替 ＆ 帳票・新規登録ボタン */}
+                <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] font-black text-slate-400 mr-1 flex items-center gap-1">
+                      <Folder className="w-3.5 h-3.5 text-slate-400" />
+                      まとめ表示:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => { setHistoryGroupMode('date'); setCollapsedHistoryGroups({}); }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${
+                        historyGroupMode === 'date'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>日付順 (標準)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setHistoryGroupMode('field'); setCollapsedHistoryGroups({}); }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${
+                        historyGroupMode === 'field'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                      <span>圃場（畑）ごとにまとめる</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setHistoryGroupMode('crop'); setCollapsedHistoryGroups({}); }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${
+                        historyGroupMode === 'crop'
+                          ? 'bg-teal-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <Sprout className="w-3.5 h-3.5" />
+                      <span>作目ごとにまとめる</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setHistoryGroupMode('type'); setCollapsedHistoryGroups({}); }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${
+                        historyGroupMode === 'type'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <List className="w-3.5 h-3.5" />
+                      <span>作業内容ごとにまとめる</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setIsReportModalOpen(true)}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                      title="農協（JA）・GAP提出用の病害虫防除日誌をA4横で印刷・PDF保存"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>📑 公的防除日誌を印刷・PDF出力</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsDirectAddModalOpen(true)}
+                      className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>作業履歴を直接登録</span>
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setIsReportModalOpen(true)}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
-                    title="農協（JA）・GAP提出用の病害虫防除日誌をA4横で印刷・PDF保存"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>📑 公的防除日誌を印刷・PDF出力</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsDirectAddModalOpen(true)}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors shadow-2xs"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>作業履歴を直接登録</span>
-                  </button>
+
+                {/* 下段: 絞り込みフィルタ（区分・圃場・作目・フリーワード） */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2 flex-wrap flex-1">
+                    <select 
+                      value={historyTypeFilter} 
+                      onChange={(e: any) => setHistoryTypeFilter(e.target.value)}
+                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-400"
+                    >
+                      <option value="all">📋 すべての作業区分</option>
+                      <option value="sprayOnly">🧪 農薬散布のみ</option>
+                      <option value="fertOnly">🔬 施肥（元肥・追肥）のみ</option>
+                      <option value="workOnly">🌾 一般作業・収穫のみ</option>
+                    </select>
+
+                    <select
+                      value={historyFieldFilter}
+                      onChange={(e) => setHistoryFieldFilter(e.target.value)}
+                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-400"
+                    >
+                      <option value="all">📍 すべての圃場</option>
+                      {fields.map(f => (
+                        <option key={f.id} value={f.id}>{f.name}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={historyCropFilter}
+                      onChange={(e) => setHistoryCropFilter(e.target.value)}
+                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-400"
+                    >
+                      <option value="all">🌱 すべての作目</option>
+                      {crops.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+
+                    <div className="relative flex-1 min-w-[180px] sm:max-w-xs">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input 
+                        type="text" 
+                        placeholder="資材名・作業者・メモで検索..." 
+                        value={historySearchQuery}
+                        onChange={e => setHistorySearchQuery(e.target.value)}
+                        className="w-full pl-8 pr-7 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:bg-white focus:ring-2 focus:ring-blue-400"
+                      />
+                      {historySearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setHistorySearchQuery('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {(historyTypeFilter !== 'all' || historyFieldFilter !== 'all' || historyCropFilter !== 'all' || historySearchQuery) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHistoryTypeFilter('all');
+                          setHistoryFieldFilter('all');
+                          setHistoryCropFilter('all');
+                          setHistorySearchQuery('');
+                        }}
+                        className="px-2.5 py-1.5 text-[11px] font-black text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg border border-rose-200 transition-colors cursor-pointer"
+                      >
+                        条件クリア
+                      </button>
+                    )}
+                  </div>
+
+                  {groupedWorkLogs.length > 1 && (
+                    <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                      <button
+                        type="button"
+                        onClick={() => setCollapsedHistoryGroups({})}
+                        className="px-2.5 py-1.5 text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+                      >
+                        すべて開く
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allClosed: Record<string, boolean> = {};
+                          groupedWorkLogs.forEach(g => { allClosed[g.key] = true; });
+                          setCollapsedHistoryGroups(allClosed);
+                        }}
+                        className="px-2.5 py-1.5 text-[11px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+                      >
+                        すべて折りたたむ
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
-                {filteredWorkLogs.map(log => {
-                  const isSpray = log.work_type?.includes('農薬') || log.memo?.includes('[散布管理]');
-                  return (
-                    <div key={log.id} className="p-4 hover:bg-slate-50/60 transition-colors flex items-center justify-between gap-4">
-                      <div className="space-y-1 min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-black text-slate-800">{log.work_date}</span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
-                            isSpray ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
-                          }`}>
-                            {log.work_type}
-                          </span>
-                          <span className="text-xs font-bold text-slate-600">{log.fields?.name || '圃場未指定'}</span>
-                          <span className="text-xs font-bold text-emerald-600">{log.crops?.name}</span>
-                          {log.workers?.name && (
-                            <span className="text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                              {log.workers.name}
+              {/* 2. 集計サマリーバー（件数・合計時間・内訳が一目でわかる） */}
+              <div className="bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-slate-400">表示件数:</span>
+                    <span className="text-sm font-black text-white">{historySummary.totalCount} 件</span>
+                    <span className="text-[11px] font-bold text-slate-400">（{groupedWorkLogs.length} グループ）</span>
+                  </div>
+                  <div className="h-4 w-px bg-slate-700 hidden sm:block" />
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-[11px] font-bold text-slate-400">合計作業時間:</span>
+                    <span className="text-sm font-black text-amber-300">{formatMinutesReadable(historySummary.totalMinutes)}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap text-xs font-black">
+                  <span className="px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                    🧪 農薬散布: {historySummary.sprayCount}件
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                    🔬 施肥: {historySummary.fertCount}件
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    🌾 一般作業: {historySummary.workCount}件
+                  </span>
+                </div>
+              </div>
+
+              {/* 3. グループ別カード一覧 */}
+              {groupedWorkLogs.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 font-bold text-sm">
+                  条件に一致する作業記録がありません。
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {groupedWorkLogs.map(group => {
+                    const isCollapsed = !!collapsedHistoryGroups[group.key];
+                    const headerAccent =
+                      group.badgeTone === 'emerald' ? 'border-l-4 border-l-emerald-500 bg-emerald-50/40' :
+                      group.badgeTone === 'teal' ? 'border-l-4 border-l-teal-500 bg-teal-50/40' :
+                      group.badgeTone === 'rose' ? 'border-l-4 border-l-rose-500 bg-rose-50/40' :
+                      'border-l-4 border-l-blue-500 bg-slate-50/80';
+
+                    return (
+                      <div key={group.key} className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                        {/* グループ見出しバー（クリックで開閉） */}
+                        <button
+                          type="button"
+                          onClick={() => setCollapsedHistoryGroups(prev => ({ ...prev, [group.key]: !prev[group.key] }))}
+                          className={`w-full px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-left transition-colors hover:bg-slate-100/70 cursor-pointer ${headerAccent}`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {isCollapsed ? (
+                              <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 text-slate-700 shrink-0" />
+                            )}
+                            <span className="text-sm font-black text-slate-900 truncate">
+                              {historyGroupMode === 'field' && '📍 '}
+                              {historyGroupMode === 'crop' && '🌱 '}
+                              {historyGroupMode === 'date' && '📅 '}
+                              {historyGroupMode === 'type' && '🏷️ '}
+                              {group.title}
                             </span>
-                          )}
-                        </div>
-                        {log.memo && (
-                          <p className="text-xs text-slate-500 font-medium truncate">{log.memo}</p>
+                            {group.subtitle && (
+                              <span className="text-xs font-bold text-slate-500 truncate hidden md:inline">
+                                ― {group.subtitle}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0 flex-wrap pl-6 sm:pl-0">
+                            {group.sprayCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-md text-[11px] font-black bg-rose-100 text-rose-800">
+                                散布 {group.sprayCount}
+                              </span>
+                            )}
+                            {group.fertCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-md text-[11px] font-black bg-teal-100 text-teal-800">
+                                施肥 {group.fertCount}
+                              </span>
+                            )}
+                            {group.workCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-md text-[11px] font-black bg-emerald-100 text-emerald-800">
+                                作業 {group.workCount}
+                              </span>
+                            )}
+                            <span className="px-2.5 py-0.5 rounded-md text-xs font-black bg-slate-200/80 text-slate-800">
+                              計 {group.logs.length}件
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-md text-xs font-black bg-amber-100 text-amber-900 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {formatMinutesReadable(group.totalMinutes)}
+                            </span>
+                          </div>
+                        </button>
+
+                        {/* グループ内の明細行 */}
+                        {!isCollapsed && (
+                          <div className="divide-y divide-slate-100 border-t border-slate-100">
+                            {group.logs.map(log => {
+                              const cat = getLogCategory(log);
+                              const { badges, cleanNote } = parseStructuredMemo(log.memo);
+                              const typeBadgeStyle =
+                                cat === 'spray'
+                                  ? 'bg-rose-100 text-rose-800 border-rose-200'
+                                  : cat === 'fert'
+                                  ? 'bg-teal-100 text-teal-800 border-teal-200'
+                                  : 'bg-emerald-100 text-emerald-800 border-emerald-200';
+
+                              return (
+                                <div key={log.id} className="px-4 py-3.5 hover:bg-slate-50/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                  <div className="space-y-1.5 min-w-0 flex-1">
+                                    {/* 1行目: 日付・作業区分・圃場・作目・作業者 */}
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      {historyGroupMode !== 'date' && (
+                                        <span className="text-xs font-black text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md font-mono">
+                                          📅 {log.work_date}
+                                        </span>
+                                      )}
+                                      <span className={`px-2.5 py-0.5 rounded-md text-xs font-black border ${typeBadgeStyle}`}>
+                                        {cat === 'spray' ? '🧪 ' : cat === 'fert' ? '🔬 ' : '🌾 '}
+                                        {log.work_type}
+                                      </span>
+
+                                      {historyGroupMode !== 'field' && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                                          <MapPin className="w-3 h-3 text-slate-500" />
+                                          {log.fields?.name || '圃場未指定'}
+                                        </span>
+                                      )}
+
+                                      {historyGroupMode !== 'crop' && log.crops?.name && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                          <Sprout className="w-3 h-3 text-emerald-600" />
+                                          {log.crops.name}
+                                        </span>
+                                      )}
+
+                                      {log.workers?.name && (
+                                        <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                                          <User className="w-3 h-3 text-slate-400" />
+                                          {log.workers.name}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* 2行目: 構造化バッジ（使用資材・成分・水量・RAC等）＋ クリーンメモ */}
+                                    {(badges.length > 0 || cleanNote) && (
+                                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                        {badges.map((b, idx) => {
+                                          const bClass =
+                                            b.tone === 'rose' ? 'bg-rose-50 text-rose-800 border-rose-200' :
+                                            b.tone === 'teal' ? 'bg-teal-50 text-teal-800 border-teal-200' :
+                                            b.tone === 'blue' ? 'bg-blue-50 text-blue-800 border-blue-200' :
+                                            b.tone === 'amber' ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                                            'bg-slate-100 text-slate-700 border-slate-200';
+                                          return (
+                                            <span key={idx} className={`px-2 py-0.5 rounded-md text-xs font-bold border ${bClass}`}>
+                                              {b.text}
+                                            </span>
+                                          );
+                                        })}
+                                        {cleanNote && (
+                                          <span className="text-xs text-slate-600 font-medium break-all">
+                                            {cleanNote}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* 右側: 作業時間 ＆ 訂正・削除ボタン */}
+                                  <div className="flex items-center justify-end gap-2 shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
+                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-black flex items-center gap-1 ${
+                                      Number(log.duration_minutes) > 0
+                                        ? 'bg-slate-100 text-slate-700'
+                                        : 'text-slate-400'
+                                    }`}>
+                                      <Clock className="w-3 h-3 text-slate-400" />
+                                      {log.duration_minutes || 0}分
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditModal(log)}
+                                      className="px-3 py-1 text-xs font-black text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-200 transition-colors cursor-pointer"
+                                    >
+                                      訂正
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteWorkLog(log.id)}
+                                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                      title="削除"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
                       </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs font-bold text-slate-400">{log.duration_minutes}分</span>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditModal(log)}
-                          className="px-2.5 py-1 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-200 transition-colors"
-                        >
-                          訂正
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteWorkLog(log.id)}
-                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                          title="削除"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {filteredWorkLogs.length === 0 && (
-                  <div className="p-12 text-center text-slate-400 font-bold text-sm">
-                    作業記録がありません。
-                  </div>
-                )}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
