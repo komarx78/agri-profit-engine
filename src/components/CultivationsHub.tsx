@@ -55,14 +55,19 @@ interface CultivationItem {
 interface PesticideDisplayItem {
   id: string;
   name: string;
+  rawName: string;
   type: '殺虫剤' | '殺菌剤' | '除草剤' | 'その他';
   racCode: string;
+  activeIngredientText: string;
   targetPests: string[];
   maxCount: number;
+  usageCountLabel: string;
   usedCount: number;
   dilution: string;
   usageTime: string;
   method: string;
+  registrationNo?: string;
+  isOfficialRegistered?: boolean;
 }
 
 interface CultivationsHubProps {
@@ -91,9 +96,13 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
 
   // --- タブ2: 散布管理ステート ---
   const [pesticides, setPesticides] = useState<PesticideDisplayItem[]>([]);
+  const [famicCropPesticides, setFamicCropPesticides] = useState<any[]>([]);
   const [selectedSprayCropId, setSelectedSprayCropId] = useState<string>('');
+  const [selectedSprayTargetFieldId, setSelectedSprayTargetFieldId] = useState<string>('all');
   const [selectedSprayFieldIds, setSelectedSprayFieldIds] = useState<string[]>([]);
-  const [sprayCategoryTab, setSprayCategoryTab] = useState<'殺虫剤' | '殺菌剤' | '除草剤' | 'その他'>('殺虫剤');
+  const [sprayCategoryTab, setSprayCategoryTab] = useState<'すべて' | '殺虫剤' | '殺菌剤' | '除草剤' | 'その他'>('すべて');
+  const [selectedPestTag, setSelectedPestTag] = useState<string>('all');
+  const [sprayCatalogMode, setSprayCatalogMode] = useState<'farm' | 'famic'>('farm');
   const [searchSprayQuery, setSearchSprayQuery] = useState('');
   const [selectedPesticideIds, setSelectedPesticideIds] = useState<string[]>([]);
   const [isSprayModalOpen, setIsSprayModalOpen] = useState(false);
@@ -394,6 +403,48 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     }
   };
 
+  // 半角カタカナ等を美しい全角カタカナ・標準表記へ自動整形するヘルパー
+  const formatCleanJapanese = (str?: string): string => {
+    if (!str) return '';
+    return String(str).normalize('NFKC').trim();
+  };
+
+  // 農薬の用途カテゴリ（殺虫剤 / 殺菌剤 / 除草剤 / その他）をFAMICのpurpose・type・対象病害虫から正確に判定
+  const classifyPesticideCategory = (
+    purposeStr?: string,
+    typeStr?: string,
+    nameStr?: string,
+    pestsStr?: string
+  ): '殺虫剤' | '殺菌剤' | '除草剤' | 'その他' => {
+    const combined = formatCleanJapanese(`${purposeStr || ''} ${typeStr || ''} ${nameStr || ''}`);
+    const pests = formatCleanJapanese(pestsStr || '');
+
+    if (combined.includes('除草') || pests.includes('雑草') || pests.includes('スギナ')) {
+      return '除草剤';
+    }
+    if (
+      combined.includes('殺虫') ||
+      combined.includes('殺ダニ') ||
+      combined.includes('殺線虫') ||
+      /アオムシ|コナガ|ヨトウムシ|アブラムシ|アザミウマ|スリップス|ハモグリバエ|カメムシ|メイガ|ダニ|センチュウ|ネキリムシ|コガネムシ/.test(pests)
+    ) {
+      // もし用途が「殺菌剤」単独なら殺菌剤、それ以外（殺虫剤・殺虫殺菌剤等）は殺虫剤
+      if (purposeStr?.includes('殺菌') && !purposeStr?.includes('殺虫') && !/ムシ|ガ|アブラムシ|ダニ/.test(pests)) {
+        return '殺菌剤';
+      }
+      return '殺虫剤';
+    }
+    if (
+      combined.includes('殺菌') ||
+      combined.includes('くん蒸') ||
+      combined.includes('クロルピクリン') ||
+      /病|菌|べと|うどんこ|サビ|腐|立枯|炭疽|斑点|萎黄/.test(pests)
+    ) {
+      return '殺菌剤';
+    }
+    return 'その他';
+  };
+
   // 自農園登録農薬（materials）に限定し、作物ごとのFAMIC適用情報と散布実績を結合（メモリキャッシュ対応）
   const [isLoadingPesticides, setIsLoadingPesticides] = useState(false);
 
@@ -428,6 +479,8 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
         }
       }
 
+      setFamicCropPesticides(famicItems);
+
       // 2. 「自社登録農薬マスタ（materials）」を主軸として、FAMIC情報と散布回数を結合
       const normalizeText = (str: string) => {
         if (!str) return '';
@@ -435,59 +488,90 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
           .normalize('NFKC')
           .toLowerCase()
           .replace(/[\u3041-\u3096]/g, m => String.fromCharCode(m.charCodeAt(0) + 0x60))
-          .replace(/[\s　・･()（）\[\]【】]/g, '');
+          .replace(/[\s　・･()（）\[\]【】「」『』\-ー]/g, '');
       };
 
       const formattedPesticides: PesticideDisplayItem[] = materialsToUse.map((mat: any) => {
-        const matName = mat.name;
-        const normMatName = normalizeText(matName);
+        const rawMatName = mat.name || '';
+        const cleanMatName = formatCleanJapanese(rawMatName);
+        const normMatName = normalizeText(rawMatName);
 
-        // FAMIC公的データから該当農薬の適用情報を探す
+        // FAMIC公的データから該当農薬の適用情報を探す（代表名・メーカー冠名つき両方と照合）
         const famicMatch = famicItems.find((f: any) => {
           const normFamic = normalizeText(f.name);
-          return normFamic.includes(normMatName) || normMatName.includes(normFamic);
+          if (normFamic && (normFamic.includes(normMatName) || normMatName.includes(normFamic))) return true;
+          if (Array.isArray(f.variants)) {
+            return f.variants.some((v: any) => {
+              const nv = normalizeText(v.full_name);
+              return nv && (nv.includes(normMatName) || normMatName.includes(nv));
+            });
+          }
+          return false;
         });
 
-        // 過去の散布実績回数を集計
+        // 過去の散布実績回数を集計（初期全体値）
         const usedCount = logsList.filter(l => {
           const isTargetCrop = l.crop_id === cropId;
-          const isSpray = l.work_type?.includes('農薬') || l.memo?.includes('[散布管理]');
-          const isSamePesticide = l.memo?.includes(matName) || l.materials?.name === matName;
+          const isSpray = l.work_type?.includes('農薬') || l.work_type?.includes('防除') || l.work_type?.includes('散布') || l.memo?.includes('[散布管理]') || l.memo?.includes('品名:');
+          const normMemo = normalizeText(l.memo || '');
+          const isSamePesticide = (l.memo && (l.memo.includes(rawMatName) || l.memo.includes(cleanMatName) || (normMatName && normMemo.includes(normMatName)))) || l.materials?.name === rawMatName;
           return isTargetCrop && isSpray && isSamePesticide;
         }).length;
 
-        // 最大使用可能回数
-        const maxCount = famicMatch?.max_count ? parseInt(famicMatch.max_count, 10) : (mat.max_uses_per_crop || 5);
+        // 最大使用可能回数をFAMICの usage_count（例: "3回以内"）または active_ingredients から正確に抽出
+        const rawUsageCountStr = formatCleanJapanese(famicMatch?.usage_count || '');
+        const countMatch = rawUsageCountStr.match(/(\d+)\s*回/);
+        const ingMaxCount = famicMatch?.active_ingredients?.[0]?.maxCount;
+        const maxCount = countMatch
+          ? parseInt(countMatch[1], 10)
+          : ingMaxCount
+          ? Number(ingMaxCount)
+          : (Number(mat.max_uses_per_crop) || 5);
 
-        // カテゴリ（殺虫剤、殺菌剤、除草剤、その他）
-        const rawType = famicMatch?.type || mat.material_type || mat.category || 'その他';
-        let category: '殺虫剤' | '殺菌剤' | '除草剤' | 'その他' = 'その他';
-        if (rawType.includes('殺虫') || rawType.includes('殺ダニ')) {
-          if (rawType.includes('殺菌')) {
-            category = '殺虫剤';
-          } else {
-            category = '殺虫剤';
-          }
-        } else if (rawType.includes('殺菌')) {
-          category = '殺菌剤';
-        } else if (rawType.includes('除草')) {
-          category = '除草剤';
-        }
+        // 対象病害虫リスト（半角カナを全角へ綺麗に整形）
+        const rawPests: string[] = famicMatch?.target_pests_array?.length > 0
+          ? famicMatch.target_pests_array
+          : famicMatch?.target_pest
+          ? famicMatch.target_pest.split(/[、,，]/).map((s: string) => s.trim())
+          : mat.target_pest
+          ? String(mat.target_pest).split(/[、,，]/).map((s: string) => s.trim())
+          : ['登録対象病害虫'];
+        const cleanPests = Array.from(new Set(rawPests.map(p => formatCleanJapanese(p)).filter(Boolean)));
 
-        // RACコード
-        const rac = famicMatch?.rac_code || famicMatch?.racCode || (category === '殺虫剤' ? 'IR' : category === '殺菌剤' ? 'FR' : 'HR');
+        // カテゴリ（殺虫剤、殺菌剤、除草剤、その他）の正確な判定
+        const category = classifyPesticideCategory(
+          famicMatch?.purpose || mat.pesticide_purpose || mat.category,
+          famicMatch?.type || mat.material_type || mat.specification,
+          cleanMatName,
+          cleanPests.join(' ')
+        );
+
+        // 有効成分・系統（RAC）表示の整形
+        const activeIngName = formatCleanJapanese(
+          famicMatch?.active_ingredients?.[0]?.name ||
+          (famicMatch?.type && famicMatch.type !== '-' ? famicMatch.type : '') ||
+          mat.active_ingredient ||
+          ''
+        );
+        const racPrefix = category === '殺虫剤' ? 'IRAC(殺虫系)' : category === '殺菌剤' ? 'FRAC(殺菌系)' : category === '除草剤' ? 'HRAC(除草系)' : '農薬系統';
+        const rac = famicMatch?.rac_code || famicMatch?.racCode || mat.rac_code || racPrefix;
 
         return {
-          id: mat.id || `mat-${matName}`,
-          name: matName,
+          id: mat.id || `mat-${rawMatName}`,
+          name: cleanMatName,
+          rawName: rawMatName,
           type: category,
           racCode: rac,
-          targetPests: famicMatch?.target_pests_array || (famicMatch?.target_pest ? famicMatch.target_pest.split(',').map((s: string) => s.trim()) : ['自社登録農薬']),
+          activeIngredientText: activeIngName || `${category}成分`,
+          targetPests: cleanPests,
           maxCount: maxCount,
+          usageCountLabel: rawUsageCountStr && rawUsageCountStr !== '-' ? rawUsageCountStr : `${maxCount}回以内`,
           usedCount: usedCount,
-          dilution: famicMatch?.usage_amount || '規定倍率',
-          usageTime: famicMatch?.usage_time || '収穫前日まで',
-          method: famicMatch?.usage_method || '散布'
+          dilution: formatCleanJapanese(famicMatch?.usage_amount && famicMatch.usage_amount !== '-' ? famicMatch.usage_amount : (mat.dilution_rate || 'ラベル規定量')),
+          usageTime: formatCleanJapanese(famicMatch?.usage_time && famicMatch.usage_time !== '-' ? famicMatch.usage_time : '収穫前日制限を確認'),
+          method: formatCleanJapanese(famicMatch?.usage_method && famicMatch.usage_method !== '-' ? famicMatch.usage_method : '散布'),
+          registrationNo: famicMatch?.registration_no || mat.registration_no || '',
+          isOfficialRegistered: !!famicMatch
         };
       });
 
@@ -499,10 +583,51 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     }
   };
 
+  // 公的FAMIC農薬をワンクリックで自農園マスタ（materials）に追加するハンドラー
+  const handleRegisterPestToFarmMaster = async (famicItem: any) => {
+    try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) return;
+
+      const cleanName = formatCleanJapanese(famicItem.name || famicItem.full_name || '');
+      if (!cleanName) return;
+
+      const rawCountStr = formatCleanJapanese(famicItem.usage_count || '');
+      const cMatch = rawCountStr.match(/(\d+)\s*回/);
+      const maxUses = cMatch ? parseInt(cMatch[1], 10) : 5;
+
+      const payload = {
+        user_id: tenantId,
+        name: cleanName,
+        category: '農薬費',
+        material_type: 'pesticide',
+        unit: '本',
+        default_price: 0,
+        max_uses_per_crop: maxUses,
+        specification: `FAMIC登録番号:${famicItem.registration_no || ''} / ${formatCleanJapanese(famicItem.purpose || '')} / ${formatCleanJapanese(famicItem.type || '')}`
+      };
+
+      const { data, error } = await supabase.from('materials').insert([payload]).select();
+      if (error) throw error;
+
+      if (data && data[0]) {
+        const updatedMaterials = [data[0], ...farmRegisteredPesticides];
+        setFarmRegisteredPesticides(updatedMaterials);
+        showToast(`「${cleanName}」を自農園の農薬マスタに追加しました！`);
+        if (selectedSprayCropId) {
+          loadPesticidesForCrop(selectedSprayCropId, crops, workLogs, updatedMaterials);
+        }
+      }
+    } catch (e: any) {
+      alert('農薬マスタへの追加に失敗しました: ' + (e.message || ''));
+    }
+  };
+
   // 作物プルダウン変更時の連動
   const handleCropChange = async (newCropId: string) => {
     setSelectedSprayCropId(newCropId);
     setSelectedPesticideIds([]);
+    setSelectedPestTag('all');
     await loadPesticidesForCrop(newCropId, crops, workLogs, farmRegisteredPesticides);
   };
 
@@ -541,20 +666,129 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
       }));
   }, [cultivations, selectedIds]);
 
+  // --- 散布管理：選択中の圃場・作目に応じたリアルタイム残回数計算 ＆ 圃場別防除カルテ ---
+  const pesticidesWithLiveCounts = useMemo(() => {
+    const normalizeForMatch = (s: string) =>
+      (s || '').normalize('NFKC').toLowerCase().replace(/[\s　・･()（）\[\]【】「」『』\-ー]/g, '');
+
+    return pesticides.map(p => {
+      const normName = normalizeForMatch(p.name);
+      const usedCount = workLogs.filter(l => {
+        if (l.status === 'planned') return false;
+        if (selectedSprayCropId && l.crop_id && l.crop_id !== selectedSprayCropId) return false;
+        if (selectedSprayTargetFieldId !== 'all' && l.field_id !== selectedSprayTargetFieldId) return false;
+        const isSpray = l.work_type?.includes('農薬') || l.work_type?.includes('防除') || l.work_type?.includes('散布') || l.memo?.includes('[散布管理]') || l.memo?.includes('品名:');
+        if (!isSpray) return false;
+        const memoStr = l.memo || '';
+        const normMemo = normalizeForMatch(memoStr);
+        return memoStr.includes(p.rawName) || memoStr.includes(p.name) || (normName.length >= 3 && normMemo.includes(normName));
+      }).length;
+
+      return {
+        ...p,
+        usedCount
+      };
+    });
+  }, [pesticides, workLogs, selectedSprayCropId, selectedSprayTargetFieldId]);
+
+  // 散布管理：カテゴリ別の農薬件数集計
+  const sprayCategoryCounts = useMemo(() => {
+    const counts = {
+      'すべて': pesticidesWithLiveCounts.length,
+      '殺虫剤': 0,
+      '殺菌剤': 0,
+      '除草剤': 0,
+      'その他': 0
+    };
+    pesticidesWithLiveCounts.forEach(p => {
+      counts[p.type] = (counts[p.type] || 0) + 1;
+    });
+    return counts;
+  }, [pesticidesWithLiveCounts]);
+
+  // 散布管理：対象病害虫のワンクリック逆引きタグ一覧（現在のカテゴリ内で頻出順）
+  const availablePestTags = useMemo(() => {
+    const tagCountMap = new Map<string, number>();
+    pesticidesWithLiveCounts
+      .filter(p => sprayCategoryTab === 'すべて' || p.type === sprayCategoryTab)
+      .forEach(p => {
+        p.targetPests.forEach(tp => {
+          if (!tp || tp === '自社登録農薬' || tp === '登録対象病害虫') return;
+          tagCountMap.set(tp, (tagCountMap.get(tp) || 0) + 1);
+        });
+      });
+    return Array.from(tagCountMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 14)
+      .map(([tag, count]) => ({ tag, count }));
+  }, [pesticidesWithLiveCounts, sprayCategoryTab]);
+
+  // 散布管理：圃場ごとの防除回数・最終散布日サマリー
+  const sprayFieldSummaries = useMemo(() => {
+    return fields.map(f => {
+      const fLogs = workLogs.filter(l => {
+        if (l.status === 'planned') return false;
+        if (l.field_id !== f.id) return false;
+        if (selectedSprayCropId && l.crop_id && l.crop_id !== selectedSprayCropId) return false;
+        return l.work_type?.includes('農薬') || l.work_type?.includes('防除') || l.work_type?.includes('散布') || l.memo?.includes('[散布管理]') || l.memo?.includes('品名:');
+      });
+      const lastDate = fLogs.reduce((max, l) => (!max || (l.work_date && l.work_date > max) ? l.work_date : max), '');
+      const areaAcre = f.area_size ? Number(f.area_size) : f.area_sqm ? Math.round((Number(f.area_sqm) / 100) * 10) / 10 : 10;
+      return {
+        fieldId: f.id,
+        fieldName: f.name,
+        areaAcre,
+        sprayCount: fLogs.length,
+        lastDate
+      };
+    });
+  }, [fields, workLogs, selectedSprayCropId]);
+
+  // 散布管理：現在選択中の作目・圃場の農薬散布履歴一覧
+  const currentCropSprayLogs = useMemo(() => {
+    return workLogs.filter(l => {
+      if (l.status === 'planned') return false;
+      const isSpray = l.work_type?.includes('農薬') || l.work_type?.includes('防除') || l.work_type?.includes('散布') || l.memo?.includes('[散布管理]') || l.memo?.includes('品名:');
+      if (!isSpray) return false;
+      if (selectedSprayCropId && l.crop_id && l.crop_id !== selectedSprayCropId) return false;
+      if (selectedSprayTargetFieldId !== 'all' && l.field_id !== selectedSprayTargetFieldId) return false;
+      return true;
+    });
+  }, [workLogs, selectedSprayCropId, selectedSprayTargetFieldId]);
+
   // --- 散布管理フィルタリング ---
   const filteredPesticides = useMemo(() => {
-    return pesticides.filter(p => {
-      if (p.type !== sprayCategoryTab) return false;
+    return pesticidesWithLiveCounts.filter(p => {
+      if (sprayCategoryTab !== 'すべて' && p.type !== sprayCategoryTab) return false;
+      if (selectedPestTag !== 'all' && !p.targetPests.includes(selectedPestTag)) return false;
       if (searchSprayQuery.trim()) {
-        const q = searchSprayQuery.toLowerCase();
-        const mName = p.name.toLowerCase().includes(q);
+        const q = formatCleanJapanese(searchSprayQuery).toLowerCase();
+        const mName = p.name.toLowerCase().includes(q) || p.rawName.toLowerCase().includes(q);
         const mPest = p.targetPests.some(pest => pest.toLowerCase().includes(q));
-        const mRac = p.racCode.toLowerCase().includes(q);
-        if (!mName && !mPest && !mRac) return false;
+        const mRac = p.racCode.toLowerCase().includes(q) || p.activeIngredientText.toLowerCase().includes(q);
+        const mTime = p.usageTime.toLowerCase().includes(q) || p.method.toLowerCase().includes(q);
+        if (!mName && !mPest && !mRac && !mTime) return false;
       }
       return true;
     });
-  }, [pesticides, sprayCategoryTab, searchSprayQuery]);
+  }, [pesticidesWithLiveCounts, sprayCategoryTab, selectedPestTag, searchSprayQuery]);
+
+  // 公的FAMIC農薬リストのフィルタリング（公的DB検索・追加モード用）
+  const filteredFamicCropPesticides = useMemo(() => {
+    return famicCropPesticides.filter(fp => {
+      const cleanName = formatCleanJapanese(fp.name || '');
+      const cleanPests = formatCleanJapanese(fp.target_pest || '');
+      const cat = classifyPesticideCategory(fp.purpose, fp.type, cleanName, cleanPests);
+      if (sprayCategoryTab !== 'すべて' && cat !== sprayCategoryTab) return false;
+      if (selectedPestTag !== 'all' && !cleanPests.includes(selectedPestTag)) return false;
+      if (searchSprayQuery.trim()) {
+        const q = formatCleanJapanese(searchSprayQuery).toLowerCase();
+        const targetStr = `${cleanName} ${cleanPests} ${ formatCleanJapanese(fp.type || '') } ${ formatCleanJapanese(fp.applicant || '') }`.toLowerCase();
+        if (!targetStr.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [famicCropPesticides, sprayCategoryTab, selectedPestTag, searchSprayQuery]);
 
   // --- 履歴カテゴリ判定ヘルパー ---
   const getLogCategory = (log: any): 'spray' | 'fert' | 'work' => {
@@ -1931,30 +2165,105 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
             </div>
           )}
 
-          {/* TAB 2: 散布管理 (残回数) */}
+          {/* TAB 2: 散布管理 (残回数・病害虫逆引き・圃場別カウント) */}
           {activeMainTab === 'spray' && (
-            <div className="space-y-4">
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 block mb-1">対象作物を選択</label>
-                    <select 
-                      value={selectedSprayCropId} 
-                      onChange={e => handleCropChange(e.target.value)}
-                      className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-400 cursor-pointer"
-                    >
-                      {crops.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
+            <div className="space-y-5">
+              {/* 🛡️ 1. 防除コックピット上部パネル（作物 × 圃場選択・モード切替・検索・病害虫逆引き） */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                {/* 1段目: 作物選択 × 圃場（畑）選択 ＆ アクションボタン群 */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                  <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-wrap">
+                    {/* ① 対象作物セレクター */}
+                    <div>
+                      <label className="text-[11px] font-black text-slate-500 block mb-1 flex items-center gap-1">
+                        <Sprout className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>① 対象作物を選択</span>
+                      </label>
+                      <select 
+                        value={selectedSprayCropId} 
+                        onChange={e => handleCropChange(e.target.value)}
+                        className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-400 cursor-pointer min-w-[160px]"
+                      >
+                        {crops.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* ② 対象圃場（畑）セレクター（畑ごとの正確な残回数を算出！） */}
+                    <div>
+                      <label className="text-[11px] font-black text-slate-500 block mb-1 flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-rose-600" />
+                        <span>② どの圃場（畑）の残回数を見る・撒くか</span>
+                      </label>
+                      <select
+                        value={selectedSprayTargetFieldId}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setSelectedSprayTargetFieldId(val);
+                          if (val !== 'all') {
+                            setSelectedSprayFieldIds([val]);
+                          }
+                        }}
+                        className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-400 cursor-pointer min-w-[200px]"
+                      >
+                        <option value="all">すべての圃場（作目全体で集計）</option>
+                        {sprayFieldSummaries.map(fs => (
+                          <option key={fs.fieldId} value={fs.fieldId}>
+                            📍 {fs.fieldName} ({fs.areaAcre}a / 今期防除 {fs.sprayCount}回)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* カタログモード切替（自農園の登録農薬 vs 公的FAMICから新規追加） */}
+                    <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setSprayCatalogMode('farm')}
+                        className={`px-3 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                          sprayCatalogMode === 'farm'
+                            ? 'bg-white text-rose-700 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        ⭐ 自農園の登録農薬 ({pesticidesWithLiveCounts.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSprayCatalogMode('famic')}
+                        className={`px-3 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                          sprayCatalogMode === 'famic'
+                            ? 'bg-white text-rose-700 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        🔍 公的FAMICから探して追加 ({famicCropPesticides.length})
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  {/* 右側：防除日誌出力 ＆ 選択農薬の散布記録ボタン */}
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
-                      onClick={() => setIsSprayModalOpen(true)}
+                      onClick={() => setIsReportModalOpen(true)}
+                      className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Printer className="w-4 h-4 text-slate-600" />
+                      <span>公的防除日誌</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedSprayTargetFieldId !== 'all') {
+                          setSelectedSprayFieldIds([selectedSprayTargetFieldId]);
+                        }
+                        setIsSprayModalOpen(true);
+                      }}
                       disabled={selectedPesticideIds.length === 0}
-                      className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl font-black text-xs transition-all shadow-sm flex items-center gap-2"
+                      className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl font-black text-xs transition-all shadow-sm flex items-center gap-2 cursor-pointer"
                     >
                       <FlaskConical className="w-4 h-4" />
                       <span>選択農薬の散布を記録 ({selectedPesticideIds.length})</span>
@@ -1962,33 +2271,179 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 border-b border-slate-100 pt-2">
-                  {(['殺虫剤', '殺菌剤', '除草剤', 'その他'] as const).map(tab => (
+                {/* 📍 圃場別クイック切替バー（各畑の防除回数と最終散布日がひと目でわかる！） */}
+                {sprayFieldSummaries.length > 0 && (
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                    <span className="text-[11px] font-black text-slate-400 shrink-0 mr-1">畑ごとの防除状況:</span>
                     <button
-                      key={tab}
-                      onClick={() => setSprayCategoryTab(tab)}
-                      className={`px-4 py-2 text-xs font-bold rounded-t-xl transition-all border-b-2 ${
-                        sprayCategoryTab === tab 
-                          ? 'border-rose-600 text-rose-800 bg-rose-50/50 font-black' 
-                          : 'border-transparent text-slate-500 hover:text-slate-800'
+                      type="button"
+                      onClick={() => setSelectedSprayTargetFieldId('all')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap border transition-all cursor-pointer ${
+                        selectedSprayTargetFieldId === 'all'
+                          ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
                       }`}
                     >
-                      {tab}
+                      すべての圃場
                     </button>
-                  ))}
+                    {sprayFieldSummaries.map(fs => {
+                      const isActive = selectedSprayTargetFieldId === fs.fieldId;
+                      return (
+                        <button
+                          key={fs.fieldId}
+                          type="button"
+                          onClick={() => {
+                            setSelectedSprayTargetFieldId(isActive ? 'all' : fs.fieldId);
+                            if (!isActive) setSelectedSprayFieldIds([fs.fieldId]);
+                          }}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap border transition-all flex items-center gap-1.5 cursor-pointer ${
+                            isActive
+                              ? 'bg-rose-600 text-white border-rose-600 font-black shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-rose-300'
+                          }`}
+                        >
+                          <span>📍 {fs.fieldName}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-black ${
+                            isActive
+                              ? 'bg-rose-800 text-rose-100'
+                              : fs.sprayCount > 0
+                                ? 'bg-rose-50 text-rose-700'
+                                : 'bg-slate-100 text-slate-400'
+                          }`}>
+                            {fs.sprayCount > 0 ? `散布 ${fs.sprayCount}回` : '未散布'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* 2段目: キーワード検索窓 ＆ 件数バッジ付きカテゴリタブ */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
+                  {/* カテゴリタブ（件数バッジ付き） */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                    {([
+                      { id: 'すべて', label: 'すべて', icon: '📋' },
+                      { id: '殺虫剤', label: '殺虫剤', icon: '🐛' },
+                      { id: '殺菌剤', label: '殺菌剤', icon: '🍄' },
+                      { id: '除草剤', label: '除草剤', icon: '🌿' },
+                      { id: 'その他', label: 'その他・展着剤等', icon: '📦' }
+                    ] as const).map(tab => {
+                      const count = sprayCategoryCounts[tab.id] || 0;
+                      const isActive = sprayCategoryTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => {
+                            setSprayCategoryTab(tab.id);
+                            setSelectedPestTag('all');
+                          }}
+                          className={`px-3.5 py-2 text-xs font-bold rounded-xl whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                            isActive
+                              ? 'bg-rose-600 text-white font-black shadow-xs'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          <span>{tab.icon} {tab.label}</span>
+                          {sprayCatalogMode === 'farm' && (
+                            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                              isActive ? 'bg-rose-800 text-white' : 'bg-white text-slate-600'
+                            }`}>
+                              {count}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* キーワード検索窓 */}
+                  <div className="relative w-full md:w-80">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="農薬名・病害虫（アオムシ等）・成分で検索..."
+                      value={searchSprayQuery}
+                      onChange={e => setSearchSprayQuery(e.target.value)}
+                      className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-400"
+                    />
+                    {searchSprayQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchSprayQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {/* 🐛 3段目: 病害虫ワンクリック逆引きタグバー（今困っている虫・病気から1秒で薬を絞る！） */}
+                {availablePestTags.length > 0 && (
+                  <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] font-black text-slate-500 mr-1">
+                      🎯 効く病害虫・雑草で絞り込む:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPestTag('all')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                        selectedPestTag === 'all'
+                          ? 'bg-slate-800 text-white'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      すべて表示
+                    </button>
+                    {availablePestTags.map(({ tag, count }) => {
+                      const isTagActive = selectedPestTag === tag;
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => setSelectedPestTag(isTagActive ? 'all' : tag)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                            isTagActive
+                              ? 'bg-rose-600 text-white border-rose-600 font-black shadow-2xs'
+                              : 'bg-rose-50/60 text-rose-900 border-rose-200/80 hover:bg-rose-100/70'
+                          }`}
+                        >
+                          {tag} <span className="opacity-70 text-[10px]">({count})</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
+              {/* 🧪 2. 農薬カード一覧（モードA: 自農園の登録農薬 / モードB: 公的FAMIC検索・追加） */}
               {isLoadingPesticides ? (
-                <div className="p-12 flex justify-center text-rose-500">
+                <div className="p-16 flex flex-col items-center justify-center gap-2 text-rose-500">
                   <Loader2 className="w-8 h-8 animate-spin" />
+                  <p className="text-xs font-bold text-slate-500">対象作物の適用農薬と残回数を照合中...</p>
                 </div>
-              ) : (
+              ) : sprayCatalogMode === 'farm' ? (
+                /* ⭐ モードA: 自農園の登録農薬（残回数管理 ＆ 散布記録選択） */
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {filteredPesticides.map(pest => {
                     const isSelected = selectedPesticideIds.includes(pest.id);
-                    const remaining = pest.maxCount - pest.usedCount;
-                    const isWarning = remaining <= 1;
+                    const remaining = Math.max(0, pest.maxCount - pest.usedCount);
+                    const isExhausted = remaining <= 0;
+                    const isWarning = remaining === 1;
+                    const usagePercent = Math.min(100, Math.round((pest.usedCount / Math.max(1, pest.maxCount)) * 100));
+
+                    const typeBadgeStyle =
+                      pest.type === '殺虫剤'
+                        ? 'bg-rose-50 text-rose-700 border-rose-200'
+                        : pest.type === '殺菌剤'
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : pest.type === '除草剤'
+                        ? 'bg-amber-50 text-amber-800 border-amber-200'
+                        : 'bg-slate-100 text-slate-700 border-slate-200';
+
+                    const amountLabel = pest.dilution.includes('倍') ? '💧 希釈倍率' : '⚖️ 10a使用量';
 
                     return (
                       <div 
@@ -1998,53 +2453,337 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                             prev.includes(pest.id) ? prev.filter(id => id !== pest.id) : [...prev, pest.id]
                           );
                         }}
-                        className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${
+                        className={`p-4 sm:p-5 rounded-3xl border-2 cursor-pointer transition-all flex flex-col justify-between gap-3.5 ${
                           isSelected 
-                            ? 'bg-rose-50/40 border-rose-500 shadow-sm' 
-                            : 'bg-white border-slate-200 hover:border-slate-300'
+                            ? 'bg-rose-50/50 border-rose-500 shadow-md ring-2 ring-rose-500/20' 
+                            : isExhausted
+                            ? 'bg-slate-50 border-rose-300 opacity-85'
+                            : 'bg-white border-slate-200 hover:border-rose-300 shadow-2xs'
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-5 h-5 rounded-lg border flex items-center justify-center transition-colors ${
-                              isSelected ? 'bg-rose-600 border-rose-600 text-white' : 'border-slate-300 bg-white'
-                            }`}>
-                              {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        <div className="space-y-3">
+                          {/* 上段: チェックボックス・農薬名・分類バッジ・残り回数 */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-start gap-2.5 min-w-0">
+                              <div className={`w-5 h-5 mt-0.5 rounded-lg border flex items-center justify-center shrink-0 transition-colors ${
+                                isSelected ? 'bg-rose-600 border-rose-600 text-white' : 'border-slate-300 bg-white'
+                              }`}>
+                                {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-black border ${typeBadgeStyle}`}>
+                                    {pest.type === '殺虫剤' ? '🐛 殺虫剤' : pest.type === '殺菌剤' ? '🍄 殺菌剤' : pest.type === '除草剤' ? '🌿 除草剤' : '📦 その他'}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md truncate max-w-[160px]" title={pest.activeIngredientText}>
+                                    🛡️ {pest.activeIngredientText}
+                                  </span>
+                                </div>
+                                <h4 className="text-base font-black text-slate-900 leading-snug break-words">
+                                  {pest.name}
+                                </h4>
+                              </div>
                             </div>
-                            <div>
-                              <h4 className="text-sm font-black text-slate-800">{pest.name}</h4>
-                              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                                RAC: {pest.racCode}
+                            
+                            {/* 右上: 残り回数バッジ */}
+                            <div className="text-right shrink-0">
+                              <span className={`inline-block text-xs font-black px-2.5 py-1 rounded-xl border ${
+                                isExhausted
+                                  ? 'bg-rose-600 text-white border-rose-700'
+                                  : isWarning
+                                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                  : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                              }`}>
+                                {isExhausted ? '⚠️ 上限到達 (残0回)' : `あと ${remaining}回 OK`}
                               </span>
+                              <p className="text-[10px] text-slate-500 mt-1 font-bold">
+                                使用済 <strong className="text-slate-800">{pest.usedCount}回</strong> / 上限 {pest.maxCount}回
+                              </p>
                             </div>
                           </div>
-                          
-                          <div className="text-right">
-                            <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${
-                              isWarning ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
-                            }`}>
-                              残 {remaining}回
-                            </span>
-                            <p className="text-[10px] text-slate-400 mt-1 font-bold">
-                              使用済 {pest.usedCount} / 上限 {pest.maxCount}回
-                            </p>
+
+                          {/* 残回数ゲージバー */}
+                          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all ${
+                                isExhausted ? 'bg-rose-600' : isWarning ? 'bg-amber-500' : 'bg-emerald-500'
+                              }`}
+                              style={{ width: `${Math.max(8, 100 - usagePercent)}%` }}
+                            />
+                          </div>
+
+                          {/* 中段: 農家さんが現場で一番知りたい3大情報（使用時期・使用量/希釈倍率・使用方法） */}
+                          <div className="grid grid-cols-3 gap-1.5 bg-slate-50 p-2.5 rounded-2xl border border-slate-200/80 text-[11px]">
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 block">⏱️ 使用時期・制限</span>
+                              <span className="font-black text-rose-700 leading-tight block mt-0.5">{pest.usageTime}</span>
+                            </div>
+                            <div className="border-l border-slate-200 pl-2">
+                              <span className="text-[10px] font-bold text-slate-400 block">{amountLabel}</span>
+                              <span className="font-black text-slate-800 leading-tight block mt-0.5">{pest.dilution}</span>
+                            </div>
+                            <div className="border-l border-slate-200 pl-2">
+                              <span className="text-[10px] font-bold text-slate-400 block">🚜 使用方法</span>
+                              <span className="font-black text-slate-800 leading-tight block mt-0.5">{pest.method}</span>
+                            </div>
+                          </div>
+
+                          {/* 下段: 対象病害虫バッジ（全角で見やすく！） */}
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-slate-400 block">🎯 効く対象病害虫・雑草:</span>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {pest.targetPests.slice(0, 6).map((tp, idx) => (
+                                <span
+                                  key={idx}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedPestTag(selectedPestTag === tp ? 'all' : tp);
+                                  }}
+                                  className={`px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors ${
+                                    selectedPestTag === tp
+                                      ? 'bg-rose-600 text-white border-rose-600 font-black'
+                                      : 'bg-white text-slate-700 border-slate-200 hover:border-rose-300'
+                                  }`}
+                                >
+                                  {tp}
+                                </span>
+                              ))}
+                              {pest.targetPests.length > 6 && (
+                                <span className="text-[10px] font-bold text-slate-400">
+                                  +{pest.targetPests.length - 6}件
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
 
-                        <div className="mt-3 pt-3 border-t border-slate-100 text-[11px] text-slate-500 space-y-1 font-medium">
-                          <p>希釈倍率: <span className="font-bold text-slate-700">{pest.dilution}</span></p>
-                          <p>対象病害虫: <span className="text-slate-600">{pest.targetPests.slice(0, 3).join(', ')}</span></p>
+                        {/* カードフッター: この農薬1つですぐ散布記録をつけるボタン */}
+                        <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-bold text-slate-400">
+                            {selectedSprayTargetFieldId === 'all'
+                              ? '※全圃場の合計使用回数'
+                              : `📍 ${fields.find(f => f.id === selectedSprayTargetFieldId)?.name || '選択圃場'}での使用回数`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!selectedPesticideIds.includes(pest.id)) {
+                                setSelectedPesticideIds(prev => [...prev, pest.id]);
+                              }
+                              if (selectedSprayTargetFieldId !== 'all') {
+                                setSelectedSprayFieldIds([selectedSprayTargetFieldId]);
+                              }
+                              setIsSprayModalOpen(true);
+                            }}
+                            className="px-3 py-1.5 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 rounded-xl text-[11px] font-black transition-all cursor-pointer"
+                          >
+                            🧪 この農薬で散布記録 ➔
+                          </button>
                         </div>
                       </div>
                     );
                   })}
+
                   {filteredPesticides.length === 0 && (
-                    <div className="col-span-full bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-400 font-bold">
-                      該当する登録農薬がありません。「資材マスタ」から農薬を登録してください。
+                    <div className="col-span-full bg-white p-12 rounded-3xl border border-slate-200 text-center text-slate-500 space-y-3">
+                      <p className="text-sm font-black text-slate-700">
+                        条件に一致する自農園の登録農薬がありません。
+                      </p>
+                      <p className="text-xs">
+                        別のカテゴリ（すべて・殺虫剤・殺菌剤・除草剤）を選ぶか、「🔍 公的FAMICから探して追加」から普段使う農薬をワンクリック追加してください。
+                      </p>
+                      <div className="flex items-center justify-center gap-2 pt-1">
+                        {sprayCategoryTab !== 'すべて' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSprayCategoryTab('すべて');
+                              setSelectedPestTag('all');
+                            }}
+                            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-black cursor-pointer"
+                          >
+                            すべてのカテゴリを表示する
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setSprayCatalogMode('famic')}
+                          className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black cursor-pointer"
+                        >
+                          🔍 公的FAMICから適用農薬を探して追加する
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
+              ) : (
+                /* 🔍 モードB: 公的FAMICデータベースからこの作物に使える農薬を検索・自社マスタへワンクリック追加 */
+                <div className="space-y-3">
+                  <div className="bg-rose-50/70 border border-rose-200 p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                    <span className="font-bold text-rose-900">
+                      💡 <strong>{crops.find(c => c.id === selectedSprayCropId)?.name || '選択作物'}</strong> に公的登録（FAMIC）されている農薬一覧（{filteredFamicCropPesticides.length}件）です。普段使う農薬をワンクリックで自農園マスタへ追加できます。
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSprayCatalogMode('farm')}
+                      className="px-3 py-1.5 bg-white hover:bg-slate-50 text-rose-700 border border-rose-300 rounded-xl font-black shrink-0 cursor-pointer"
+                    >
+                      ⭐ 自農園の登録農薬へ戻る
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredFamicCropPesticides.slice(0, 90).map((fp: any, idx: number) => {
+                      const cleanName = formatCleanJapanese(fp.name || '');
+                      const cleanPests = Array.from(new Set((fp.target_pests_array || [fp.target_pest || '']).map((s: string) => formatCleanJapanese(s)).filter(Boolean)));
+                      const cat = classifyPesticideCategory(fp.purpose, fp.type, cleanName, cleanPests.join(' '));
+                      const isAlreadyInFarm = farmRegisteredPesticides.some(m => formatCleanJapanese(m.name) === cleanName);
+
+                      return (
+                        <div key={`${fp.registration_no}-${idx}`} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col justify-between gap-3">
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="px-2 py-0.5 bg-slate-900 text-amber-300 rounded-md text-[10px] font-mono font-black">
+                                登録番号: {fp.registration_no || '-'}
+                              </span>
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[10px] font-black border border-slate-200">
+                                {cat}
+                              </span>
+                            </div>
+                            <h4 className="text-sm font-black text-slate-900">{cleanName}</h4>
+                            <div className="grid grid-cols-3 gap-1.5 bg-slate-50 p-2 rounded-xl border border-slate-200/70 text-[10px]">
+                              <div>
+                                <span className="text-slate-400 block font-bold">使用時期</span>
+                                <span className="font-black text-rose-700">{formatCleanJapanese(fp.usage_time || '-')}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 block font-bold">倍率・使用量</span>
+                                <span className="font-black text-slate-800">{formatCleanJapanese(fp.usage_amount || '-')}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 block font-bold">使用回数</span>
+                                <span className="font-black text-slate-800">{formatCleanJapanese(fp.usage_count || '-')}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {cleanPests.slice(0, 5).map((tp: any, pIdx: number) => (
+                                <span key={pIdx} className="px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-bold">
+                                  {String(tp)}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-100">
+                            {isAlreadyInFarm ? (
+                              <span className="w-full py-1.5 px-3 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-black flex items-center justify-center gap-1">
+                                <Check className="w-3.5 h-3.5" /> 自農園マスタ登録済
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleRegisterPestToFarmMaster(fp)}
+                                className="w-full py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1 transition-all cursor-pointer"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>自農園の農薬マスタに追加</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
+
+              {/* 📋 3. 【改革⑤】この作目・圃場の過去の農薬散布履歴（RACローテーション・散布根拠の即時確認） */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <History className="w-4 h-4 text-rose-600" />
+                    <h4 className="text-sm font-black text-slate-800">
+                      この作目・圃場の農薬散布履歴 ({currentCropSprayLogs.length}件)
+                    </h4>
+                    <span className="text-[11px] font-bold text-slate-400">
+                      ※上の「残〇回」のカウント根拠となる実際の散布記録です
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsReportModalOpen(true)}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>公的防除日誌（台帳）を印刷</span>
+                  </button>
+                </div>
+
+                {currentCropSprayLogs.length === 0 ? (
+                  <div className="p-6 text-center text-slate-400 text-xs font-bold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    現在選択中の条件（{crops.find(c => c.id === selectedSprayCropId)?.name || '作目'} / {selectedSprayTargetFieldId === 'all' ? '全圃場' : fields.find(f => f.id === selectedSprayTargetFieldId)?.name}）における農薬散布履歴はまだありません。
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden">
+                    {currentCropSprayLogs.slice(0, 20).map((log: any) => {
+                      const { badges, cleanNote } = parseStructuredMemo(log.memo);
+                      return (
+                        <div key={log.id} className="p-3.5 hover:bg-rose-50/20 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="space-y-1.5 min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-black text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md font-mono">
+                                📅 {formatDateWithDay(log.work_date)}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-md text-xs font-black bg-rose-50 text-rose-700 border border-rose-200">
+                                🧪 {log.work_type || '農薬散布'}
+                              </span>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                                <MapPin className="w-3 h-3 text-slate-500" />
+                                {log.fields?.name || '圃場未指定'}
+                              </span>
+                              {log.crops?.name && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  <Sprout className="w-3 h-3 text-emerald-600" />
+                                  {log.crops.name}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {badges.map((b, bIdx) => (
+                                <span key={bIdx} className="px-2 py-0.5 bg-rose-50/80 text-rose-900 border border-rose-200 rounded-md text-xs font-bold">
+                                  {formatCleanJapanese(b.text)}
+                                </span>
+                              ))}
+                              {cleanNote && (
+                                <span className="text-xs text-slate-600 font-medium">{formatCleanJapanese(cleanNote)}</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditModal(log)}
+                              className="px-2.5 py-1.5 text-xs font-black text-blue-600 hover:bg-blue-50 rounded-xl border border-blue-200 transition-colors cursor-pointer"
+                            >
+                              訂正
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteWorkLog(log.id)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="この散布記録を削除"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -3646,7 +4385,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
             </h3>
             <form onSubmit={handleSaveSprayLog} className="space-y-4">
               {/* ⚠️ 散布基準セーフティ警告バナー */}
-              {pesticides.filter(p => selectedPesticideIds.includes(p.id)).some(p => p.usedCount >= p.maxCount) && (
+              {pesticidesWithLiveCounts.filter(p => selectedPesticideIds.includes(p.id)).some(p => p.usedCount >= p.maxCount) && (
                 <div className="p-3 bg-rose-50 border-2 border-rose-500 rounded-2xl flex items-start gap-2.5 text-rose-800 animate-pulse">
                   <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
                   <div className="text-xs space-y-1">
@@ -3655,7 +4394,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                       選択中の農薬の中に、**今期の上限使用回数にすでに達している農薬**があります。散布すると出荷停止や回収命令の対象となる恐れがあります。
                     </p>
                     <ul className="list-disc list-inside font-bold text-rose-900 pt-0.5">
-                      {pesticides
+                      {pesticidesWithLiveCounts
                         .filter(p => selectedPesticideIds.includes(p.id) && p.usedCount >= p.maxCount)
                         .map(p => (
                           <li key={p.id}>{p.name} (今期 {p.usedCount}回 / 上限 {p.maxCount}回)</li>
@@ -3666,8 +4405,8 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
               )}
 
               {/* ℹ️ 最終回アラート */}
-              {!pesticides.filter(p => selectedPesticideIds.includes(p.id)).some(p => p.usedCount >= p.maxCount) &&
-               pesticides.filter(p => selectedPesticideIds.includes(p.id)).some(p => p.usedCount + 1 === p.maxCount) && (
+              {!pesticidesWithLiveCounts.filter(p => selectedPesticideIds.includes(p.id)).some(p => p.usedCount >= p.maxCount) &&
+               pesticidesWithLiveCounts.filter(p => selectedPesticideIds.includes(p.id)).some(p => p.usedCount + 1 === p.maxCount) && (
                 <div className="p-3 bg-amber-50 border border-amber-300 rounded-2xl flex items-start gap-2.5 text-amber-800">
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <div className="text-xs space-y-0.5">
