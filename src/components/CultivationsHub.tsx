@@ -2704,65 +2704,65 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
         <button
           type="button"
           onClick={() => setActiveMainTab('cultivations')}
-          className={`flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all ${
+          className={`flex-1 min-w-[116px] shrink-0 whitespace-nowrap flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2.5 sm:px-3 rounded-xl text-xs font-black transition-all ${
             activeMainTab === 'cultivations'
               ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
           }`}
         >
-          <Sprout className="w-4 h-4" />
+          <Sprout className="w-4 h-4 shrink-0" />
           <span>作付け一覧</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveMainTab('spray')}
-          className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all ${
+          className={`flex-1 min-w-[136px] shrink-0 whitespace-nowrap flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2.5 sm:px-3 rounded-xl text-xs font-black transition-all ${
             activeMainTab === 'spray'
               ? 'bg-rose-600 text-white shadow-sm'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
           }`}
         >
-          <FlaskConical className="w-4 h-4" />
+          <FlaskConical className="w-4 h-4 shrink-0" />
           <span>散布管理 (残回数)</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveMainTab('fertilizers')}
-          className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all ${
+          className={`flex-1 min-w-[136px] shrink-0 whitespace-nowrap flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2.5 sm:px-3 rounded-xl text-xs font-black transition-all ${
             activeMainTab === 'fertilizers'
               ? 'bg-teal-700 text-white shadow-sm'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
           }`}
         >
-          <Sparkles className="w-4 h-4" />
+          <Sparkles className="w-4 h-4 shrink-0" />
           <span>肥料管理 (成分・公的)</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveMainTab('history')}
-          className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all ${
+          className={`flex-1 min-w-[130px] shrink-0 whitespace-nowrap flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2.5 sm:px-3 rounded-xl text-xs font-black transition-all ${
             activeMainTab === 'history'
               ? 'bg-blue-600 text-white shadow-sm'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
           }`}
         >
-          <History className="w-4 h-4" />
+          <History className="w-4 h-4 shrink-0" />
           <span>作業・散布履歴</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveMainTab('tasks')}
-          className={`flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition-all ${
+          className={`flex-1 min-w-[126px] shrink-0 whitespace-nowrap flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2.5 sm:px-3 rounded-xl text-xs font-black transition-all ${
             activeMainTab === 'tasks'
               ? 'bg-amber-600 text-white shadow-sm'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
           }`}
         >
-          <CheckSquare className="w-4 h-4" />
+          <CheckSquare className="w-4 h-4 shrink-0" />
           <span>作業予定 (タスク)</span>
         </button>
       </div>
@@ -2778,69 +2778,69 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
           {activeMainTab === 'cultivations' && (
             <div className="space-y-5">
               {/* 🧭 1. 【改革④】農園全体の稼働サマリー ＆ 表示モード・フィルター切替コックピット */}
-              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+              <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                 {/* 1段目: 稼働状況サマリーカード（クリックで絞り込み連動！） ＆ 表示切替 */}
                 <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-                  <div className="grid grid-cols-3 gap-2.5 sm:flex sm:items-center sm:gap-3">
+                  <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-3">
                     <button
                       type="button"
                       onClick={() => setCultStatusFilter('all')}
-                      className={`px-3.5 py-2.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                      className={`px-2.5 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl border text-left transition-all cursor-pointer min-w-0 ${
                         cultStatusFilter === 'all'
                           ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
                           : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                       }`}
                     >
-                      <span className={`text-[10px] font-bold block ${cultStatusFilter === 'all' ? 'text-slate-300' : 'text-slate-400'}`}>
+                      <span className={`text-[10px] font-bold block truncate ${cultStatusFilter === 'all' ? 'text-slate-300' : 'text-slate-400'}`}>
                         🗺️ 全登録圃場
                       </span>
-                      <div className="text-sm sm:text-base font-black leading-tight mt-0.5">
-                        {cultivationSummary.totalCount}筆 <span className="text-xs font-bold opacity-80">({cultivationSummary.totalArea}a)</span>
+                      <div className="text-xs sm:text-base font-black leading-tight mt-0.5 whitespace-nowrap">
+                        {cultivationSummary.totalCount}筆 <span className="text-[10px] sm:text-xs font-bold opacity-80">({cultivationSummary.totalArea}a)</span>
                       </div>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setCultStatusFilter(cultStatusFilter === 'active' ? 'all' : 'active')}
-                      className={`px-3.5 py-2.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                      className={`px-2.5 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl border text-left transition-all cursor-pointer min-w-0 ${
                         cultStatusFilter === 'active'
                           ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                           : 'bg-emerald-50/70 text-emerald-900 border-emerald-200 hover:bg-emerald-100/70'
                       }`}
                     >
-                      <span className={`text-[10px] font-bold block ${cultStatusFilter === 'active' ? 'text-emerald-100' : 'text-emerald-600'}`}>
+                      <span className={`text-[10px] font-bold block truncate ${cultStatusFilter === 'active' ? 'text-emerald-100' : 'text-emerald-600'}`}>
                         🟢 作付・稼働中
                       </span>
-                      <div className="text-sm sm:text-base font-black leading-tight mt-0.5">
-                        {cultivationSummary.activeCount}筆 <span className="text-xs font-bold opacity-80">({cultivationSummary.activeArea}a)</span>
+                      <div className="text-xs sm:text-base font-black leading-tight mt-0.5 whitespace-nowrap">
+                        {cultivationSummary.activeCount}筆 <span className="text-[10px] sm:text-xs font-bold opacity-80">({cultivationSummary.activeArea}a)</span>
                       </div>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setCultStatusFilter(cultStatusFilter === 'fallow' ? 'all' : 'fallow')}
-                      className={`px-3.5 py-2.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                      className={`px-2.5 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl border text-left transition-all cursor-pointer min-w-0 ${
                         cultStatusFilter === 'fallow'
                           ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
                           : 'bg-amber-50/70 text-amber-900 border-amber-200 hover:bg-amber-100/70'
                       }`}
                     >
-                      <span className={`text-[10px] font-bold block ${cultStatusFilter === 'fallow' ? 'text-amber-100' : 'text-amber-600'}`}>
+                      <span className={`text-[10px] font-bold block truncate ${cultStatusFilter === 'fallow' ? 'text-amber-100' : 'text-amber-600'}`}>
                         🟡 休閑・未設定
                       </span>
-                      <div className="text-sm sm:text-base font-black leading-tight mt-0.5">
-                        {cultivationSummary.fallowCount}筆 <span className="text-xs font-bold opacity-80">({cultivationSummary.fallowArea}a)</span>
+                      <div className="text-xs sm:text-base font-black leading-tight mt-0.5 whitespace-nowrap">
+                        {cultivationSummary.fallowCount}筆 <span className="text-[10px] sm:text-xs font-bold opacity-80">({cultivationSummary.fallowArea}a)</span>
                       </div>
                     </button>
                   </div>
 
                   {/* 右側: 表示モード切替スイッチ ＆ スケジュール新規追加ボタン */}
                   <div className="flex items-center justify-between sm:justify-end gap-2 flex-wrap">
-                    <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200">
+                    <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200 w-full sm:w-auto overflow-x-auto">
                       <button
                         type="button"
                         onClick={() => setCultViewMode('both')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        className={`flex-1 sm:flex-initial whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-black transition-all cursor-pointer ${
                           cultViewMode === 'both'
                             ? 'bg-white text-emerald-700 shadow-2xs'
                             : 'text-slate-600 hover:text-slate-900'
@@ -2851,7 +2851,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                       <button
                         type="button"
                         onClick={() => setCultViewMode('gantt')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        className={`flex-1 sm:flex-initial whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-black transition-all cursor-pointer ${
                           cultViewMode === 'gantt'
                             ? 'bg-white text-emerald-700 shadow-2xs'
                             : 'text-slate-600 hover:text-slate-900'
@@ -2862,7 +2862,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                       <button
                         type="button"
                         onClick={() => setCultViewMode('cards')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        className={`flex-1 sm:flex-initial whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-black transition-all cursor-pointer ${
                           cultViewMode === 'cards'
                             ? 'bg-white text-emerald-700 shadow-2xs'
                             : 'text-slate-600 hover:text-slate-900'
@@ -2875,9 +2875,9 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                     <button
                       type="button"
                       onClick={() => handleOpenPlanModal(fields[0]?.id || '', 8)}
-                      className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                      className="w-full sm:w-auto justify-center px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all cursor-pointer whitespace-nowrap"
                     >
-                      <Plus className="w-4 h-4" />
+                      <Plus className="w-4 h-4 shrink-0" />
                       <span>作付スケジュールを追加</span>
                     </button>
                   </div>
@@ -3048,9 +3048,9 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                     <table className="w-full min-w-[1120px] table-fixed border-collapse text-left">
                       <thead>
                         <tr className="bg-slate-100/90 border-b border-slate-200 text-[11px] font-black text-slate-700">
-                          <th className="py-2.5 px-3.5 w-52 sticky left-0 bg-slate-100 z-20 border-r border-slate-200 shadow-[1px_0_0_0_#e2e8f0]">
-                            <div>圃場（畑）名 / 面積</div>
-                            <div className="text-[10px] font-bold text-slate-400 mt-0.5">現在の作目・生育日数</div>
+                          <th className="py-2.5 px-2.5 sm:px-3.5 w-36 sm:w-52 sticky left-0 bg-slate-100 z-20 border-r border-slate-200 shadow-[1px_0_0_0_#e2e8f0]">
+                            <div className="truncate">圃場（畑）名 / 面積</div>
+                            <div className="text-[10px] font-bold text-slate-400 mt-0.5 truncate">現在の作目・生育日数</div>
                           </th>
                           {scheduleMonths.map(m => {
                             const currentM = new Date().getMonth() + 1;
@@ -3088,7 +3088,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                           return (
                             <tr key={fp.fieldId} className="hover:bg-slate-50/70 transition-colors group">
                               {/* 左固定列: 圃場名・面積・科名・生育日数・連作警告・追加ボタン */}
-                              <td className="py-2.5 px-3 sticky left-0 bg-white group-hover:bg-slate-50 z-10 border-r border-slate-200 shadow-[1px_0_0_0_#e2e8f0] align-top">
+                              <td className="py-2.5 px-2 sm:px-3 sticky left-0 bg-white group-hover:bg-slate-50 z-10 border-r border-slate-200 shadow-[1px_0_0_0_#e2e8f0] align-top">
                                 <div className="flex items-start justify-between gap-1">
                                   <div className="min-w-0 flex-1 space-y-1">
                                     <div className="font-black text-slate-900 truncate flex items-center gap-1.5">
@@ -3564,9 +3564,9 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                           {/* 下段フッター: 1秒で動けるワンクリック現場アクション導線 */}
                           <div
                             onClick={(e) => e.stopPropagation()}
-                            className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-1.5"
+                            className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-1.5 flex-wrap"
                           >
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 flex-wrap">
                               <button
                                 type="button"
                                 onClick={() => {
@@ -3582,7 +3582,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                                   setActiveMainTab('spray');
                                   window.scrollTo({ top: 0, behavior: 'smooth' });
                                 }}
-                                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-[11px] font-black transition-colors cursor-pointer"
+                                className="px-2 sm:px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-[11px] font-black transition-colors cursor-pointer whitespace-nowrap shrink-0"
                                 title="この畑の農薬残回数・防除管理へ"
                               >
                                 🧪 防除
@@ -3594,7 +3594,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                                   setActiveMainTab('fertilizers');
                                   window.scrollTo({ top: 0, behavior: 'smooth' });
                                 }}
-                                className="px-2.5 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 rounded-xl text-[11px] font-black transition-colors cursor-pointer"
+                                className="px-2 sm:px-2.5 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 rounded-xl text-[11px] font-black transition-colors cursor-pointer whitespace-nowrap shrink-0"
                                 title="この畑の肥料カルテへ"
                               >
                                 🔬 肥料
@@ -3609,7 +3609,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                                   setActiveMainTab('history');
                                   window.scrollTo({ top: 0, behavior: 'smooth' });
                                 }}
-                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-black transition-colors cursor-pointer"
+                                className="px-2 sm:px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-black transition-colors cursor-pointer whitespace-nowrap shrink-0"
                                 title="この畑の作業・散布履歴一覧へ"
                               >
                                 🕒 履歴({fp.totalLogsCount})
@@ -3624,9 +3624,9 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                                 setDirectAddCropId(fp.displayCropId || '');
                                 setIsDirectAddModalOpen(true);
                               }}
-                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-black flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                              className="px-2.5 sm:px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-black flex items-center gap-1 shadow-2xs transition-all cursor-pointer whitespace-nowrap shrink-0"
                             >
-                              <Plus className="w-3.5 h-3.5" />
+                              <Plus className="w-3.5 h-3.5 shrink-0" />
                               <span>作業を記録</span>
                             </button>
                           </div>
@@ -3660,20 +3660,20 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
           {activeMainTab === 'spray' && (
             <div className="space-y-5">
               {/* 🛡️ 1. 防除コックピット上部パネル（作物 × 圃場選択・モード切替・検索・病害虫逆引き） */}
-              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+              <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                 {/* 1段目: 作物選択 × 圃場（畑）選択 ＆ アクションボタン群 */}
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-                  <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-wrap">
+                  <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-wrap min-w-0">
                     {/* ① 対象作物セレクター */}
-                    <div>
+                    <div className="w-full sm:w-auto min-w-0">
                       <label className="text-[11px] font-black text-slate-500 block mb-1 flex items-center gap-1">
-                        <Sprout className="w-3.5 h-3.5 text-emerald-600" />
+                        <Sprout className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                         <span>① 対象作物を選択</span>
                       </label>
                       <select 
                         value={selectedSprayCropId} 
                         onChange={e => handleCropChange(e.target.value)}
-                        className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-400 cursor-pointer min-w-[160px]"
+                        className="w-full sm:w-auto max-w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-400 cursor-pointer sm:min-w-[160px]"
                       >
                         {crops.map(c => (
                           <option key={c.id} value={c.id}>{c.name}</option>
@@ -3682,9 +3682,9 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                     </div>
 
                     {/* ② 対象圃場（畑）セレクター（畑ごとの正確な残回数を算出・作物連動） */}
-                    <div>
+                    <div className="w-full sm:w-auto min-w-0">
                       <label className="text-[11px] font-black text-slate-500 block mb-1 flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-rose-600" />
+                        <MapPin className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                         <span>② どの圃場（畑）の残回数を見る・撒くか</span>
                       </label>
                       <select
@@ -3700,7 +3700,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                             }
                           }
                         }}
-                        className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-400 cursor-pointer min-w-[220px]"
+                        className="w-full sm:w-auto max-w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-400 cursor-pointer sm:min-w-[220px]"
                       >
                         <option value="all">
                           すべての圃場（{crops.find(c => c.id === selectedSprayCropId)?.name || '対象作物'}全体で集計）
@@ -3735,11 +3735,11 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                     </div>
 
                     {/* カタログモード切替（自農園の登録農薬 vs 公的FAMICから新規追加） */}
-                    <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1">
+                    <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1 w-full sm:w-auto overflow-x-auto">
                       <button
                         type="button"
                         onClick={() => setSprayCatalogMode('farm')}
-                        className={`px-3 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                        className={`flex-1 sm:flex-initial whitespace-nowrap px-2.5 sm:px-3 py-2 rounded-lg text-[11px] sm:text-xs font-black transition-all cursor-pointer ${
                           sprayCatalogMode === 'farm'
                             ? 'bg-white text-rose-700 shadow-2xs'
                             : 'text-slate-600 hover:text-slate-900'
@@ -3750,7 +3750,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                       <button
                         type="button"
                         onClick={() => setSprayCatalogMode('famic')}
-                        className={`px-3 py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                        className={`flex-1 sm:flex-initial whitespace-nowrap px-2.5 sm:px-3 py-2 rounded-lg text-[11px] sm:text-xs font-black transition-all cursor-pointer ${
                           sprayCatalogMode === 'famic'
                             ? 'bg-white text-rose-700 shadow-2xs'
                             : 'text-slate-600 hover:text-slate-900'
@@ -3766,9 +3766,9 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                     <button
                       type="button"
                       onClick={() => setIsReportModalOpen(true)}
-                      className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                     >
-                      <Printer className="w-4 h-4 text-slate-600" />
+                      <Printer className="w-4 h-4 text-slate-600 shrink-0" />
                       <span>公的防除日誌</span>
                     </button>
 
@@ -3781,9 +3781,9 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                         setIsSprayModalOpen(true);
                       }}
                       disabled={selectedPesticideIds.length === 0}
-                      className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl font-black text-xs transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+                      className="flex-1 sm:flex-initial justify-center px-4 sm:px-5 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl font-black text-xs transition-all shadow-sm flex items-center gap-2 cursor-pointer whitespace-nowrap"
                     >
-                      <FlaskConical className="w-4 h-4" />
+                      <FlaskConical className="w-4 h-4 shrink-0" />
                       <span>選択農薬の散布を記録 ({selectedPesticideIds.length})</span>
                     </button>
                   </div>
@@ -4533,26 +4533,26 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                               </div>
 
                               {/* 畑ごとの N-P-K-Ca-Mg メーター */}
-                              <div className="grid grid-cols-5 gap-1.5 pt-1">
-                                <div className="bg-slate-900/80 border border-blue-500/20 rounded-xl p-1.5 text-center">
-                                  <div className="text-[9px] font-black text-blue-300">N(窒素)</div>
-                                  <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalN}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
+                              <div className="grid grid-cols-5 gap-1 sm:gap-1.5 pt-1">
+                                <div className="bg-slate-900/80 border border-blue-500/20 rounded-xl px-1 py-1.5 sm:p-1.5 text-center min-w-0">
+                                  <div className="text-[9px] font-black text-blue-300 truncate">N(窒素)</div>
+                                  <div className="text-xs sm:text-sm font-black text-white mt-0.5 truncate">{fc.totalN}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
                                 </div>
-                                <div className="bg-slate-900/80 border border-amber-500/20 rounded-xl p-1.5 text-center">
-                                  <div className="text-[9px] font-black text-amber-300">P(リン)</div>
-                                  <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalP}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
+                                <div className="bg-slate-900/80 border border-amber-500/20 rounded-xl px-1 py-1.5 sm:p-1.5 text-center min-w-0">
+                                  <div className="text-[9px] font-black text-amber-300 truncate">P(リン)</div>
+                                  <div className="text-xs sm:text-sm font-black text-white mt-0.5 truncate">{fc.totalP}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
                                 </div>
-                                <div className="bg-slate-900/80 border border-purple-500/20 rounded-xl p-1.5 text-center">
-                                  <div className="text-[9px] font-black text-purple-300">K(カリ)</div>
-                                  <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalK}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
+                                <div className="bg-slate-900/80 border border-purple-500/20 rounded-xl px-1 py-1.5 sm:p-1.5 text-center min-w-0">
+                                  <div className="text-[9px] font-black text-purple-300 truncate">K(カリ)</div>
+                                  <div className="text-xs sm:text-sm font-black text-white mt-0.5 truncate">{fc.totalK}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
                                 </div>
-                                <div className="bg-slate-900/80 border border-yellow-500/20 rounded-xl p-1.5 text-center">
-                                  <div className="text-[9px] font-black text-yellow-300">Ca(石灰)</div>
-                                  <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalCa}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
+                                <div className="bg-slate-900/80 border border-yellow-500/20 rounded-xl px-1 py-1.5 sm:p-1.5 text-center min-w-0">
+                                  <div className="text-[9px] font-black text-yellow-300 truncate">Ca(石灰)</div>
+                                  <div className="text-xs sm:text-sm font-black text-white mt-0.5 truncate">{fc.totalCa}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
                                 </div>
-                                <div className="bg-slate-900/80 border border-teal-500/20 rounded-xl p-1.5 text-center">
-                                  <div className="text-[9px] font-black text-teal-300">Mg(苦土)</div>
-                                  <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalMg}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
+                                <div className="bg-slate-900/80 border border-teal-500/20 rounded-xl px-1 py-1.5 sm:p-1.5 text-center min-w-0">
+                                  <div className="text-[9px] font-black text-teal-300 truncate">Mg(苦土)</div>
+                                  <div className="text-xs sm:text-sm font-black text-white mt-0.5 truncate">{fc.totalMg}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
                                 </div>
                               </div>
                             </div>
@@ -6399,26 +6399,26 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                   <label className="text-xs font-black text-slate-700 block">
                     10aあたりの純成分投入量 (kg/10a) を直接入力
                   </label>
-                  <div className="grid grid-cols-5 gap-2">
-                    <div>
-                      <span className="text-[10px] font-black text-blue-700 block mb-1">🔵 N (kg)</span>
-                      <input type="number" step="0.1" value={fertRecordManualN} onChange={e => setFertRecordManualN(e.target.value)} className="w-full p-2 bg-white border border-blue-200 rounded-xl text-sm font-black text-slate-800" />
+                  <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-black text-blue-700 block mb-1 truncate">🔵 N (kg)</span>
+                      <input type="number" step="0.1" value={fertRecordManualN} onChange={e => setFertRecordManualN(e.target.value)} className="w-full p-1.5 sm:p-2 bg-white border border-blue-200 rounded-xl text-xs sm:text-sm font-black text-slate-800" />
                     </div>
-                    <div>
-                      <span className="text-[10px] font-black text-amber-700 block mb-1">🟠 P (kg)</span>
-                      <input type="number" step="0.1" value={fertRecordManualP} onChange={e => setFertRecordManualP(e.target.value)} className="w-full p-2 bg-white border border-amber-200 rounded-xl text-sm font-black text-slate-800" />
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-black text-amber-700 block mb-1 truncate">🟠 P (kg)</span>
+                      <input type="number" step="0.1" value={fertRecordManualP} onChange={e => setFertRecordManualP(e.target.value)} className="w-full p-1.5 sm:p-2 bg-white border border-amber-200 rounded-xl text-xs sm:text-sm font-black text-slate-800" />
                     </div>
-                    <div>
-                      <span className="text-[10px] font-black text-purple-700 block mb-1">🟣 K (kg)</span>
-                      <input type="number" step="0.1" value={fertRecordManualK} onChange={e => setFertRecordManualK(e.target.value)} className="w-full p-2 bg-white border border-purple-200 rounded-xl text-sm font-black text-slate-800" />
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-black text-purple-700 block mb-1 truncate">🟣 K (kg)</span>
+                      <input type="number" step="0.1" value={fertRecordManualK} onChange={e => setFertRecordManualK(e.target.value)} className="w-full p-1.5 sm:p-2 bg-white border border-purple-200 rounded-xl text-xs sm:text-sm font-black text-slate-800" />
                     </div>
-                    <div>
-                      <span className="text-[10px] font-black text-yellow-700 block mb-1">🟡 Ca (kg)</span>
-                      <input type="number" step="0.1" value={fertRecordManualCa} onChange={e => setFertRecordManualCa(e.target.value)} className="w-full p-2 bg-white border border-yellow-200 rounded-xl text-sm font-black text-slate-800" />
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-black text-yellow-700 block mb-1 truncate">🟡 Ca (kg)</span>
+                      <input type="number" step="0.1" value={fertRecordManualCa} onChange={e => setFertRecordManualCa(e.target.value)} className="w-full p-1.5 sm:p-2 bg-white border border-yellow-200 rounded-xl text-xs sm:text-sm font-black text-slate-800" />
                     </div>
-                    <div>
-                      <span className="text-[10px] font-black text-teal-700 block mb-1">🟢 Mg (kg)</span>
-                      <input type="number" step="0.1" value={fertRecordManualMg} onChange={e => setFertRecordManualMg(e.target.value)} className="w-full p-2 bg-white border border-teal-200 rounded-xl text-sm font-black text-slate-800" />
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-black text-teal-700 block mb-1 truncate">🟢 Mg (kg)</span>
+                      <input type="number" step="0.1" value={fertRecordManualMg} onChange={e => setFertRecordManualMg(e.target.value)} className="w-full p-1.5 sm:p-2 bg-white border border-teal-200 rounded-xl text-xs sm:text-sm font-black text-slate-800" />
                     </div>
                   </div>
                 </div>
@@ -6426,31 +6426,31 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
 
               {/* 📊 4. 10aあたり純成分 リアルタイム自動換算プレビュー */}
               <div className="p-3.5 bg-slate-900 text-white rounded-2xl border border-slate-700 space-y-2">
-                <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center justify-between gap-2 flex-wrap text-xs">
                   <span className="font-black text-teal-300 flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5" />
+                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
                     <span>記録される10aあたり純成分量 (自動計算プレビュー)</span>
                   </span>
                   <span className="text-[11px] text-slate-400 font-bold">
                     肥料実量: {calculatedFertNutrients.kgPer10a} kg/10a
                   </span>
                 </div>
-                <div className="grid grid-cols-5 gap-2 text-center">
-                  <div className="bg-slate-800 rounded-xl p-2 border border-blue-500/30">
-                    <div className="text-[10px] font-bold text-blue-300">🔵 N (窒素)</div>
-                    <div className="text-sm font-black text-white">{calculatedFertNutrients.n} <span className="text-[10px] text-slate-400">kg</span></div>
+                <div className="grid grid-cols-5 gap-1 sm:gap-2 text-center">
+                  <div className="bg-slate-800 rounded-xl px-1 py-2 sm:p-2 border border-blue-500/30 min-w-0">
+                    <div className="text-[9px] sm:text-[10px] font-bold text-blue-300 truncate">🔵 N (窒素)</div>
+                    <div className="text-xs sm:text-sm font-black text-white truncate">{calculatedFertNutrients.n} <span className="text-[9px] sm:text-[10px] text-slate-400">kg</span></div>
                   </div>
-                  <div className="bg-slate-800 rounded-xl p-2 border border-amber-500/30">
-                    <div className="text-[10px] font-bold text-amber-300">🟠 P (リン)</div>
-                    <div className="text-sm font-black text-white">{calculatedFertNutrients.p} <span className="text-[10px] text-slate-400">kg</span></div>
+                  <div className="bg-slate-800 rounded-xl px-1 py-2 sm:p-2 border border-amber-500/30 min-w-0">
+                    <div className="text-[9px] sm:text-[10px] font-bold text-amber-300 truncate">🟠 P (リン)</div>
+                    <div className="text-xs sm:text-sm font-black text-white truncate">{calculatedFertNutrients.p} <span className="text-[9px] sm:text-[10px] text-slate-400">kg</span></div>
                   </div>
-                  <div className="bg-slate-800 rounded-xl p-2 border border-purple-500/30">
-                    <div className="text-[10px] font-bold text-purple-300">🟣 K (カリ)</div>
-                    <div className="text-sm font-black text-white">{calculatedFertNutrients.k} <span className="text-[10px] text-slate-400">kg</span></div>
+                  <div className="bg-slate-800 rounded-xl px-1 py-2 sm:p-2 border border-purple-500/30 min-w-0">
+                    <div className="text-[9px] sm:text-[10px] font-bold text-purple-300 truncate">🟣 K (カリ)</div>
+                    <div className="text-xs sm:text-sm font-black text-white truncate">{calculatedFertNutrients.k} <span className="text-[9px] sm:text-[10px] text-slate-400">kg</span></div>
                   </div>
-                  <div className="bg-slate-800 rounded-xl p-2 border border-yellow-500/30">
-                    <div className="text-[10px] font-bold text-yellow-300">🟡 Ca (石灰)</div>
-                    <div className="text-sm font-black text-white">{calculatedFertNutrients.ca} <span className="text-[10px] text-slate-400">kg</span></div>
+                  <div className="bg-slate-800 rounded-xl px-1 py-2 sm:p-2 border border-yellow-500/30 min-w-0">
+                    <div className="text-[9px] sm:text-[10px] font-bold text-yellow-300 truncate">🟡 Ca (石灰)</div>
+                    <div className="text-xs sm:text-sm font-black text-white truncate">{calculatedFertNutrients.ca} <span className="text-[9px] sm:text-[10px] text-slate-400">kg</span></div>
                   </div>
                   <div className="bg-slate-800 rounded-xl p-2 border border-teal-500/30">
                     <div className="text-[10px] font-bold text-teal-300">🟢 Mg (苦土)</div>
@@ -6811,11 +6811,11 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
 
               {/* 2. 🌱 定植・播種（本圃開始）時期 ＆ 定植日 */}
               <div className="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-200 space-y-2.5">
-                <span className="text-xs font-black text-emerald-900 flex items-center justify-between">
+                <span className="text-xs font-black text-emerald-900 flex items-center justify-between gap-2">
                   <span>🌱 ① 定植・播種時期（畑を使い始める時期）</span>
-                  <span className="text-[10px] font-bold text-emerald-700">{selectedScheduleYear}年度</span>
+                  <span className="text-[10px] font-bold text-emerald-700 shrink-0">{selectedScheduleYear}年度</span>
                 </span>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <div>
                     <label className="text-[10px] font-bold text-emerald-800 block mb-1">開始月</label>
                     <select
@@ -6847,7 +6847,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                       <option value={3}>下旬 (21日〜末)</option>
                     </select>
                   </div>
-                  <div>
+                  <div className="col-span-2 sm:col-span-1">
                     <label className="text-[10px] font-bold text-emerald-800 block mb-1">定植・播種日(任意)</label>
                     <input
                       type="date"
@@ -6875,7 +6875,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                 <span className="text-xs font-black text-amber-900 block">
                   🧺 ② 収穫開始 〜 収穫完了・片付け時期（畑が空く時期）
                 </span>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-amber-800 block">🧺 収穫開始（いつから穫れるか）</label>
                     <div className="grid grid-cols-2 gap-1.5">
@@ -6933,8 +6933,8 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                 const spp = getSeedlingsPer10a(planFormCropId);
                 const estSeedlings = areaVal && spp ? Math.ceil((areaVal / 10) * spp) : null;
                 return (
-                  <div className="bg-slate-50 px-3.5 py-2.5 rounded-2xl border border-slate-200 flex items-center justify-between gap-3 text-xs">
-                    <div>
+                  <div className="bg-slate-50 px-3.5 py-2.5 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 text-xs">
+                    <div className="min-w-0">
                       <span className="text-[10px] font-bold text-slate-400 block">🌱 植え付けに必要な苗の数（畑の面積 × 作目マスタの10aあたり苗数）</span>
                       {estSeedlings !== null ? (
                         <span className="font-black text-slate-800">約 {estSeedlings.toLocaleString()} 本 <span className="text-[10px] font-bold text-slate-400">({areaVal}a × {spp!.toLocaleString()}本/10a)</span></span>
@@ -6948,14 +6948,14 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                         </span>
                       )}
                     </div>
-                    <div className="w-36">
+                    <div className="w-full sm:w-36 shrink-0">
                       <label className="text-[10px] font-bold text-slate-500 block mb-0.5">目標収穫量 (kg・任意)</label>
                       <input
                         type="number"
                         value={planFormTargetYieldKg}
                         onChange={e => setPlanFormTargetYieldKg(e.target.value)}
                         placeholder="例: 8000"
-                        className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-black text-slate-800 outline-none"
+                        className="w-full px-2.5 py-1.5 sm:py-1 bg-white border border-slate-200 rounded-lg text-xs font-black text-slate-800 outline-none"
                       />
                     </div>
                   </div>

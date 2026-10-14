@@ -2856,27 +2856,27 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
           </div>
 
           {/* 右側：ナビゲーション・ユーザー情報・言語切替・ログアウト */}
-          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-3 shrink-0">
             
             {/* 管理者モード時のみ管理者画面リンクを表示 */}
             {role === 'admin' && (
               <Link
                 href={activeFarmId ? `/admin/cultivations?farm=${activeFarmId}` : '/admin/cultivations'}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-sm shrink-0"
+                className="flex items-center gap-1 px-2.5 py-1.5 sm:px-3.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-[11px] sm:text-sm rounded-xl transition-all shadow-sm shrink-0 whitespace-nowrap"
                 title={t('adminDashboardBtn', language)}
               >
-                <Building className="w-4 h-4 shrink-0" />
+                <Building className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                 <span>{t('adminDashboardBtn', language)}</span>
               </Link>
             )}
 
             {/* 言語選択 */}
             <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
-              <Languages className="w-3.5 h-3.5 text-slate-500 ml-1" />
+              <Languages className="w-3.5 h-3.5 text-slate-500 ml-1 shrink-0" />
               <select
                 value={language}
                 onChange={(e) => handleLanguageChange(e.target.value as LanguageCode)}
-                className="bg-transparent text-xs font-bold text-slate-700 outline-none pr-1 cursor-pointer"
+                className="bg-transparent text-[11px] sm:text-xs font-bold text-slate-700 outline-none pr-1 cursor-pointer max-w-[92px] sm:max-w-none truncate"
               >
                 {LANGUAGES.map((lang) => (
                   <option key={lang.code} value={lang.code}>
@@ -2890,7 +2890,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             {/* ログアウト */}
             <button 
               onClick={handleLogout} 
-              className="flex items-center gap-1 p-2 sm:px-2.5 sm:py-1.5 text-xs sm:text-sm font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors shrink-0"
+              className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 text-xs sm:text-sm font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors shrink-0"
               title={t('portal_logout', language)}
             >
               <LogOut className="w-4 h-4 shrink-0" />
@@ -2910,13 +2910,13 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               setMobilePrimaryView('attendance');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl font-black text-[11px] transition-all cursor-pointer ${
+            className={`flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl font-black text-[10px] sm:text-[11px] leading-tight transition-all cursor-pointer ${
               mobilePrimaryView === 'attendance'
                 ? 'bg-emerald-600 text-white shadow-sm'
                 : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            <Clock className="w-4 h-4" />
+            <Clock className="w-4 h-4 shrink-0" />
             <span className="truncate max-w-full">{t('mobileNav_attendance', language)}</span>
           </button>
 
@@ -2929,13 +2929,13 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               }
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl font-black text-[11px] transition-all cursor-pointer ${
+            className={`flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl font-black text-[10px] sm:text-[11px] leading-tight transition-all cursor-pointer ${
               mobilePrimaryView === 'work'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            <Sprout className="w-4 h-4" />
+            <Sprout className="w-4 h-4 shrink-0" />
             <span className="truncate max-w-full">{t('mobileNav_work', language)}</span>
           </button>
 
@@ -2948,13 +2948,13 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               }
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`relative flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl font-black text-[11px] transition-all cursor-pointer ${
+            className={`relative flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl font-black text-[10px] sm:text-[11px] leading-tight transition-all cursor-pointer ${
               mobilePrimaryView === 'schedule'
                 ? 'bg-amber-600 text-white shadow-sm'
                 : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            <CalendarIcon className="w-4 h-4" />
+            <CalendarIcon className="w-4 h-4 shrink-0" />
             <span className="truncate max-w-full">{t('mobileNav_schedule', language)}</span>
             {todayTasksProgress.total - todayTasksProgress.completed > 0 && (
               <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-rose-500"></span>
@@ -2967,13 +2967,13 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               setMobilePrimaryView('info');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl font-black text-[11px] transition-all cursor-pointer ${
+            className={`flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl font-black text-[10px] sm:text-[11px] leading-tight transition-all cursor-pointer ${
               mobilePrimaryView === 'info'
                 ? 'bg-purple-600 text-white shadow-sm'
                 : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
-            <MessageSquare className="w-4 h-4" />
+            <MessageSquare className="w-4 h-4 shrink-0" />
             <span className="truncate max-w-full">{t('mobileNav_info', language)}</span>
           </button>
         </div>
@@ -2990,7 +2990,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               // 1. 未出勤：出勤打刻カード
               <div 
                 onClick={() => handleClockAction('in')}
-                className="cursor-pointer bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white p-4 sm:p-5 rounded-2xl shadow-md transition-all active:scale-[0.99] flex items-center justify-between gap-4 group"
+                className="cursor-pointer bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white p-4 sm:p-5 rounded-2xl shadow-md transition-all active:scale-[0.99] flex items-center justify-between gap-3 sm:gap-4 group"
               >
                 <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                   <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-2xl sm:text-3xl shrink-0 group-hover:scale-110 transition-transform">
@@ -3005,9 +3005,9 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                     </p>
                   </div>
                 </div>
-                <div className="shrink-0 flex items-center gap-1 bg-white text-emerald-800 px-3.5 py-2 rounded-xl font-black text-xs sm:text-sm shadow-xs group-hover:bg-emerald-50">
+                <div className="shrink-0 flex items-center gap-1 bg-white text-emerald-800 px-3 sm:px-3.5 py-2 rounded-xl font-black text-xs sm:text-sm shadow-xs group-hover:bg-emerald-50 whitespace-nowrap">
                   <span>{t('portal_clockIn', language)}</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <ArrowRight className="w-4 h-4 shrink-0" />
                 </div>
               </div>
             ) : !hasClockedOut ? (
@@ -3018,7 +3018,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                   <div className="space-y-2">
                     <div 
                       onClick={() => switchToPortalTab('work')}
-                      className="cursor-pointer bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white p-4 sm:p-5 rounded-2xl shadow-md transition-all active:scale-[0.99] flex items-center justify-between gap-4 group"
+                      className="cursor-pointer bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white p-4 sm:p-5 rounded-2xl shadow-md transition-all active:scale-[0.99] flex items-center justify-between gap-3 sm:gap-4 group"
                     >
                       <div className="flex items-center gap-3 sm:gap-4 min-w-0">
                         <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-2xl sm:text-3xl shrink-0 group-hover:scale-110 transition-transform">
@@ -3040,9 +3040,9 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                           </p>
                         </div>
                       </div>
-                      <div className="shrink-0 flex items-center gap-1 bg-white text-blue-800 px-3.5 py-2 rounded-xl font-black text-xs sm:text-sm shadow-xs group-hover:bg-blue-50">
+                      <div className="shrink-0 flex items-center gap-1 bg-white text-blue-800 px-3 sm:px-3.5 py-2 rounded-xl font-black text-xs sm:text-sm shadow-xs group-hover:bg-blue-50 whitespace-nowrap">
                         <span>{t('workRecord', language)}</span>
-                        <ArrowRight className="w-4 h-4" />
+                        <ArrowRight className="w-4 h-4 shrink-0" />
                       </div>
                     </div>
                   </div>
@@ -3050,21 +3050,21 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               })()
             ) : (
               // 3. 退勤済み：お疲れ様でした案内
-              <div className="bg-slate-100 border border-slate-200 text-slate-700 p-4 rounded-2xl flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
+              <div className="bg-slate-100 border border-slate-200 text-slate-700 p-4 rounded-2xl flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center text-xl shrink-0">
                     🏠
                   </div>
-                  <div>
-                    <h2 className="text-sm sm:text-base font-black text-slate-800">
+                  <div className="min-w-0">
+                    <h2 className="text-sm sm:text-base font-black text-slate-800 truncate">
                       {t('nav_allWorkDoneTitle', language)}
                     </h2>
-                    <p className="text-xs text-slate-500 font-medium">
+                    <p className="text-xs text-slate-500 font-medium truncate">
                       {t('nav_allWorkDoneSub', language)}
                     </p>
                   </div>
                 </div>
-                <div className="text-xs font-bold text-slate-400 shrink-0">
+                <div className="text-xs font-bold text-slate-400 shrink-0 whitespace-nowrap">
                   {t('live_clockedOut', language)}: {attendance?.clock_out ? formatDisplayTime(attendance.clock_out) : '--:--'}
                 </div>
               </div>
@@ -3079,7 +3079,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
           <div className={`${(mobilePrimaryView === 'attendance' || mobilePrimaryView === 'info') ? 'block' : 'hidden lg:block'} lg:col-span-4 space-y-6`}>
             
             {/* 出退勤（スマホでは「出退勤」タブ選択時のみ表示） */}
-            <div className={`${mobilePrimaryView === 'attendance' ? 'block' : 'hidden lg:block'} bg-white rounded-3xl p-6 shadow-sm border border-slate-200 relative overflow-hidden`}>
+            <div className={`${mobilePrimaryView === 'attendance' ? 'block' : 'hidden lg:block'} bg-white rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-200 relative overflow-hidden`}>
               <div className="absolute top-0 right-0 p-4 opacity-5">
                 <Clock className="w-24 h-24" />
               </div>
@@ -3087,20 +3087,20 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               {/* ログインユーザー ウェルカムバナー */}
               {currentUser && (
                 <div className="mb-4 bg-emerald-50/80 border border-emerald-200/80 p-3 rounded-2xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black text-xs shadow-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black text-xs shadow-xs shrink-0">
                         {workerProfile?.name ? workerProfile.name.charAt(0) : (currentUser.name ? currentUser.name.charAt(0) : 'ユ')}
                       </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-emerald-700">{t('currentWorkerLabel', language)}</p>
-                        <p className="text-sm font-black text-slate-800">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold text-emerald-700 truncate">{t('currentWorkerLabel', language)}</p>
+                        <p className="text-sm font-black text-slate-800 truncate">
                           {workerProfile ? getTranslatedName(workerProfile, language) : getTranslatedName(currentUser, language)}
                           {t('workerHonorific', language)}
                         </p>
                       </div>
                     </div>
-                    <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg">
+                    <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-lg shrink-0 whitespace-nowrap">
                       {role === 'admin' ? t('adminMode', language) : t('workerMode', language)}
                     </span>
                   </div>
@@ -3131,12 +3131,12 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                     <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current"><path d="M12 2C6.48 2 2 5.82 2 10.53c0 4.23 3.64 7.77 8.56 8.41.33.07.78.22.89.5.1.25.07.64-.03 1.05-.16.63-.53 2.05-.53 2.05s-.16.65.25.79c.41.14.94-.23 1.3-.5 3.09-2.27 6.09-4.8 7.98-7.39C21.6 13.56 22 12.09 22 10.53 22 5.82 17.52 2 12 2z"/></svg>
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-xs font-black text-slate-800">{t('lineOfficialNotice', language)}</span>
                       {workerProfile?.line_user_id ? (
-                        <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded-md">{t('lineStatusLinked', language)}</span>
+                        <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded-md whitespace-nowrap">{t('lineStatusLinked', language)}</span>
                       ) : (
-                        <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded-md">{t('lineStatusUnlinked', language)}</span>
+                        <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded-md whitespace-nowrap">{t('lineStatusUnlinked', language)}</span>
                       )}
                     </div>
                     <p className="text-[10px] text-slate-500 truncate">
@@ -3149,7 +3149,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                 <button
                   type="button"
                   onClick={() => setShowLineModal(true)}
-                  className={`px-3 py-1.5 rounded-xl font-black text-xs shrink-0 transition-all cursor-pointer shadow-xs ${
+                  className={`px-3 py-1.5 rounded-xl font-black text-xs shrink-0 whitespace-nowrap transition-all cursor-pointer shadow-xs ${
                     workerProfile?.line_user_id
                       ? 'bg-slate-200 hover:bg-slate-300 text-slate-700'
                       : 'bg-[#06C755] hover:bg-[#05b34c] text-white active:scale-95'
@@ -3194,14 +3194,14 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
 
               {/* 🕒 今月の勤務実績サマリー ＆ タイムカード明細ボタン */}
               <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 mb-3.5 space-y-2.5">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-1.5 flex-wrap">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-[11px] font-black text-slate-600 flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-blue-600" />
+                      <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                       {t('tc_currentMonthSummary', language)}
                     </span>
                     {closingDay > 0 && (
-                      <span className="text-[10px] font-black text-blue-700 bg-blue-100/70 border border-blue-200 px-1.5 py-0.5 rounded-md">
+                      <span className="text-[10px] font-black text-blue-700 bg-blue-100/70 border border-blue-200 px-1.5 py-0.5 rounded-md whitespace-nowrap">
                         {closingDay}{t('closingDaySuffix', language)}
                       </span>
                     )}
@@ -3217,10 +3217,10 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                       }
                       setShowTimecardModal(true);
                     }}
-                    className="text-[11px] font-black text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 shadow-xs cursor-pointer"
+                    className="text-[11px] font-black text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 shadow-xs cursor-pointer shrink-0 whitespace-nowrap"
                   >
                     <span>{t('tc_openDetails', language)}</span>
-                    <ArrowRight className="w-3 h-3" />
+                    <ArrowRight className="w-3 h-3 shrink-0" />
                   </button>
                 </div>
 
@@ -3261,23 +3261,23 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                       {t('tabTeamLive', language)}
                     </span>
                   </div>
-                  <span className="text-[11px] font-black text-emerald-700 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
-                    {t('viewDetails', language)} <ArrowRight className="w-3.5 h-3.5" />
+                  <span className="text-[11px] font-black text-emerald-700 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5 whitespace-nowrap">
+                    {t('viewDetails', language)} <ArrowRight className="w-3.5 h-3.5 shrink-0" />
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-xs font-bold text-slate-600 bg-white/80 backdrop-blur-xs p-2 rounded-xl border border-emerald-100">
-                  <div className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <div className="flex items-center justify-between flex-wrap gap-y-1 gap-x-2 text-xs font-bold text-slate-600 bg-white/80 backdrop-blur-xs p-2 rounded-xl border border-emerald-100">
+                  <div className="flex items-center gap-1 whitespace-nowrap">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
                     <span className="text-slate-500 text-[10px]">{t('live_activeNow', language)}:</span>
                     <span className="text-emerald-700 font-black">{currentlyWorkingCount}{t('peopleCountUnit', language)}</span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                  <div className="flex items-center gap-1 whitespace-nowrap">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
                     <span className="text-slate-500 text-[10px]">{t('live_onBreak', language)}:</span>
                     <span className="text-amber-700 font-black">{onBreakCount}{t('peopleCountUnit', language)}</span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                  <div className="flex items-center gap-1 whitespace-nowrap">
+                    <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0"></span>
                     <span className="text-slate-500 text-[10px]">{t('live_clockedOut', language)}:</span>
                     <span className="text-slate-700 font-black">{clockedOutCount}{t('peopleCountUnit', language)}</span>
                   </div>
@@ -3563,16 +3563,16 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                               <button
                                 type="button"
                                 onClick={() => handleOpenCompleteModal(task)}
-                                className="flex-1 py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+                                className="flex-1 py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap"
                               >
-                                <Edit3 className="w-3.5 h-3.5" />
+                                <Edit3 className="w-3.5 h-3.5 shrink-0" />
                                 <span>{t('todo_reportAndComplete', language)}</span>
                               </button>
 
                               <button
                                 type="button"
                                 onClick={() => handleQuickCompleteTask(task)}
-                                className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-95 rounded-xl text-xs font-black transition-all border border-slate-200 flex items-center gap-1 shrink-0 cursor-pointer"
+                                className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-95 rounded-xl text-xs font-black transition-all border border-slate-200 flex items-center gap-1 shrink-0 cursor-pointer whitespace-nowrap"
                                 title={t('todo_completeBtn', language)}
                               >
                                 <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -4017,16 +4017,16 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                                   <button
                                     type="button"
                                     onClick={() => handleOpenCompleteModal(task)}
-                                    className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                                    className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                                   >
-                                    <Edit3 className="w-4 h-4" />
+                                    <Edit3 className="w-4 h-4 shrink-0" />
                                     <span>{t('todo_reportAndComplete', language)}</span>
                                   </button>
 
                                   <button
                                     type="button"
                                     onClick={() => handleQuickCompleteTask(task)}
-                                    className="py-2 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-95 rounded-xl text-xs font-black transition-all border border-slate-200 flex items-center gap-1 shrink-0 cursor-pointer"
+                                    className="py-2 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-95 rounded-xl text-xs font-black transition-all border border-slate-200 flex items-center gap-1 shrink-0 cursor-pointer whitespace-nowrap"
                                     title={t('todo_quickCompleteTooltip', language)}
                                   >
                                     <Check className="w-4 h-4 text-emerald-600" />
@@ -6684,13 +6684,13 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               setMobilePrimaryView('attendance');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl font-black text-[11px] transition-all cursor-pointer ${
+            className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl font-black text-[10px] sm:text-[11px] leading-tight transition-all cursor-pointer ${
               mobilePrimaryView === 'attendance'
                 ? 'bg-emerald-50 text-emerald-700'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Clock className={`w-5 h-5 ${mobilePrimaryView === 'attendance' ? 'text-emerald-600 stroke-[2.5]' : ''}`} />
+            <Clock className={`w-5 h-5 shrink-0 ${mobilePrimaryView === 'attendance' ? 'text-emerald-600 stroke-[2.5]' : ''}`} />
             <span className="truncate max-w-full px-0.5">{t('mobileNav_attendance', language)}</span>
           </button>
 
@@ -6703,13 +6703,13 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               }
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl font-black text-[11px] transition-all cursor-pointer ${
+            className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl font-black text-[10px] sm:text-[11px] leading-tight transition-all cursor-pointer ${
               mobilePrimaryView === 'work'
                 ? 'bg-blue-50 text-blue-700'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Sprout className={`w-5 h-5 ${mobilePrimaryView === 'work' ? 'text-blue-600 stroke-[2.5]' : ''}`} />
+            <Sprout className={`w-5 h-5 shrink-0 ${mobilePrimaryView === 'work' ? 'text-blue-600 stroke-[2.5]' : ''}`} />
             <span className="truncate max-w-full px-0.5">{t('mobileNav_work', language)}</span>
           </button>
 
@@ -6722,13 +6722,13 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               }
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`relative flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl font-black text-[11px] transition-all cursor-pointer ${
+            className={`relative flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl font-black text-[10px] sm:text-[11px] leading-tight transition-all cursor-pointer ${
               mobilePrimaryView === 'schedule'
                 ? 'bg-amber-50 text-amber-800'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            <CalendarIcon className={`w-5 h-5 ${mobilePrimaryView === 'schedule' ? 'text-amber-600 stroke-[2.5]' : ''}`} />
+            <CalendarIcon className={`w-5 h-5 shrink-0 ${mobilePrimaryView === 'schedule' ? 'text-amber-600 stroke-[2.5]' : ''}`} />
             <span className="truncate max-w-full px-0.5">{t('mobileNav_schedule', language)}</span>
             {todayTasksProgress.total - todayTasksProgress.completed > 0 && (
               <span className="absolute top-1 right-4 w-2 h-2 rounded-full bg-rose-500"></span>
@@ -6741,13 +6741,13 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               setMobilePrimaryView('info');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl font-black text-[11px] transition-all cursor-pointer ${
+            className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl font-black text-[10px] sm:text-[11px] leading-tight transition-all cursor-pointer ${
               mobilePrimaryView === 'info'
                 ? 'bg-purple-50 text-purple-700'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            <MessageSquare className={`w-5 h-5 ${mobilePrimaryView === 'info' ? 'text-purple-600 stroke-[2.5]' : ''}`} />
+            <MessageSquare className={`w-5 h-5 shrink-0 ${mobilePrimaryView === 'info' ? 'text-purple-600 stroke-[2.5]' : ''}`} />
             <span className="truncate max-w-full px-0.5">{t('mobileNav_info', language)}</span>
           </button>
         </div>

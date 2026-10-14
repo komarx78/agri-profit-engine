@@ -1446,14 +1446,14 @@ export default function WorkEntryPage({
               </div>
 
               {/* 右側：コントロール (司令塔・ポータル・言語・ログアウト) */}
-              <div className="flex items-center gap-1 flex-shrink-0">
+              <div className="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
                 {currentUser.role === 'admin' && (
                   <button
                     onClick={() => {
                       const targetFarm = workerTenantId || requestedFarmId;
                       router.push(targetFarm ? `/admin/cultivations?farm=${targetFarm}` : '/admin/cultivations');
                     }}
-                    className="flex items-center gap-1 px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 hover:text-white border border-emerald-500/40 rounded-lg text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"
+                    className="flex items-center gap-1 px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 hover:text-white border border-emerald-500/40 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"
                     title="農業司令塔へ"
                   >
                     <Sprout className="w-3 h-3 flex-shrink-0" />
@@ -1465,7 +1465,7 @@ export default function WorkEntryPage({
                     const targetFarm = workerTenantId || requestedFarmId;
                     router.push(targetFarm ? `/portal/${targetFarm}` : '/portal');
                   }}
-                  className="flex items-center gap-1 px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 hover:text-white border border-blue-500/40 rounded-lg text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"
+                  className="flex items-center gap-1 px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 hover:text-white border border-blue-500/40 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"
                   title="ポータル画面へ戻る"
                 >
                   <Layout className="w-3 h-3 flex-shrink-0" />
@@ -1481,7 +1481,7 @@ export default function WorkEntryPage({
                     const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang'));
                     langKeys.forEach(key => localStorage.setItem(key, newLang));
                   }}
-                  className="bg-emerald-900 text-emerald-300 text-[11px] font-bold rounded-lg px-1.5 py-1 focus:outline-none border border-emerald-800"
+                  className="bg-emerald-900 text-emerald-300 text-[10px] sm:text-[11px] font-bold rounded-lg px-1.5 py-1 focus:outline-none border border-emerald-800"
                 >
                   {LANGUAGES.map(l => (
                     <option key={l.code} value={l.code}>{l.flag} {l.code.toUpperCase()}</option>
@@ -1933,11 +1933,11 @@ export default function WorkEntryPage({
             <div className={`space-y-6 transition-all duration-300 ${activeWorkLog ? 'opacity-60 pointer-events-none grayscale-[30%]' : ''}`}>
               
               <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
-                <div className="flex items-center justify-between mb-2.5">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-teal-400 flex items-center gap-2">
+                <div className="flex items-center justify-between gap-2 mb-2.5">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-teal-400 flex items-center gap-2 shrink-0">
                     <MapPin className="w-4 h-4" />{t('field', language)}
                   </h2>
-                  <span className="text-xs font-bold text-teal-300 bg-teal-950 px-2 py-1 rounded-lg">{gpsStatus}</span>
+                  <span className="text-xs font-bold text-teal-300 bg-teal-950 px-2 py-1 rounded-lg truncate max-w-[65%]">{gpsStatus}</span>
                 </div>
                 <select 
                   value={selectedField}

@@ -248,7 +248,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </header>
 
       {isMobileMenuOpen && (
-        <div className="md:hidden bg-white border-b border-slate-200 p-4 space-y-2 shadow-lg absolute top-16 left-0 right-0 w-full z-40 print:hidden">
+        <div className="md:hidden bg-white border-b border-slate-200 p-4 space-y-2 shadow-lg fixed top-16 left-0 right-0 max-h-[calc(100vh-4rem)] overflow-y-auto w-full z-40 print:hidden">
           {/* モバイル用 農園コードバナー */}
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-3">
             <div className="flex items-center justify-between gap-1 text-xs font-bold text-emerald-900 mb-1.5">
@@ -391,8 +391,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col w-full md:h-screen md:overflow-auto relative">
-        <div className="flex-1 p-4 md:p-8">
+      <main className="flex-1 flex flex-col w-full min-w-0 md:h-screen md:overflow-auto relative overflow-x-hidden">
+        <div className="flex-1 p-3.5 sm:p-4 md:p-8 min-w-0">
           {children}
         </div>
       </main>
