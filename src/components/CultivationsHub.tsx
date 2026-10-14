@@ -106,10 +106,37 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   const [officialFertilizers, setOfficialFertilizers] = useState<any[]>([]);
   const [farmRegisteredFertilizers, setFarmRegisteredFertilizers] = useState<any[]>([]);
   const [searchFertQuery, setSearchFertQuery] = useState('');
-  const [fertCategoryTab, setFertCategoryTab] = useState<string>('all');
+  const [fertCategoryTab, setFertCategoryTab] = useState<string>('registered');
   const [isLoadingFertilizers, setIsLoadingFertilizers] = useState(false);
   const [fertAnalysisCropId, setFertAnalysisCropId] = useState<string>('all');
   const [fertAnalysisFieldId, setFertAnalysisFieldId] = useState<string>('all');
+  const [fertHistoryGroupMode, setFertHistoryGroupMode] = useState<'field' | 'crop' | 'date'>('field');
+  const [collapsedFertGroups, setCollapsedFertGroups] = useState<Record<string, boolean>>({});
+
+  // かんたん施肥記録（元肥・追肥・10a純成分自動計算）モーダル用ステート
+  const [isFertRecordModalOpen, setIsFertRecordModalOpen] = useState(false);
+  const [fertRecordDate, setFertRecordDate] = useState<string>(() => getJSTDate());
+  const [fertRecordWorkType, setFertRecordWorkType] = useState<'元肥' | '追肥' | '葉面散布・液肥' | '土壌改良・堆肥'>('元肥');
+  const [fertRecordFieldIds, setFertRecordFieldIds] = useState<string[]>([]);
+  const [fertRecordCropId, setFertRecordCropId] = useState<string>('');
+  const [fertRecordInputMode, setFertRecordInputMode] = useState<'auto' | 'manual'>('auto');
+  const [fertRecordSelectedFertName, setFertRecordSelectedFertName] = useState<string>('');
+  const [fertRecordNPercent, setFertRecordNPercent] = useState<string>('14');
+  const [fertRecordPPercent, setFertRecordPPercent] = useState<string>('14');
+  const [fertRecordKPercent, setFertRecordKPercent] = useState<string>('14');
+  const [fertRecordCaPercent, setFertRecordCaPercent] = useState<string>('0');
+  const [fertRecordMgPercent, setFertRecordMgPercent] = useState<string>('0');
+  const [fertRecordAmountMode, setFertRecordAmountMode] = useState<'bags_per10a' | 'per10a_kg' | 'total_field_kg'>('bags_per10a');
+  const [fertRecordBagWeight, setFertRecordBagWeight] = useState<string>('20');
+  const [fertRecordBagCount, setFertRecordBagCount] = useState<string>('3');
+  const [fertRecordKgInput, setFertRecordKgInput] = useState<string>('60');
+  const [fertRecordManualN, setFertRecordManualN] = useState<string>('8.4');
+  const [fertRecordManualP, setFertRecordManualP] = useState<string>('8.4');
+  const [fertRecordManualK, setFertRecordManualK] = useState<string>('8.4');
+  const [fertRecordManualCa, setFertRecordManualCa] = useState<string>('0');
+  const [fertRecordManualMg, setFertRecordManualMg] = useState<string>('0');
+  const [fertRecordMemo, setFertRecordMemo] = useState<string>('');
+  const [isSavingFertRecord, setIsSavingFertRecord] = useState(false);
 
   // --- タブ4: 履歴ステート ---
   const [workLogs, setWorkLogs] = useState<any[]>([]);
@@ -915,8 +942,8 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
 
   // --- 肥料管理フィルタリング ---
   const filteredFertilizers = useMemo(() => {
-    // 1. 「自社マスタ登録済のみ」タブの場合: 自農園マスタ（materials）から直接生成
-    if (fertCategoryTab === 'registered') {
+    // 1. 「自社マスタ登録済のみ」タブかつ検索クエリが空の場合: 自農園マスタ（materials）から直接生成
+    if (fertCategoryTab === 'registered' && !searchFertQuery.trim()) {
       return farmRegisteredFertilizers.map(rf => {
         const matchedOfficial = officialFertilizers.find(f => f.fertilizer_name === rf.name);
         return {
@@ -933,7 +960,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
           mg_percent: rf.mg_percent ?? matchedOfficial?.mg_percent ?? 0,
           other_ingredients: matchedOfficial?.other_ingredients || '',
           default_price: rf.default_price || rf.unit_price,
-          bag_weight: rf.bag_weight || rf.capacity || 20,
+          bag_weight: rf.bag_weight_kg || rf.bag_weight || rf.capacity || 20,
           isFarmRegistered: true
         };
       });
@@ -941,90 +968,40 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
 
     // 2. その他のカテゴリまたは検索時の場合
     return officialFertilizers.filter(f => {
+      if (fertCategoryTab === 'registered') {
+        return f.isFarmRegistered || farmRegisteredFertilizers.some(rf => rf.name === f.fertilizer_name);
+      }
       if (fertCategoryTab !== 'all') {
         if (!f.fertilizer_type?.includes(fertCategoryTab)) return false;
       }
       return true;
     });
-  }, [officialFertilizers, farmRegisteredFertilizers, fertCategoryTab]);
+  }, [officialFertilizers, farmRegisteredFertilizers, fertCategoryTab, searchFertQuery]);
 
-  // 施肥ログのパースとN-P-K累計集計 (作目・圃場別)
+  // 施肥ログのパースと圃場別カルテ・N-P-K累計集計
   const fertilizerAnalytics = useMemo(() => {
-    const fertLogs = workLogs.filter(log => {
-      const isFert = log.work_type?.includes('施肥') || log.work_type?.includes('肥料') || log.memo?.includes('[施肥') || log.memo?.includes('合計N:');
-      const isCompleted = log.status !== 'planned';
-      const matchCrop = fertAnalysisCropId === 'all' || log.crop_id === fertAnalysisCropId;
-      const matchField = fertAnalysisFieldId === 'all' || log.field_id === fertAnalysisFieldId;
-      return isFert && isCompleted && matchCrop && matchField;
-    });
-
-    let totalN = 0;
-    let totalP = 0;
-    let totalK = 0;
-    let totalCa = 0;
-    let totalMg = 0;
-    let totalCost = 0;
-    let totalKg = 0;
-
-    let basalN = 0;
-    let basalP = 0;
-    let basalK = 0;
-    let basalCa = 0;
-    let basalMg = 0;
-
-    let topdressN = 0;
-    let topdressP = 0;
-    let topdressK = 0;
-    let topdressCa = 0;
-    let topdressMg = 0;
-
-    const parsedLogs = fertLogs.map(log => {
+    // 1. 単一ログの成分パース関数
+    const parseSingleFertLog = (log: any) => {
       const memo = log.memo || '';
-      
-      // 合計N:3.1kg P:2.2kg K:0.5kg Ca:1.0kg Mg:0.5kg/10a のパース
       const nMatch = memo.match(/合計N:([\d.]+)kg/i) || memo.match(/N:([\d.]+)kg/i);
       const pMatch = memo.match(/P:([\d.]+)kg/i);
       const kMatch = memo.match(/K:([\d.]+)kg/i);
       const caMatch = memo.match(/Ca:([\d.]+)kg/i);
       const mgMatch = memo.match(/Mg:([\d.]+)kg/i);
       const costMatch = memo.match(/総費用:¥([\d,]+)/i) || memo.match(/¥([\d,]+)/i);
-      const kgMatch = memo.match(/(\d+(\.\d+)?)\s*kg/i);
+      const kgMatch = memo.match(/投入(?:量)?:?\s*([\d.]+)\s*kg/i) || memo.match(/(\d+(\.\d+)?)\s*kg/i);
 
-      const nVal = nMatch ? parseFloat(nMatch[1]) : 0;
-      const pVal = pMatch ? parseFloat(pMatch[1]) : 0;
-      const kVal = kMatch ? parseFloat(kMatch[1]) : 0;
-      const caVal = caMatch ? parseFloat(caMatch[1]) : 0;
-      const mgVal = mgMatch ? parseFloat(mgMatch[1]) : 0;
+      const nVal = nMatch ? parseFloat(nMatch[1]) : (Number(log.fert_n) || 0);
+      const pVal = pMatch ? parseFloat(pMatch[1]) : (Number(log.fert_p) || 0);
+      const kVal = kMatch ? parseFloat(kMatch[1]) : (Number(log.fert_k) || 0);
+      const caVal = caMatch ? parseFloat(caMatch[1]) : (Number(log.fert_ca) || 0);
+      const mgVal = mgMatch ? parseFloat(mgMatch[1]) : (Number(log.fert_mg) || 0);
       const costVal = costMatch ? parseInt(costMatch[1].replace(/,/g, ''), 10) : 0;
       const kgVal = kgMatch ? parseFloat(kgMatch[1]) : 0;
 
       const isBasal = log.work_type?.includes('元肥') || memo.includes('元肥');
-      const isTopdress = log.work_type?.includes('追肥') || memo.includes('追肥') || log.work_type?.includes('葉面');
+      const isTopdress = !isBasal && (log.work_type?.includes('追肥') || memo.includes('追肥') || log.work_type?.includes('葉面') || log.work_type?.includes('施肥'));
 
-      totalN += nVal;
-      totalP += pVal;
-      totalK += kVal;
-      totalCa += caVal;
-      totalMg += mgVal;
-      totalCost += costVal;
-      totalKg += kgVal;
-
-      if (isBasal) {
-        basalN += nVal;
-        basalP += pVal;
-        basalK += kVal;
-        basalCa += caVal;
-        basalMg += mgVal;
-      }
-      if (isTopdress) {
-        topdressN += nVal;
-        topdressP += pVal;
-        topdressK += kVal;
-        topdressCa += caVal;
-        topdressMg += mgVal;
-      }
-
-      // 微量要素・土壌改良成分の検出（ホウ素、マンガン、ケイ酸、鉄、腐植酸等）
       const microNutrients: string[] = [];
       if (/ホウ素|ほう素|\bB\b/i.test(memo)) microNutrients.push('ホウ素 (B)');
       if (/マンガン|\bMn\b/i.test(memo)) microNutrients.push('マンガン (Mn)');
@@ -1048,37 +1025,427 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
         isBasal,
         isTopdress
       };
+    };
+
+    // 作目フィルターに一致する全施肥完了ログ（圃場別比較カード用）
+    const cropFilteredFertLogs = workLogs
+      .filter(log => {
+        const isFert = log.work_type?.includes('施肥') || log.work_type?.includes('元肥') || log.work_type?.includes('追肥') || log.work_type?.includes('肥料') || log.memo?.includes('[施肥') || log.memo?.includes('合計N:');
+        const isCompleted = log.status !== 'planned';
+        const matchCrop = fertAnalysisCropId === 'all' || log.crop_id === fertAnalysisCropId;
+        return isFert && isCompleted && matchCrop;
+      })
+      .map(parseSingleFertLog);
+
+    // 2. 圃場別カルテ（各畑ごとの累積kg/10a・元肥/追肥内訳・最終施肥日）を生成
+    const fieldMap = new Map<string, {
+      fieldId: string;
+      fieldName: string;
+      areaAcre: number;
+      cropNames: string[];
+      totalN: number;
+      totalP: number;
+      totalK: number;
+      totalCa: number;
+      totalMg: number;
+      basalN: number;
+      basalP: number;
+      basalK: number;
+      basalCa: number;
+      basalMg: number;
+      topdressN: number;
+      topdressP: number;
+      topdressK: number;
+      topdressCa: number;
+      topdressMg: number;
+      basalCount: number;
+      topdressCount: number;
+      logCount: number;
+      lastDate: string;
+      microNutrientsSet: Set<string>;
+      logs: any[];
+    }>();
+
+    // 登録圃場を初期セット
+    fields.forEach(f => {
+      const fieldCults = cultivations.filter(c => c.fieldId === f.id);
+      if (fertAnalysisCropId !== 'all') {
+        const hasTargetCrop = fieldCults.some(c => c.cropId === fertAnalysisCropId) || cropFilteredFertLogs.some(l => l.field_id === f.id);
+        if (!hasTargetCrop) return;
+      }
+      const areaAcre = f.area_size ? Number(f.area_size) : f.area_sqm ? Math.round((Number(f.area_sqm) / 100) * 10) / 10 : 10;
+      const cropNames = Array.from(new Set(fieldCults.map(c => c.cropName).filter(Boolean)));
+      fieldMap.set(f.id, {
+        fieldId: f.id,
+        fieldName: f.name,
+        areaAcre,
+        cropNames,
+        totalN: 0, totalP: 0, totalK: 0, totalCa: 0, totalMg: 0,
+        basalN: 0, basalP: 0, basalK: 0, basalCa: 0, basalMg: 0,
+        topdressN: 0, topdressP: 0, topdressK: 0, topdressCa: 0, topdressMg: 0,
+        basalCount: 0, topdressCount: 0, logCount: 0,
+        lastDate: '',
+        microNutrientsSet: new Set<string>(),
+        logs: []
+      });
     });
 
-    // 全ログから微量要素のユニークリストを集計
+    // 各施肥ログを該当圃場へ集計
+    cropFilteredFertLogs.forEach(pLog => {
+      const fId = pLog.field_id || 'unassigned';
+      if (!fieldMap.has(fId)) {
+        fieldMap.set(fId, {
+          fieldId: fId,
+          fieldName: pLog.fields?.name || '圃場未指定',
+          areaAcre: 10,
+          cropNames: pLog.crops?.name ? [pLog.crops.name] : [],
+          totalN: 0, totalP: 0, totalK: 0, totalCa: 0, totalMg: 0,
+          basalN: 0, basalP: 0, basalK: 0, basalCa: 0, basalMg: 0,
+          topdressN: 0, topdressP: 0, topdressK: 0, topdressCa: 0, topdressMg: 0,
+          basalCount: 0, topdressCount: 0, logCount: 0,
+          lastDate: '',
+          microNutrientsSet: new Set<string>(),
+          logs: []
+        });
+      }
+      const entry = fieldMap.get(fId)!;
+      entry.logs.push(pLog);
+      entry.logCount++;
+      if (pLog.crops?.name && !entry.cropNames.includes(pLog.crops.name)) {
+        entry.cropNames.push(pLog.crops.name);
+      }
+      if (!entry.lastDate || (pLog.work_date && pLog.work_date > entry.lastDate)) {
+        entry.lastDate = pLog.work_date;
+      }
+      entry.totalN += pLog.nVal;
+      entry.totalP += pLog.pVal;
+      entry.totalK += pLog.kVal;
+      entry.totalCa += pLog.caVal;
+      entry.totalMg += pLog.mgVal;
+
+      if (pLog.isBasal) {
+        entry.basalCount++;
+        entry.basalN += pLog.nVal;
+        entry.basalP += pLog.pVal;
+        entry.basalK += pLog.kVal;
+        entry.basalCa += pLog.caVal;
+        entry.basalMg += pLog.mgVal;
+      } else {
+        entry.topdressCount++;
+        entry.topdressN += pLog.nVal;
+        entry.topdressP += pLog.pVal;
+        entry.topdressK += pLog.kVal;
+        entry.topdressCa += pLog.caVal;
+        entry.topdressMg += pLog.mgVal;
+      }
+      pLog.microNutrients.forEach((m: string) => entry.microNutrientsSet.add(m));
+    });
+
+    const round1 = (v: number) => Math.round(v * 10) / 10;
+    const fieldCards = Array.from(fieldMap.values())
+      .map(fc => ({
+        ...fc,
+        totalN: round1(fc.totalN),
+        totalP: round1(fc.totalP),
+        totalK: round1(fc.totalK),
+        totalCa: round1(fc.totalCa),
+        totalMg: round1(fc.totalMg),
+        basalN: round1(fc.basalN),
+        basalP: round1(fc.basalP),
+        basalK: round1(fc.basalK),
+        basalCa: round1(fc.basalCa),
+        basalMg: round1(fc.basalMg),
+        topdressN: round1(fc.topdressN),
+        topdressP: round1(fc.topdressP),
+        topdressK: round1(fc.topdressK),
+        topdressCa: round1(fc.topdressCa),
+        topdressMg: round1(fc.topdressMg),
+        microNutrients: Array.from(fc.microNutrientsSet)
+      }))
+      .sort((a, b) => {
+        if (b.logCount !== a.logCount) return b.logCount - a.logCount;
+        return a.fieldName.localeCompare(b.fieldName, 'ja');
+      });
+
+    // 3. 現在選択中の圃場（または全圃場の1圃場あたり平均）の算出
+    const parsedLogs = fertAnalysisFieldId === 'all'
+      ? cropFilteredFertLogs
+      : cropFilteredFertLogs.filter(l => (l.field_id || 'unassigned') === fertAnalysisFieldId);
+
+    const fertilizedFieldCards = fieldCards.filter(fc => fc.logCount > 0);
+    const divisor = fertAnalysisFieldId === 'all' ? Math.max(1, fertilizedFieldCards.length) : 1;
+
+    let sumN = 0, sumP = 0, sumK = 0, sumCa = 0, sumMg = 0, totalCost = 0, totalKg = 0;
+    let sumBasalN = 0, sumBasalP = 0, sumBasalK = 0, sumBasalCa = 0, sumBasalMg = 0;
+    let sumTopN = 0, sumTopP = 0, sumTopK = 0, sumTopCa = 0, sumTopMg = 0;
+
+    parsedLogs.forEach(l => {
+      sumN += l.nVal;
+      sumP += l.pVal;
+      sumK += l.kVal;
+      sumCa += l.caVal;
+      sumMg += l.mgVal;
+      totalCost += l.costVal;
+      totalKg += l.kgVal;
+      if (l.isBasal) {
+        sumBasalN += l.nVal;
+        sumBasalP += l.pVal;
+        sumBasalK += l.kVal;
+        sumBasalCa += l.caVal;
+        sumBasalMg += l.mgVal;
+      } else {
+        sumTopN += l.nVal;
+        sumTopP += l.pVal;
+        sumTopK += l.kVal;
+        sumTopCa += l.caVal;
+        sumTopMg += l.mgVal;
+      }
+    });
+
     const allMicroNutrients = Array.from(new Set(parsedLogs.flatMap(l => l.microNutrients)));
 
+    // 4. 施肥履歴のグルーピング（圃場ごと / 作目ごと / 日付順）
+    const groupsMap = new Map<string, {
+      key: string;
+      title: string;
+      subtitle: string;
+      logs: any[];
+      sumN: number;
+      sumP: number;
+      sumK: number;
+      sumCa: number;
+      sumMg: number;
+      basalCount: number;
+      topdressCount: number;
+    }>();
+
+    parsedLogs.forEach(l => {
+      const fName = l.fields?.name || '圃場未指定';
+      const cName = l.crops?.name || '作目未設定';
+      const wDate = l.work_date || '日付未設定';
+
+      let key = '';
+      let title = '';
+      let subtitle = '';
+      if (fertHistoryGroupMode === 'field') {
+        key = l.field_id || fName;
+        title = fName;
+        subtitle = cName;
+      } else if (fertHistoryGroupMode === 'crop') {
+        key = l.crop_id || cName;
+        title = cName;
+        subtitle = fName;
+      } else {
+        key = wDate;
+        title = formatDateWithDay(wDate);
+        subtitle = `${fName} (${cName})`;
+      }
+
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, {
+          key,
+          title,
+          subtitle,
+          logs: [],
+          sumN: 0, sumP: 0, sumK: 0, sumCa: 0, sumMg: 0,
+          basalCount: 0, topdressCount: 0
+        });
+      }
+      const g = groupsMap.get(key)!;
+      g.logs.push(l);
+      g.sumN = round1(g.sumN + l.nVal);
+      g.sumP = round1(g.sumP + l.pVal);
+      g.sumK = round1(g.sumK + l.kVal);
+      g.sumCa = round1(g.sumCa + l.caVal);
+      g.sumMg = round1(g.sumMg + l.mgVal);
+      if (l.isBasal) g.basalCount++;
+      else g.topdressCount++;
+    });
+
+    const groupedFertLogs = Array.from(groupsMap.values());
+
     return {
-      totalN: Math.round(totalN * 10) / 10,
-      totalP: Math.round(totalP * 10) / 10,
-      totalK: Math.round(totalK * 10) / 10,
-      totalCa: Math.round(totalCa * 10) / 10,
-      totalMg: Math.round(totalMg * 10) / 10,
+      isAverageMode: fertAnalysisFieldId === 'all' && fertilizedFieldCards.length > 1,
+      fertilizedFieldsCount: fertilizedFieldCards.length,
+      totalFieldsCount: fieldCards.length,
+      fieldCards,
+      groupedFertLogs,
+      totalN: round1(sumN / divisor),
+      totalP: round1(sumP / divisor),
+      totalK: round1(sumK / divisor),
+      totalCa: round1(sumCa / divisor),
+      totalMg: round1(sumMg / divisor),
       totalCost,
-      totalKg: Math.round(totalKg * 10) / 10,
-      basalN: Math.round(basalN * 10) / 10,
-      basalP: Math.round(basalP * 10) / 10,
-      basalK: Math.round(basalK * 10) / 10,
-      basalCa: Math.round(basalCa * 10) / 10,
-      basalMg: Math.round(basalMg * 10) / 10,
-      topdressN: Math.round(topdressN * 10) / 10,
-      topdressP: Math.round(topdressP * 10) / 10,
-      topdressK: Math.round(topdressK * 10) / 10,
-      topdressCa: Math.round(topdressCa * 10) / 10,
-      topdressMg: Math.round(topdressMg * 10) / 10,
+      totalKg: round1(totalKg),
+      basalN: round1(sumBasalN / divisor),
+      basalP: round1(sumBasalP / divisor),
+      basalK: round1(sumBasalK / divisor),
+      basalCa: round1(sumBasalCa / divisor),
+      basalMg: round1(sumBasalMg / divisor),
+      topdressN: round1(sumTopN / divisor),
+      topdressP: round1(sumTopP / divisor),
+      topdressK: round1(sumTopK / divisor),
+      topdressCa: round1(sumTopCa / divisor),
+      topdressMg: round1(sumTopMg / divisor),
       allMicroNutrients,
       parsedLogs
     };
-  }, [workLogs, fertAnalysisCropId, fertAnalysisFieldId]);
+  }, [workLogs, fields, cultivations, fertAnalysisCropId, fertAnalysisFieldId, fertHistoryGroupMode]);
+
+  // かんたん施肥記録モーダルを開くヘルパー
+  const handleOpenFertRecordModal = (opts?: {
+    fieldId?: string;
+    cropId?: string;
+    fertItem?: any;
+    workType?: '元肥' | '追肥' | '葉面散布・液肥' | '土壌改良・堆肥';
+  }) => {
+    const targetFieldId = opts?.fieldId || (fertAnalysisFieldId !== 'all' ? fertAnalysisFieldId : (fields[0]?.id || ''));
+    setFertRecordFieldIds(targetFieldId && targetFieldId !== 'unassigned' ? [targetFieldId] : (fields[0]?.id ? [fields[0].id] : []));
+
+    let targetCropId = opts?.cropId || (fertAnalysisCropId !== 'all' ? fertAnalysisCropId : '');
+    if (!targetCropId && targetFieldId) {
+      const matchedCult = cultivations.find(c => c.fieldId === targetFieldId);
+      if (matchedCult?.cropId) targetCropId = matchedCult.cropId;
+    }
+    if (!targetCropId && crops.length > 0) targetCropId = crops[0].id;
+    setFertRecordCropId(targetCropId);
+
+    if (opts?.workType) setFertRecordWorkType(opts.workType);
+
+    const defaultFert = opts?.fertItem || (farmRegisteredFertilizers.length > 0 ? {
+      fertilizer_name: farmRegisteredFertilizers[0].name,
+      n_percent: farmRegisteredFertilizers[0].n_percent ?? farmRegisteredFertilizers[0].n_ratio ?? 14,
+      p_percent: farmRegisteredFertilizers[0].p_percent ?? farmRegisteredFertilizers[0].p_ratio ?? 14,
+      k_percent: farmRegisteredFertilizers[0].k_percent ?? farmRegisteredFertilizers[0].k_ratio ?? 14,
+      ca_percent: farmRegisteredFertilizers[0].ca_percent ?? 0,
+      mg_percent: farmRegisteredFertilizers[0].mg_percent ?? 0,
+      bag_weight: farmRegisteredFertilizers[0].bag_weight_kg || farmRegisteredFertilizers[0].bag_weight || 20
+    } : null);
+
+    if (defaultFert) {
+      setFertRecordInputMode('auto');
+      setFertRecordSelectedFertName(defaultFert.fertilizer_name || defaultFert.name || '化成肥料');
+      setFertRecordNPercent(String(defaultFert.n_percent ?? 0));
+      setFertRecordPPercent(String(defaultFert.p_percent ?? 0));
+      setFertRecordKPercent(String(defaultFert.k_percent ?? 0));
+      setFertRecordCaPercent(String(defaultFert.ca_percent ?? 0));
+      setFertRecordMgPercent(String(defaultFert.mg_percent ?? 0));
+      setFertRecordBagWeight(String(defaultFert.bag_weight || 20));
+    }
+    setIsFertRecordModalOpen(true);
+  };
+
+  // かんたん施肥記録モーダル内の10aあたり純成分リアルタイム自動計算
+  const calculatedFertNutrients = useMemo(() => {
+    const round1 = (v: number) => Math.round(v * 10) / 10;
+    if (fertRecordInputMode === 'manual') {
+      return {
+        kgPer10a: parseFloat(fertRecordKgInput) || 0,
+        n: round1(parseFloat(fertRecordManualN) || 0),
+        p: round1(parseFloat(fertRecordManualP) || 0),
+        k: round1(parseFloat(fertRecordManualK) || 0),
+        ca: round1(parseFloat(fertRecordManualCa) || 0),
+        mg: round1(parseFloat(fertRecordManualMg) || 0)
+      };
+    }
+
+    // 選択中の圃場の合計面積（a: アール）
+    const selectedAreaAcre = fertRecordFieldIds.reduce((acc, fId) => {
+      const f = fields.find(item => item.id === fId);
+      const a = f?.area_size ? Number(f.area_size) : f?.area_sqm ? Number(f.area_sqm) / 100 : 10;
+      return acc + (a > 0 ? a : 10);
+    }, 0) || 10;
+
+    let kgPer10a = 0;
+    const bagW = parseFloat(fertRecordBagWeight) || 20;
+    const bagC = parseFloat(fertRecordBagCount) || 0;
+    const rawKg = parseFloat(fertRecordKgInput) || 0;
+
+    if (fertRecordAmountMode === 'bags_per10a') {
+      kgPer10a = round1(bagW * bagC);
+    } else if (fertRecordAmountMode === 'per10a_kg') {
+      kgPer10a = round1(rawKg);
+    } else {
+      // 畑全体への総投入量(kg)から10aあたりへ自動換算
+      kgPer10a = round1((rawKg / selectedAreaAcre) * 10);
+    }
+
+    const nPct = parseFloat(fertRecordNPercent) || 0;
+    const pPct = parseFloat(fertRecordPPercent) || 0;
+    const kPct = parseFloat(fertRecordKPercent) || 0;
+    const caPct = parseFloat(fertRecordCaPercent) || 0;
+    const mgPct = parseFloat(fertRecordMgPercent) || 0;
+
+    return {
+      kgPer10a,
+      selectedAreaAcre: round1(selectedAreaAcre),
+      n: round1((kgPer10a * nPct) / 100),
+      p: round1((kgPer10a * pPct) / 100),
+      k: round1((kgPer10a * kPct) / 100),
+      ca: round1((kgPer10a * caPct) / 100),
+      mg: round1((kgPer10a * mgPct) / 100)
+    };
+  }, [
+    fertRecordInputMode, fertRecordAmountMode, fertRecordBagWeight, fertRecordBagCount, fertRecordKgInput,
+    fertRecordNPercent, fertRecordPPercent, fertRecordKPercent, fertRecordCaPercent, fertRecordMgPercent,
+    fertRecordManualN, fertRecordManualP, fertRecordManualK, fertRecordManualCa, fertRecordManualMg,
+    fertRecordFieldIds, fields
+  ]);
+
+  // かんたん施肥記録の保存処理
+  const handleSaveFertRecord = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (fertRecordFieldIds.length === 0) {
+      alert('施肥対象の圃場を1つ以上選択してください');
+      return;
+    }
+    setIsSavingFertRecord(true);
+    try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error('テナントIDが特定できません');
+
+      const fertLabel = fertRecordSelectedFertName.trim() || '肥料';
+      const { kgPer10a, n, p, k, ca, mg } = calculatedFertNutrients;
+      const workTypeStr = `施肥（${fertRecordWorkType}）`;
+      const timestamp = new Date().toISOString();
+
+      const recordsToInsert = fertRecordFieldIds.map(fId => {
+        const matchedCult = cultivations.find(c => c.fieldId === fId);
+        const resolvedCropId = fertRecordCropId || matchedCult?.cropId || null;
+        return {
+          user_id: tenantId,
+          field_id: fId,
+          crop_id: resolvedCropId,
+          work_date: fertRecordDate,
+          work_type: workTypeStr,
+          duration_minutes: 60,
+          status: 'completed',
+          memo: `[施肥記録] 使用肥料: ${fertLabel} (投入:${kgPer10a}kg/10a) | 合計N:${n}kg P:${p}kg K:${k}kg Ca:${ca}kg Mg:${mg}kg/10a${fertRecordMemo.trim() ? ' | ' + fertRecordMemo.trim() : ''}`,
+          created_at: timestamp
+        };
+      });
+
+      const { error } = await supabase.from('work_logs').insert(recordsToInsert);
+      if (error) throw error;
+
+      setIsFertRecordModalOpen(false);
+      setFertRecordMemo('');
+      showToast(`${fertRecordFieldIds.length}箇所の圃場に「${workTypeStr}（${fertLabel}）」を記録しました！`);
+      fetchAllData();
+    } catch (err: any) {
+      console.error(err);
+      alert('施肥記録の保存に失敗しました: ' + (err.message || ''));
+    } finally {
+      setIsSavingFertRecord(false);
+    }
+  };
 
   // 公的肥料マスター ＆ 自社マスタ統合検索（全方位あいまい検索・デバウンス対応・最大200件）
   const handleSearchFertilizers = (q: string) => {
     setSearchFertQuery(q);
+    if (q.trim() && fertCategoryTab === 'registered') {
+      setFertCategoryTab('all');
+    }
 
     if (searchFertilizerTimerRef.current) {
       clearTimeout(searchFertilizerTimerRef.current);
@@ -1133,7 +1500,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
           ca_percent: rf.ca_percent ?? 0,
           mg_percent: rf.mg_percent ?? 0,
           default_price: rf.default_price || rf.unit_price,
-          bag_weight: rf.bag_weight || rf.capacity || 20,
+          bag_weight: rf.bag_weight_kg || rf.bag_weight || rf.capacity || 20,
           isFarmRegistered: true
         }));
 
@@ -1685,24 +2052,33 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
           {activeMainTab === 'fertilizers' && (
             <div className="space-y-6">
               
-              {/* 🌾 施肥純成分 (N-P-K) 累計カルテ ＆ 進捗ダッシュボード */}
+              {/* 🌾 1. 作物・圃場別 施肥純成分 (N-P-K) 累計カルテ ＆ 圃場別一覧ダッシュボード */}
               <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-5 sm:p-6 rounded-3xl shadow-md border border-slate-700/50 space-y-5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-700/60 pb-4">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-700/60 pb-4">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <div className="w-8 h-8 rounded-xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center text-teal-400">
                         <Sparkles className="w-4 h-4" />
                       </div>
                       <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
-                        作物・圃場別 施肥純成分 (N-P-K) 累計カルテ
+                        圃場別・施肥純成分 (N-P-K) 栄養カルテ
                       </h3>
+                      {fertAnalysisFieldId !== 'all' ? (
+                        <span className="px-2.5 py-0.5 rounded-lg bg-teal-500/30 border border-teal-400/50 text-teal-200 text-xs font-black">
+                          📍 選択中: {fields.find(f => f.id === fertAnalysisFieldId)?.name || '指定圃場'}
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-lg bg-slate-700/80 border border-slate-600 text-slate-300 text-[11px] font-bold">
+                          全 {fertilizerAnalytics.totalFieldsCount} 圃場（うち施肥済 {fertilizerAnalytics.fertilizedFieldsCount} 圃場）
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-400 font-bold">
-                      元肥および追肥の記録から10aあたりの純成分投入量を自動集計しています。
+                      下の「圃場別カルテ」をクリックすると、その畑の正確な10aあたり投入成分量と履歴に絞り込めます。
                     </p>
                   </div>
 
-                  {/* 絞り込みセレクター */}
+                  {/* 絞り込みセレクター ＆ ＋施肥記録ボタン */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <div className="relative">
                       <select
@@ -1724,109 +2100,270 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                         onChange={e => setFertAnalysisFieldId(e.target.value)}
                         className="pl-3 pr-8 py-2 bg-slate-800 border border-slate-600 rounded-xl text-xs font-bold text-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-400 appearance-none cursor-pointer"
                       >
-                        <option value="all">すべての圃場</option>
+                        <option value="all">すべての圃場 (一覧比較)</option>
                         {fields.map(f => (
                           <option key={f.id} value={f.id}>{f.name}</option>
                         ))}
                       </select>
                       <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
+
+                    {fertAnalysisFieldId !== 'all' && (
+                      <button
+                        type="button"
+                        onClick={() => setFertAnalysisFieldId('all')}
+                        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        全圃場表示に戻す
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenFertRecordModal()}
+                      className="px-4 py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 rounded-xl text-xs font-black transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4 stroke-[3]" />
+                      <span>施肥（元肥・追肥）を記録する</span>
+                    </button>
                   </div>
                 </div>
 
-                {/* 5大主要養分メーターカード (N-P-K-Ca-Mg) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-                  {/* 🔵 N (窒素) */}
-                  <div className="bg-slate-800/90 border border-blue-500/30 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden shadow-inner">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-black text-blue-300 uppercase tracking-wider">🔵 N (窒素)</span>
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-200 border border-blue-400/30">kg/10a</span>
-                    </div>
-                    <div>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalN}</span>
-                        <span className="text-[11px] font-bold text-slate-400">kg</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-700/50 text-[10px] text-slate-300 font-bold">
-                        <span>元: <strong className="text-blue-400">{fertilizerAnalytics.basalN}</strong></span>
-                        <span>•</span>
-                        <span>追: <strong className="text-cyan-400">{fertilizerAnalytics.topdressN}</strong></span>
-                      </div>
-                    </div>
+                {/* 📍 【改革①】圃場（畑）別・施肥状況一覧カルテ（ひと目で全畑を比較！） */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-black text-teal-300 flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-teal-400" />
+                      <span>圃場（畑）ごとの施肥状況カルテ一覧（カードをクリックで畑を選択）</span>
+                    </h4>
+                    <span className="text-[11px] text-slate-400 font-bold">
+                      ※数値はすべて10a（1反）あたりの累積純成分量(kg)
+                    </span>
                   </div>
 
-                  {/* 🟠 P (リン酸) */}
-                  <div className="bg-slate-800/90 border border-amber-500/30 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden shadow-inner">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-black text-amber-300 uppercase tracking-wider">🟠 P (リン酸)</span>
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-400/30">kg/10a</span>
-                    </div>
-                    <div>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalP}</span>
-                        <span className="text-[11px] font-bold text-slate-400">kg</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-700/50 text-[10px] text-slate-300 font-bold">
-                        <span>元: <strong className="text-amber-400">{fertilizerAnalytics.basalP}</strong></span>
-                        <span>•</span>
-                        <span>追: <strong className="text-yellow-400">{fertilizerAnalytics.topdressP}</strong></span>
-                      </div>
-                    </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {fertilizerAnalytics.fieldCards.map(fc => {
+                      const isFocused = fertAnalysisFieldId === fc.fieldId;
+                      const isUnfertilized = fc.logCount === 0;
+                      return (
+                        <div
+                          key={fc.fieldId}
+                          onClick={() => setFertAnalysisFieldId(isFocused ? 'all' : fc.fieldId)}
+                          className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-3 ${
+                            isFocused
+                              ? 'bg-teal-950/90 border-2 border-teal-400 shadow-lg ring-2 ring-teal-400/20'
+                              : isUnfertilized
+                                ? 'bg-slate-800/50 border-slate-700/80 hover:border-slate-500 opacity-85'
+                                : 'bg-slate-800/90 border-slate-700 hover:border-teal-500/60'
+                          }`}
+                        >
+                          <div className="space-y-2">
+                            {/* 畑名・面積・作目・ステータス */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-sm font-black text-white truncate">{fc.fieldName}</span>
+                                  <span className="px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 text-[10px] font-bold">
+                                    {fc.areaAcre} a
+                                  </span>
+                                  {fc.cropNames.map((cn, idx) => (
+                                    <span key={idx} className="px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-700/60 text-emerald-300 text-[10px] font-black">
+                                      🌱 {cn}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {isUnfertilized ? (
+                                <span className="shrink-0 px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-black">
+                                  ⚠️ 未施肥
+                                </span>
+                              ) : (
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {fc.basalCount > 0 && (
+                                    <span className="px-1.5 py-0.5 rounded bg-blue-500/20 border border-blue-400/40 text-blue-300 text-[10px] font-black">
+                                      元肥 {fc.basalCount}回
+                                    </span>
+                                  )}
+                                  {fc.topdressCount > 0 && (
+                                    <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-black">
+                                      追肥 {fc.topdressCount}回
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* 畑ごとの N-P-K-Ca-Mg メーター */}
+                            <div className="grid grid-cols-5 gap-1.5 pt-1">
+                              <div className="bg-slate-900/80 border border-blue-500/20 rounded-xl p-1.5 text-center">
+                                <div className="text-[9px] font-black text-blue-300">N(窒素)</div>
+                                <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalN}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
+                              </div>
+                              <div className="bg-slate-900/80 border border-amber-500/20 rounded-xl p-1.5 text-center">
+                                <div className="text-[9px] font-black text-amber-300">P(リン)</div>
+                                <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalP}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
+                              </div>
+                              <div className="bg-slate-900/80 border border-purple-500/20 rounded-xl p-1.5 text-center">
+                                <div className="text-[9px] font-black text-purple-300">K(カリ)</div>
+                                <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalK}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
+                              </div>
+                              <div className="bg-slate-900/80 border border-yellow-500/20 rounded-xl p-1.5 text-center">
+                                <div className="text-[9px] font-black text-yellow-300">Ca(石灰)</div>
+                                <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalCa}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
+                              </div>
+                              <div className="bg-slate-900/80 border border-teal-500/20 rounded-xl p-1.5 text-center">
+                                <div className="text-[9px] font-black text-teal-300">Mg(苦土)</div>
+                                <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalMg}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* フッター：最終施肥日 ＆ クイック施肥記録ボタン */}
+                          <div className="pt-2 border-t border-slate-700/60 flex items-center justify-between gap-2 text-[11px]">
+                            <span className="text-slate-400 font-bold truncate">
+                              {fc.lastDate ? `最終施肥: ${fc.lastDate}` : 'まだ施肥記録がありません'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenFertRecordModal({
+                                  fieldId: fc.fieldId !== 'unassigned' ? fc.fieldId : undefined,
+                                  workType: fc.basalCount === 0 ? '元肥' : '追肥'
+                                });
+                              }}
+                              className="px-2.5 py-1 bg-teal-500/20 hover:bg-teal-500 hover:text-slate-950 text-teal-300 border border-teal-400/40 rounded-lg text-[10px] font-black transition-all shrink-0 cursor-pointer"
+                            >
+                              ＋ {fc.basalCount === 0 ? '元肥を記録' : '追肥を記録'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 5大主要養分メーターカード (選択圃場の合計 または 施肥済圃場の平均) */}
+                <div className="pt-3 border-t border-slate-700/60 space-y-2.5">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-xs font-black text-slate-200 flex items-center gap-1.5">
+                      {fertAnalysisFieldId !== 'all' ? (
+                        <>🎯 選択中の圃場「<strong className="text-teal-300">{fields.find(f => f.id === fertAnalysisFieldId)?.name || '圃場'}</strong>」の10aあたり累積投入量</>
+                      ) : (
+                        <>📊 施肥済圃場（{fertilizerAnalytics.fertilizedFieldsCount}圃場）の <strong className="text-teal-300">1圃場あたり平均投入量 (kg/10a)</strong></>
+                      )}
+                    </span>
+                    {fertAnalysisFieldId === 'all' && fertilizerAnalytics.fertilizedFieldsCount > 1 && (
+                      <span className="text-[11px] text-teal-300/90 font-bold">
+                        ※別々の畑の10a数値が混ざらないよう、1圃場あたりの平均値を表示しています
+                      </span>
+                    )}
                   </div>
 
-                  {/* 🟣 K (カリ) */}
-                  <div className="bg-slate-800/90 border border-purple-500/30 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden shadow-inner">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-black text-purple-300 uppercase tracking-wider">🟣 K (カリ)</span>
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-400/30">kg/10a</span>
-                    </div>
-                    <div>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalK}</span>
-                        <span className="text-[11px] font-bold text-slate-400">kg</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                    {/* 🔵 N (窒素) */}
+                    <div className="bg-slate-800/90 border border-blue-500/30 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden shadow-inner">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-black text-blue-300 uppercase tracking-wider">🔵 N (窒素)</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-200 border border-blue-400/30">
+                          {fertilizerAnalytics.isAverageMode ? '平均 kg/10a' : 'kg/10a'}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-700/50 text-[10px] text-slate-300 font-bold">
-                        <span>元: <strong className="text-purple-400">{fertilizerAnalytics.basalK}</strong></span>
-                        <span>•</span>
-                        <span>追: <strong className="text-pink-400">{fertilizerAnalytics.topdressK}</strong></span>
+                      <div>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalN}</span>
+                          <span className="text-[11px] font-bold text-slate-400">kg</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-700/50 text-[10px] text-slate-300 font-bold">
+                          <span>元肥: <strong className="text-blue-400">{fertilizerAnalytics.basalN}</strong></span>
+                          <span>•</span>
+                          <span>追肥: <strong className="text-cyan-400">{fertilizerAnalytics.topdressN}</strong></span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* 🟡 Ca (カルシウム・石灰) */}
-                  <div className="bg-slate-800/90 border border-yellow-500/30 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden shadow-inner">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-black text-yellow-300 uppercase tracking-wider">🟡 Ca (石灰)</span>
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-200 border border-yellow-400/30">kg/10a</span>
-                    </div>
-                    <div>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalCa}</span>
-                        <span className="text-[11px] font-bold text-slate-400">kg</span>
+                    {/* 🟠 P (リン酸) */}
+                    <div className="bg-slate-800/90 border border-amber-500/30 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden shadow-inner">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-black text-amber-300 uppercase tracking-wider">🟠 P (リン酸)</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-400/30">
+                          {fertilizerAnalytics.isAverageMode ? '平均 kg/10a' : 'kg/10a'}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-700/50 text-[10px] text-slate-300 font-bold">
-                        <span>元: <strong className="text-yellow-400">{fertilizerAnalytics.basalCa}</strong></span>
-                        <span>•</span>
-                        <span>追: <strong className="text-amber-300">{fertilizerAnalytics.topdressCa}</strong></span>
+                      <div>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalP}</span>
+                          <span className="text-[11px] font-bold text-slate-400">kg</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-700/50 text-[10px] text-slate-300 font-bold">
+                          <span>元肥: <strong className="text-amber-400">{fertilizerAnalytics.basalP}</strong></span>
+                          <span>•</span>
+                          <span>追肥: <strong className="text-yellow-400">{fertilizerAnalytics.topdressP}</strong></span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* 🟢 Mg (苦土・マグネシウム) */}
-                  <div className="bg-slate-800/90 border border-teal-500/30 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden shadow-inner">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-black text-teal-300 uppercase tracking-wider">🟢 Mg (苦土)</span>
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-200 border border-teal-400/30">kg/10a</span>
-                    </div>
-                    <div>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalMg}</span>
-                        <span className="text-[11px] font-bold text-slate-400">kg</span>
+                    {/* 🟣 K (カリ) */}
+                    <div className="bg-slate-800/90 border border-purple-500/30 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden shadow-inner">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-black text-purple-300 uppercase tracking-wider">🟣 K (カリ)</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-400/30">
+                          {fertilizerAnalytics.isAverageMode ? '平均 kg/10a' : 'kg/10a'}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-700/50 text-[10px] text-slate-300 font-bold">
-                        <span>元: <strong className="text-teal-400">{fertilizerAnalytics.basalMg}</strong></span>
-                        <span>•</span>
-                        <span>追: <strong className="text-emerald-300">{fertilizerAnalytics.topdressMg}</strong></span>
+                      <div>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalK}</span>
+                          <span className="text-[11px] font-bold text-slate-400">kg</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-700/50 text-[10px] text-slate-300 font-bold">
+                          <span>元肥: <strong className="text-purple-400">{fertilizerAnalytics.basalK}</strong></span>
+                          <span>•</span>
+                          <span>追肥: <strong className="text-pink-400">{fertilizerAnalytics.topdressK}</strong></span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 🟡 Ca (カルシウム・石灰) */}
+                    <div className="bg-slate-800/90 border border-yellow-500/30 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden shadow-inner">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-black text-yellow-300 uppercase tracking-wider">🟡 Ca (石灰)</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-200 border border-yellow-400/30">
+                          {fertilizerAnalytics.isAverageMode ? '平均 kg/10a' : 'kg/10a'}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalCa}</span>
+                          <span className="text-[11px] font-bold text-slate-400">kg</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-700/50 text-[10px] text-slate-300 font-bold">
+                          <span>元肥: <strong className="text-yellow-400">{fertilizerAnalytics.basalCa}</strong></span>
+                          <span>•</span>
+                          <span>追肥: <strong className="text-amber-300">{fertilizerAnalytics.topdressCa}</strong></span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 🟢 Mg (苦土・マグネシウム) */}
+                    <div className="bg-slate-800/90 border border-teal-500/30 rounded-2xl p-3.5 flex flex-col justify-between relative overflow-hidden shadow-inner">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-black text-teal-300 uppercase tracking-wider">🟢 Mg (苦土)</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-200 border border-teal-400/30">
+                          {fertilizerAnalytics.isAverageMode ? '平均 kg/10a' : 'kg/10a'}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">{fertilizerAnalytics.totalMg}</span>
+                          <span className="text-[11px] font-bold text-slate-400">kg</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1.5 pt-1.5 border-t border-slate-700/50 text-[10px] text-slate-300 font-bold">
+                          <span>元肥: <strong className="text-teal-400">{fertilizerAnalytics.basalMg}</strong></span>
+                          <span>•</span>
+                          <span>追肥: <strong className="text-emerald-300">{fertilizerAnalytics.topdressMg}</strong></span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1835,7 +2372,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                 {/* 🧪 微量要素・土壌改良・有機質投入状況パネル */}
                 {fertilizerAnalytics.allMicroNutrients.length > 0 && (
                   <div className="p-3 bg-slate-800/80 rounded-2xl border border-teal-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-black text-teal-300 flex items-center gap-1">
                         <Sparkles className="w-3.5 h-3.5 text-teal-400" />
                         <span>投入済みの微量要素・土壌改良成分:</span>
@@ -1853,64 +2390,203 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                     </span>
                   </div>
                 )}
+              </div>
 
-                {/* 施肥実績タイムライン（直近の施肥履歴） */}
-                {fertilizerAnalytics.parsedLogs.length > 0 && (
-                  <div className="pt-2 border-t border-slate-700/60">
-                    <h4 className="text-xs font-black text-slate-300 mb-2.5 flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-teal-400" />
-                      <span>施肥履歴内訳タイムライン ({fertilizerAnalytics.parsedLogs.length}件)</span>
+              {/* 📋 2. 【改革③】圃場ごとにまとまる見やすい施肥履歴一覧（訂正・削除対応） */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Clock className="w-4 h-4 text-teal-600" />
+                    <h4 className="text-sm font-black text-slate-800">
+                      施肥実績・履歴一覧 ({fertilizerAnalytics.parsedLogs.length}件)
                     </h4>
-                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                      {fertilizerAnalytics.parsedLogs.map((log: any) => (
-                        <div key={log.id} className="p-3 bg-slate-800/70 border border-slate-700 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                          <div className="space-y-1 min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-teal-300 font-black">{log.work_date}</span>
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
-                                log.isBasal ? 'bg-blue-900/60 text-blue-300 border border-blue-700' : 'bg-emerald-900/60 text-emerald-300 border border-emerald-700'
-                              }`}>
-                                {log.work_type}
-                              </span>
-                              <span className="text-slate-300 font-bold">{log.fields?.name || '圃場未指定'}</span>
-                              <span className="text-emerald-400 font-bold">{log.crops?.name}</span>
-                            </div>
-                            <p className="text-[11px] text-slate-400 truncate">{log.memo}</p>
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-                            {log.nVal > 0 && <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px] font-bold">N:{log.nVal}kg</span>}
-                            {log.pVal > 0 && <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-[10px] font-bold">P:{log.pVal}kg</span>}
-                            {log.kVal > 0 && <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded text-[10px] font-bold">K:{log.kVal}kg</span>}
-                            {log.caVal > 0 && <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-300 rounded text-[10px] font-bold">Ca:{log.caVal}kg</span>}
-                            {log.mgVal > 0 && <span className="px-1.5 py-0.5 bg-teal-500/20 text-teal-300 rounded text-[10px] font-bold">Mg:{log.mgVal}kg</span>}
-                            {log.microNutrients?.map((m: string, mIdx: number) => (
-                              <span key={mIdx} className="px-1.5 py-0.5 bg-emerald-900/50 text-emerald-300 rounded text-[10px] font-bold border border-emerald-700/50">
-                                {m}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
+                    <div className="flex items-center gap-1 ml-1 bg-slate-100 p-1 rounded-xl">
+                      {([
+                        { id: 'field', label: '📍 圃場ごと' },
+                        { id: 'crop', label: '🌱 作目ごと' },
+                        { id: 'date', label: '📅 日付順' }
+                      ] as const).map(gm => (
+                        <button
+                          key={gm.id}
+                          type="button"
+                          onClick={() => setFertHistoryGroupMode(gm.id)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                            fertHistoryGroupMode === gm.id
+                              ? 'bg-teal-600 text-white shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {gm.label}
+                        </button>
                       ))}
                     </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenFertRecordModal()}
+                      className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>施肥履歴を追加</span>
+                    </button>
+                  </div>
+                </div>
+
+                {fertilizerAnalytics.groupedFertLogs.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 space-y-2 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <p className="text-xs font-bold">該当する施肥履歴がありません。</p>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenFertRecordModal()}
+                      className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>最初の施肥（元肥・追肥）を記録する</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {fertilizerAnalytics.groupedFertLogs.map(grp => {
+                      const isCollapsed = !!collapsedFertGroups[grp.key];
+                      return (
+                        <div key={grp.key} className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-2xs">
+                          {/* グループヘッダー */}
+                          <div
+                            onClick={() => setCollapsedFertGroups(prev => ({ ...prev, [grp.key]: !prev[grp.key] }))}
+                            className="px-4 py-3 bg-slate-50 hover:bg-slate-100/80 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                          >
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                              <span className="text-sm font-black text-slate-800">{grp.title}</span>
+                              {grp.subtitle && (
+                                <span className="text-xs font-bold text-slate-500">({grp.subtitle})</span>
+                              )}
+                              <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[11px] font-black">
+                                {grp.logs.length}件
+                              </span>
+                              {grp.basalCount > 0 && (
+                                <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-black">
+                                  元肥 {grp.basalCount}回
+                                </span>
+                              )}
+                              {grp.topdressCount > 0 && (
+                                <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black">
+                                  追肥 {grp.topdressCount}回
+                                </span>
+                              )}
+                            </div>
+
+                            {/* グループ合計成分バッジ */}
+                            <div className="flex items-center gap-1.5 flex-wrap text-[11px] font-black">
+                              <span className="text-slate-400 mr-0.5">累計(/10a):</span>
+                              <span className="px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-200 rounded-md">N: {grp.sumN}kg</span>
+                              <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-md">P: {grp.sumP}kg</span>
+                              <span className="px-2 py-0.5 bg-purple-50 text-purple-800 border border-purple-200 rounded-md">K: {grp.sumK}kg</span>
+                              {grp.sumCa > 0 && <span className="px-2 py-0.5 bg-yellow-50 text-yellow-800 border border-yellow-200 rounded-md">Ca: {grp.sumCa}kg</span>}
+                              {grp.sumMg > 0 && <span className="px-2 py-0.5 bg-teal-50 text-teal-800 border border-teal-200 rounded-md">Mg: {grp.sumMg}kg</span>}
+                            </div>
+                          </div>
+
+                          {/* グループ内の個別履歴リスト */}
+                          {!isCollapsed && (
+                            <div className="divide-y divide-slate-100">
+                              {grp.logs.map((log: any) => {
+                                const { badges, cleanNote } = parseStructuredMemo(log.memo);
+                                return (
+                                  <div key={log.id} className="p-3.5 hover:bg-slate-50/70 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div className="space-y-1.5 min-w-0 flex-1">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-xs font-black text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md font-mono">
+                                          📅 {formatDateWithDay(log.work_date)}
+                                        </span>
+                                        <span className={`px-2.5 py-0.5 rounded-md text-xs font-black border ${
+                                          log.isBasal
+                                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        }`}>
+                                          🔬 {log.work_type}
+                                        </span>
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                                          <MapPin className="w-3 h-3 text-slate-500" />
+                                          {log.fields?.name || '圃場未指定'}
+                                        </span>
+                                        {log.crops?.name && (
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                            <Sprout className="w-3 h-3 text-emerald-600" />
+                                            {log.crops.name}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {/* 成分バッジ ＆ 構造化メモ */}
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        {log.nVal > 0 && <span className="px-2 py-0.5 bg-blue-100/80 text-blue-900 rounded-md text-[11px] font-black">🔵 N: {log.nVal}kg/10a</span>}
+                                        {log.pVal > 0 && <span className="px-2 py-0.5 bg-amber-100/80 text-amber-900 rounded-md text-[11px] font-black">🟠 P: {log.pVal}kg/10a</span>}
+                                        {log.kVal > 0 && <span className="px-2 py-0.5 bg-purple-100/80 text-purple-900 rounded-md text-[11px] font-black">🟣 K: {log.kVal}kg/10a</span>}
+                                        {log.caVal > 0 && <span className="px-2 py-0.5 bg-yellow-100/80 text-yellow-900 rounded-md text-[11px] font-black">🟡 Ca: {log.caVal}kg/10a</span>}
+                                        {log.mgVal > 0 && <span className="px-2 py-0.5 bg-teal-100/80 text-teal-900 rounded-md text-[11px] font-black">🟢 Mg: {log.mgVal}kg/10a</span>}
+                                        {log.microNutrients?.map((m: string, mIdx: number) => (
+                                          <span key={mIdx} className="px-2 py-0.5 bg-teal-50 text-teal-800 rounded-md text-[11px] font-bold border border-teal-200">
+                                            ✨ {m}
+                                          </span>
+                                        ))}
+                                        {badges.map((b, bIdx) => (
+                                          <span key={bIdx} className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-md text-[11px] font-bold">
+                                            {b.text}
+                                          </span>
+                                        ))}
+                                        {cleanNote && (
+                                          <span className="text-xs text-slate-600 font-medium">{cleanNote}</span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* 訂正・削除ボタン */}
+                                    <div className="flex items-center justify-end gap-1.5 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenEditModal(log)}
+                                        className="px-2.5 py-1.5 text-xs font-black text-blue-600 hover:bg-blue-50 rounded-xl border border-blue-200 transition-colors cursor-pointer"
+                                      >
+                                        訂正
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteWorkLog(log.id)}
+                                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                        title="この施肥記録を削除"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
 
-              {/* 検索 ＆ カテゴリフィルターバー */}
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                  <div className="relative w-full sm:w-80">
-                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input 
-                      type="text" 
-                      placeholder="肥料名・メーカー・登録番号・成分（例: 昭和、21、高度化成、石灰）..." 
-                      value={searchFertQuery}
-                      onChange={e => handleSearchFertilizers(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
-                    />
+              {/* 🔍 3. 【改革⑤】自農園の登録肥料（マイ肥料）＆ 公的5.2万件データベース検索 */}
+              <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3.5">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-black text-slate-800 flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-teal-600" />
+                      <span>使用肥料カタログ ＆ 公的データベース (FAMIC 5.2万件) 検索</span>
+                    </h4>
+                    <p className="text-xs text-slate-500 font-bold mt-0.5">
+                      普段使う肥料からワンクリックで施肥記録をつけたり、公的データベースから自農園マスタへ追加できます。
+                    </p>
                   </div>
 
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-600 shrink-0">
                     <span>自農園マスタ登録数: <strong className="text-teal-700 font-black">{farmRegisteredFertilizers.length}</strong> 品目</span>
                     <Link
                       href={currentTenantId ? `/admin/masters?farm=${currentTenantId}` : "/admin/masters"}
@@ -1921,22 +2597,35 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                   </div>
                 </div>
 
-                {/* 肥料カテゴリタブ */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+                  <div className="relative w-full">
+                    <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input 
+                      type="text" 
+                      placeholder="公的5.2万件＆自社マスタから検索（例: オール14、高度化成、硫安、鶏糞、苦土石灰、登録番号）..." 
+                      value={searchFertQuery}
+                      onChange={e => handleSearchFertilizers(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* 肥料カテゴリタブ（自農園の登録肥料を最優先・先頭に配置！） */}
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs font-bold">
                   {[
-                    { id: 'all', label: 'すべて' },
+                    { id: 'registered', label: `⭐ 自農園の登録肥料 (${farmRegisteredFertilizers.length})` },
+                    { id: 'all', label: '🔍 公的DBすべて (5.2万件)' },
                     { id: '化成', label: '化成肥料' },
                     { id: '有機', label: '有機質肥料' },
                     { id: '石灰', label: '石灰・苦土 (Ca・Mg)' },
                     { id: '配合', label: '配合肥料' },
-                    { id: '液肥', label: '液肥・葉面散布' },
-                    { id: 'registered', label: '自社マスタ登録済のみ' }
+                    { id: '液肥', label: '液肥・葉面散布' }
                   ].map(tab => (
                     <button
                       key={tab.id}
                       type="button"
                       onClick={() => setFertCategoryTab(tab.id)}
-                      className={`px-3 py-1.5 rounded-xl whitespace-nowrap transition-all ${
+                      className={`px-3.5 py-2 rounded-xl whitespace-nowrap transition-all cursor-pointer ${
                         fertCategoryTab === tab.id
                           ? 'bg-teal-700 text-white shadow-xs font-black'
                           : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
@@ -1955,9 +2644,26 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                   <p className="text-xs font-bold">肥料マスターを検索中...</p>
                 </div>
               ) : filteredFertilizers.length === 0 ? (
-                <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-400 space-y-2">
-                  <p className="text-sm font-bold">該当する肥料が見つかりませんでした。</p>
-                  <p className="text-xs">別のキーワード（メーカー名や銘柄名の一部）で検索をお試しください。</p>
+                <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-500 space-y-3">
+                  <p className="text-sm font-black text-slate-700">
+                    {fertCategoryTab === 'registered'
+                      ? '自農園の登録肥料がまだ登録されていません。'
+                      : '該当する肥料が見つかりませんでした。'}
+                  </p>
+                  <p className="text-xs font-medium">
+                    {fertCategoryTab === 'registered'
+                      ? '上の検索バーから普段お使いの肥料名を検索するか、「🔍 公的DBすべて (5.2万件)」タブから選んでワンクリック追加してください。'
+                      : '別のキーワード（メーカー名や銘柄名の一部）で検索をお試しください。'}
+                  </p>
+                  {fertCategoryTab === 'registered' && (
+                    <button
+                      type="button"
+                      onClick={() => setFertCategoryTab('all')}
+                      className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black transition-colors cursor-pointer"
+                    >
+                      🔍 公的データベース (5.2万件) を表示する
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2046,12 +2752,21 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                           )}
                         </div>
 
-                        {/* アクション */}
-                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                        {/* アクション：この肥料で施肥記録 ＆ 自農園マスタ追加 */}
+                        <div className="pt-2.5 border-t border-slate-100 space-y-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenFertRecordModal({ fertItem: fert })}
+                            className="w-full py-2 px-3 bg-slate-900 hover:bg-slate-800 text-teal-300 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                            <span>この肥料で施肥（元肥・追肥）を記録</span>
+                          </button>
+
                           {isRegistered || fert.isFarmRegistered ? (
-                            <div className="w-full flex items-center justify-between">
-                              <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200 flex items-center gap-1">
-                                <Check className="w-3.5 h-3.5" /> 自農園マスタ登録済
+                            <div className="w-full flex items-center justify-between px-1">
+                              <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200 flex items-center gap-1">
+                                <Check className="w-3 h-3" /> 自農園マスタ登録済
                               </span>
                               <Link
                                 href={currentTenantId ? `/admin/masters?farm=${currentTenantId}` : "/admin/masters"}
@@ -2064,10 +2779,10 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                             <button
                               type="button"
                               onClick={() => handleRegisterFertToFarmMaster(fert)}
-                              className="w-full py-1.5 px-3 bg-teal-600 hover:bg-teal-700 text-white text-xs font-black rounded-xl transition-all shadow-2xs flex items-center justify-center gap-1"
+                              className="w-full py-1.5 px-3 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
                             >
                               <Plus className="w-3.5 h-3.5" />
-                              自農園マスタにワンクリック追加
+                              自農園マスタにも追加しておく
                             </button>
                           )}
                         </div>
@@ -3031,6 +3746,378 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                 >
                   {isSavingSpray ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                   <span>散布を記録する</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🔬 かんたん施肥記録（元肥・追肥・10a純成分自動計算）モーダル */}
+      {isFertRecordModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-xl w-full shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 my-8 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-100">
+              <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-teal-600" />
+                <span>施肥（元肥・追肥）の記録 ＆ 10a純成分自動計算</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsFertRecordModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveFertRecord} className="space-y-4">
+              {/* 1. 施肥日 ＆ 施肥区分 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 block mb-1">施肥日</label>
+                  <input
+                    type="date"
+                    value={fertRecordDate}
+                    onChange={e => setFertRecordDate(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 block mb-1">施肥区分（元肥 / 追肥）</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {(['元肥', '追肥', '葉面散布・液肥', '土壌改良・堆肥'] as const).map(wt => (
+                      <button
+                        key={wt}
+                        type="button"
+                        onClick={() => setFertRecordWorkType(wt)}
+                        className={`py-2 px-2.5 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                          fertRecordWorkType === wt
+                            ? wt === '元肥'
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                              : 'bg-teal-600 text-white border-teal-600 shadow-2xs'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {wt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. 対象の圃場（複数選択可） ＆ 対象の作目 */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-bold text-slate-500 block mb-1">
+                    施肥対象の圃場（複数選択可・面積自動連動）
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5 max-h-32 overflow-y-auto p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+                    {fields.map(f => {
+                      const isChecked = fertRecordFieldIds.includes(f.id);
+                      const areaA = f.area_size ? Number(f.area_size) : f.area_sqm ? Math.round((Number(f.area_sqm) / 100) * 10) / 10 : 10;
+                      return (
+                        <label key={f.id} className="flex items-center justify-between gap-1 text-xs font-bold text-slate-700 cursor-pointer bg-white px-2 py-1.5 rounded-lg border border-slate-200/80 hover:border-teal-400">
+                          <span className="flex items-center gap-1.5 truncate">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                setFertRecordFieldIds(prev =>
+                                  prev.includes(f.id) ? prev.filter(id => id !== f.id) : [...prev, f.id]
+                                );
+                              }}
+                              className="rounded text-teal-600"
+                            />
+                            <span className="truncate">{f.name}</span>
+                          </span>
+                          <span className="text-[10px] text-slate-400 shrink-0">{areaA}a</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-500 block mb-1">対象の作目</label>
+                  <select
+                    value={fertRecordCropId}
+                    onChange={e => setFertRecordCropId(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none"
+                  >
+                    <option value="">圃場の作目に自動連動</option>
+                    {crops.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-400 mt-1.5 font-medium leading-snug">
+                    ※選択圃場面積合計: <strong className="text-slate-700">{calculatedFertNutrients.selectedAreaAcre || 10} a</strong>
+                  </p>
+                </div>
+              </div>
+
+              {/* 3. 入力モード切替（肥料から自動計算 vs 直接成分入力） */}
+              <div className="bg-slate-100 p-1 rounded-xl grid grid-cols-2 gap-1">
+                <button
+                  type="button"
+                  onClick={() => setFertRecordInputMode('auto')}
+                  className={`py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                    fertRecordInputMode === 'auto'
+                      ? 'bg-white text-teal-800 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  ⚡ 肥料・袋数から自動計算（推奨）
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFertRecordInputMode('manual')}
+                  className={`py-2 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                    fertRecordInputMode === 'manual'
+                      ? 'bg-white text-teal-800 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  ✍️ 10a純成分(kg)を直接入力
+                </button>
+              </div>
+
+              {fertRecordInputMode === 'auto' ? (
+                <div className="space-y-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                  {/* 自農園登録肥料からワンクリック選択 */}
+                  {farmRegisteredFertilizers.length > 0 && (
+                    <div>
+                      <label className="text-[11px] font-black text-teal-800 block mb-1.5">
+                        ⭐ 自農園の登録肥料からワンクリック選択:
+                      </label>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {farmRegisteredFertilizers.map(rf => {
+                          const isSelected = fertRecordSelectedFertName === rf.name;
+                          return (
+                            <button
+                              key={rf.id}
+                              type="button"
+                              onClick={() => {
+                                setFertRecordSelectedFertName(rf.name);
+                                setFertRecordNPercent(String(rf.n_percent ?? rf.n_ratio ?? 0));
+                                setFertRecordPPercent(String(rf.p_percent ?? rf.p_ratio ?? 0));
+                                setFertRecordKPercent(String(rf.k_percent ?? rf.k_ratio ?? 0));
+                                setFertRecordCaPercent(String(rf.ca_percent ?? 0));
+                                setFertRecordMgPercent(String(rf.mg_percent ?? 0));
+                                setFertRecordBagWeight(String(rf.bag_weight_kg || rf.bag_weight || 20));
+                              }}
+                              className={`px-2.5 py-1.5 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-teal-700 text-white border-teal-700 shadow-2xs'
+                                  : 'bg-white text-slate-700 border-slate-200 hover:border-teal-400'
+                              }`}
+                            >
+                              {rf.name} ({rf.n_percent ?? 0}-{rf.p_percent ?? 0}-{rf.k_percent ?? 0})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 肥料名と成分率(%) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-500 block mb-1">使用した肥料名</label>
+                      <input
+                        type="text"
+                        value={fertRecordSelectedFertName}
+                        onChange={e => setFertRecordSelectedFertName(e.target.value)}
+                        placeholder="例: 高度化成オール14、硫安、発酵鶏糞..."
+                        className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-500 block mb-1">肥料の保証成分率 (%)</label>
+                      <div className="grid grid-cols-5 gap-1">
+                        <div>
+                          <span className="text-[9px] font-black text-blue-600 block text-center">N%</span>
+                          <input type="number" step="0.1" value={fertRecordNPercent} onChange={e => setFertRecordNPercent(e.target.value)} className="w-full p-1.5 bg-white border border-blue-200 rounded-lg text-xs font-black text-center text-slate-800" />
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-black text-amber-600 block text-center">P%</span>
+                          <input type="number" step="0.1" value={fertRecordPPercent} onChange={e => setFertRecordPPercent(e.target.value)} className="w-full p-1.5 bg-white border border-amber-200 rounded-lg text-xs font-black text-center text-slate-800" />
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-black text-purple-600 block text-center">K%</span>
+                          <input type="number" step="0.1" value={fertRecordKPercent} onChange={e => setFertRecordKPercent(e.target.value)} className="w-full p-1.5 bg-white border border-purple-200 rounded-lg text-xs font-black text-center text-slate-800" />
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-black text-yellow-600 block text-center">Ca%</span>
+                          <input type="number" step="0.1" value={fertRecordCaPercent} onChange={e => setFertRecordCaPercent(e.target.value)} className="w-full p-1.5 bg-white border border-yellow-200 rounded-lg text-xs font-black text-center text-slate-800" />
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-black text-teal-600 block text-center">Mg%</span>
+                          <input type="number" step="0.1" value={fertRecordMgPercent} onChange={e => setFertRecordMgPercent(e.target.value)} className="w-full p-1.5 bg-white border border-teal-200 rounded-lg text-xs font-black text-center text-slate-800" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 投入量の入力方法 */}
+                  <div className="pt-1 border-t border-slate-200/80 space-y-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] font-bold text-slate-500">投入量の入力方法:</span>
+                      {([
+                        { id: 'bags_per10a', label: '📦 10aあたりの袋数' },
+                        { id: 'per10a_kg', label: '⚖️ 10aあたりのkg数' },
+                        { id: 'total_field_kg', label: '🚜 畑全体に入れた総kg数' }
+                      ] as const).map(am => (
+                        <button
+                          key={am.id}
+                          type="button"
+                          onClick={() => setFertRecordAmountMode(am.id)}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                            fertRecordAmountMode === am.id
+                              ? 'bg-slate-800 text-white'
+                              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {am.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {fertRecordAmountMode === 'bags_per10a' ? (
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-500 block mb-1">1袋の重さ (kg)</label>
+                          <input
+                            type="number"
+                            step="1"
+                            value={fertRecordBagWeight}
+                            onChange={e => setFertRecordBagWeight(e.target.value)}
+                            className="w-full p-2 bg-white border border-slate-200 rounded-xl text-sm font-black text-slate-800"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-500 block mb-1">10aあたり投入袋数 (袋)</label>
+                          <input
+                            type="number"
+                            step="0.5"
+                            value={fertRecordBagCount}
+                            onChange={e => setFertRecordBagCount(e.target.value)}
+                            className="w-full p-2 bg-white border border-teal-400 rounded-xl text-sm font-black text-teal-900"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-500 block mb-1">
+                          {fertRecordAmountMode === 'per10a_kg'
+                            ? '10aあたりの肥料投入量 (kg/10a)'
+                            : `選択した畑全体（${calculatedFertNutrients.selectedAreaAcre || 10}a）に投入した総重量 (kg)`}
+                        </label>
+                        <input
+                          type="number"
+                          step="1"
+                          value={fertRecordKgInput}
+                          onChange={e => setFertRecordKgInput(e.target.value)}
+                          className="w-full p-2 bg-white border border-teal-400 rounded-xl text-sm font-black text-teal-900"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* 直接成分入力モード */
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2.5">
+                  <label className="text-xs font-black text-slate-700 block">
+                    10aあたりの純成分投入量 (kg/10a) を直接入力
+                  </label>
+                  <div className="grid grid-cols-5 gap-2">
+                    <div>
+                      <span className="text-[10px] font-black text-blue-700 block mb-1">🔵 N (kg)</span>
+                      <input type="number" step="0.1" value={fertRecordManualN} onChange={e => setFertRecordManualN(e.target.value)} className="w-full p-2 bg-white border border-blue-200 rounded-xl text-sm font-black text-slate-800" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black text-amber-700 block mb-1">🟠 P (kg)</span>
+                      <input type="number" step="0.1" value={fertRecordManualP} onChange={e => setFertRecordManualP(e.target.value)} className="w-full p-2 bg-white border border-amber-200 rounded-xl text-sm font-black text-slate-800" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black text-purple-700 block mb-1">🟣 K (kg)</span>
+                      <input type="number" step="0.1" value={fertRecordManualK} onChange={e => setFertRecordManualK(e.target.value)} className="w-full p-2 bg-white border border-purple-200 rounded-xl text-sm font-black text-slate-800" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black text-yellow-700 block mb-1">🟡 Ca (kg)</span>
+                      <input type="number" step="0.1" value={fertRecordManualCa} onChange={e => setFertRecordManualCa(e.target.value)} className="w-full p-2 bg-white border border-yellow-200 rounded-xl text-sm font-black text-slate-800" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black text-teal-700 block mb-1">🟢 Mg (kg)</span>
+                      <input type="number" step="0.1" value={fertRecordManualMg} onChange={e => setFertRecordManualMg(e.target.value)} className="w-full p-2 bg-white border border-teal-200 rounded-xl text-sm font-black text-slate-800" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 📊 4. 10aあたり純成分 リアルタイム自動換算プレビュー */}
+              <div className="p-3.5 bg-slate-900 text-white rounded-2xl border border-slate-700 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-black text-teal-300 flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>記録される10aあたり純成分量 (自動計算プレビュー)</span>
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-bold">
+                    肥料実量: {calculatedFertNutrients.kgPer10a} kg/10a
+                  </span>
+                </div>
+                <div className="grid grid-cols-5 gap-2 text-center">
+                  <div className="bg-slate-800 rounded-xl p-2 border border-blue-500/30">
+                    <div className="text-[10px] font-bold text-blue-300">🔵 N (窒素)</div>
+                    <div className="text-sm font-black text-white">{calculatedFertNutrients.n} <span className="text-[10px] text-slate-400">kg</span></div>
+                  </div>
+                  <div className="bg-slate-800 rounded-xl p-2 border border-amber-500/30">
+                    <div className="text-[10px] font-bold text-amber-300">🟠 P (リン)</div>
+                    <div className="text-sm font-black text-white">{calculatedFertNutrients.p} <span className="text-[10px] text-slate-400">kg</span></div>
+                  </div>
+                  <div className="bg-slate-800 rounded-xl p-2 border border-purple-500/30">
+                    <div className="text-[10px] font-bold text-purple-300">🟣 K (カリ)</div>
+                    <div className="text-sm font-black text-white">{calculatedFertNutrients.k} <span className="text-[10px] text-slate-400">kg</span></div>
+                  </div>
+                  <div className="bg-slate-800 rounded-xl p-2 border border-yellow-500/30">
+                    <div className="text-[10px] font-bold text-yellow-300">🟡 Ca (石灰)</div>
+                    <div className="text-sm font-black text-white">{calculatedFertNutrients.ca} <span className="text-[10px] text-slate-400">kg</span></div>
+                  </div>
+                  <div className="bg-slate-800 rounded-xl p-2 border border-teal-500/30">
+                    <div className="text-[10px] font-bold text-teal-300">🟢 Mg (苦土)</div>
+                    <div className="text-sm font-black text-white">{calculatedFertNutrients.mg} <span className="text-[10px] text-slate-400">kg</span></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. 備考・メモ（微量要素キーワード等） */}
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1">備考・メモ（微量要素・ホウ素・マンガン等があれば記入）</label>
+                <input
+                  type="text"
+                  value={fertRecordMemo}
+                  onChange={e => setFertRecordMemo(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none"
+                  placeholder="例: 定植前元肥、ホウ素・マンガン入り、通路追肥など..."
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsFertRecordModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingFertRecord}
+                  className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl text-xs font-black transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  {isSavingFertRecord ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  <span>施肥を記録する ({fertRecordFieldIds.length}圃場)</span>
                 </button>
               </div>
             </form>
