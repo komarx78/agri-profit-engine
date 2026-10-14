@@ -239,14 +239,6 @@ export default function AdminHub({ onSwitchToHome, initialNav = 'cultivations' }
             <span>📱 現場ポータルへ行く</span>
           </button>
 
-          <Link
-            href={tenantId ? `/work/${tenantId}` : '/work'}
-            className="w-full flex items-center gap-2 px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 font-black text-xs rounded-xl transition-colors"
-          >
-            <Sprout className="w-4 h-4 text-emerald-600" />
-            <span>🌱 現場日報入力へ行く</span>
-          </Link>
-
           <button
             onClick={handleCopyUrl}
             className="w-full flex items-center gap-2 px-3 py-2 bg-emerald-50/70 hover:bg-emerald-100 text-emerald-800 font-black text-xs rounded-xl transition-colors"

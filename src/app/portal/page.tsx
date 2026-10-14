@@ -28,6 +28,7 @@ import { PwaBottomBanner } from '@/components/PwaInstallPrompt';
 import { LineLinkModal } from '@/components/LineLinkModal';
 import Link from 'next/link';
 import { getJSTDate, getJSTTime, formatDisplayTime, parseTimeToMinutes, getAttendancePeriod, getDateListBetween } from '@/lib/dateUtils';
+import WorkEntryPage from '../work/page';
 
 const CalendarWrapper = dynamic(() => import('@/components/CalendarWrapper'), { 
   ssr: false, 
@@ -154,8 +155,24 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
     overtimeMinutes: number;
   }>({ workDays: 0, totalMinutes: 0, overtimeMinutes: 0 });
 
-  // 👥 チーム稼働状況 & 作業日報まとめ用ステート
-  const [activePortalTab, setActivePortalTab] = useState<'status' | 'reports' | 'calendar' | 'tasks'>('status');
+  // 👥 チーム稼働状況 & 作業日報まとめ・作業記録・出荷タブ用ステート
+  const [activePortalTab, setActivePortalTab] = useState<'status' | 'reports' | 'calendar' | 'tasks' | 'work' | 'sales'>(() => {
+    if (typeof window !== 'undefined') {
+      const tabParam = new URLSearchParams(window.location.search).get('tab');
+      if (tabParam === 'work' || tabParam === 'sales' || tabParam === 'tasks' || tabParam === 'reports' || tabParam === 'calendar' || tabParam === 'status') {
+        return tabParam;
+      }
+    }
+    return 'status';
+  });
+
+  const switchToPortalTab = (tab: 'status' | 'reports' | 'calendar' | 'tasks' | 'work' | 'sales') => {
+    setActivePortalTab(tab);
+    if (typeof window !== 'undefined') {
+      const el = document.getElementById('portal-main-tabs');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
   
   // 📋 本日のやることリスト（ToDo）用ステート
   const [todoFilter, setTodoFilter] = useState<'all' | 'mine' | 'done'>('all');
@@ -2901,10 +2918,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                 return (
                   <div className="space-y-2">
                     <div 
-                      onClick={() => {
-                        const targetFarm = activeFarmId || requestedFarmId;
-                        router.push(targetFarm ? `/work?farm=${targetFarm}` : '/work');
-                      }}
+                      onClick={() => switchToPortalTab('work')}
                       className="cursor-pointer bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white p-4 sm:p-5 rounded-2xl shadow-md transition-all active:scale-[0.99] flex items-center justify-between gap-4 group"
                     >
                       <div className="flex items-center gap-3 sm:gap-4 min-w-0">
@@ -3171,15 +3185,13 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                 </div>
               </div>
 
-              {/* 現場ポータル遷移ボタン */}
+              {/* 作業・収穫記録タブへ切り替えボタン */}
               <button 
-                onClick={() => {
-                  const targetFarm = activeFarmId || requestedFarmId;
-                  router.push(targetFarm ? `/work/${targetFarm}` : '/work');
-                }}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm mb-4"
+                type="button"
+                onClick={() => switchToPortalTab('work')}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm mb-4 cursor-pointer"
               >
-                {t('goToWorkPortal', language)} <ArrowRight className="w-4 h-4" />
+                <span>🚜 {t('workRecord', language)}</span> <ArrowRight className="w-4 h-4" />
               </button>
 
               {/* 🏖️ 有給休暇・残日数 ＆ 申請セクション (派遣スタッフには完全非表示) */}
@@ -3581,8 +3593,8 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             
           </div>
 
-          {/* 右側カラム：3大機能タブ（👥 農場の今・稼働状況 / 📋 作業日報まとめ / 📅 スケジュール） */}
-          <div className="lg:col-span-8 space-y-4">
+          {/* 右側カラム：統合機能タブ（📋 本日のやること / 🚜 作業記録 / 🚚 出荷・納品 / 👥 農場の今 / 📄 作業日報まとめ / 📅 スケジュール） */}
+          <div id="portal-main-tabs" className="lg:col-span-8 space-y-4">
             
             {/* タブナビゲーション */}
             <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-1.5 overflow-x-auto">
@@ -3606,6 +3618,32 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                       : '完了'}
                   </span>
                 )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActivePortalTab('work')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+                  activePortalTab === 'work'
+                    ? 'bg-emerald-700 text-white shadow-sm scale-[1.01]'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <Sprout className="w-4 h-4" />
+                <span>{t('workRecord', language)}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActivePortalTab('sales')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+                  activePortalTab === 'sales'
+                    ? 'bg-emerald-700 text-white shadow-sm scale-[1.01]'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <Truck className="w-4 h-4" />
+                <span>{t('tabSales', language)}</span>
               </button>
 
               <button
@@ -3896,10 +3934,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
 
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      const targetFarm = activeFarmId || requestedFarmId;
-                                      router.push(targetFarm ? `/work/${targetFarm}` : '/work');
-                                    }}
+                                    onClick={() => switchToPortalTab('work')}
                                     className="py-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 active:scale-95 rounded-xl text-xs font-black transition-all border border-blue-100 flex items-center gap-1 shrink-0 cursor-pointer"
                                     title={t('goToWorkScreenTooltip', language)}
                                   >
@@ -3914,6 +3949,24 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* 🚜 作業記録（日報・収穫・農薬散布）タブ */}
+              {activePortalTab === 'work' && (
+                <WorkEntryPage
+                  requestedFarmId={activeFarmId || requestedFarmId || undefined}
+                  embeddedTab="work"
+                  externalLanguage={language}
+                />
+              )}
+
+              {/* 🚚 出荷・納品タブ */}
+              {activePortalTab === 'sales' && (
+                <WorkEntryPage
+                  requestedFarmId={activeFarmId || requestedFarmId || undefined}
+                  embeddedTab="sales"
+                  externalLanguage={language}
+                />
               )}
 
               {/* ① 👥 農場リアルタイム稼働状況（全員の今） */}

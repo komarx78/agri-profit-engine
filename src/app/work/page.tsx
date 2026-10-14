@@ -110,7 +110,15 @@ function getWorkTypeEmoji(type: string): string {
   return '✨';
 }
 
-export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: string } = {}) {
+export default function WorkEntryPage({
+  requestedFarmId,
+  embeddedTab,
+  externalLanguage,
+}: {
+  requestedFarmId?: string;
+  embeddedTab?: 'work' | 'sales';
+  externalLanguage?: LanguageCode;
+} = {}) {
   const router = useRouter();
   const [workerTenantId, setWorkerTenantId] = useState<string | null>(() => {
     if (requestedFarmId) return requestedFarmId;
@@ -137,14 +145,31 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
   const { companyName } = useCompany(workerTenantId);
   const [currentUser, setCurrentUser] = useState<{id: string, name: string, role: string} | null>(null);
   const [isMounted, setIsMounted] = useState(false);
-  const [language, setLanguage] = useState<LanguageCode>('ja');
+  const [language, setLanguage] = useState<LanguageCode>(externalLanguage || 'ja');
+
+  useEffect(() => {
+    if (externalLanguage) setLanguage(externalLanguage);
+  }, [externalLanguage]);
 
   const [crops, setCrops] = useState<MasterItem[]>([]);
   const [fields, setFields] = useState<MasterItem[]>([]);
   const [materials, setMaterials] = useState<MasterItem[]>([]);
 
   // --- タブと勤怠状態 ---
-  const [activeTab, setActiveTab] = useState<'attendance' | 'work' | 'sales'>('attendance');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'work' | 'sales'>(() => {
+    if (embeddedTab) return embeddedTab;
+    if (typeof window !== 'undefined') {
+      const tabParam = new URLSearchParams(window.location.search).get('tab');
+      if (tabParam === 'work' || tabParam === 'sales' || tabParam === 'attendance') {
+        return tabParam;
+      }
+    }
+    return 'attendance';
+  });
+
+  useEffect(() => {
+    if (embeddedTab) setActiveTab(embeddedTab);
+  }, [embeddedTab]);
   
   // --- 出荷・納品用ステート ---
   const [b2bOrders, setB2bOrders] = useState<any[]>([]);
@@ -1396,105 +1421,109 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
   );
 
   return (
-    <main className="min-h-screen bg-emerald-950 text-slate-100 font-sans pb-32">
+    <main className={embeddedTab ? "bg-emerald-950 text-slate-100 font-sans pb-8 rounded-3xl overflow-hidden shadow-inner" : "min-h-screen bg-emerald-950 text-slate-100 font-sans pb-32"}>
       {/* ヘッダー */}
-      <header className="sticky top-0 z-10 backdrop-blur-md bg-emerald-950/90 border-b border-emerald-800/50 px-2.5 py-2 shadow-lg flex flex-col gap-2">
-        <div className="max-w-md w-full mx-auto flex items-center justify-between gap-1 flex-wrap sm:flex-nowrap">
-          
-          {/* 左側：アプリアイコン＆タイトル */}
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <div className="p-1.5 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-lg shadow-md text-emerald-950 flex-shrink-0">
-              <Sprout className="w-4 h-4 stroke-[2.5]" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-xs sm:text-sm font-black tracking-tight text-white truncate leading-tight flex items-center gap-1">
-                <span className="truncate max-w-[130px] sm:max-w-[180px]">{companyName || t('systemTitle', language)}</span>
-                <span className="text-[9px] text-emerald-300 font-bold bg-emerald-900/80 px-1 py-0.2 rounded shrink-0">日報</span>
-              </h1>
-              <p className="text-[10px] font-bold text-emerald-400 truncate">
-                {language === 'ja' ? `${getTranslatedName(currentUser, language)} さん` : getTranslatedName(currentUser, language)}
-              </p>
-            </div>
-          </div>
+      <header className={embeddedTab ? "bg-emerald-950/90 border-b border-emerald-800/50 px-3 py-2.5 flex flex-col gap-2" : "sticky top-0 z-10 backdrop-blur-md bg-emerald-950/90 border-b border-emerald-800/50 px-2.5 py-2 shadow-lg flex flex-col gap-2"}>
+        {!embeddedTab && (
+          <>
+            <div className="max-w-md w-full mx-auto flex items-center justify-between gap-1 flex-wrap sm:flex-nowrap">
+              
+              {/* 左側：アプリアイコン＆タイトル */}
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <div className="p-1.5 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-lg shadow-md text-emerald-950 flex-shrink-0">
+                  <Sprout className="w-4 h-4 stroke-[2.5]" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-xs sm:text-sm font-black tracking-tight text-white truncate leading-tight flex items-center gap-1">
+                    <span className="truncate max-w-[130px] sm:max-w-[180px]">{companyName || t('systemTitle', language)}</span>
+                    <span className="text-[9px] text-emerald-300 font-bold bg-emerald-900/80 px-1 py-0.2 rounded shrink-0">日報</span>
+                  </h1>
+                  <p className="text-[10px] font-bold text-emerald-400 truncate">
+                    {language === 'ja' ? `${getTranslatedName(currentUser, language)} さん` : getTranslatedName(currentUser, language)}
+                  </p>
+                </div>
+              </div>
 
-          {/* 右側：コントロール (司令塔・ポータル・言語・ログアウト) */}
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {currentUser.role === 'admin' && (
+              {/* 右側：コントロール (司令塔・ポータル・言語・ログアウト) */}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {currentUser.role === 'admin' && (
+                  <button
+                    onClick={() => {
+                      const targetFarm = workerTenantId || requestedFarmId;
+                      router.push(targetFarm ? `/admin/cultivations?farm=${targetFarm}` : '/admin/cultivations');
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 hover:text-white border border-emerald-500/40 rounded-lg text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"
+                    title="農業司令塔へ"
+                  >
+                    <Sprout className="w-3 h-3 flex-shrink-0" />
+                    <span>{t('cmd_hub', language)}</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    const targetFarm = workerTenantId || requestedFarmId;
+                    router.push(targetFarm ? `/portal/${targetFarm}` : '/portal');
+                  }}
+                  className="flex items-center gap-1 px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 hover:text-white border border-blue-500/40 rounded-lg text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"
+                  title="ポータル画面へ戻る"
+                >
+                  <Layout className="w-3 h-3 flex-shrink-0" />
+                  <span>{t('portal_btn', language)}</span>
+                </button>
+                <select
+                  value={language}
+                  onChange={(e) => {
+                    const newLang = e.target.value as LanguageCode;
+                    setLanguage(newLang);
+                    localStorage.setItem('agri_lang', newLang);
+                    localStorage.setItem('agri_lang_sales', newLang);
+                    const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang'));
+                    langKeys.forEach(key => localStorage.setItem(key, newLang));
+                  }}
+                  className="bg-emerald-900 text-emerald-300 text-[11px] font-bold rounded-lg px-1.5 py-1 focus:outline-none border border-emerald-800"
+                >
+                  {LANGUAGES.map(l => (
+                    <option key={l.code} value={l.code}>{l.flag} {l.code.toUpperCase()}</option>
+                  ))}
+                </select>
+                <button onClick={handleLogout} className="p-1 bg-emerald-900/80 text-emerald-400 rounded-lg hover:bg-emerald-800 transition-colors" title="ログアウト">
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* タブ切り替え (3等分均等グリッド配置) */}
+            <div className="max-w-md w-full mx-auto grid grid-cols-3 gap-1 bg-emerald-900/60 p-1 rounded-xl">
               <button
-                onClick={() => {
-                  const targetFarm = workerTenantId || requestedFarmId;
-                  router.push(targetFarm ? `/admin/cultivations?farm=${targetFarm}` : '/admin/cultivations');
-                }}
-                className="flex items-center gap-1 px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 hover:text-white border border-emerald-500/40 rounded-lg text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"
-                title="農業司令塔へ"
+                onClick={() => setActiveTab('attendance')}
+                className={`py-1.5 px-0.5 text-[11px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 text-center truncate ${
+                  activeTab === 'attendance' ? 'bg-emerald-500 text-emerald-950 shadow-md scale-[1.02]' : 'text-emerald-300/70 hover:text-white'
+                }`}
               >
-                <Sprout className="w-3 h-3 flex-shrink-0" />
-                <span>{t('cmd_hub', language)}</span>
+                <Clock className="w-3.5 h-3.5 flex-shrink-0 hidden sm:inline" />
+                <span className="truncate">{t('attendance', language)}</span>
               </button>
-            )}
-            <button
-              onClick={() => {
-                const targetFarm = workerTenantId || requestedFarmId;
-                router.push(targetFarm ? `/portal/${targetFarm}` : '/portal');
-              }}
-              className="flex items-center gap-1 px-2 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 hover:text-white border border-blue-500/40 rounded-lg text-[11px] font-bold transition-all shadow-sm whitespace-nowrap"
-              title="ポータル画面へ戻る"
-            >
-              <Layout className="w-3 h-3 flex-shrink-0" />
-              <span>{t('portal_btn', language)}</span>
-            </button>
-            <select
-              value={language}
-              onChange={(e) => {
-                const newLang = e.target.value as LanguageCode;
-                setLanguage(newLang);
-                localStorage.setItem('agri_lang', newLang);
-                localStorage.setItem('agri_lang_sales', newLang);
-                const langKeys = Object.keys(localStorage).filter(k => k.startsWith('agri_lang'));
-                langKeys.forEach(key => localStorage.setItem(key, newLang));
-              }}
-              className="bg-emerald-900 text-emerald-300 text-[11px] font-bold rounded-lg px-1.5 py-1 focus:outline-none border border-emerald-800"
-            >
-              {LANGUAGES.map(l => (
-                <option key={l.code} value={l.code}>{l.flag} {l.code.toUpperCase()}</option>
-              ))}
-            </select>
-            <button onClick={handleLogout} className="p-1 bg-emerald-900/80 text-emerald-400 rounded-lg hover:bg-emerald-800 transition-colors" title="ログアウト">
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* タブ切り替え (3等分均等グリッド配置) */}
-        <div className="max-w-md w-full mx-auto grid grid-cols-3 gap-1 bg-emerald-900/60 p-1 rounded-xl">
-          <button
-            onClick={() => setActiveTab('attendance')}
-            className={`py-1.5 px-0.5 text-[11px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 text-center truncate ${
-              activeTab === 'attendance' ? 'bg-emerald-500 text-emerald-950 shadow-md scale-[1.02]' : 'text-emerald-300/70 hover:text-white'
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5 flex-shrink-0 hidden sm:inline" />
-            <span className="truncate">{t('attendance', language)}</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('work')}
-            className={`py-1.5 px-0.5 text-[11px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 text-center truncate ${
-              activeTab === 'work' ? 'bg-emerald-500 text-emerald-950 shadow-md scale-[1.02]' : 'text-emerald-300/70 hover:text-white'
-            }`}
-          >
-            <History className="w-3.5 h-3.5 flex-shrink-0 hidden sm:inline" />
-            <span className="truncate">{t('workRecord', language)}</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('sales')}
-            className={`py-1.5 px-0.5 text-[11px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 text-center truncate ${
-              activeTab === 'sales' ? 'bg-emerald-500 text-emerald-950 shadow-md scale-[1.02]' : 'text-emerald-300/70 hover:text-white'
-            }`}
-          >
-            <Truck className="w-3.5 h-3.5 flex-shrink-0 hidden sm:inline" />
-            <span className="truncate">{t('tabSales', language)}</span>
-          </button>
-        </div>
+              <button
+                onClick={() => setActiveTab('work')}
+                className={`py-1.5 px-0.5 text-[11px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 text-center truncate ${
+                  activeTab === 'work' ? 'bg-emerald-500 text-emerald-950 shadow-md scale-[1.02]' : 'text-emerald-300/70 hover:text-white'
+                }`}
+              >
+                <History className="w-3.5 h-3.5 flex-shrink-0 hidden sm:inline" />
+                <span className="truncate">{t('workRecord', language)}</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('sales')}
+                className={`py-1.5 px-0.5 text-[11px] sm:text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 text-center truncate ${
+                  activeTab === 'sales' ? 'bg-emerald-500 text-emerald-950 shadow-md scale-[1.02]' : 'text-emerald-300/70 hover:text-white'
+                }`}
+              >
+                <Truck className="w-3.5 h-3.5 flex-shrink-0 hidden sm:inline" />
+                <span className="truncate">{t('tabSales', language)}</span>
+              </button>
+            </div>
+          </>
+        )}
         
         {/* 📍 GPS位置情報 コントロール ＆ ステータスバー */}
         <div className="max-w-md w-full mx-auto flex items-center justify-between gap-2 px-2 py-1 bg-emerald-950/70 border border-emerald-800/60 rounded-xl text-[10px] font-bold">
@@ -3038,7 +3067,7 @@ export default function WorkEntryPage({ requestedFarmId }: { requestedFarmId?: s
       />
 
       {/* 📱 ページの最下部に配置するアプリ化案内バナー（画面に被らない安全配置） */}
-      <PwaBottomBanner language={language} />
+      {!embeddedTab && <PwaBottomBanner language={language} />}
     </main>
   );
 }

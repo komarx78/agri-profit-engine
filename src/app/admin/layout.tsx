@@ -179,7 +179,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       items: [
         { name: '📦 販売管理システム', path: farmQ('/sales-management'), icon: ShoppingCart, external: true },
         { name: '💳 経理・購買システム', path: farmQ('/accounting-management'), icon: Receipt, external: true },
-        { name: '📱 現場出退勤ポータル', path: tenantId ? `/portal/${tenantId}` : '/portal', icon: Layout, external: true },
         { name: '👥 労務・人事システム', path: farmQ('/hr'), icon: Users, external: true },
         { name: '⚙️ マスタ管理全般', path: farmQ('/admin/masters'), icon: Database },
         { name: '🏢 自社情報設定', path: farmQ('/admin/settings'), icon: Settings },
@@ -289,13 +288,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <Layout className="w-5 h-5 text-blue-600" />
                   現場ポータルへ行く
                 </Link>
-                <Link 
-                  href={tenantId ? `/work/${tenantId}` : '/work'} 
-                  className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 font-bold hover:bg-slate-100"
-                >
-                  <Sprout className="w-5 h-5" />
-                  現場打刻画面へ行く
-                </Link>
                 <button 
                   onClick={handleCopyUrl}
                   className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors shadow-xs border border-emerald-200 mt-1.5"
@@ -379,13 +371,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               >
                 <Layout className="w-5 h-5 text-blue-600" />
                 現場ポータルへ行く
-              </Link>
-              <Link 
-                href={tenantId ? `/work/${tenantId}` : '/work'} 
-                className="flex items-center gap-3 px-4 py-2 rounded-xl text-slate-600 font-bold hover:bg-slate-100 transition-colors"
-              >
-                <Sprout className="w-5 h-5" />
-                現場打刻画面へ行く
               </Link>
               <button 
                 onClick={handleCopyUrl}
