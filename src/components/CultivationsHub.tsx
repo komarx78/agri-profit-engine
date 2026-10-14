@@ -101,14 +101,21 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   const [cultYearStartMonth, setCultYearStartMonth] = useState<8 | 1>(8);
   const [selectedScheduleYear, setSelectedScheduleYear] = useState<number>(() => new Date().getFullYear());
 
-  // 圃場の作付スケジュール追加・変更モーダル用ステート
+  // 圃場の作付スケジュール追加・変更モーダル用ステート（上・中・下旬 ＆ 栽培ステージ対応）
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [planFormFieldId, setPlanFormFieldId] = useState<string>('');
   const [planFormCropId, setPlanFormCropId] = useState<string>('');
   const [planFormVariety, setPlanFormVariety] = useState<string>('');
   const [planFormStartMonth, setPlanFormStartMonth] = useState<number>(8);
-  const [planFormEndMonth, setPlanFormEndMonth] = useState<number>(12);
+  const [planFormStartTerm, setPlanFormStartTerm] = useState<1 | 2 | 3>(1);
+  const [planFormEndMonth, setPlanFormEndMonth] = useState<number>(11);
+  const [planFormEndTerm, setPlanFormEndTerm] = useState<1 | 2 | 3>(3);
+  const [planFormPlantingDate, setPlanFormPlantingDate] = useState<string>('');
+  const [planFormSeedlingMonth, setPlanFormSeedlingMonth] = useState<number>(0);
+  const [planFormHarvestStartMonth, setPlanFormHarvestStartMonth] = useState<number>(11);
+  const [planFormHarvestStartTerm, setPlanFormHarvestStartTerm] = useState<1 | 2 | 3>(1);
+  const [planFormTargetYieldKg, setPlanFormTargetYieldKg] = useState<string>('');
   const [isSavingPlan, setIsSavingPlan] = useState(false);
 
   // --- タブ2: 散布管理ステート ---
@@ -659,12 +666,70 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     }
   }, [toastMessage]);
 
-  // --- 作付け一覧：12ヶ月配列（8月始まり or 1月始まり）と期間判定ヘルパー ---
+  // --- 作付け一覧：12ヶ月配列（8月始まり or 1月始まり）と期間・旬・ステージ判定ヘルパー ---
   const scheduleMonths = useMemo(() => {
     return cultYearStartMonth === 8
       ? [8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7]
       : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
   }, [cultYearStartMonth]);
+
+  const getTermLabel = (t?: number) => {
+    if (t === 2) return '中旬';
+    if (t === 3) return '下旬';
+    return '上旬';
+  };
+
+  // 作目名から植物の「科（連作障害判定用）」を推定するヘルパー
+  const getCropBotanicalFamily = (cropName: string): string => {
+    const n = (cropName || '').normalize('NFKC');
+    if (/キャベツ|白菜|ハクサイ|大根|ダイコン|ブロッコリー|カリフラワー|小松菜|コマツナ|カブ|蕪|チンゲン菜|水菜/.test(n)) return 'アブラナ科';
+    if (/トマト|ミニトマト|ナス|茄子|ピーマン|パプリカ|ししとう|じゃがいも|ジャガイモ|馬鈴薯|トウガラシ/.test(n)) return 'ナス科';
+    if (/きゅうり|キュウリ|胡瓜|かぼちゃ|カボチャ|スイカ|メロン|ゴーヤ|ズッキーニ|冬瓜/.test(n)) return 'ウリ科';
+    if (/にんじん|ニンジン|人参|セリ|セロリ|パセリ|三つ葉/.test(n)) return 'セリ科';
+    if (/モロヘイヤ|オクラ/.test(n)) return 'アオイ(シナノキ)科';
+    if (/ほうれん草|ホウレンソウ|ビーツ|スイスチャード/.test(n)) return 'ヒユ(アカザ)科';
+    if (/レタス|春菊|シュンギク|ごぼう|ゴボウ/.test(n)) return 'キク科';
+    if (/枝豆|エダマメ|大豆|インゲン|そら豆|エンドウ|落花生/.test(n)) return 'マメ科';
+    if (/ネギ|ねぎ|玉ねぎ|タマネギ|ニラ|にんにく|ニンニク|アスパラ/.test(n)) return 'ヒガンバナ(ユリ)科';
+    return '';
+  };
+
+  // varietyカラムに安全に格納された旬・ステージメタデータのパーサー（DBスキーマエラー完全防止）
+  const parsePlanVarietyMeta = (rawVariety: string | null | undefined, startM: number, endM: number) => {
+    const raw = String(rawVariety || '');
+    const metaIdx = raw.indexOf('||META:');
+    let cleanVariety = raw;
+    let parsed: any = {};
+
+    if (metaIdx !== -1) {
+      cleanVariety = raw.slice(0, metaIdx).trim();
+      const jsonPart = raw.slice(metaIdx + 7).trim();
+      try {
+        parsed = JSON.parse(jsonPart);
+      } catch (e) {
+        parsed = {};
+      }
+    }
+
+    const startTerm: 1 | 2 | 3 = parsed.st === 2 ? 2 : parsed.st === 3 ? 3 : 1;
+    const endTerm: 1 | 2 | 3 = parsed.et === 1 ? 1 : parsed.et === 2 ? 2 : 3;
+    const seedlingMonth: number = Number(parsed.sm) || 0;
+    const harvestStartMonth: number = Number(parsed.hm) || endM;
+    const harvestStartTerm: 1 | 2 | 3 = parsed.ht === 2 ? 2 : parsed.ht === 3 ? 3 : 1;
+    const plantingDate: string = parsed.pd || '';
+    const targetYieldKg: string = parsed.ty ? String(parsed.ty) : '';
+
+    return {
+      cleanVariety,
+      startTerm,
+      endTerm,
+      seedlingMonth,
+      harvestStartMonth,
+      harvestStartTerm,
+      plantingDate,
+      targetYieldKg
+    };
+  };
 
   const isMonthInPlanRange = (month: number, startM: number, endM: number) => {
     const s = Number(startM) || 8;
@@ -676,8 +741,97 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     return month >= s || month <= e;
   };
 
-  // --- 圃場別ポートフォリオ（1圃場＝1カルテ ＋ 年間スケジュール ＋ 現場実績の完全統合） ---
+  // 指定した月(m)が計画(p)のどの栽培ステージに該当するかを判定
+  const getPlanStageForMonth = (
+    m: number,
+    p: {
+      startMonth: number;
+      startTerm: 1 | 2 | 3;
+      endMonth: number;
+      endTerm: 1 | 2 | 3;
+      seedlingMonth: number;
+      harvestStartMonth: number;
+      harvestStartTerm: 1 | 2 | 3;
+    }
+  ): {
+    stage: 'seedling' | 'planting' | 'growing' | 'harvest' | 'single' | 'none';
+    activeTerms: [boolean, boolean, boolean];
+    termStages: ['none' | 'seedling' | 'planting' | 'growing' | 'harvest', 'none' | 'seedling' | 'planting' | 'growing' | 'harvest', 'none' | 'seedling' | 'planting' | 'growing' | 'harvest'];
+  } => {
+    const inMainRange = isMonthInPlanRange(m, p.startMonth, p.endMonth);
+    const isSeedlingOnlyMonth = p.seedlingMonth > 0 && m === p.seedlingMonth && !inMainRange;
+
+    if (isSeedlingOnlyMonth) {
+      return {
+        stage: 'seedling',
+        activeTerms: [true, true, true],
+        termStages: ['seedling', 'seedling', 'seedling']
+      };
+    }
+
+    if (!inMainRange) {
+      return {
+        stage: 'none',
+        activeTerms: [false, false, false],
+        termStages: ['none', 'none', 'none']
+      };
+    }
+
+    const isStartM = m === p.startMonth;
+    const isEndM = m === p.endMonth;
+    const inHarvestM = isMonthInPlanRange(m, p.harvestStartMonth, p.endMonth);
+
+    // 各旬（1=上旬, 2=中旬, 3=下旬）の稼働とステージ判定
+    const activeTerms: [boolean, boolean, boolean] = [true, true, true];
+    if (isStartM) {
+      if (p.startTerm >= 2) activeTerms[0] = false;
+      if (p.startTerm >= 3) activeTerms[1] = false;
+    }
+    if (isEndM) {
+      if (p.endTerm <= 2) activeTerms[2] = false;
+      if (p.endTerm <= 1) activeTerms[1] = false;
+    }
+
+    const termStages: ['none' | 'seedling' | 'planting' | 'growing' | 'harvest', 'none' | 'seedling' | 'planting' | 'growing' | 'harvest', 'none' | 'seedling' | 'planting' | 'growing' | 'harvest'] = ['none', 'none', 'none'];
+
+    ([1, 2, 3] as const).forEach((t, idx) => {
+      if (!activeTerms[idx]) {
+        termStages[idx] = p.seedlingMonth === m ? 'seedling' : 'none';
+        return;
+      }
+      if (inHarvestM) {
+        if (m === p.harvestStartMonth && t < p.harvestStartTerm) {
+          termStages[idx] = isStartM && t === p.startTerm ? 'planting' : 'growing';
+        } else {
+          termStages[idx] = 'harvest';
+        }
+      } else if (isStartM && t === p.startTerm) {
+        termStages[idx] = 'planting';
+      } else {
+        termStages[idx] = 'growing';
+      }
+    });
+
+    let stage: 'seedling' | 'planting' | 'growing' | 'harvest' | 'single' = 'growing';
+    if (isStartM && isEndM) {
+      stage = 'single';
+    } else if (inHarvestM && (m !== p.harvestStartMonth || p.harvestStartTerm <= 2)) {
+      stage = 'harvest';
+    } else if (isStartM) {
+      stage = 'planting';
+    } else if (inHarvestM) {
+      stage = 'harvest';
+    } else {
+      stage = 'growing';
+    }
+
+    return { stage, activeTerms, termStages };
+  };
+
+  // --- 圃場別ポートフォリオ（1圃場＝1カルテ ＋ 36旬栽培こよみ ＋ 現場実績の完全統合） ---
   const fieldPortfolioList = useMemo(() => {
+    const todayMs = new Date().setHours(0, 0, 0, 0);
+
     return fields.map(f => {
       const areaAcre =
         f.area_size !== undefined && f.area_size !== null && Number(f.area_size) > 0
@@ -686,20 +840,37 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
           ? Math.round((Number(f.area_sqm) / 100) * 10) / 10
           : 10.0;
 
-      // この圃場の年間作付計画（複数作・二毛作対応）
+      // この圃場の年間作付計画（複数作・二毛作・36旬・ステージ対応）
       const fPlans = rawCultivationPlans
         .filter(p => p.field_id === f.id && (!p.year || Number(p.year) === selectedScheduleYear))
         .map(p => {
           const matchedCrop = p.crops || crops.find(c => c.id === p.crop_id);
+          const sMonth = Number(p.start_month) || 8;
+          const eMonth = Number(p.end_month) || sMonth;
+          const meta = parsePlanVarietyMeta(p.variety, sMonth, eMonth);
+          const cropName = matchedCrop?.name || meta.cleanVariety || '作目未設定';
+          const family = getCropBotanicalFamily(cropName);
+
           return {
             id: p.id,
             fieldId: f.id,
             cropId: p.crop_id || matchedCrop?.id || '',
-            cropName: matchedCrop?.name || p.variety || '作目未設定',
-            variety: p.variety || '',
-            startMonth: Number(p.start_month) || 8,
-            endMonth: Number(p.end_month) || Number(p.start_month) || 11,
-            year: Number(p.year) || selectedScheduleYear
+            cropName,
+            family,
+            variety: meta.cleanVariety,
+            rawVariety: p.variety || '',
+            startMonth: sMonth,
+            startTerm: meta.startTerm,
+            endMonth: eMonth,
+            endTerm: meta.endTerm,
+            seedlingMonth: meta.seedlingMonth,
+            harvestStartMonth: meta.harvestStartMonth,
+            harvestStartTerm: meta.harvestStartTerm,
+            plantingDate: meta.plantingDate,
+            targetYieldKg: meta.targetYieldKg,
+            calculatedSeedlings: p.calculated_seedlings ? Number(p.calculated_seedlings) : Math.round((areaAcre / 10) * 4000),
+            year: Number(p.year) || selectedScheduleYear,
+            periodLabel: `${sMonth}月${getTermLabel(meta.startTerm)}〜${eMonth}月${getTermLabel(meta.endTerm)}`
           };
         });
 
@@ -711,19 +882,46 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
       let fertCount = 0;
       let totalMinutes = 0;
       const activeLogMonths = new Set<number>();
+      const logsByMonth: Record<number, Array<{ id: string; dateShort: string; label: string; category: 'spray' | 'fert' | 'plant' | 'harvest' | 'other'; rawLog: any }>> = {};
 
       fLogs.forEach(l => {
         totalMinutes += Number(l.duration_minutes) || 0;
-        const wt = l.work_type || '';
+        const wt = l.work_type || l.task_title || '作業';
         const memo = l.memo || '';
+        let cat: 'spray' | 'fert' | 'plant' | 'harvest' | 'other' = 'other';
+        let shortType = wt.replace(/（.*?）|\(.*?\)/g, '').slice(0, 5);
+
         if (wt.includes('農薬') || wt.includes('防除') || wt.includes('散布') || memo.includes('[散布管理]') || memo.includes('品名:')) {
           sprayCount++;
+          cat = 'spray';
+          shortType = '防除';
         } else if (wt.includes('施肥') || wt.includes('肥料') || wt.includes('元肥') || wt.includes('追肥') || memo.includes('[施肥') || memo.includes('合計N:')) {
           fertCount++;
+          cat = 'fert';
+          shortType = wt.includes('元肥') ? '元肥' : wt.includes('追肥') ? '追肥' : '施肥';
+        } else if (wt.includes('定植') || wt.includes('播種') || wt.includes('植付') || wt.includes('種まき')) {
+          cat = 'plant';
+          shortType = wt.includes('播種') || wt.includes('種まき') ? '播種' : '定植';
+        } else if (wt.includes('収穫') || wt.includes('出荷')) {
+          cat = 'harvest';
+          shortType = '収穫';
         }
+
         if (l.work_date) {
-          const mMatch = String(l.work_date).match(/^\d{4}-(\d{2})/);
-          if (mMatch) activeLogMonths.add(Number(mMatch[1]));
+          const mMatch = String(l.work_date).match(/^\d{4}-(\d{2})-(\d{2})/);
+          if (mMatch) {
+            const mNum = Number(mMatch[1]);
+            const dNum = Number(mMatch[2]);
+            activeLogMonths.add(mNum);
+            if (!logsByMonth[mNum]) logsByMonth[mNum] = [];
+            logsByMonth[mNum].push({
+              id: l.id,
+              dateShort: `${mNum}/${dNum}`,
+              label: `${mNum}/${dNum} ${shortType}`,
+              category: cat,
+              rawLog: l
+            });
+          }
         }
       });
 
@@ -741,6 +939,40 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
         : inferredCrop
         ? `${inferredCrop.name}`
         : '未作付（休閑・土作り中）';
+      const botanicalFamily = getCropBotanicalFamily(displayCropName);
+
+      // 生育日数（定植後 〇日目）の算出
+      const plantingLog = [...fLogs].reverse().find(l => {
+        const w = String(l.work_type || l.task_title || '');
+        return w.includes('定植') || w.includes('播種') || w.includes('植付');
+      });
+      const effectivePlantingDate = primaryPlan?.plantingDate || plantingLog?.work_date || '';
+      let growthDaysLabel = '';
+      if (effectivePlantingDate) {
+        const pMs = new Date(effectivePlantingDate).setHours(0, 0, 0, 0);
+        if (!isNaN(pMs)) {
+          const diffDays = Math.floor((todayMs - pMs) / (1000 * 60 * 60 * 24));
+          if (diffDays >= 0 && diffDays <= 300) {
+            growthDaysLabel = `定植後 ${diffDays}日目`;
+          } else if (diffDays < 0 && diffDays >= -120) {
+            growthDaysLabel = `定植まであと ${Math.abs(diffDays)}日`;
+          }
+        }
+      }
+
+      // 同一圃場内での連作障害チェック（複数計画で同じ作目または同じ科がある場合）
+      let continuousCropWarning = '';
+      if (fPlans.length >= 2) {
+        for (let i = 0; i < fPlans.length; i++) {
+          for (let j = i + 1; j < fPlans.length; j++) {
+            if (fPlans[i].cropName === fPlans[j].cropName) {
+              continuousCropWarning = `連作注意: ${fPlans[i].cropName}が連続設定されています`;
+            } else if (fPlans[i].family && fPlans[i].family === fPlans[j].family) {
+              continuousCropWarning = `連作注意: 同じ${fPlans[i].family}（${fPlans[i].cropName}・${fPlans[j].cropName}）です`;
+            }
+          }
+        }
+      }
 
       const selectionId = primaryPlan ? primaryPlan.id : `field-${f.id}`;
 
@@ -754,8 +986,12 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
         plans: fPlans,
         displayCropId,
         displayCropName,
+        botanicalFamily,
+        effectivePlantingDate,
+        growthDaysLabel,
+        continuousCropWarning,
         startDateLabel: primaryPlan
-          ? `${primaryPlan.startMonth}月〜${primaryPlan.endMonth}月`
+          ? primaryPlan.periodLabel
           : inferredCrop && lastLog?.work_date
           ? `作業実績あり (${lastLog.work_date.slice(5, 7).replace(/^0/, '')}月〜)`
           : 'スケジュール未設定',
@@ -765,7 +1001,8 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
         fertCount,
         totalMinutes,
         totalLogsCount: fLogs.length,
-        activeLogMonths: Array.from(activeLogMonths)
+        activeLogMonths: Array.from(activeLogMonths),
+        logsByMonth
       };
     });
   }, [fields, rawCultivationPlans, crops, workLogs, selectedScheduleYear]);
@@ -857,7 +1094,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
       }));
   }, [fieldPortfolioList, selectedIds, crops]);
 
-  // --- 作付スケジュール（年間計画）の追加・編集・削除ハンドラー ---
+  // --- 作付スケジュール（年間栽培こよみ計画）の追加・編集・削除ハンドラー ---
   const handleOpenPlanModal = (fieldId: string, startMonth: number = 8, existingPlan?: any) => {
     setPlanFormFieldId(fieldId);
     if (existingPlan) {
@@ -865,15 +1102,30 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
       setPlanFormCropId(existingPlan.cropId || crops[0]?.id || '');
       setPlanFormVariety(existingPlan.variety || '');
       setPlanFormStartMonth(Number(existingPlan.startMonth) || 8);
-      setPlanFormEndMonth(Number(existingPlan.endMonth) || 12);
+      setPlanFormStartTerm(existingPlan.startTerm || 1);
+      setPlanFormEndMonth(Number(existingPlan.endMonth) || 11);
+      setPlanFormEndTerm(existingPlan.endTerm || 3);
+      setPlanFormSeedlingMonth(Number(existingPlan.seedlingMonth) || 0);
+      setPlanFormHarvestStartMonth(Number(existingPlan.harvestStartMonth) || Number(existingPlan.endMonth) || 11);
+      setPlanFormHarvestStartTerm(existingPlan.harvestStartTerm || 1);
+      setPlanFormPlantingDate(existingPlan.plantingDate || '');
+      setPlanFormTargetYieldKg(existingPlan.targetYieldKg || '');
     } else {
       setEditingPlanId(null);
       const fp = fieldPortfolioList.find(item => item.fieldId === fieldId);
       setPlanFormCropId(fp?.displayCropId || crops[0]?.id || '');
       setPlanFormVariety('');
       setPlanFormStartMonth(startMonth);
+      setPlanFormStartTerm(1);
       const defaultEnd = ((startMonth + 2) % 12) + 1;
       setPlanFormEndMonth(defaultEnd);
+      setPlanFormEndTerm(3);
+      setPlanFormSeedlingMonth(0);
+      setPlanFormHarvestStartMonth(defaultEnd);
+      setPlanFormHarvestStartTerm(1);
+      const defaultDateStr = `${selectedScheduleYear}-${String(startMonth).padStart(2, '0')}-05`;
+      setPlanFormPlantingDate(defaultDateStr);
+      setPlanFormTargetYieldKg('');
     }
     setIsPlanModalOpen(true);
   };
@@ -892,11 +1144,24 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
       const targetField = fields.find(f => f.id === planFormFieldId);
       const areaAcre = targetField?.area_size ? Number(targetField.area_size) : 10;
 
+      // 旬・ステージ・定植日メタデータをvarietyカラムへ安全に構造化格納（DBスキーマ変更不要・エラーゼロ）
+      const metaObj = {
+        st: planFormStartTerm,
+        et: planFormEndTerm,
+        sm: Number(planFormSeedlingMonth) || 0,
+        hm: Number(planFormHarvestStartMonth) || Number(planFormEndMonth),
+        ht: planFormHarvestStartTerm,
+        pd: planFormPlantingDate || '',
+        ty: planFormTargetYieldKg || ''
+      };
+      const cleanVar = planFormVariety.replace(/\|\|META:.*$/, '').trim();
+      const serializedVariety = `${cleanVar} ||META:${JSON.stringify(metaObj)}`.trim();
+
       const payload = {
         user_id: tenantId,
         field_id: planFormFieldId,
         crop_id: planFormCropId,
-        variety: planFormVariety.trim() || null,
+        variety: serializedVariety,
         year: selectedScheduleYear,
         start_month: Number(planFormStartMonth),
         end_month: Number(planFormEndMonth),
@@ -910,13 +1175,13 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
           .eq('id', editingPlanId)
           .eq('user_id', tenantId);
         if (error) throw error;
-        showToast('作付スケジュールを更新しました！');
+        showToast('栽培こよみ・作付スケジュールを更新しました！');
       } else {
         const { error } = await supabase
           .from('cultivation_plans_v2')
           .insert([payload]);
         if (error) throw error;
-        showToast('年間作付スケジュールを登録しました！');
+        showToast('年間栽培こよみ・作付スケジュールを登録しました！');
       }
 
       setIsPlanModalOpen(false);
@@ -2578,21 +2843,21 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                 </div>
               </div>
 
-              {/* 📅 2. 【改革①】12ヶ月がひと目でわかる「圃場別・年間作付スケジュール表（年間ガントチャート）」 */}
+              {/* 📅 2. 【改革①】上・中・下旬（36旬）× 栽培ステージ色分け × 実績連動「圃場別・年間栽培こよみ＆作付スケジュール表」 */}
               {(cultViewMode === 'both' || cultViewMode === 'gantt') && (
                 <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3.5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2.5 border-b border-slate-100">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-2.5 border-b border-slate-100">
                     <div>
                       <h3 className="text-sm sm:text-base font-black text-slate-800 flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-emerald-600" />
-                        <span>📅 圃場別・年間作付スケジュール表（{selectedScheduleYear}年度）</span>
+                        <span>📅 圃場別・年間栽培こよみ ＆ 作付スケジュール表（{selectedScheduleYear}年度 / 上・中・下旬 36旬管理）</span>
                       </h3>
-                      <p className="text-[11px] font-bold text-slate-400 mt-0.5">
-                        💡 緑のバーを押すと期間・作目の変更、空いている月のマス（＋）を押すとその月から新しい作付け（二毛作・輪作）を追加できます。
+                      <p className="text-[11px] font-bold text-slate-500 mt-0.5">
+                        💡 各月を「上旬・中旬・下旬」の3旬で管理し、🌱定植・🌿生育管理・🧺収穫期と、実際の作業実績（防除・施肥・作業日）をひと目で比較できます。マスを押すと日程・ステージを編集できます。
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+                    <div className="flex items-center gap-2 self-start lg:self-auto flex-wrap">
                       {/* 年度切替 */}
                       <div className="flex items-center bg-slate-100 rounded-xl p-1 border border-slate-200 text-xs font-black">
                         <button
@@ -2632,13 +2897,39 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                     </div>
                   </div>
 
-                  {/* 12ヶ月ガントチャートテーブル */}
-                  <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                    <table className="w-full min-w-[780px] border-collapse text-left">
+                  {/* 🎨 栽培ステージ凡例バー（農家がひと目で工程を見分けられるガイド） */}
+                  <div className="flex items-center justify-between gap-2 flex-wrap bg-slate-50 px-3.5 py-2 rounded-2xl border border-slate-200/80 text-[11px] font-bold">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="text-slate-500 font-black">【工程ステージ凡例】</span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-dashed border-amber-400 font-black">
+                        🌰 育苗・土作り期（本圃準備）
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-600 text-white font-black shadow-2xs">
+                        🌱 定植・播種期（植付開始）
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-600 text-white font-black shadow-2xs">
+                        🌿 生育・管理期（追肥・防除）
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500 text-white font-black shadow-2xs">
+                        🧺 収穫・出荷期（収穫ピーク）
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 font-black">
+                        🚜 下段バッジ＝現場の実作業記録
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-bold">
+                      ※各月の上部3メモリは「上旬・中旬・下旬」を表します
+                    </span>
+                  </div>
+
+                  {/* 12ヶ月×3旬（36旬）完全均等幅ガントチャートテーブル */}
+                  <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+                    <table className="w-full min-w-[1120px] table-fixed border-collapse text-left">
                       <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-black text-slate-600">
-                          <th className="py-2.5 px-3.5 w-48 sticky left-0 bg-slate-50 z-10 border-r border-slate-200">
-                            圃場（畑）名 / 面積
+                        <tr className="bg-slate-100/90 border-b border-slate-200 text-[11px] font-black text-slate-700">
+                          <th className="py-2.5 px-3.5 w-52 sticky left-0 bg-slate-100 z-20 border-r border-slate-200 shadow-[1px_0_0_0_#e2e8f0]">
+                            <div>圃場（畑）名 / 面積</div>
+                            <div className="text-[10px] font-bold text-slate-400 mt-0.5">現在の作目・生育日数</div>
                           </th>
                           {scheduleMonths.map(m => {
                             const currentM = new Date().getMonth() + 1;
@@ -2646,17 +2937,25 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                             return (
                               <th
                                 key={m}
-                                className={`py-2.5 px-1 text-center border-r border-slate-200/70 last:border-r-0 ${
-                                  isCurrentMonth ? 'bg-emerald-100/80 text-emerald-900' : ''
+                                className={`py-2 px-1 text-center border-r border-slate-200/80 last:border-r-0 ${
+                                  isCurrentMonth ? 'bg-emerald-100/90 text-emerald-950' : ''
                                 }`}
                               >
                                 <div className="flex flex-col items-center leading-tight">
-                                  <span>{m}月</span>
-                                  {isCurrentMonth && (
-                                    <span className="text-[9px] bg-emerald-600 text-white px-1.5 rounded-full mt-0.5">
-                                      今月
-                                    </span>
-                                  )}
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs font-black">{m}月</span>
+                                    {isCurrentMonth && (
+                                      <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.2 rounded-full">
+                                        今月
+                                      </span>
+                                    )}
+                                  </div>
+                                  {/* 上旬・中旬・下旬の3旬メモリヘッダー */}
+                                  <div className="grid grid-cols-3 w-full mt-1 pt-1 border-t border-slate-200/80 text-[9px] font-bold text-slate-400">
+                                    <span>上</span>
+                                    <span className="border-x border-slate-200/60">中</span>
+                                    <span>下</span>
+                                  </div>
                                 </div>
                               </th>
                             );
@@ -2667,20 +2966,36 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                         {filteredFieldPortfolios.map(fp => {
                           return (
                             <tr key={fp.fieldId} className="hover:bg-slate-50/70 transition-colors group">
-                              {/* 左固定列: 圃場名・面積・追加ボタン */}
-                              <td className="py-2.5 px-3.5 sticky left-0 bg-white group-hover:bg-slate-50 z-10 border-r border-slate-200">
-                                <div className="flex items-center justify-between gap-1.5">
-                                  <div className="min-w-0">
-                                    <div className="font-black text-slate-800 truncate flex items-center gap-1">
-                                      <span>{fp.fieldName}</span>
-                                    </div>
-                                    <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5">
-                                      <span>{fp.areaAcre} a</span>
-                                      <span>•</span>
-                                      <span className={fp.isCultivating ? 'text-emerald-600 font-black' : 'text-amber-600'}>
-                                        {fp.isCultivating ? fp.displayCropName : '休閑'}
+                              {/* 左固定列: 圃場名・面積・科名・生育日数・連作警告・追加ボタン */}
+                              <td className="py-2.5 px-3 sticky left-0 bg-white group-hover:bg-slate-50 z-10 border-r border-slate-200 shadow-[1px_0_0_0_#e2e8f0] align-top">
+                                <div className="flex items-start justify-between gap-1">
+                                  <div className="min-w-0 flex-1 space-y-1">
+                                    <div className="font-black text-slate-900 truncate flex items-center gap-1.5">
+                                      <span className="truncate">{fp.fieldName}</span>
+                                      <span className="px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded text-[10px] font-bold shrink-0">
+                                        {fp.areaAcre}a
                                       </span>
                                     </div>
+                                    <div className="text-[10px] font-bold flex items-center gap-1 flex-wrap">
+                                      <span className={fp.isCultivating ? 'text-emerald-700 font-black' : 'text-amber-600 font-bold'}>
+                                        {fp.isCultivating ? `🌱 ${fp.displayCropName}` : '🟡 休閑・未設定'}
+                                      </span>
+                                      {fp.botanicalFamily && (
+                                        <span className="text-[9px] px-1 py-0.2 bg-slate-100 text-slate-500 rounded">
+                                          {fp.botanicalFamily}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {fp.growthDaysLabel && (
+                                      <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-[9px] font-black">
+                                        ⏱️ {fp.growthDaysLabel}
+                                      </div>
+                                    )}
+                                    {fp.continuousCropWarning && (
+                                      <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 border border-rose-200 text-rose-700 text-[9px] font-black">
+                                        ⚠️ {fp.continuousCropWarning}
+                                      </div>
+                                    )}
                                   </div>
                                   <button
                                     type="button"
@@ -2693,12 +3008,19 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                                 </div>
                               </td>
 
-                              {/* 12ヶ月セル */}
+                              {/* 12ヶ月（各月3旬）セル */}
                               {scheduleMonths.map(m => {
                                 const currentM = new Date().getMonth() + 1;
                                 const isCurrentMonth = m === currentM;
-                                const matchedPlan = fp.plans.find(p => isMonthInPlanRange(m, p.startMonth, p.endMonth));
-                                const hasWorkInMonth = fp.activeLogMonths.includes(m);
+
+                                // この月に該当する計画（本圃期間 または 育苗準備月）を検索
+                                const matchedPlan = fp.plans.find(
+                                  p => isMonthInPlanRange(m, p.startMonth, p.endMonth) || (p.seedlingMonth > 0 && p.seedlingMonth === m)
+                                );
+                                const stageInfo = matchedPlan
+                                  ? getPlanStageForMonth(m, matchedPlan)
+                                  : null;
+                                const monthLogs = fp.logsByMonth?.[m] || [];
 
                                 return (
                                   <td
@@ -2710,30 +3032,130 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                                         handleOpenPlanModal(fp.fieldId, m);
                                       }
                                     }}
-                                    className={`p-1 border-r border-slate-100 last:border-r-0 text-center cursor-pointer transition-all ${
-                                      isCurrentMonth ? 'bg-emerald-50/40' : ''
-                                    } hover:bg-emerald-50`}
+                                    className={`p-1 border-r border-slate-200/70 last:border-r-0 align-top cursor-pointer transition-all ${
+                                      isCurrentMonth ? 'bg-emerald-50/30' : ''
+                                    } hover:bg-emerald-50/70`}
                                     title={
                                       matchedPlan
-                                        ? `${fp.fieldName}: ${matchedPlan.cropName} (${matchedPlan.startMonth}月〜${matchedPlan.endMonth}月) ※クリックで変更・削除`
-                                        : `${fp.fieldName}の${m}月から作付けを追加`
+                                        ? `${fp.fieldName}: ${matchedPlan.cropName}${matchedPlan.variety ? ` (${matchedPlan.variety})` : ''}\n期間: ${matchedPlan.periodLabel}\n収穫予定: ${matchedPlan.harvestStartMonth}月${getTermLabel(matchedPlan.harvestStartTerm)}〜\n※クリックして詳細変更・削除`
+                                        : `${fp.fieldName}の${m}月から作付計画を登録`
                                     }
                                   >
-                                    {matchedPlan ? (
-                                      <div className="w-full py-1.5 px-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] leading-tight truncate shadow-2xs">
-                                        {m === matchedPlan.startMonth || m === scheduleMonths[0]
-                                          ? `🌱 ${matchedPlan.cropName}`
-                                          : '━'}
-                                      </div>
-                                    ) : hasWorkInMonth ? (
-                                      <div className="w-full py-1 px-1 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 font-bold text-[10px] leading-tight truncate">
-                                        🚜 実績 ({fp.displayCropName})
-                                      </div>
-                                    ) : (
-                                      <div className="w-full py-1 text-[10px] text-slate-300 opacity-0 group-hover:opacity-100 font-black transition-opacity">
-                                        ＋
-                                      </div>
-                                    )}
+                                    <div className="space-y-1 min-h-[54px] flex flex-col justify-between">
+                                      {matchedPlan && stageInfo && stageInfo.stage !== 'none' ? (
+                                        <div className="space-y-1">
+                                          {/* 1. 上旬・中旬・下旬の3旬インジケーターバー */}
+                                          <div className="grid grid-cols-3 gap-0.5 h-1.5 w-full">
+                                            {stageInfo.termStages.map((ts, tIdx) => (
+                                              <div
+                                                key={tIdx}
+                                                className={`rounded-xs ${
+                                                  ts === 'harvest'
+                                                    ? 'bg-amber-500'
+                                                    : ts === 'planting'
+                                                    ? 'bg-emerald-600'
+                                                    : ts === 'growing'
+                                                    ? 'bg-teal-500'
+                                                    : ts === 'seedling'
+                                                    ? 'bg-amber-300'
+                                                    : 'bg-slate-200/70'
+                                                }`}
+                                              />
+                                            ))}
+                                          </div>
+
+                                          {/* 2. ステージ別メインバッジ（何をすべき時期か一目でわかる！） */}
+                                          {stageInfo.stage === 'seedling' ? (
+                                            <div className="w-full py-1 px-1 rounded-lg bg-amber-50 border border-dashed border-amber-400 text-amber-900 font-black text-[10px] leading-tight text-center">
+                                              <div className="truncate">🌰 育苗・準備</div>
+                                              <div className="text-[9px] font-bold text-amber-700 truncate">
+                                                {matchedPlan.cropName}
+                                              </div>
+                                            </div>
+                                          ) : stageInfo.stage === 'planting' ? (
+                                            <div className="w-full py-1 px-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] leading-tight text-center shadow-2xs">
+                                              <div className="truncate">🌱 {matchedPlan.cropName}</div>
+                                              <div className="text-[9px] font-bold text-emerald-100 truncate">
+                                                {matchedPlan.plantingDate && Number(matchedPlan.plantingDate.slice(5, 7)) === m
+                                                  ? `${Number(matchedPlan.plantingDate.slice(8, 10))}日定植`
+                                                  : `${getTermLabel(matchedPlan.startTerm)}〜定植`}
+                                              </div>
+                                            </div>
+                                          ) : stageInfo.stage === 'harvest' ? (
+                                            <div className="w-full py-1 px-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-black text-[10px] leading-tight text-center shadow-2xs">
+                                              <div className="truncate">🧺 収穫・出荷</div>
+                                              <div className="text-[9px] font-bold text-amber-100 truncate">
+                                                {matchedPlan.cropName}
+                                                {m === matchedPlan.endMonth ? ` (~${getTermLabel(matchedPlan.endTerm)})` : ''}
+                                              </div>
+                                            </div>
+                                          ) : stageInfo.stage === 'single' ? (
+                                            <div className="w-full py-1 px-1 rounded-lg bg-emerald-600 text-white font-black text-[10px] leading-tight text-center shadow-2xs">
+                                              <div className="truncate">🌱 {matchedPlan.cropName}</div>
+                                              <div className="text-[9px] font-bold text-emerald-100 truncate">
+                                                定植〜🧺収穫
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <div className="w-full py-1 px-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-black text-[10px] leading-tight text-center shadow-2xs">
+                                              <div className="truncate">🌿 生育・管理</div>
+                                              <div className="text-[9px] font-bold text-teal-100 truncate">
+                                                {matchedPlan.cropName}
+                                                {matchedPlan.variety ? ` (${matchedPlan.variety})` : ''}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : monthLogs.length === 0 ? (
+                                        <div className="w-full h-full min-h-[42px] flex items-center justify-center text-[10px] text-slate-300 opacity-0 group-hover:opacity-100 font-black transition-opacity">
+                                          ＋ 作付追加
+                                        </div>
+                                      ) : null}
+
+                                      {/* 3. 下段: その月に実施されたリアルな現場作業実績バッジ（計画と実績の同時表示！） */}
+                                      {monthLogs.length > 0 && (
+                                        <div className="space-y-0.5 pt-0.5">
+                                          {monthLogs.slice(0, 2).map((ml, mIdx) => (
+                                            <div
+                                              key={ml.id || mIdx}
+                                              className={`w-full px-1 py-0.5 rounded text-[9px] font-black leading-tight truncate border ${
+                                                ml.category === 'spray'
+                                                  ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                                  : ml.category === 'fert'
+                                                  ? 'bg-teal-50 text-teal-800 border-teal-200'
+                                                  : ml.category === 'harvest'
+                                                  ? 'bg-amber-50 text-amber-900 border-amber-300'
+                                                  : ml.category === 'plant'
+                                                  ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                                                  : 'bg-blue-50 text-blue-800 border-blue-200'
+                                              }`}
+                                              title={`作業実績: ${ml.label} (${fp.displayCropName})`}
+                                            >
+                                              {ml.category === 'spray'
+                                                ? '🧪'
+                                                : ml.category === 'fert'
+                                                ? '🔬'
+                                                : ml.category === 'harvest'
+                                                ? '🧺'
+                                                : ml.category === 'plant'
+                                                ? '🌱'
+                                                : '🚜'}{' '}
+                                              {ml.label}
+                                            </div>
+                                          ))}
+                                          {monthLogs.length > 2 && (
+                                            <div className="text-[9px] font-black text-slate-400 text-center">
+                                              他 +{monthLogs.length - 2}件の作業
+                                            </div>
+                                          )}
+                                          {!matchedPlan && (
+                                            <div className="text-[9px] font-bold text-emerald-700 text-center hover:underline">
+                                              ＋計画登録
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
                                   </td>
                                 );
                               })}
@@ -2746,7 +3168,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                 </div>
               )}
 
-              {/* 🗂️ 3. 【改革②＆③】圃場別リアル現場カルテ（1圃場＝1カード・12ヶ月ミニバー・防除施肥実績・ワンクリック導線） */}
+              {/* 🗂️ 3. 【改革②＆③】圃場別リアル現場カルテ（1圃場＝1カード・36旬ステージバー・生育日数・防除施肥実績・ワンクリック導線） */}
               {(cultViewMode === 'both' || cultViewMode === 'cards') && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between px-1">
@@ -2782,7 +3204,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                           }`}
                         >
                           <div className="space-y-3">
-                            {/* 上段: チェックボックス・圃場名・面積・稼働バッジ */}
+                            {/* 上段: チェックボックス・圃場名・面積・稼働＆生育日数バッジ */}
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-start gap-2.5 min-w-0">
                                 <div className={`w-5 h-5 mt-0.5 rounded-lg border flex items-center justify-center shrink-0 transition-colors ${
@@ -2798,6 +3220,11 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                                     <span className="px-2 py-0.5 text-[11px] font-black bg-slate-100 text-slate-700 border border-slate-200 rounded-lg">
                                       {fp.areaAcre} a
                                     </span>
+                                    {fp.botanicalFamily && (
+                                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-500 rounded-md">
+                                        {fp.botanicalFamily}
+                                      </span>
+                                    )}
                                   </div>
                                   <p className="text-[11px] font-bold text-slate-400 mt-0.5">
                                     {fp.lastWorkDate
@@ -2807,16 +3234,30 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                                 </div>
                               </div>
 
-                              <span className={`px-2.5 py-1 rounded-xl text-[11px] font-black border shrink-0 ${
-                                fp.isCultivating
-                                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                                  : 'bg-amber-100 text-amber-800 border-amber-300'
-                              }`}>
-                                {fp.isCultivating ? '🟢 作付中' : '🟡 休閑・未設定'}
-                              </span>
+                              <div className="flex flex-col items-end gap-1 shrink-0">
+                                <span className={`px-2.5 py-1 rounded-xl text-[11px] font-black border ${
+                                  fp.isCultivating
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                    : 'bg-amber-100 text-amber-800 border-amber-300'
+                                }`}>
+                                  {fp.isCultivating ? '🟢 作付中' : '🟡 休閑・未設定'}
+                                </span>
+                                {fp.growthDaysLabel && (
+                                  <span className="px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-black">
+                                    ⏱️ {fp.growthDaysLabel}
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
-                            {/* 中段1: 作目・年間スケジュール表示 ＆ その場変更ボタン */}
+                            {fp.continuousCropWarning && (
+                              <div className="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-black flex items-center gap-1.5">
+                                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                <span>{fp.continuousCropWarning}</span>
+                              </div>
+                            )}
+
+                            {/* 中段1: 作目・年間栽培こよみ表示 ＆ その場変更ボタン */}
                             <div
                               onClick={(e) => e.stopPropagation()}
                               className={`p-3 rounded-2xl border space-y-2 cursor-default ${
@@ -2826,29 +3267,41 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                               }`}
                             >
                               {fp.plans.length > 0 ? (
-                                <div className="space-y-1.5">
+                                <div className="space-y-2">
                                   {fp.plans.map((p, idx) => (
-                                    <div key={p.id || idx} className="flex items-center justify-between gap-2">
-                                      <div className="flex items-center gap-1.5 min-w-0">
-                                        <Sprout className="w-4 h-4 text-emerald-600 shrink-0" />
-                                        <span className="text-xs sm:text-sm font-black text-emerald-950 truncate">
-                                          {p.cropName}
-                                          {p.variety ? ` (${p.variety})` : ''}
-                                        </span>
-                                        <span className="px-2 py-0.5 bg-white text-emerald-800 border border-emerald-200 rounded-md text-[10px] font-black shrink-0">
-                                          {p.startMonth}月〜{p.endMonth}月
-                                        </span>
+                                    <div key={p.id || idx} className="bg-white/90 p-2 rounded-xl border border-emerald-200/80 space-y-1">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                          <Sprout className="w-4 h-4 text-emerald-600 shrink-0" />
+                                          <span className="text-xs sm:text-sm font-black text-emerald-950 truncate">
+                                            {p.cropName}
+                                            {p.variety ? ` (${p.variety})` : ''}
+                                          </span>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenPlanModal(fp.fieldId, p.startMonth, p)}
+                                          className="px-2 py-0.5 text-[10px] font-black text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-md transition-colors cursor-pointer shrink-0"
+                                        >
+                                          日程・ステージ変更
+                                        </button>
                                       </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleOpenPlanModal(fp.fieldId, p.startMonth, p)}
-                                        className="px-2 py-0.5 text-[10px] font-black text-emerald-700 hover:bg-emerald-100 rounded-md transition-colors cursor-pointer shrink-0"
-                                      >
-                                        変更
-                                      </button>
+                                      <div className="flex items-center gap-1.5 flex-wrap text-[10px] font-bold">
+                                        <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded">
+                                          🌱 {p.periodLabel}
+                                        </span>
+                                        <span className="px-1.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded">
+                                          🧺 収穫: {p.harvestStartMonth}月{getTermLabel(p.harvestStartTerm)}〜
+                                        </span>
+                                        {p.plantingDate && (
+                                          <span className="text-slate-500">
+                                            (定植日: {p.plantingDate.slice(5).replace('-', '/')})
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
                                   ))}
-                                  <div className="pt-1 flex justify-end">
+                                  <div className="pt-0.5 flex justify-end">
                                     <button
                                       type="button"
                                       onClick={() => handleOpenPlanModal(fp.fieldId, 3)}
@@ -2874,7 +3327,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                                     onClick={() => handleOpenPlanModal(fp.fieldId, 8)}
                                     className="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-lg text-[10px] font-black transition-colors cursor-pointer shrink-0"
                                   >
-                                    📅 期間を設定
+                                    📅 栽培こよみを設定
                                   </button>
                                 </div>
                               ) : (
@@ -2892,21 +3345,30 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                                 </div>
                               )}
 
-                              {/* 12ヶ月ミニタイムラインバー */}
+                              {/* 12ヶ月ステージ色分けミニタイムラインバー */}
                               <div className="pt-1">
                                 <div className="grid grid-cols-12 gap-0.5 text-center">
                                   {scheduleMonths.map(m => {
-                                    const inPlan = fp.plans.some(p => isMonthInPlanRange(m, p.startMonth, p.endMonth));
+                                    const matchedP = fp.plans.find(
+                                      p => isMonthInPlanRange(m, p.startMonth, p.endMonth) || (p.seedlingMonth > 0 && p.seedlingMonth === m)
+                                    );
+                                    const st = matchedP ? getPlanStageForMonth(m, matchedP).stage : 'none';
                                     const inLog = fp.activeLogMonths.includes(m);
                                     return (
                                       <div
                                         key={m}
-                                        onClick={() => handleOpenPlanModal(fp.fieldId, m, fp.plans.find(p => isMonthInPlanRange(m, p.startMonth, p.endMonth)))}
+                                        onClick={() => handleOpenPlanModal(fp.fieldId, m, matchedP)}
                                         className={`py-0.5 rounded text-[9px] font-black cursor-pointer transition-colors ${
-                                          inPlan
+                                          st === 'harvest'
+                                            ? 'bg-amber-500 text-white'
+                                            : st === 'planting'
                                             ? 'bg-emerald-600 text-white'
+                                            : st === 'growing' || st === 'single'
+                                            ? 'bg-teal-600 text-white'
+                                            : st === 'seedling'
+                                            ? 'bg-amber-200 text-amber-900'
                                             : inLog
-                                            ? 'bg-teal-200 text-teal-900'
+                                            ? 'bg-blue-100 text-blue-800 border border-blue-300'
                                             : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
                                         }`}
                                         title={`${m}月: クリックしてスケジュール設定`}
@@ -6052,15 +6514,20 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
         </div>
       )}
 
-      {/* 📅 圃場の年間作付スケジュール登録・変更モーダル */}
+      {/* 📅 圃場の年間栽培こよみ・作付スケジュール登録・変更モーダル（36旬・ステージ・定植日対応） */}
       {isPlanModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 my-auto">
             <div className="flex items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-100">
-              <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-emerald-600" />
-                <span>{editingPlanId ? '作付スケジュールの変更' : '年間作付スケジュールの登録'}</span>
-              </h3>
+              <div>
+                <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-emerald-600" />
+                  <span>{editingPlanId ? '栽培こよみ・作付計画の変更' : '年間栽培こよみ・作付計画の登録'}</span>
+                </h3>
+                <p className="text-[11px] font-bold text-slate-400 mt-0.5">
+                  上旬・中旬・下旬（10日刻み）や定植予定日、収穫時期を細かく管理できます。
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsPlanModalOpen(false)}
@@ -6071,27 +6538,28 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
             </div>
 
             <form onSubmit={handleSavePlan} className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-slate-500 block mb-1">対象の圃場（畑）</label>
-                <select
-                  value={planFormFieldId}
-                  onChange={e => setPlanFormFieldId(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400"
-                  required
-                >
-                  <option value="">圃場を選択してください</option>
-                  {fields.map(f => {
-                    const a = f.area_size ? Number(f.area_size) : 10;
-                    return (
-                      <option key={f.id} value={f.id}>
-                        {f.name} ({a}a)
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
+              {/* 1. 対象圃場と作目・品種 */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 block mb-1">対象の圃場（畑）</label>
+                  <select
+                    value={planFormFieldId}
+                    onChange={e => setPlanFormFieldId(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400"
+                    required
+                  >
+                    <option value="">圃場を選択してください</option>
+                    {fields.map(f => {
+                      const a = f.area_size ? Number(f.area_size) : 10;
+                      return (
+                        <option key={f.id} value={f.id}>
+                          {f.name} ({a}a)
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
                 <div>
                   <label className="text-xs font-bold text-slate-500 block mb-1">作目（必須）</label>
                   <select
@@ -6101,60 +6569,209 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                     required
                   >
                     <option value="">作目を選択</option>
-                    {crops.map(c => (
-                      <option key={c.id} value={c.id}>
-                        🌱 {c.name}
-                      </option>
-                    ))}
+                    {crops.map(c => {
+                      const fam = getCropBotanicalFamily(c.name);
+                      return (
+                        <option key={c.id} value={c.id}>
+                          🌱 {c.name}{fam ? ` (${fam})` : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
+              </div>
 
+              {/* 連作障害の事前リアルタイム警告 */}
+              {(() => {
+                const selectedCropObj = crops.find(c => c.id === planFormCropId);
+                const selectedFam = getCropBotanicalFamily(selectedCropObj?.name || '');
+                const fp = fieldPortfolioList.find(item => item.fieldId === planFormFieldId);
+                const otherPlans = (fp?.plans || []).filter(p => p.id !== editingPlanId);
+                const conflictPlan = otherPlans.find(
+                  p => p.cropId === planFormCropId || (selectedFam && p.family === selectedFam)
+                );
+                if (!conflictPlan) return null;
+                return (
+                  <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-black block">⚠️ 連作障害のご注意</span>
+                      <span>
+                        この圃場には同じ{selectedFam || '作目'}の「{conflictPlan.cropName}（{conflictPlan.periodLabel}）」が登録されています。土壌病害や生育不良にご注意ください。
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-bold text-slate-500 block mb-1">品種・作型メモ（任意）</label>
+                  <label className="text-xs font-bold text-slate-500 block mb-1">品種名・作型メモ（任意）</label>
                   <input
                     type="text"
                     value={planFormVariety}
                     onChange={e => setPlanFormVariety(e.target.value)}
-                    placeholder="例: 秋冬作、寒玉、春系など"
+                    placeholder="例: 冬藍、寒玉、秋冬どり等"
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400"
                   />
                 </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-500 block mb-1">🌰 育苗・土作り開始月（任意）</label>
+                  <select
+                    value={planFormSeedlingMonth}
+                    onChange={e => setPlanFormSeedlingMonth(Number(e.target.value))}
+                    className="w-full p-2.5 bg-amber-50/60 border border-amber-200 rounded-xl text-xs font-black text-amber-950 outline-none"
+                  >
+                    <option value={0}>指定なし（定植月から開始）</option>
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
+                      <option key={m} value={m}>{m}月から育苗・土作り準備</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
+              {/* 2. 🌱 定植・播種（本圃開始）時期 ＆ 定植日 */}
               <div className="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-200 space-y-2.5">
-                <span className="text-xs font-black text-emerald-900 block">
-                  📅 作付け・栽培期間（{selectedScheduleYear}年度）
+                <span className="text-xs font-black text-emerald-900 flex items-center justify-between">
+                  <span>🌱 ① 定植・播種時期（畑を使い始める時期）</span>
+                  <span className="text-[10px] font-bold text-emerald-700">{selectedScheduleYear}年度</span>
                 </span>
-                <div className="grid grid-cols-2 gap-3 items-center">
+                <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="text-[11px] font-bold text-emerald-800 block mb-1">開始月（定植・播種）</label>
+                    <label className="text-[10px] font-bold text-emerald-800 block mb-1">開始月</label>
                     <select
                       value={planFormStartMonth}
-                      onChange={e => setPlanFormStartMonth(Number(e.target.value))}
-                      className="w-full p-2 bg-white border border-emerald-300 rounded-xl text-sm font-black text-slate-800 outline-none"
+                      onChange={e => {
+                        const nextM = Number(e.target.value);
+                        setPlanFormStartMonth(nextM);
+                        if (planFormPlantingDate) {
+                          const dayPart = planFormPlantingDate.slice(8, 10) || '05';
+                          setPlanFormPlantingDate(`${selectedScheduleYear}-${String(nextM).padStart(2, '0')}-${dayPart}`);
+                        }
+                      }}
+                      className="w-full p-2 bg-white border border-emerald-300 rounded-xl text-xs font-black text-slate-800 outline-none"
                     >
                       {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
-                        <option key={m} value={m}>{m}月から</option>
+                        <option key={m} value={m}>{m}月</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="text-[11px] font-bold text-emerald-800 block mb-1">終了月（収穫完了・片付）</label>
+                    <label className="text-[10px] font-bold text-emerald-800 block mb-1">旬（上・中・下）</label>
                     <select
-                      value={planFormEndMonth}
-                      onChange={e => setPlanFormEndMonth(Number(e.target.value))}
-                      className="w-full p-2 bg-white border border-emerald-300 rounded-xl text-sm font-black text-slate-800 outline-none"
+                      value={planFormStartTerm}
+                      onChange={e => setPlanFormStartTerm(Number(e.target.value) as 1 | 2 | 3)}
+                      className="w-full p-2 bg-white border border-emerald-300 rounded-xl text-xs font-black text-slate-800 outline-none"
                     >
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
-                        <option key={m} value={m}>{m}月まで</option>
-                      ))}
+                      <option value={1}>上旬 (1〜10日)</option>
+                      <option value={2}>中旬 (11〜20日)</option>
+                      <option value={3}>下旬 (21日〜末)</option>
                     </select>
                   </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-emerald-800 block mb-1">定植・播種日(任意)</label>
+                    <input
+                      type="date"
+                      value={planFormPlantingDate}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setPlanFormPlantingDate(val);
+                        if (val) {
+                          const mNum = Number(val.slice(5, 7));
+                          const dNum = Number(val.slice(8, 10));
+                          if (mNum >= 1 && mNum <= 12) setPlanFormStartMonth(mNum);
+                          if (dNum <= 10) setPlanFormStartTerm(1);
+                          else if (dNum <= 20) setPlanFormStartTerm(2);
+                          else setPlanFormStartTerm(3);
+                        }
+                      }}
+                      className="w-full p-1.5 bg-white border border-emerald-300 rounded-xl text-xs font-bold text-slate-800 outline-none"
+                    />
+                  </div>
                 </div>
-                <p className="text-[10px] font-bold text-emerald-700">
-                  ※同じ圃場に時期をずらして複数の作目（二毛作・輪作）を登録することも可能です。
-                </p>
               </div>
+
+              {/* 3. 🧺 収穫開始時期 〜 収穫完了（片付け）時期 */}
+              <div className="bg-amber-50/70 p-3.5 rounded-2xl border border-amber-200 space-y-2.5">
+                <span className="text-xs font-black text-amber-900 block">
+                  🧺 ② 収穫開始 〜 収穫完了・片付け時期（畑が空く時期）
+                </span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-amber-800 block">🧺 収穫開始（いつから穫れるか）</label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <select
+                        value={planFormHarvestStartMonth}
+                        onChange={e => setPlanFormHarvestStartMonth(Number(e.target.value))}
+                        className="w-full p-2 bg-white border border-amber-300 rounded-xl text-xs font-black text-slate-800 outline-none"
+                      >
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
+                          <option key={m} value={m}>{m}月</option>
+                        ))}
+                      </select>
+                      <select
+                        value={planFormHarvestStartTerm}
+                        onChange={e => setPlanFormHarvestStartTerm(Number(e.target.value) as 1 | 2 | 3)}
+                        className="w-full p-2 bg-white border border-amber-300 rounded-xl text-xs font-black text-slate-800 outline-none"
+                      >
+                        <option value={1}>上旬〜</option>
+                        <option value={2}>中旬〜</option>
+                        <option value={3}>下旬〜</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-amber-800 block">🚜 収穫完了・片付け（畑が空く時期）</label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <select
+                        value={planFormEndMonth}
+                        onChange={e => setPlanFormEndMonth(Number(e.target.value))}
+                        className="w-full p-2 bg-white border border-amber-300 rounded-xl text-xs font-black text-slate-800 outline-none"
+                      >
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
+                          <option key={m} value={m}>{m}月</option>
+                        ))}
+                      </select>
+                      <select
+                        value={planFormEndTerm}
+                        onChange={e => setPlanFormEndTerm(Number(e.target.value) as 1 | 2 | 3)}
+                        className="w-full p-2 bg-white border border-amber-300 rounded-xl text-xs font-black text-slate-800 outline-none"
+                      >
+                        <option value={1}>上旬まで</option>
+                        <option value={2}>中旬まで</option>
+                        <option value={3}>下旬まで</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. 圃場面積からの必要苗数・目標収量サポート表示 */}
+              {(() => {
+                const fObj = fields.find(f => f.id === planFormFieldId);
+                const areaVal = fObj?.area_size ? Number(fObj.area_size) : 10;
+                const estSeedlings = Math.round((areaVal / 10) * 4000);
+                return (
+                  <div className="bg-slate-50 px-3.5 py-2.5 rounded-2xl border border-slate-200 flex items-center justify-between gap-3 text-xs">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block">🌱 面積({areaVal}a)からの概算必要苗数目安</span>
+                      <span className="font-black text-slate-800">約 {estSeedlings.toLocaleString()} 本 <span className="text-[10px] font-bold text-slate-400">(4,000株/10a換算)</span></span>
+                    </div>
+                    <div className="w-36">
+                      <label className="text-[10px] font-bold text-slate-500 block mb-0.5">目標収穫量 (kg・任意)</label>
+                      <input
+                        type="number"
+                        value={planFormTargetYieldKg}
+                        onChange={e => setPlanFormTargetYieldKg(e.target.value)}
+                        placeholder="例: 8000"
+                        className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-black text-slate-800 outline-none"
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="flex items-center justify-between gap-2 pt-2">
                 {editingPlanId ? (
@@ -6183,7 +6800,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                     className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-black transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
                   >
                     {isSavingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                    <span>{editingPlanId ? '変更を保存' : 'スケジュールを登録'}</span>
+                    <span>{editingPlanId ? '変更を保存' : '栽培こよみを登録'}</span>
                   </button>
                 </div>
               </div>

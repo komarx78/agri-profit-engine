@@ -78,7 +78,12 @@ export default function CultivationSchedulePage() {
       if (pRes.error && pRes.error.code !== '42P01') {
         console.error("Plans fetch error:", pRes.error);
       }
-      setPlans(pRes.data || []);
+      setPlans(
+        (pRes.data || []).map((p: any) => ({
+          ...p,
+          variety: p.variety ? String(p.variety).replace(/\|\|META:.*$/, '').trim() : ''
+        }))
+      );
       
     } catch (err) {
       console.error(err);
