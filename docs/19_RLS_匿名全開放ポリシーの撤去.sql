@@ -80,18 +80,20 @@ ORDER BY tablename, policyname;
 
 
 -- ---------------------------------------------------------------------
--- STEP 3【非常用・元に戻す】STEP 2 の後に画面でデータが出なくなった場合だけ実行
---  ※ 安全ではない元の状態に戻すだけです。実行した場合は必ず状況を共有してください
+-- STEP 3【即時復旧用】暗証番号（PIN）ログインのスタッフや、
+--  Vercel に SUPABASE_SERVICE_ROLE_KEY が設定されていない環境で
+--  画面にデータが出なくなった場合は、下の12行を実行してください（1秒で元通り表示されます）
 -- ---------------------------------------------------------------------
--- CREATE POLICY "Allow anonymous read access on cultivation_plans_v2"   ON cultivation_plans_v2 FOR SELECT USING (true);
--- CREATE POLICY "Allow anonymous insert access on cultivation_plans_v2" ON cultivation_plans_v2 FOR INSERT WITH CHECK (true);
--- CREATE POLICY "Allow anonymous update access on cultivation_plans_v2" ON cultivation_plans_v2 FOR UPDATE USING (true);
--- CREATE POLICY "Allow anonymous delete access on cultivation_plans_v2" ON cultivation_plans_v2 FOR DELETE USING (true);
--- CREATE POLICY "Allow anonymous read access on nursery_schedules_v2"   ON nursery_schedules_v2 FOR SELECT USING (true);
--- CREATE POLICY "Allow anonymous insert access on nursery_schedules_v2" ON nursery_schedules_v2 FOR INSERT WITH CHECK (true);
--- CREATE POLICY "Allow anonymous update access on nursery_schedules_v2" ON nursery_schedules_v2 FOR UPDATE USING (true);
--- CREATE POLICY "Allow anonymous delete access on nursery_schedules_v2" ON nursery_schedules_v2 FOR DELETE USING (true);
--- CREATE POLICY "Allow anonymous read access on crop_standards"   ON crop_standards FOR SELECT USING (true);
--- CREATE POLICY "Allow anonymous insert access on crop_standards" ON crop_standards FOR INSERT WITH CHECK (true);
--- CREATE POLICY "Allow anonymous update access on crop_standards" ON crop_standards FOR UPDATE USING (true);
--- CREATE POLICY "Allow anonymous delete access on crop_standards" ON crop_standards FOR DELETE USING (true);
+CREATE POLICY "Allow anonymous read access on cultivation_plans_v2"   ON cultivation_plans_v2 FOR SELECT USING (true);
+CREATE POLICY "Allow anonymous insert access on cultivation_plans_v2" ON cultivation_plans_v2 FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow anonymous update access on cultivation_plans_v2" ON cultivation_plans_v2 FOR UPDATE USING (true);
+CREATE POLICY "Allow anonymous delete access on cultivation_plans_v2" ON cultivation_plans_v2 FOR DELETE USING (true);
+CREATE POLICY "Allow anonymous read access on nursery_schedules_v2"   ON nursery_schedules_v2 FOR SELECT USING (true);
+CREATE POLICY "Allow anonymous insert access on nursery_schedules_v2" ON nursery_schedules_v2 FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow anonymous update access on nursery_schedules_v2" ON nursery_schedules_v2 FOR UPDATE USING (true);
+CREATE POLICY "Allow anonymous delete access on nursery_schedules_v2" ON nursery_schedules_v2 FOR DELETE USING (true);
+CREATE POLICY "Allow anonymous read access on crop_standards"   ON crop_standards FOR SELECT USING (true);
+CREATE POLICY "Allow anonymous insert access on crop_standards" ON crop_standards FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow anonymous update access on crop_standards" ON crop_standards FOR UPDATE USING (true);
+CREATE POLICY "Allow anonymous delete access on crop_standards" ON crop_standards FOR DELETE USING (true);
+

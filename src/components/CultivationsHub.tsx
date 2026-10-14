@@ -668,11 +668,30 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
     }
   };
 
-  // 作物プルダウン変更時の連動
-  const handleCropChange = async (newCropId: string) => {
+  // 作物プルダウン変更時の連動（無関係な圃場が選択されたままにならないよう自動調整）
+  const handleCropChange = async (newCropId: string, preserveFieldId?: string) => {
     setSelectedSprayCropId(newCropId);
     setSelectedPesticideIds([]);
     setSelectedPestTag('all');
+    if (preserveFieldId) {
+      setSelectedSprayTargetFieldId(preserveFieldId);
+      setSelectedSprayFieldIds([preserveFieldId]);
+    } else if (selectedSprayTargetFieldId !== 'all') {
+      const targetField = fields.find(f => f.id === selectedSprayTargetFieldId);
+      const targetCropObj = crops.find(c => c.id === newCropId);
+      const hasMatchingPlan = rawCultivationPlans.some(
+        (p: any) => p.field_id === selectedSprayTargetFieldId && (p.crop_id === newCropId || (targetCropObj?.name && p.crops?.name === targetCropObj.name))
+      );
+      const hasMatchingLog = workLogs.some(
+        (l: any) => l.field_id === selectedSprayTargetFieldId && l.status !== 'planned' && (l.crop_id === newCropId || (targetCropObj?.name && l.crops?.name === targetCropObj.name))
+      );
+      const nameMatchesCrop = Boolean(
+        targetCropObj?.name && targetField?.name && targetField.name.normalize('NFKC').includes(targetCropObj.name.normalize('NFKC'))
+      );
+      if (!hasMatchingPlan && !hasMatchingLog && !nameMatchesCrop) {
+        setSelectedSprayTargetFieldId('all');
+      }
+    }
     await loadPesticidesForCrop(newCropId, crops, workLogs, farmRegisteredPesticides);
   };
 
@@ -1311,9 +1330,21 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
       .map(([tag, count]) => ({ tag, count }));
   }, [pesticidesWithLiveCounts, sprayCategoryTab]);
 
-  // 散布管理：圃場ごとの防除回数・最終散布日サマリー
+  // 散布管理：圃場ごとの防除回数・最終散布日・栽培作目サマリー
   const sprayFieldSummaries = useMemo(() => {
     return fields.map(f => {
+      const fp = fieldPortfolioList.find(item => item.fieldId === f.id);
+      const planCropIds = Array.from(new Set((fp?.plans || []).map((p: any) => p.cropId).filter(Boolean)));
+      const primaryCropId = fp?.displayCropId || '';
+      const primaryCropName = (fp?.hasExplicitPlan || fp?.isCultivating) ? (fp?.displayCropName || '') : '';
+      const nameMatchedCrop = !primaryCropId
+        ? crops.find(c => c.name && f.name && f.name.normalize('NFKC').includes(c.name.normalize('NFKC')))
+        : null;
+      const effectiveCropId = primaryCropId || nameMatchedCrop?.id || '';
+      const effectiveCropName = primaryCropName || nameMatchedCrop?.name || '';
+      const allFieldCropIds = Array.from(new Set([...planCropIds, ...(effectiveCropId ? [effectiveCropId] : [])]));
+      const matchesSelectedCrop = Boolean(selectedSprayCropId && allFieldCropIds.includes(selectedSprayCropId));
+
       const fLogs = workLogs.filter(l => {
         if (l.status === 'planned') return false;
         if (l.field_id !== f.id) return false;
@@ -1327,10 +1358,14 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
         fieldName: f.name,
         areaAcre,
         sprayCount: fLogs.length,
-        lastDate
+        lastDate,
+        effectiveCropId,
+        effectiveCropName,
+        allFieldCropIds,
+        matchesSelectedCrop
       };
     });
-  }, [fields, workLogs, selectedSprayCropId]);
+  }, [fields, workLogs, selectedSprayCropId, fieldPortfolioList, crops]);
 
   // 散布管理：現在選択中の作目・圃場の農薬散布履歴一覧
   const currentCropSprayLogs = useMemo(() => {
@@ -3429,8 +3464,15 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                               <div
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (fp.displayCropId) setSelectedSprayCropId(fp.displayCropId);
-                                  setSelectedSprayTargetFieldId(fp.fieldId);
+                                  const matchedCropId =
+                                    fp.displayCropId ||
+                                    crops.find(c => c.name && fp.fieldName && fp.fieldName.normalize('NFKC').includes(c.name.normalize('NFKC')))?.id;
+                                  if (matchedCropId) {
+                                    handleCropChange(matchedCropId, fp.fieldId);
+                                  } else {
+                                    setSelectedSprayTargetFieldId(fp.fieldId);
+                                    setSelectedSprayFieldIds([fp.fieldId]);
+                                  }
                                   setActiveMainTab('spray');
                                   window.scrollTo({ top: 0, behavior: 'smooth' });
                                 }}
@@ -3481,8 +3523,15 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (fp.displayCropId) setSelectedSprayCropId(fp.displayCropId);
-                                  setSelectedSprayTargetFieldId(fp.fieldId);
+                                  const matchedCropId =
+                                    fp.displayCropId ||
+                                    crops.find(c => c.name && fp.fieldName && fp.fieldName.normalize('NFKC').includes(c.name.normalize('NFKC')))?.id;
+                                  if (matchedCropId) {
+                                    handleCropChange(matchedCropId, fp.fieldId);
+                                  } else {
+                                    setSelectedSprayTargetFieldId(fp.fieldId);
+                                    setSelectedSprayFieldIds([fp.fieldId]);
+                                  }
                                   setActiveMainTab('spray');
                                   window.scrollTo({ top: 0, behavior: 'smooth' });
                                 }}
@@ -3585,7 +3634,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                       </select>
                     </div>
 
-                    {/* ② 対象圃場（畑）セレクター（畑ごとの正確な残回数を算出！） */}
+                    {/* ② 対象圃場（畑）セレクター（畑ごとの正確な残回数を算出・作物連動） */}
                     <div>
                       <label className="text-[11px] font-black text-slate-500 block mb-1 flex items-center gap-1">
                         <MapPin className="w-3.5 h-3.5 text-rose-600" />
@@ -3598,16 +3647,43 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                           setSelectedSprayTargetFieldId(val);
                           if (val !== 'all') {
                             setSelectedSprayFieldIds([val]);
+                            const targetFs = sprayFieldSummaries.find(fs => fs.fieldId === val);
+                            if (targetFs?.effectiveCropId && !targetFs.allFieldCropIds.includes(selectedSprayCropId)) {
+                              handleCropChange(targetFs.effectiveCropId, val);
+                            }
                           }
                         }}
-                        className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-400 cursor-pointer min-w-[200px]"
+                        className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-400 cursor-pointer min-w-[220px]"
                       >
-                        <option value="all">すべての圃場（作目全体で集計）</option>
-                        {sprayFieldSummaries.map(fs => (
-                          <option key={fs.fieldId} value={fs.fieldId}>
-                            📍 {fs.fieldName} ({fs.areaAcre}a / 今期防除 {fs.sprayCount}回)
-                          </option>
-                        ))}
+                        <option value="all">
+                          すべての圃場（{crops.find(c => c.id === selectedSprayCropId)?.name || '対象作物'}全体で集計）
+                        </option>
+                        {sprayFieldSummaries.some(fs => fs.matchesSelectedCrop) ? (
+                          <>
+                            <optgroup label={`🌱 ${crops.find(c => c.id === selectedSprayCropId)?.name || '選択作物'}の圃場`}>
+                              {sprayFieldSummaries.filter(fs => fs.matchesSelectedCrop).map(fs => (
+                                <option key={fs.fieldId} value={fs.fieldId}>
+                                  📍 {fs.fieldName} ({fs.areaAcre}a / 今期防除 {fs.sprayCount}回)
+                                </option>
+                              ))}
+                            </optgroup>
+                            {sprayFieldSummaries.some(fs => !fs.matchesSelectedCrop) && (
+                              <optgroup label="📍 その他の圃場（選ぶと対象作物も自動で切り替わります）">
+                                {sprayFieldSummaries.filter(fs => !fs.matchesSelectedCrop).map(fs => (
+                                  <option key={fs.fieldId} value={fs.fieldId}>
+                                    📍 {fs.fieldName}{fs.effectiveCropName ? ` [${fs.effectiveCropName}]` : ''} ({fs.areaAcre}a / 今期防除 {fs.sprayCount}回)
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                          </>
+                        ) : (
+                          sprayFieldSummaries.map(fs => (
+                            <option key={fs.fieldId} value={fs.fieldId}>
+                              📍 {fs.fieldName}{fs.effectiveCropName ? ` [${fs.effectiveCropName}]` : ''} ({fs.areaAcre}a / 今期防除 {fs.sprayCount}回)
+                            </option>
+                          ))
+                        )}
                       </select>
                     </div>
 
@@ -3666,52 +3742,36 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                   </div>
                 </div>
 
-                {/* 📍 圃場別クイック切替バー（各畑の防除回数と最終散布日がひと目でわかる！） */}
-                {sprayFieldSummaries.length > 0 && (
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                    <span className="text-[11px] font-black text-slate-400 shrink-0 mr-1">畑ごとの防除状況:</span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedSprayTargetFieldId('all')}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap border transition-all cursor-pointer ${
-                        selectedSprayTargetFieldId === 'all'
-                          ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
-                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      すべての圃場
-                    </button>
-                    {sprayFieldSummaries.map(fs => {
-                      const isActive = selectedSprayTargetFieldId === fs.fieldId;
-                      return (
-                        <button
-                          key={fs.fieldId}
-                          type="button"
-                          onClick={() => {
-                            setSelectedSprayTargetFieldId(isActive ? 'all' : fs.fieldId);
-                            if (!isActive) setSelectedSprayFieldIds([fs.fieldId]);
-                          }}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap border transition-all flex items-center gap-1.5 cursor-pointer ${
-                            isActive
-                              ? 'bg-rose-600 text-white border-rose-600 font-black shadow-2xs'
-                              : 'bg-white text-slate-700 border-slate-200 hover:border-rose-300'
-                          }`}
-                        >
-                          <span>📍 {fs.fieldName}</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-black ${
-                            isActive
-                              ? 'bg-rose-800 text-rose-100'
-                              : fs.sprayCount > 0
-                                ? 'bg-rose-50 text-rose-700'
-                                : 'bg-slate-100 text-slate-400'
-                          }`}>
-                            {fs.sprayCount > 0 ? `散布 ${fs.sprayCount}回` : '未散布'}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                {/* 📍 特定の畑を選んでいる時のみ、他の畑一覧は出さずに「選択中の畑の防除状況」だけをスッキリ表示 */}
+                {selectedSprayTargetFieldId !== 'all' && (() => {
+                  const activeFs = sprayFieldSummaries.find(fs => fs.fieldId === selectedSprayTargetFieldId);
+                  if (!activeFs) return null;
+                  return (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 bg-rose-50/80 border border-rose-200 rounded-2xl">
+                      <div className="flex items-center gap-2.5 flex-wrap text-xs">
+                        <span className="px-2.5 py-1 bg-rose-600 text-white rounded-lg font-black flex items-center gap-1 shadow-2xs">
+                          <MapPin className="w-3.5 h-3.5" />
+                          選択中の畑: {activeFs.fieldName}
+                        </span>
+                        <span className="font-bold text-slate-700">
+                          面積: <strong className="font-black text-slate-900">{activeFs.areaAcre}a</strong>
+                        </span>
+                        <span className="text-slate-300">|</span>
+                        <span className="font-bold text-slate-700">
+                          この畑の今期防除: <strong className="font-black text-rose-700">{activeFs.sprayCount}回</strong>
+                          {activeFs.lastDate ? `（最終散布: ${formatDateWithDay(activeFs.lastDate)}）` : '（今期まだ散布記録なし）'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSprayTargetFieldId('all')}
+                        className="px-3 py-1 bg-white hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-xl text-[11px] font-black transition-colors self-start sm:self-auto shrink-0 cursor-pointer"
+                      >
+                        ✕ すべての圃場表示に戻す
+                      </button>
+                    </div>
+                  );
+                })()}
 
                 {/* 2段目: キーワード検索窓 ＆ 件数バッジ付きカテゴリタブ */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
@@ -4362,120 +4422,148 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
                   </div>
                 </div>
 
-                {/* 📍 【改革①】圃場（畑）別・施肥状況一覧カルテ（ひと目で全畑を比較！） */}
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-black text-teal-300 flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-teal-400" />
-                      <span>圃場（畑）ごとの施肥状況カルテ一覧（カードをクリックで畑を選択）</span>
-                    </h4>
-                    <span className="text-[11px] text-slate-400 font-bold">
-                      ※数値はすべて10a（1反）あたりの累積純成分量(kg)
-                    </span>
-                  </div>
+                {/* 📍 【改革①】圃場（畑）別・施肥状況一覧カルテ（全圃場表示時は比較一覧、特定畑選択時は選択中の畑サマリーのみ表示） */}
+                {fertAnalysisFieldId === 'all' ? (
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black text-teal-300 flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-teal-400" />
+                        <span>圃場（畑）ごとの施肥状況カルテ一覧（カードをクリックで畑を選択）</span>
+                      </h4>
+                      <span className="text-[11px] text-slate-400 font-bold">
+                        ※数値はすべて10a（1反）あたりの累積純成分量(kg)
+                      </span>
+                    </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {fertilizerAnalytics.fieldCards.map(fc => {
-                      const isFocused = fertAnalysisFieldId === fc.fieldId;
-                      const isUnfertilized = fc.logCount === 0;
-                      return (
-                        <div
-                          key={fc.fieldId}
-                          onClick={() => setFertAnalysisFieldId(isFocused ? 'all' : fc.fieldId)}
-                          className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-3 ${
-                            isFocused
-                              ? 'bg-teal-950/90 border-2 border-teal-400 shadow-lg ring-2 ring-teal-400/20'
-                              : isUnfertilized
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                      {fertilizerAnalytics.fieldCards.map(fc => {
+                        const isUnfertilized = fc.logCount === 0;
+                        return (
+                          <div
+                            key={fc.fieldId}
+                            onClick={() => setFertAnalysisFieldId(fc.fieldId)}
+                            className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-3 ${
+                              isUnfertilized
                                 ? 'bg-slate-800/50 border-slate-700/80 hover:border-slate-500 opacity-85'
                                 : 'bg-slate-800/90 border-slate-700 hover:border-teal-500/60'
-                          }`}
-                        >
-                          <div className="space-y-2">
-                            {/* 畑名・面積・作目・ステータス */}
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-sm font-black text-white truncate">{fc.fieldName}</span>
-                                  <span className="px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 text-[10px] font-bold">
-                                    {fc.areaAcre} a
+                            }`}
+                          >
+                            <div className="space-y-2">
+                              {/* 畑名・面積・作目・ステータス */}
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-sm font-black text-white truncate">{fc.fieldName}</span>
+                                    <span className="px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 text-[10px] font-bold">
+                                      {fc.areaAcre} a
+                                    </span>
+                                    {fc.cropNames.map((cn, idx) => (
+                                      <span key={idx} className="px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-700/60 text-emerald-300 text-[10px] font-black">
+                                        🌱 {cn}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                {isUnfertilized ? (
+                                  <span className="shrink-0 px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-black">
+                                    ⚠️ 未施肥
                                   </span>
-                                  {fc.cropNames.map((cn, idx) => (
-                                    <span key={idx} className="px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-700/60 text-emerald-300 text-[10px] font-black">
-                                      🌱 {cn}
-                                    </span>
-                                  ))}
+                                ) : (
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {fc.basalCount > 0 && (
+                                      <span className="px-1.5 py-0.5 rounded bg-blue-500/20 border border-blue-400/40 text-blue-300 text-[10px] font-black">
+                                        元肥 {fc.basalCount}回
+                                      </span>
+                                    )}
+                                    {fc.topdressCount > 0 && (
+                                      <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-black">
+                                        追肥 {fc.topdressCount}回
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* 畑ごとの N-P-K-Ca-Mg メーター */}
+                              <div className="grid grid-cols-5 gap-1.5 pt-1">
+                                <div className="bg-slate-900/80 border border-blue-500/20 rounded-xl p-1.5 text-center">
+                                  <div className="text-[9px] font-black text-blue-300">N(窒素)</div>
+                                  <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalN}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
+                                </div>
+                                <div className="bg-slate-900/80 border border-amber-500/20 rounded-xl p-1.5 text-center">
+                                  <div className="text-[9px] font-black text-amber-300">P(リン)</div>
+                                  <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalP}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
+                                </div>
+                                <div className="bg-slate-900/80 border border-purple-500/20 rounded-xl p-1.5 text-center">
+                                  <div className="text-[9px] font-black text-purple-300">K(カリ)</div>
+                                  <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalK}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
+                                </div>
+                                <div className="bg-slate-900/80 border border-yellow-500/20 rounded-xl p-1.5 text-center">
+                                  <div className="text-[9px] font-black text-yellow-300">Ca(石灰)</div>
+                                  <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalCa}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
+                                </div>
+                                <div className="bg-slate-900/80 border border-teal-500/20 rounded-xl p-1.5 text-center">
+                                  <div className="text-[9px] font-black text-teal-300">Mg(苦土)</div>
+                                  <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalMg}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
                                 </div>
                               </div>
-
-                              {isUnfertilized ? (
-                                <span className="shrink-0 px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-black">
-                                  ⚠️ 未施肥
-                                </span>
-                              ) : (
-                                <div className="flex items-center gap-1 shrink-0">
-                                  {fc.basalCount > 0 && (
-                                    <span className="px-1.5 py-0.5 rounded bg-blue-500/20 border border-blue-400/40 text-blue-300 text-[10px] font-black">
-                                      元肥 {fc.basalCount}回
-                                    </span>
-                                  )}
-                                  {fc.topdressCount > 0 && (
-                                    <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-black">
-                                      追肥 {fc.topdressCount}回
-                                    </span>
-                                  )}
-                                </div>
-                              )}
                             </div>
 
-                            {/* 畑ごとの N-P-K-Ca-Mg メーター */}
-                            <div className="grid grid-cols-5 gap-1.5 pt-1">
-                              <div className="bg-slate-900/80 border border-blue-500/20 rounded-xl p-1.5 text-center">
-                                <div className="text-[9px] font-black text-blue-300">N(窒素)</div>
-                                <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalN}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
-                              </div>
-                              <div className="bg-slate-900/80 border border-amber-500/20 rounded-xl p-1.5 text-center">
-                                <div className="text-[9px] font-black text-amber-300">P(リン)</div>
-                                <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalP}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
-                              </div>
-                              <div className="bg-slate-900/80 border border-purple-500/20 rounded-xl p-1.5 text-center">
-                                <div className="text-[9px] font-black text-purple-300">K(カリ)</div>
-                                <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalK}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
-                              </div>
-                              <div className="bg-slate-900/80 border border-yellow-500/20 rounded-xl p-1.5 text-center">
-                                <div className="text-[9px] font-black text-yellow-300">Ca(石灰)</div>
-                                <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalCa}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
-                              </div>
-                              <div className="bg-slate-900/80 border border-teal-500/20 rounded-xl p-1.5 text-center">
-                                <div className="text-[9px] font-black text-teal-300">Mg(苦土)</div>
-                                <div className="text-xs sm:text-sm font-black text-white mt-0.5">{fc.totalMg}<span className="text-[9px] text-slate-400 ml-0.5">kg</span></div>
-                              </div>
+                            {/* フッター：最終施肥日 ＆ クイック施肥記録ボタン */}
+                            <div className="pt-2 border-t border-slate-700/60 flex items-center justify-between gap-2 text-[11px]">
+                              <span className="text-slate-400 font-bold truncate">
+                                {fc.lastDate ? `最終施肥: ${fc.lastDate}` : 'まだ施肥記録がありません'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenFertRecordModal({
+                                    fieldId: fc.fieldId !== 'unassigned' ? fc.fieldId : undefined,
+                                    workType: fc.basalCount === 0 ? '元肥' : '追肥'
+                                  });
+                                }}
+                                className="px-2.5 py-1 bg-teal-500/20 hover:bg-teal-500 hover:text-slate-950 text-teal-300 border border-teal-400/40 rounded-lg text-[10px] font-black transition-all shrink-0 cursor-pointer"
+                              >
+                                ＋ {fc.basalCount === 0 ? '元肥を記録' : '追肥を記録'}
+                              </button>
                             </div>
                           </div>
-
-                          {/* フッター：最終施肥日 ＆ クイック施肥記録ボタン */}
-                          <div className="pt-2 border-t border-slate-700/60 flex items-center justify-between gap-2 text-[11px]">
-                            <span className="text-slate-400 font-bold truncate">
-                              {fc.lastDate ? `最終施肥: ${fc.lastDate}` : 'まだ施肥記録がありません'}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenFertRecordModal({
-                                  fieldId: fc.fieldId !== 'unassigned' ? fc.fieldId : undefined,
-                                  workType: fc.basalCount === 0 ? '元肥' : '追肥'
-                                });
-                              }}
-                              className="px-2.5 py-1 bg-teal-500/20 hover:bg-teal-500 hover:text-slate-950 text-teal-300 border border-teal-400/40 rounded-lg text-[10px] font-black transition-all shrink-0 cursor-pointer"
-                            >
-                              ＋ {fc.basalCount === 0 ? '元肥を記録' : '追肥を記録'}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                ) : (() => {
+                  const activeFc = fertilizerAnalytics.fieldCards.find(fc => fc.fieldId === fertAnalysisFieldId);
+                  if (!activeFc) return null;
+                  return (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 bg-teal-950/80 border border-teal-500/50 rounded-2xl">
+                      <div className="flex items-center gap-2.5 flex-wrap text-xs">
+                        <span className="px-2.5 py-1 bg-teal-500 text-slate-950 rounded-lg font-black flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5" />
+                          選択中の畑: {activeFc.fieldName} ({activeFc.areaAcre}a)
+                        </span>
+                        {activeFc.cropNames.map((cn, idx) => (
+                          <span key={idx} className="px-2 py-0.5 rounded bg-emerald-950 border border-emerald-700 text-emerald-300 text-[11px] font-black">
+                            🌱 {cn}
+                          </span>
+                        ))}
+                        <span className="text-slate-300 font-bold">
+                          元肥: <strong className="text-blue-300">{activeFc.basalCount}回</strong> / 追肥: <strong className="text-emerald-300">{activeFc.topdressCount}回</strong>
+                          {activeFc.lastDate ? `（最終施肥: ${activeFc.lastDate}）` : '（まだ施肥記録なし）'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFertAnalysisFieldId('all')}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-teal-200 border border-teal-500/40 rounded-xl text-xs font-black transition-colors self-start sm:self-auto shrink-0 cursor-pointer"
+                      >
+                        ✕ すべての圃場（一覧比較）に戻す
+                      </button>
+                    </div>
+                  );
+                })()}
 
                 {/* 5大主要養分メーターカード (選択圃場の合計 または 施肥済圃場の平均) */}
                 <div className="pt-3 border-t border-slate-700/60 space-y-2.5">
