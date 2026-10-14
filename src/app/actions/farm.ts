@@ -1407,3 +1407,133 @@ export async function deleteTenantCultivationPlanAction(tenantId: string, planId
   }
 }
 
+// 5) 肥料・資材の必要量（買い物・発注リスト）画面用の農園一括データ取得・在庫/単価保存・新規資材追加
+export async function getMaterialRequirementsPageData(tenantId: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const [mRes, cRes, fRes, pRes, compRes] = await Promise.all([
+      supabase.from('materials').select('*').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).order('name'),
+      supabase.from('crops').select('*').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).order('name'),
+      supabase.from('fields').select('*').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).order('name'),
+      supabase.from('cultivation_plans_v2').select('*, fields(*), crops(*)').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`),
+      supabase.from('company_settings').select('id, settings').or(`user_id.eq.${ownerId},id.eq.${ownerId},user_id.eq.${tenantId},id.eq.${tenantId}`).maybeSingle()
+    ]);
+
+    const crops = cRes.data || [];
+    const cropIds = crops.map((c: any) => c.id).filter(Boolean);
+    let cropStandards: any[] = [];
+    if (cropIds.length > 0) {
+      const { data: csData } = await supabase.from('crop_standards').select('*').in('crop_id', cropIds);
+      cropStandards = csData || [];
+    }
+
+    const inventoryMap = compRes.data?.settings?.material_inventory || {};
+
+    return {
+      success: true,
+      materials: mRes.data || [],
+      crops,
+      fields: fRes.data || [],
+      plans: pRes.data || [],
+      cropStandards,
+      inventoryMap
+    };
+  } catch (err: any) {
+    console.error('getMaterialRequirementsPageData error:', err);
+    return { success: false, error: err.message || 'データの取得に失敗しました。' };
+  }
+}
+
+export async function saveMaterialInventoryAction(
+  tenantId: string,
+  materialId: string,
+  patch: { stock?: number; ordered?: boolean; unitPrice?: number; unit?: string }
+) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    if (patch.unitPrice !== undefined || patch.unit !== undefined) {
+      const matUpdate: Record<string, any> = {};
+      if (patch.unitPrice !== undefined) matUpdate.default_price = Number(patch.unitPrice) || 0;
+      if (patch.unit !== undefined) matUpdate.unit = patch.unit;
+      await supabase
+        .from('materials')
+        .update(matUpdate)
+        .eq('id', materialId)
+        .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`);
+    }
+
+    if (patch.stock !== undefined || patch.ordered !== undefined) {
+      const { data: comp } = await supabase
+        .from('company_settings')
+        .select('id, settings')
+        .or(`user_id.eq.${ownerId},id.eq.${ownerId},user_id.eq.${tenantId},id.eq.${tenantId}`)
+        .maybeSingle();
+
+      if (comp) {
+        const currentSettings = comp.settings || {};
+        const currentInv = currentSettings.material_inventory || {};
+        const prevEntry = currentInv[materialId] || {};
+        const nextEntry = {
+          ...prevEntry,
+          ...(patch.stock !== undefined ? { stock: Math.max(0, Number(patch.stock) || 0) } : {}),
+          ...(patch.ordered !== undefined ? { ordered: Boolean(patch.ordered) } : {}),
+          updatedAt: new Date().toISOString()
+        };
+        const nextSettings = {
+          ...currentSettings,
+          material_inventory: {
+            ...currentInv,
+            [materialId]: nextEntry
+          }
+        };
+        await supabase.from('company_settings').update({ settings: nextSettings }).eq('id', comp.id);
+      }
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('saveMaterialInventoryAction error:', err);
+    return { success: false, error: err.message || '在庫・単価の保存に失敗しました。' };
+  }
+}
+
+export async function quickCreateMaterialAction(
+  tenantId: string,
+  payload: { name: string; category: string; material_type: string; unit: string; default_price: number; specification?: string }
+) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const { data, error } = await supabase
+      .from('materials')
+      .insert([
+        {
+          user_id: ownerId,
+          name: payload.name.trim(),
+          category: payload.category || '資材・種苗等',
+          material_type: payload.material_type || 'material',
+          unit: payload.unit || '袋',
+          default_price: Number(payload.default_price) || 0,
+          specification: payload.specification || ''
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, data };
+  } catch (err: any) {
+    console.error('quickCreateMaterialAction error:', err);
+    return { success: false, error: err.message || '資材の登録に失敗しました。' };
+  }
+}
+
+
