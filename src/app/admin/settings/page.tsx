@@ -286,40 +286,43 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* 方式②: LINE公式アカウント連携 (LINEで使いたい人向け) */}
+            {/* 方式②: LINE公式アカウント連携 (退勤忘れ通知・個人連携) */}
             <div className="bg-slate-800/90 p-5 rounded-2xl border border-slate-700 flex flex-col justify-between shadow-sm">
               <div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/20 text-blue-300 rounded-lg text-xs font-black mb-3">
-                  <span>方式②：公式LINE連携（LINEで打刻）</span>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#06C755]/20 text-[#4cc764] rounded-lg text-xs font-black mb-3">
+                  <span>方式②：公式LINE連携（退勤忘れ通知・打刻）</span>
                 </div>
-                <h3 className="text-sm font-bold text-white mb-1.5">スタッフ個人のLINEで毎朝打刻</h3>
+                <h3 className="text-sm font-bold text-white mb-1.5">友だち追加＋4桁の専用連携コード送信</h3>
                 <p className="text-xs text-slate-300 mb-4 leading-relaxed">
-                  スタッフがこのQRコードを読み取って送信すると、LINEの下部メニューが貴社専用の打刻ボタンに自動で切り替わります。
+                  公式LINE（<span className="font-mono font-bold text-emerald-300">@543tdbfc</span>）を友だち追加し、スタッフごとに発行される<strong className="text-white">【4桁の専用連携コード】</strong>を送信すると個人連携が完了し、退勤忘れ通知が届きます。
                 </p>
                 <div className="bg-white p-3 rounded-2xl inline-block mb-3 shadow-md text-center">
                   <img 
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`https://line.me/R/oaMessage/@566kmiby/?${resolveSafeFarmCode(formData.farm_code)}`)}`}
-                    alt="LINE登録用QRコード"
-                    className="w-32 h-32 mx-auto"
+                    src="https://qr-official.line.me/gs/M_543tdbfc_GW.png?from=page&searchId=543tdbfc"
+                    alt="アグリプロフィット公式LINE友だち追加QR"
+                    className="w-32 h-32 mx-auto object-contain"
                   />
-                  <span className="text-[10px] font-black text-slate-600 block mt-1">LINEで送信して登録</span>
+                  <span className="text-[10px] font-black text-slate-600 block mt-1">公式LINE（@543tdbfc）友だち追加</span>
                 </div>
               </div>
               <div className="space-y-2 pt-2 border-t border-slate-700/60">
-                <div className="text-[11px] text-slate-400 font-mono truncate bg-slate-950/60 p-2 rounded-lg">
-                  {`参加コード: ${resolveSafeFarmCode(formData.farm_code)}`}
-                </div>
+                <Link
+                  href="/hr"
+                  className="w-full py-2 bg-[#06C755] hover:bg-[#05b34c] text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 shadow-sm"
+                >
+                  <span>👥 スタッフ別の連携QR・コードを発行する</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
                 <button
                   type="button"
                   onClick={() => {
-                    const code = resolveSafeFarmCode(formData.farm_code);
-                    navigator.clipboard.writeText(`https://line.me/R/oaMessage/@566kmiby/?${code}`);
-                    alert('LINE連携用URLをコピーしました！');
+                    navigator.clipboard.writeText('https://lin.ee/RD1vp8c');
+                    alert('公式LINE（@543tdbfc）の友だち追加URLをコピーしました！');
                   }}
-                  className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 shadow-sm"
+                  className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 shadow-sm"
                 >
                   <Copy className="w-3.5 h-3.5" />
-                  <span>LINE招待リンクをコピー</span>
+                  <span>公式LINE友だち追加URLをコピー</span>
                 </button>
               </div>
             </div>
