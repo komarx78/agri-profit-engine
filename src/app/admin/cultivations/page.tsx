@@ -8,8 +8,10 @@ import CultivationsHub from '@/components/CultivationsHub';
 function CultivationsContent() {
   const searchParams = useSearchParams();
   const initialSubTab = (searchParams.get('tab') as 'cultivations' | 'pesticide' | 'history' | 'tasks') || 'cultivations';
+  // focus=calendar: 左メニュー「作付けこよみ（計画）」から来た時、年間こよみ表の位置を最初に表示する
+  const initialFocus = searchParams.get('focus') || '';
 
-  return <CultivationsHub initialSubTab={initialSubTab} />;
+  return <CultivationsHub initialSubTab={initialSubTab} initialFocus={initialFocus} />;
 }
 
 export default function CultivationsPage() {

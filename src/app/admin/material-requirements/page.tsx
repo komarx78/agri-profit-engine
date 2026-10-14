@@ -98,10 +98,10 @@ export default function MaterialRequirementsPage() {
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
             <Calculator className="w-6 h-6 md:w-8 md:h-8 text-amber-600 flex-shrink-0" />
-            必要資材 自動集計
-            <HelpTooltip content="栽培計画とマスタの基準値をもとに、今年度の必要な資材（肥料や農薬）の総量を自動計算します。これをもとに発注を行えます。" className="ml-1" />
+            肥料・資材の必要量
+            <HelpTooltip content="「作付けこよみ（計画）」で登録した面積とマスタの基準値をもとに、今年度の必要な資材（肥料や農薬）の総量を自動計算します。これをもとに発注を行えます。" className="ml-1" />
           </h1>
-          <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">栽培計画（面積×基準値）に基づき、今年度必要な資材の総量を自動計算・集計します。</p>
+          <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">「作付けこよみ（計画）」の面積×基準値に基づき、今年度必要な資材の総量を自動計算・集計します。</p>
         </div>
         
         <div className="flex flex-wrap items-center gap-2 md:gap-4">

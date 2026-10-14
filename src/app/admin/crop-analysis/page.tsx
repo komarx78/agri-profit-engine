@@ -150,10 +150,10 @@ export default function CropAnalysisPage() {
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight mb-2 flex items-center gap-3">
             <Sprout className="w-8 h-8 text-emerald-500" />
-            作目別 分析
+            作目ごとの比較
           </h1>
           <p className="text-sm md:text-base text-slate-500 font-medium">
-            作物ごとの収益性（予実）や、作業・作業者ごとの稼働時間を分析します。
+            作物ごとの収益性（予実）や、作業・作業者ごとの稼働時間を比べて分析します。
           </p>
         </div>
         

@@ -58,6 +58,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [copied, setCopied] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [isPosterOpen, setIsPosterOpen] = useState(false);
+  // 現在のURLクエリ（?tab= 等）。同じ画面を開く2つのメニュー入口の見分けに使う
+  const [currentSearch, setCurrentSearch] = useState<string>('');
+  useEffect(() => {
+    const sync = () => setCurrentSearch(window.location.search.replace(/^\?/, ''));
+    sync();
+    window.addEventListener('popstate', sync);
+    return () => window.removeEventListener('popstate', sync);
+  }, [pathname]);
 
   const displayFarmCode = (farmCode || (tenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04' ? 'kap' : tenantId === '62163024-2c8e-4057-a872-2455dbc58d32' ? 'sahara' : tenantId ? tenantId.substring(0, 8) : '')).toUpperCase();
 
@@ -134,39 +142,57 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     router.push('/login');
   };
 
+  // 🧭 左メニュー：農家さんの1年の流れ（毎日 → シーズン前の準備 → お金のふり返り → 設定）でグループ化
+  // matchTab: 同じ画面（/admin/cultivations）を開く2つの入口を、URLの ?tab= で見分けて正しい方だけ光らせる
+  const farmQ = (base: string, extra = '') => {
+    const params = [tenantId ? `farm=${tenantId}` : '', extra].filter(Boolean).join('&');
+    return params ? `${base}?${params}` : base;
+  };
   const navGroups = [
     {
-      title: '日々の現場・作業日誌',
+      title: '毎日つかう',
       items: [
-        { name: 'ダッシュボード', path: tenantId ? `/admin/dashboard?farm=${tenantId}` : '/admin/dashboard', icon: LayoutDashboard },
-        { name: '作付け・作業日誌', path: tenantId ? `/admin/cultivations?farm=${tenantId}` : '/admin/cultivations', icon: Sprout },
-        { name: 'タスク・作業予定', path: tenantId ? `/admin/tasks?farm=${tenantId}` : '/admin/tasks', icon: Calendar },
-        { name: '日報・作業承認', path: tenantId ? `/admin/approvals?farm=${tenantId}` : '/admin/approvals', icon: Inbox },
+        { name: 'ダッシュボード（今日のようす）', path: farmQ('/admin/dashboard'), icon: LayoutDashboard },
+        { name: '作業予定（タスク）', path: farmQ('/admin/tasks'), icon: Calendar },
+        { name: '日報の確認・承認', path: farmQ('/admin/approvals'), icon: Inbox },
+        { name: '作業日誌', path: farmQ('/admin/cultivations', 'tab=history'), icon: BookOpen, matchTab: 'diary' },
+        { name: '💊 農薬検索・防除AI', path: farmQ('/farm/pesticide-check'), icon: FlaskConical },
       ]
     },
     {
-      title: '栽培計画・マップ・分析',
+      title: '作付けを決める・準備する',
       items: [
-        { name: '作付地図・圃場', path: tenantId ? `/admin/map?farm=${tenantId}` : '/admin/map', icon: MapPin },
-        { name: '栽培計画・予実', path: tenantId ? `/admin/cultivation-schedule?farm=${tenantId}` : '/admin/cultivation-schedule', icon: Calendar },
-        { name: '作目別 採算分析', path: tenantId ? `/admin/crop-analysis?farm=${tenantId}` : '/admin/crop-analysis', icon: PieChart },
-        { name: '育苗スケジュール', path: tenantId ? `/admin/nursery-schedule?farm=${tenantId}` : '/admin/nursery-schedule', icon: Table },
-        { name: '資材必要量集計', path: tenantId ? `/admin/material-requirements?farm=${tenantId}` : '/admin/material-requirements', icon: Calculator },
+        { name: '畑の地図', path: farmQ('/admin/map'), icon: MapPin },
+        { name: '作付けこよみ（計画）', path: farmQ('/admin/cultivations', 'tab=cultivations&focus=calendar'), icon: Sprout, matchTab: 'plan' },
+        { name: '育苗スケジュール', path: farmQ('/admin/nursery-schedule'), icon: Table },
+        { name: '肥料・資材の必要量', path: farmQ('/admin/material-requirements'), icon: Calculator },
       ]
     },
     {
-      title: '連携システム・マスタ',
+      title: 'お金をふり返る',
       items: [
-        { name: '📦 販売管理システム', path: tenantId ? `/sales-management?farm=${tenantId}` : '/sales-management', icon: ShoppingCart, external: true },
-        { name: '💳 経理・購買システム', path: tenantId ? `/accounting-management?farm=${tenantId}` : '/accounting-management', icon: Receipt, external: true },
+        { name: '作付けごとの収支（予実）', path: farmQ('/admin/cultivation-schedule'), icon: Receipt },
+        { name: '作目ごとの比較', path: farmQ('/admin/crop-analysis'), icon: PieChart },
+      ]
+    },
+    {
+      title: 'ほかのシステム・設定',
+      items: [
+        { name: '📦 販売管理システム', path: farmQ('/sales-management'), icon: ShoppingCart, external: true },
+        { name: '💳 経理・購買システム', path: farmQ('/accounting-management'), icon: Receipt, external: true },
         { name: '📱 現場出退勤ポータル', path: tenantId ? `/portal/${tenantId}` : '/portal', icon: Layout, external: true },
-        { name: '👥 労務・人事システム', path: tenantId ? `/hr?farm=${tenantId}` : '/hr', icon: Users, external: true },
-        { name: '💊 農薬検索・防除AI', path: tenantId ? `/farm/pesticide-check?farm=${tenantId}` : '/farm/pesticide-check', icon: FlaskConical },
-        { name: '⚙️ マスタ管理全般', path: tenantId ? `/admin/masters?farm=${tenantId}` : '/admin/masters', icon: Database },
-        { name: '🏢 自社情報設定', path: tenantId ? `/admin/settings?farm=${tenantId}` : '/admin/settings', icon: Settings },
+        { name: '👥 労務・人事システム', path: farmQ('/hr'), icon: Users, external: true },
+        { name: '⚙️ マスタ管理全般', path: farmQ('/admin/masters'), icon: Database },
+        { name: '🏢 自社情報設定', path: farmQ('/admin/settings'), icon: Settings },
       ]
     }
   ];
+
+  // 作付け・作業日誌画面のどちらの入口が選ばれているか（tab=cultivations または指定なし → こよみ ／ それ以外 → 日誌）
+  const currentCultEntry = (() => {
+    const tab = new URLSearchParams(currentSearch).get('tab');
+    return !tab || tab === 'cultivations' ? 'plan' : 'diary';
+  })();
 
   const NavLinks = () => (
     <div className="space-y-6">
@@ -177,14 +203,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </h3>
           <div className="space-y-1">
             {group.items.map((item: any) => {
-              const isActive = pathname === item.path.split('?')[0];
+              const isActive = pathname === item.path.split('?')[0] && (!item.matchTab || item.matchTab === currentCultEntry);
               const Icon = item.icon;
               return (
                 <Link
                   key={item.path}
                   href={item.path}
                   target={item.external ? "_blank" : undefined}
-                  onClick={() => setIsMobileMenuOpen(false)}
+                  onClick={() => { setIsMobileMenuOpen(false); if (!item.external) setCurrentSearch(item.path.split('?')[1] || ''); }}
                   className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-colors font-bold ${
                     isActive 
                       ? 'bg-emerald-50 text-emerald-700' 

@@ -426,11 +426,11 @@ export default function CloudPortalHub({ onSwitchToWork }: CloudPortalHubProps) 
             <div className="w-12 h-12 bg-teal-100 text-teal-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
               <BarChart3 className="w-6 h-6" />
             </div>
-            <span className="text-[10px] font-black bg-teal-100 text-teal-700 px-2 py-0.5 rounded-md">計画・予実</span>
+            <span className="text-[10px] font-black bg-teal-100 text-teal-700 px-2 py-0.5 rounded-md">収支・予実</span>
           </div>
-          <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-teal-600 transition-colors">📊 栽培・予実管理表</h3>
+          <h3 className="text-lg font-black text-slate-800 mb-2 group-hover:text-teal-600 transition-colors">📊 作付けごとの収支（予実）</h3>
           <p className="text-sm font-bold text-slate-500 flex-1 leading-relaxed">
-            作付計画ごとの売上・資材費・労働時間の収支分析、育苗スケジュール（ロス率計算）を統合管理。
+            作付けごとに、目標に対する収量・売上と、資材費・人件費・労働時間から「いくら残ったか」を答え合わせします。
           </p>
         </Link>
 

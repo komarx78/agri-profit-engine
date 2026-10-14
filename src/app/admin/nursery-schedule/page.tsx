@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { getJSTDate } from '@/lib/dateUtils';
@@ -28,6 +29,9 @@ export default function NurserySchedulePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [year, setYear] = useState(new Date().getFullYear());
+  // 「作付けこよみ（計画）」へ移動するリンク用（?farm= を必ず引き継ぐ）
+  const [farmId, setFarmId] = useState<string>('');
+  const planCalendarHref = `/admin/cultivations?${farmId ? `farm=${farmId}&` : ''}tab=cultivations&focus=calendar`;
   
   // 今日の日付から2週間前を起点とする（今日が画面の左寄りに表示されるように）
   const [startDate, setStartDate] = useState(() => {
@@ -58,6 +62,7 @@ export default function NurserySchedulePage() {
         setIsLoading(false);
         return;
       }
+      setFarmId(tenantId);
 
       // 自社テナントの栽培計画を取得
       const { data: plansData, error: plansErr } = await supabase
@@ -284,7 +289,7 @@ export default function NurserySchedulePage() {
       <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex gap-3 text-emerald-800 text-sm font-medium">
         <Info className="w-5 h-5 shrink-0 text-emerald-600" />
         <p>
-          このリストは<strong>「栽培計画表」と連動</strong>しています。新しい苗を計画に追加したい場合は、先に「栽培計画表」画面で計画を立ててください。自動的にこちらに必要数と共に追加されます。
+          このリストは<strong>「作付けこよみ（計画）」と連動</strong>しています。新しい苗を追加したい場合は、先に<Link href={planCalendarHref} className="font-black underline text-emerald-700 hover:text-emerald-900">「作付けこよみ（計画）」</Link>で、どの畑に何をいつ植えるかを登録してください。必要な苗の数と一緒に、自動でこちらに追加されます。
         </p>
       </div>
       
@@ -457,7 +462,7 @@ export default function NurserySchedulePage() {
                 {plans.length === 0 && (
                   <tr>
                     <td colSpan={6 + weeks.length} className="p-8 text-center text-slate-400 font-bold">
-                      現在、苗が必要な栽培計画はありません。「栽培計画表」から計画を作成してください。
+                      現在、苗が必要な作付けはありません。<Link href={planCalendarHref} className="underline text-emerald-700 hover:text-emerald-900">「作付けこよみ（計画）」</Link>から、どの畑に何を植えるかを登録してください。
                     </td>
                   </tr>
                 )}

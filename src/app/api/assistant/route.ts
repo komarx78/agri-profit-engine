@@ -76,11 +76,12 @@ function getFallbackResponse(
 
   if (q.includes('圃場') || q.includes('マップ') || q.includes('地図') || q.includes('作付け') || q.includes('作付')) {
     return {
-      reply: `圃場と作付けの管理は以下の画面で行えます：\n\n- **作付地図 (圃場マップ)**: 航空写真上で圃場の区画、現在の作付け、前作履歴を視覚的に把握。\n- **作付け・作業 統合司令塔**: 品目ごとの定植日、収穫予定、目標収量の一元管理。\n- **作目別 採算分析**: どの作物が一番利益が出ているかを自動グラフ化。`,
+      reply: `畑と作付けの管理は以下の画面で行えます（左メニュー「作付けを決める・準備する」「お金をふり返る」）：\n\n- **畑の地図**: 航空写真上で畑の区画、現在の作付け、前作履歴を視覚的に把握。\n- **作付けこよみ（計画）**: どの畑に何を・いつ植えて・いつ収穫するかを年間こよみで登録・変更。\n- **作付けごとの収支（予実）**: 作付けごとに目標と実績（収量・売上・費用・所得）を答え合わせ。\n- **作目ごとの比較**: どの作物が一番利益が出ているかを比較。`,
       actionLinks: [
-        { label: '作付地図 (圃場マップ)へ', url: tenantId ? `/admin/map?farm=${tenantId}` : '/admin/map' },
-        { label: '作付け統合司令塔へ', url: tenantId ? `/admin/cultivations?farm=${tenantId}` : '/admin/cultivations' },
-        { label: '作目別 採算分析へ', url: tenantId ? `/admin/crop-analysis?farm=${tenantId}` : '/admin/crop-analysis' },
+        { label: '畑の地図へ', url: tenantId ? `/admin/map?farm=${tenantId}` : '/admin/map' },
+        { label: '作付けこよみ（計画）へ', url: tenantId ? `/admin/cultivations?farm=${tenantId}&tab=cultivations&focus=calendar` : '/admin/cultivations?tab=cultivations&focus=calendar' },
+        { label: '作付けごとの収支（予実）へ', url: tenantId ? `/admin/cultivation-schedule?farm=${tenantId}` : '/admin/cultivation-schedule' },
+        { label: '作目ごとの比較へ', url: tenantId ? `/admin/crop-analysis?farm=${tenantId}` : '/admin/crop-analysis' },
       ]
     };
   }
@@ -164,16 +165,18 @@ PC操作やITツールに不慣れな農家様や現場スタッフ、管理者�
    - 現場ポータル: /portal/${tenantId || ''} (スタッフがスマホで打刻・日報を入力する画面)
    - 現場打刻: /work/${tenantId || ''} (PINコード入力で出退勤打刻)
    - ダッシュボード: /admin/dashboard (本日の出勤状況、作業進捗、KPI)
-   - 作業承認インボックス: /admin/approvals (現場から届いた日報・打刻の確認・承認)
-   - タスク管理: /admin/tasks (スタッフへの作業割り当て・指示)
+   - 日報の確認・承認: /admin/approvals (現場から届いた日報・打刻の確認・承認)
+   - 作業予定（タスク）: /admin/tasks (スタッフへの作業割り当て・指示)
    - 作業台帳: /admin/work-ledger (過去の全日報データ検索・集計・CSV出力)
-3. 栽培・圃場・分析:
-   - 作付け・作業統合司令塔: /admin/cultivations (品目ごとの計画・進捗)
-   - 作付地図 (圃場マップ): /admin/map (Googleマップ航空写真上で圃場と作付けを一元視覚化)
-   - 栽培・予実管理表: /admin/cultivation-schedule (ガントチャートでの定植・収穫予定)
-   - 作目別 採算分析: /admin/crop-analysis (作物ごとの売上・原価・利益率グラフ)
-   - 育苗スケジュール: /admin/nursery-schedule (播種から育苗管理)
-   - 必要資材自動集計: /admin/material-requirements (面積に応じた肥料・資材自動計算)
+   - 作業日誌: /admin/cultivations?tab=history (作業・防除・施肥の記録と履歴)
+3. 作付けを決める・準備する（左メニューのグループ名）:
+   - 畑の地図: /admin/map (Googleマップ航空写真上で畑と作付けを一元視覚化)
+   - 作付けこよみ（計画）: /admin/cultivations?tab=cultivations&focus=calendar (どの畑に何を・いつ植えて・いつ収穫するかを36旬の年間こよみで登録・変更。計画の登録はここだけ)
+   - 育苗スケジュール: /admin/nursery-schedule (作付けこよみから必要な苗を自動算出し、播種・鉢上げ・植え付けの予定を管理)
+   - 肥料・資材の必要量: /admin/material-requirements (作付けこよみの面積に応じた肥料・資材の自動計算)
+   お金をふり返る（左メニューのグループ名）:
+   - 作付けごとの収支（予実）: /admin/cultivation-schedule (作付けごとの目標と実績：収量・売上・費用・所得、目標設定、出荷・売上の記録。日程の登録はできない)
+   - 作目ごとの比較: /admin/crop-analysis (作物ごとの売上・原価・利益率の比較)
    - 圃場管理: /admin/fields (圃場マスタ・面積・土壌設定)
 4. 販売・請求・B2B:
    - 販売管理システム: /sales-management (出荷先・顧客・売上管理)

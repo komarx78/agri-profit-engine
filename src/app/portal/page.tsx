@@ -5468,8 +5468,8 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
                             <TrendingUp className="w-5 h-5 text-emerald-600" /> 「どの畑が一番儲かっているか？」が一目で分かる！
                           </strong>
                           <ul className="space-y-1.5 list-disc ml-5 text-xs text-emerald-800 leading-relaxed font-medium">
-                            <li><strong>作目別 採算分析:</strong> 作物ごとの売上・直接原価・按分経費・人件費・粗利率をグラフで比較。</li>
-                            <li><strong>圃場別 レポート:</strong> 畑ごとの実質時給（売上−経費 ÷ 総労働時間）を算出。</li>
+                            <li><strong>作目ごとの比較:</strong> 作物ごとの売上・直接原価・按分経費・人件費・粗利率をグラフで比較。</li>
+                            <li><strong>作付けごとの収支（予実）:</strong> 作付けごとに目標と実績を答え合わせし、1時間あたりの所得（売上−経費 ÷ 総労働時間）を算出。</li>
                             <li><strong>来期の作付戦略へ:</strong> 儲かる作物に面積を集中させ、無駄なコストを削減するデータ経営が実現します。</li>
                           </ul>
                         </div>

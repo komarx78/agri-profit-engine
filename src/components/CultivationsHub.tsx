@@ -73,13 +73,18 @@ interface PesticideDisplayItem {
 
 interface CultivationsHubProps {
   initialSubTab?: string;
+  initialFocus?: string;
 }
 
-export default function CultivationsHub({ initialSubTab = 'cultivations' }: CultivationsHubProps) {
+export default function CultivationsHub({ initialSubTab = 'cultivations', initialFocus = '' }: CultivationsHubProps) {
   const router = useRouter();
 
   // メインタブ: cultivations(作付け) | spray(散布管理) | history(作業・散布履歴) | tasks(予定)
   const [activeMainTab, setActiveMainTab] = useState<string>(initialSubTab);
+  // 左メニューの「作業日誌」⇔「作付けこよみ」を切り替えた時（同じ画面のままURLだけ変わる）にもタブを追従させる
+  useEffect(() => {
+    setActiveMainTab(initialSubTab);
+  }, [initialSubTab]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -98,6 +103,19 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   const [cultViewMode, setCultViewMode] = useState<'both' | 'cards' | 'gantt'>('both');
   const [cultStatusFilter, setCultStatusFilter] = useState<'all' | 'active' | 'fallow'>('all');
   const [cultCropFilter, setCultCropFilter] = useState<string>('all');
+  // 左メニュー「作付けこよみ（計画）」（?focus=calendar）から来た時、読み込み完了後に年間こよみ表へ移動する（同じ入口では1回だけ）
+  const focusHandledKeyRef = useRef<string>('');
+  useEffect(() => {
+    const key = `${initialSubTab}|${initialFocus}`;
+    if (initialFocus !== 'calendar') { focusHandledKeyRef.current = key; return; }
+    if (isLoading || activeMainTab !== 'cultivations' || focusHandledKeyRef.current === key) return;
+    focusHandledKeyRef.current = key;
+    setCultViewMode(prev => (prev === 'cards' ? 'both' : prev));
+    setTimeout(() => {
+      const el = document.getElementById('cultivation-calendar-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 150);
+  }, [initialSubTab, initialFocus, isLoading, activeMainTab]);
   const [cultYearStartMonth, setCultYearStartMonth] = useState<8 | 1>(8);
   const [selectedScheduleYear, setSelectedScheduleYear] = useState<number>(() => new Date().getFullYear());
 
@@ -2855,7 +2873,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
 
               {/* 📅 2. 【改革①】上・中・下旬（36旬）× 栽培ステージ色分け × 実績連動「圃場別・年間栽培こよみ＆作付スケジュール表」 */}
               {(cultViewMode === 'both' || cultViewMode === 'gantt') && (
-                <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3.5">
+                <div id="cultivation-calendar-section" className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3.5">
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-2.5 border-b border-slate-100">
                     <div>
                       <h3 className="text-sm sm:text-base font-black text-slate-800 flex items-center gap-2">

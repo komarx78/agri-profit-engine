@@ -422,6 +422,10 @@ export default function CultivationSchedulePage() {
   );
 
   const farmQuery = tenantId ? `?farm=${tenantId}` : '';
+  // 左メニューと同じ入口へ直接移動するリンク（?farm= を必ず引き継ぐ）
+  const farmPrefix = tenantId ? `farm=${tenantId}&` : '';
+  const calendarHref = `/admin/cultivations?${farmPrefix}tab=cultivations&focus=calendar`;
+  const diaryHref = `/admin/cultivations?${farmPrefix}tab=history`;
 
   // --- 目標設定 ---
   const openTargetModal = (r: any) => {
@@ -554,7 +558,7 @@ export default function CultivationSchedulePage() {
             <div>
               <h1 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-2.5">
                 <TrendingUp className="w-7 h-7 text-blue-600" />
-                <span>栽培計画・予実（作付けごとの採算）</span>
+                <span>作付けごとの収支（予実）</span>
               </h1>
               <p className="text-xs sm:text-sm text-slate-500 font-bold mt-1">
                 作付けごとに「目標に対して、どれだけ穫れて・売れて・お金がかかり・いくら残ったか」を答え合わせする画面です。
@@ -585,11 +589,11 @@ export default function CultivationSchedulePage() {
           {/* 役割分担の案内 */}
           <div className="bg-blue-50/70 border border-blue-200 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <p className="text-xs font-bold text-blue-900 leading-relaxed">
-              💡 <span className="font-black">作付けの日程（いつ・どの畑で・何を育てるか）</span>の登録や変更、日々の作業・防除・施肥の記録は
-              <span className="font-black">「作付け・作業日誌」</span>で行います。ここではその結果を、お金と収量で確認します。
+              💡 <span className="font-black">作付けの日程（いつ・どの畑で・何を育てるか）</span>の登録や変更は
+              <span className="font-black">「作付けこよみ（計画）」</span>、日々の作業・防除・施肥の記録は<span className="font-black">「作業日誌」</span>で行います。ここではその結果を、お金と収量で確認します。
             </p>
             <Link
-              href={`/admin/cultivations${farmQuery}`}
+              href={calendarHref}
               className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm"
             >
               <Calendar className="w-4 h-4" />
@@ -616,10 +620,10 @@ export default function CultivationSchedulePage() {
             <Sprout className="w-10 h-10 text-emerald-500 mx-auto" />
             <p className="text-base font-black text-slate-800">{year}年度の作付けがまだ登録されていません</p>
             <p className="text-xs font-bold text-slate-500">
-              「作付け・作業日誌」の年間栽培こよみ表で、畑と作目・日程を登録すると、ここに採算ボードが自動で表示されます。
+              「作付けこよみ（計画）」で、畑と作目・日程を登録すると、ここに作付けごとの収支が自動で表示されます。
             </p>
             <Link
-              href={`/admin/cultivations${farmQuery}`}
+              href={calendarHref}
               className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-black shadow-sm"
             >
               <Calendar className="w-4 h-4" />
@@ -852,7 +856,7 @@ export default function CultivationSchedulePage() {
                       PDFレポート
                     </a>
                     <Link
-                      href={`/admin/cultivations${farmQuery}`}
+                      href={calendarHref}
                       className="ml-auto px-3 py-2 text-blue-700 hover:bg-blue-50 rounded-xl text-xs font-black flex items-center gap-1"
                     >
                       <Calendar className="w-3.5 h-3.5" />
@@ -1121,7 +1125,7 @@ export default function CultivationSchedulePage() {
                 (detailReport.works.length === 0 ? (
                   <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center text-xs font-bold text-slate-500 space-y-2">
                     <p>この作付けの作業記録はまだありません。</p>
-                    <Link href={`/admin/cultivations${farmQuery}`} className="inline-block px-4 py-2 bg-blue-600 text-white rounded-xl font-black">
+                    <Link href={diaryHref} className="inline-block px-4 py-2 bg-blue-600 text-white rounded-xl font-black">
                       作業日誌で記録する
                     </Link>
                   </div>
