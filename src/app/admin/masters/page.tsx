@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft, Coffee, Briefcase, FlaskConical, Wheat, Truck, Smartphone, MessageSquare, Search, Table, LayoutGrid } from 'lucide-react';
+import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft, Coffee, Briefcase, FlaskConical, Wheat, Truck, Smartphone, MessageSquare, Search, Table, LayoutGrid, RefreshCw } from 'lucide-react';
 import Papa from 'papaparse';
 import { autoTranslateMasterData } from '@/app/actions/translate';
 import { getTenantCropStandardsAction, saveTenantCropStandardAction } from '@/app/actions/farm';
@@ -125,8 +125,7 @@ export default function MastersPage() {
               line_link_pin_expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
             })
             .eq('id', w.id)
-            .then(() => {})
-            .catch(() => {});
+            .then(() => {}, () => {});
           return { ...w, line_link_pin: generatedCode };
         }
         return w;
@@ -501,7 +500,7 @@ export default function MastersPage() {
             const inserts: any[] = [];
             const updates: { id: string; data: any }[] = [];
 
-            for (const row of data) {
+            for (const row of data as Record<string, any>[]) {
               const rawName = (row['農薬名'] || row['資材名'] || row['肥料名'] || row.name || '').trim();
               if (!rawName) continue;
 

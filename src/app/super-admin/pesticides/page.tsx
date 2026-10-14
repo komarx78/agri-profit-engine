@@ -145,7 +145,7 @@ export default function AdminPesticidesPage() {
             setLoading(false);
           }
         },
-        error: (err) => {
+        error: (err: Error) => {
           setLoading(false);
           setStatus({ type: 'error', message: `CSVの解析に失敗しました: ${err.message}` });
         }
@@ -217,7 +217,7 @@ export default function AdminPesticidesPage() {
             header: true,
             skipEmptyLines: true,
             complete: (results) => resolve(results.data),
-            error: (err) => reject(err)
+            error: (err: Error) => reject(err)
           });
         });
 
