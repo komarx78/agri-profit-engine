@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getAdminMastersDataAction, getAdminPlansMonthDataAction, saveAdminPlansBatchAction } from '@/app/actions/farm';
 import { getJSTDate } from '@/lib/dateUtils';
 import { Calendar, Sprout, Store, Calculator, CheckCircle2, Clock, Truck, MapPin, Loader2, Target, ChevronLeft, ChevronRight, Plus, X, User, FileText, Image as ImageIcon, ChevronDown, ChevronUp, PieChart as PieChartIcon } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -73,6 +74,16 @@ export default function PlansPage() {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) return;
 
+      const mAction = await getAdminMastersDataAction(tenantId);
+      if (mAction.success) {
+        setCrops(mAction.crops || []);
+        setFields(mAction.fields || []);
+        setChannels(mAction.channels || []);
+        setSalesPrices(mAction.salesPrices || []);
+        setMaterials(mAction.materials || []);
+        return;
+      }
+
       const [cRes, fRes, chRes, spRes, mRes] = await Promise.all([
         supabase.from('crops').select('id, name').eq('user_id', tenantId),
         supabase.from('fields').select('id, name').eq('user_id', tenantId),
@@ -103,6 +114,13 @@ export default function PlansPage() {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) {
         setIsLoading(false);
+        return;
+      }
+
+      const pAction = await getAdminPlansMonthDataAction(tenantId, startOfMonth, endOfMonth);
+      if (pAction.success) {
+        setAllWorkLogs(pAction.workLogs || []);
+        setAllSalesLogs(pAction.salesLogs || []);
         return;
       }
 
@@ -370,8 +388,11 @@ export default function PlansPage() {
           }
         });
 
-        const { error } = await supabase.from('work_logs').insert(inserts);
-        if (error) throw error;
+        const saveRes = await saveAdminPlansBatchAction(tenantId || '', 'work_logs', inserts);
+        if (!saveRes.success) {
+          const { error } = await supabase.from('work_logs').insert(inserts);
+          if (error) throw error;
+        }
 
       } else {
         const channelId = channels.find(c => c.name === selectedChannel)?.id;
@@ -389,8 +410,11 @@ export default function PlansPage() {
           status: 'planned'
         }));
 
-        const { error } = await supabase.from('sales_logs').insert(inserts);
-        if (error) throw error;
+        const saveRes = await saveAdminPlansBatchAction(tenantId || '', 'sales_logs', inserts);
+        if (!saveRes.success) {
+          const { error } = await supabase.from('sales_logs').insert(inserts);
+          if (error) throw error;
+        }
       }
 
       setMessage({ text: '予定を登録しました！', type: 'success' });

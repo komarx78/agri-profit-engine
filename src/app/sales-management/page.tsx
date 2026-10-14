@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
-import { getB2BOrders } from '@/app/actions/b2b';
+import { getB2BOrders, getSalesLogsAndMastersAction } from '@/app/actions/b2b';
 
 export default function SalesManagementDashboard() {
   const [orders, setOrders] = useState<any[]>([]);
@@ -25,36 +25,43 @@ export default function SalesManagementDashboard() {
         const activeTenantId = await getCurrentTenantId();
         if (activeTenantId) setTenantId(activeTenantId);
 
-        const [ordersRes, logsRes, channelsRes, cropsRes] = await Promise.all([
+        const [ordersRes, salesDataRes] = await Promise.all([
           getB2BOrders(activeTenantId),
-          activeTenantId
-            ? supabase
-                .from('sales_logs')
-                .select('id, sales_date, quantity, unit, total_sales, channel_id, crop_id, status')
-                .eq('user_id', activeTenantId)
-                .or('status.neq.planned,status.is.null')
-                .order('sales_date', { ascending: false })
-                .order('id', { ascending: false })
-            : Promise.resolve({ data: [], error: null }),
-          activeTenantId ? supabase.from('sales_channels').select('id, name').eq('user_id', activeTenantId) : Promise.resolve({ data: [], error: null }),
-          activeTenantId ? supabase.from('crops').select('id, name').eq('user_id', activeTenantId) : Promise.resolve({ data: [], error: null })
+          getSalesLogsAndMastersAction(activeTenantId)
         ]);
 
         if (ordersRes.success) {
           setOrders(ordersRes.orders || []);
         }
 
-        const rawLogs = logsRes.data || [];
-        const chList = channelsRes.data || [];
-        const crList = cropsRes.data || [];
+        let rawLogs: any[] = salesDataRes?.salesLogs || [];
+        let chList: any[] = salesDataRes?.channels || [];
+        let crList: any[] = salesDataRes?.crops || [];
+
+        if (!salesDataRes?.success && activeTenantId) {
+          const [logsRes, channelsRes, cropsRes] = await Promise.all([
+            supabase
+              .from('sales_logs')
+              .select('id, sales_date, quantity, unit, total_sales, channel_id, crop_id, status')
+              .eq('user_id', activeTenantId)
+              .or('status.neq.planned,status.is.null')
+              .order('sales_date', { ascending: false })
+              .order('id', { ascending: false }),
+            supabase.from('sales_channels').select('id, name').eq('user_id', activeTenantId),
+            supabase.from('crops').select('id, name').eq('user_id', activeTenantId)
+          ]);
+          rawLogs = logsRes.data || [];
+          chList = channelsRes.data || [];
+          crList = cropsRes.data || [];
+        }
 
         setChannels(chList);
         setCrops(crList);
 
-        const mappedLogs = rawLogs.map(log => ({
+        const mappedLogs = rawLogs.map((log: any) => ({
           ...log,
-          crops: { name: crList.find(c => c.id === log.crop_id)?.name || '不明' },
-          sales_channels: { name: chList.find(c => c.id === log.channel_id)?.name || '不明' }
+          crops: { name: crList.find((c: any) => c.id === log.crop_id)?.name || '不明' },
+          sales_channels: { name: chList.find((c: any) => c.id === log.channel_id)?.name || '不明' }
         }));
 
         setSalesLogs(mappedLogs);

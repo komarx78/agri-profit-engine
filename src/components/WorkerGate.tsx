@@ -235,14 +235,20 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
 
     try {
       let workerList: any[] = [];
-      let resolvedOwnerId = targetOwnerId;
+      let resolvedOwnerId = targetOwnerId.trim();
+      const lowerTarget = resolvedOwnerId.toLowerCase();
+      const noHyphenTarget = lowerTarget.replace(/-/g, '');
+      if (SHORT_FARM_CODES[lowerTarget] || SHORT_FARM_CODES[noHyphenTarget]) {
+        resolvedOwnerId = SHORT_FARM_CODES[lowerTarget] || SHORT_FARM_CODES[noHyphenTarget];
+      }
 
       // 1. 指定農園のみをピンポイント照合（他社一覧の全件取得は完全遮断）
       try {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedOwnerId);
         const { data: farm } = await supabase
           .from('company_settings')
           .select('id, user_id, company_name')
-          .or(`user_id.eq.${targetOwnerId},id.eq.${targetOwnerId}`)
+          .or(isUuid ? `user_id.eq.${resolvedOwnerId},id.eq.${resolvedOwnerId}` : `farm_code.ilike.${lowerTarget},farm_code.ilike.${noHyphenTarget}`)
           .maybeSingle();
 
         if (farm) {

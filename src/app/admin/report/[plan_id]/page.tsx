@@ -3,7 +3,7 @@
 import React, { useEffect, useState, use } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
-import { getTenantCultivationPlansAction } from '@/app/actions/farm';
+import { getTenantCultivationPlansAction, getCultivationSchedulePageDataAction } from '@/app/actions/farm';
 import { getJSTDate } from '@/lib/dateUtils';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Printer, Loader2, ChevronLeft } from 'lucide-react';
@@ -60,28 +60,47 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
       const plan = (plansRes.data || []).find((p: any) => p.id === unwrappedParams.plan_id);
       if (!plan) throw new Error('対象の作付け計画が見つかりません');
       setPlanData(plan);
+
+      const schedRes = await getCultivationSchedulePageDataAction(
+        currentTenant,
+        Number(plan.year || new Date().getFullYear())
+      );
       
       const rawArea = Number(plan.fields?.area_size || plan.calculated_area);
       const area = rawArea > 0 ? rawArea : 1;
       setAreaSize(area);
       const m = 10 / area;
       setMultiplier(m);
+
+      if (schedRes.success) {
+        const workLogs = (schedRes.workLogs || []).filter((w: any) =>
+          w.plan_id === unwrappedParams.plan_id ||
+          (w.crop_id === plan.crop_id && w.field_id === plan.field_id)
+        );
+        const salesLogs = (schedRes.salesLogs || []).filter((s: any) =>
+          s.plan_id === unwrappedParams.plan_id || s.crop_id === plan.crop_id
+        );
+        const allFields = schedRes.fields || [];
+        const expenses = schedRes.monthlyExpenses || [];
+        processLogs(plan, workLogs, salesLogs, m, area, allFields, expenses);
+        return;
+      }
       
-      // 自社テナントの作業ログと出荷ログの取得
+      // クライアントフォールバック（currentTenant を使用）
       const wQuery = supabase.from('work_logs').select(`
         *,
         materials (*)
       `).or(`plan_id.eq.${unwrappedParams.plan_id},and(crop_id.eq.${plan.crop_id},field_id.eq.${plan.field_id})`)
-        .eq('user_id', tenantId)
+        .eq('user_id', currentTenant)
         .order('work_date', { ascending: true });
 
       const sQuery = supabase.from('sales_logs').select('*')
         .or(`plan_id.eq.${unwrappedParams.plan_id},crop_id.eq.${plan.crop_id}`)
-        .eq('user_id', tenantId)
+        .eq('user_id', currentTenant)
         .order('sales_date', { ascending: true });
 
-      const fQuery = supabase.from('fields').select('*').eq('user_id', tenantId);
-      const eQuery = supabase.from('monthly_expenses').select('*').eq('user_id', tenantId);
+      const fQuery = supabase.from('fields').select('*').eq('user_id', currentTenant);
+      const eQuery = supabase.from('monthly_expenses').select('*').eq('user_id', currentTenant);
 
       const [workRes, salesRes, fieldsRes, expRes] = await Promise.all([
         wQuery,

@@ -11,8 +11,9 @@ import {
   RefreshCw, AlertTriangle, HelpCircle, Crown
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { resolveTenantUuid } from '@/lib/tenant';
 import { getB2BOrders, updateB2BOrderStatus } from '@/app/actions/b2b';
-import { getWorkerShareSettings, submitAttendance } from '@/app/actions/farm';
+import { getWorkerShareSettings, submitAttendance, getAdminMastersDataAction, saveWorkerWorkLogAction, saveWorkerAdHocSalesLogAction } from '@/app/actions/farm';
 import { executeAttendanceWithRetry } from '@/lib/attendanceClient';
 import { WorkerGate } from '@/components/WorkerGate';
 import { HelpTooltip } from '@/components/HelpTooltip';
@@ -332,60 +333,63 @@ export default function WorkEntryPage({
   useEffect(() => {
     setIsMounted(true);
 
-    let targetFarmParam = requestedFarmId || '';
+    async function initWorkAuth() {
+      let targetFarmParam = requestedFarmId || '';
 
-    if (typeof window !== 'undefined') {
-      try {
-        const urlParams = new URLSearchParams(window.location.search);
-        
-        // リセット指示があれば古いキャッシュをパージ
-        if (urlParams.get('reset') === '1' || urlParams.get('clear') === '1') {
-          localStorage.removeItem('agri_current_worker');
-          localStorage.removeItem('agri_owner_id');
+      if (typeof window !== 'undefined') {
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          
+          // リセット指示があれば古いキャッシュをパージ
+          if (urlParams.get('reset') === '1' || urlParams.get('clear') === '1') {
+            localStorage.removeItem('agri_current_worker');
+            localStorage.removeItem('agri_owner_id');
+          }
+
+          let farmParam = requestedFarmId || urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId');
+          if (!farmParam) {
+            const match = window.location.pathname.match(/\/(?:work|farm)\/([a-zA-Z0-9_-]+)/);
+            if (match && match[1]) {
+              farmParam = match[1];
+            }
+          }
+          if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
+            const resolvedFarm = (await resolveTenantUuid(farmParam)) || farmParam;
+            targetFarmParam = resolvedFarm;
+            setWorkerTenantId(resolvedFarm);
+            localStorage.setItem('agri_owner_id', resolvedFarm);
+          }
+        } catch (e) {
+          console.warn('URL parsing error:', e);
         }
+      }
 
-        const farmParam = requestedFarmId || urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId');
-        if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
-          targetFarmParam = farmParam;
-          setWorkerTenantId(farmParam);
-          localStorage.setItem('agri_owner_id', farmParam);
-        } else {
-          const match = window.location.pathname.match(/\/(?:work|farm)\/([a-zA-Z0-9_-]+)/);
-          if (match && match[1]) {
-            targetFarmParam = match[1];
-            setWorkerTenantId(match[1]);
-            localStorage.setItem('agri_owner_id', match[1]);
+      try {
+        const savedUser = localStorage.getItem('agri_current_worker');
+        const savedLang = (localStorage.getItem('agri_language') || localStorage.getItem('agri_lang') || localStorage.getItem('agri_lang_sales')) as LanguageCode;
+        if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
+          setLanguage(savedLang as LanguageCode);
+        }
+        if (savedUser) {
+          const parsed = JSON.parse(savedUser);
+          if (parsed && parsed.id) {
+            // 🚨【マルチテナント物理防壁】もしURLで特定農園が指定されているのに、作業者の所属農園が異なる場合はパージ
+            if (targetFarmParam && parsed.user_id && parsed.user_id !== targetFarmParam) {
+              console.log('Switching farm: clearing mismatched cached worker in work page');
+              localStorage.removeItem('agri_current_worker');
+              setCurrentUser(null);
+              return;
+            }
+            setCurrentUser(parsed);
+          } else {
+            localStorage.removeItem('agri_current_worker');
           }
         }
       } catch (e) {
-        console.warn('URL parsing error:', e);
+        console.warn('Storage read error in work page:', e);
       }
     }
-
-    try {
-      const savedUser = localStorage.getItem('agri_current_worker');
-      const savedLang = (localStorage.getItem('agri_language') || localStorage.getItem('agri_lang') || localStorage.getItem('agri_lang_sales')) as LanguageCode;
-      if (savedLang && LANGUAGES.some(l => l.code === savedLang)) {
-        setLanguage(savedLang as LanguageCode);
-      }
-      if (savedUser) {
-        const parsed = JSON.parse(savedUser);
-        if (parsed && parsed.id) {
-          // 🚨【マルチテナント物理防壁】もしURLで特定農園が指定されているのに、作業者の所属農園が異なる場合はパージ
-          if (targetFarmParam && parsed.user_id && parsed.user_id !== targetFarmParam) {
-            console.log('Switching farm: clearing mismatched cached worker in work page');
-            localStorage.removeItem('agri_current_worker');
-            setCurrentUser(null);
-            return;
-          }
-          setCurrentUser(parsed);
-        } else {
-          localStorage.removeItem('agri_current_worker');
-        }
-      }
-    } catch (e) {
-      console.warn('Storage read error in work page:', e);
-    }
+    initWorkAuth();
   }, [requestedFarmId]);
 
   useEffect(() => {
@@ -401,29 +405,41 @@ export default function WorkEntryPage({
           .eq('id', targetWorkerId)
           .single();
 
-        const ownerId = wProfile?.user_id || (currentUser as any)?.user_id;
+        const rawOwnerId = wProfile?.user_id || (currentUser as any)?.user_id || workerTenantId;
+        const ownerId = rawOwnerId ? ((await resolveTenantUuid(rawOwnerId)) || rawOwnerId) : null;
         if (ownerId) {
           setWorkerTenantId(ownerId);
         }
 
-        // 自社テナントのマスタのみを厳格に取得（ownerIdがない場合は絶対に他社データを取得しない）
-        const [cRes, fRes, mRes, chRes] = await Promise.all([
-          ownerId 
-            ? supabase.from('crops').select('*').eq('user_id', ownerId) 
-            : Promise.resolve({ data: [], error: null }),
-          ownerId 
-            ? supabase.from('fields').select('*').eq('user_id', ownerId) 
-            : Promise.resolve({ data: [], error: null }),
-          ownerId 
-            ? supabase.from('materials').select('*').eq('user_id', ownerId) 
-            : Promise.resolve({ data: [], error: null }),
-          ownerId 
-            ? supabase.from('sales_channels').select('*').eq('user_id', ownerId) 
-            : Promise.resolve({ data: [], error: null })
-        ]);
+        // 自社テナントのマスタのみを厳格に取得（Server Action併用でPINログイン時のRLS遮断を防止）
+        let cropsData: any[] = [];
+        let fieldsData: any[] = [];
+        let materialsData: any[] = [];
+        let channelsData: any[] = [];
+
+        if (ownerId) {
+          const srvMasters = await getAdminMastersDataAction(ownerId);
+          if (srvMasters.success) {
+            cropsData = srvMasters.crops || [];
+            fieldsData = srvMasters.fields || [];
+            materialsData = srvMasters.materials || [];
+            channelsData = srvMasters.channels || [];
+          } else {
+            const [cRes, fRes, mRes, chRes] = await Promise.all([
+              supabase.from('crops').select('*').eq('user_id', ownerId),
+              supabase.from('fields').select('*').eq('user_id', ownerId),
+              supabase.from('materials').select('*').eq('user_id', ownerId),
+              supabase.from('sales_channels').select('*').eq('user_id', ownerId)
+            ]);
+            cropsData = cRes.data || [];
+            fieldsData = fRes.data || [];
+            materialsData = mRes.data || [];
+            channelsData = chRes.data || [];
+          }
+        }
 
         if (wProfile) setWorkerProfile(wProfile);
-        if (chRes.data) setSalesChannels(chRes.data);
+        setSalesChannels(channelsData);
 
         try {
           const oRes = await getB2BOrders(ownerId || null);
@@ -447,12 +463,12 @@ export default function WorkEntryPage({
           setTasks(tData);
         }
 
-        if (cRes.data) setCrops(cRes.data);
-        if (fRes.data) setFields(fRes.data);
-        if (mRes.data) setMaterials(mRes.data);
-        if (!cRes.error) setIsConnected(true);
+        setCrops(cropsData);
+        setFields(fieldsData);
+        setMaterials(materialsData);
+        setIsConnected(true);
 
-        if (!cRes.error && currentUser) {
+        if (currentUser) {
           // 今日の打刻状態を取得（未退勤ログのフォールバック付き）
           let activeAttLog = null;
           const { data: todayLogs } = await supabase
@@ -913,10 +929,33 @@ export default function WorkEntryPage({
     try {
       const cropId = crops.find(c => c.name === selectedSalesCrop)?.id;
       const channelId = salesChannels.find(c => c.name === selectedSalesChannel)?.id;
-      const ownerId = workerProfile?.user_id || (currentUser as any)?.user_id || null;
+      const ownerId = workerProfile?.user_id || (currentUser as any)?.user_id || workerTenantId || null;
       const qty = parseFloat(salesQuantity) || 0;
 
-      // 該当の販売価格マスタがあれば単価を取得（登録がなければ事後入力・確定用としてnull）
+      const srvRes = await saveWorkerAdHocSalesLogAction(ownerId, {
+        workerId: currentUser?.id,
+        cropId: cropId || null,
+        cropName: selectedSalesCrop,
+        channelId: channelId || null,
+        channelName: selectedSalesChannel,
+        salesDate: getJSTDate(),
+        quantity: qty,
+        unit: salesUnit
+      });
+
+      if (srvRes.success) {
+        alert(srvRes.unitPrice !== null && srvRes.unitPrice !== undefined
+          ? `都度出荷を記録しました！\n（マスタ単価: ¥${srvRes.unitPrice} / 想定売上: ¥${srvRes.totalSales?.toLocaleString()}）`
+          : `都度出荷を記録しました！\n（※確定金額は精算書到着後に売上管理画面で入力できます）`
+        );
+        setSelectedSalesCrop('');
+        setSelectedSalesChannel('');
+        setSalesQuantity('');
+        setSalesUnit('kg');
+        return;
+      }
+
+      // フォールバック
       let unitPrice: number | null = null;
       let totalSales: number | null = null;
 
@@ -1099,12 +1138,17 @@ export default function WorkEntryPage({
       let syncedCount = 0;
       for (const item of list) {
         const { _offline_created_at, ...dbPayload } = item;
-        const { error } = await supabase.from('work_logs').insert([dbPayload]);
-        if (!error) {
+        const srv = await saveWorkerWorkLogAction(dbPayload.user_id || workerTenantId, dbPayload, null);
+        if (srv.success) {
           syncedCount++;
         } else {
-          console.warn('Sync failed for item:', error);
-          remaining.push(item);
+          const { error } = await supabase.from('work_logs').insert([dbPayload]);
+          if (!error) {
+            syncedCount++;
+          } else {
+            console.warn('Sync failed for item:', error);
+            remaining.push(item);
+          }
         }
       }
 
@@ -1181,8 +1225,8 @@ export default function WorkEntryPage({
             uploadedVideoUrl = fileName;
         }
 
-        const { data, error } = await supabase.from('work_logs').insert([{
-          user_id: workerProfile?.user_id || null,
+        const payload = {
+          user_id: workerProfile?.user_id || workerTenantId || null,
           farm_id: workerProfile?.farm_id || null,
           worker_id: currentUser.id,
           crop_id: cropId || null,
@@ -1199,10 +1243,16 @@ export default function WorkEntryPage({
           video_url: uploadedVideoUrl,
           weather: weatherText,
           temperature: temp
-        }]).select(`*, crops(name), fields(name), materials(name)`);
-        
-        if (error) throw error;
-        if (data && data.length > 0) setActiveWorkLog(data[0]);
+        };
+
+        const srv = await saveWorkerWorkLogAction(payload.user_id, payload, null);
+        if (srv.success && srv.data) {
+          setActiveWorkLog(srv.data);
+        } else {
+          const { data, error } = await supabase.from('work_logs').insert([payload]).select(`*, crops(name), fields(name), materials(name)`);
+          if (error) throw error;
+          if (data && data.length > 0) setActiveWorkLog(data[0]);
+        }
       }
       setIsSubmitting(false);
     } catch (err: any) {
@@ -1221,20 +1271,21 @@ export default function WorkEntryPage({
       const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
       if (isOnline && isConnected && activeWorkLog.id) {
-        const { error } = await supabase.from('work_logs').update({
+        const updatePayload = {
           end_time: endTime.toISOString(),
           duration_minutes: diffMins,
           status: 'completed'
-        }).eq('id', activeWorkLog.id);
-        
-        if (error) {
-          console.warn('Update failed, buffering completion to offline log:', error);
-          saveOfflineWorkLog({
-            ...activeWorkLog,
-            end_time: endTime.toISOString(),
-            duration_minutes: diffMins,
-            status: 'completed'
-          });
+        };
+        const srv = await saveWorkerWorkLogAction(workerProfile?.user_id || workerTenantId, updatePayload, activeWorkLog.id);
+        if (!srv.success) {
+          const { error } = await supabase.from('work_logs').update(updatePayload).eq('id', activeWorkLog.id);
+          if (error) {
+            console.warn('Update failed, buffering completion to offline log:', error);
+            saveOfflineWorkLog({
+              ...activeWorkLog,
+              ...updatePayload
+            });
+          }
         }
       } else {
         saveOfflineWorkLog({
@@ -1282,7 +1333,7 @@ export default function WorkEntryPage({
       if (!isOnline) {
         // 電波圏外時：直ちにローカルストレージへ退避
         saveOfflineWorkLog({
-          user_id: workerProfile?.user_id || null,
+          user_id: workerProfile?.user_id || workerTenantId || null,
           farm_id: workerProfile?.farm_id || null,
           worker_id: currentUser.id,
           crop_id: cropId || null,
@@ -1331,8 +1382,8 @@ export default function WorkEntryPage({
         }
       }
 
-      const { error } = await supabase.from('work_logs').insert([{
-        user_id: workerProfile?.user_id || null,
+      const payload = {
+        user_id: workerProfile?.user_id || workerTenantId || null,
         farm_id: workerProfile?.farm_id || null,
         worker_id: currentUser.id,
         crop_id: cropId || null,
@@ -1347,25 +1398,18 @@ export default function WorkEntryPage({
         photo_url: uploadedPhotoUrl,
         video_url: uploadedVideoUrl,
         approval_status: 'pending'
-      }]);
+      };
 
-      if (error) {
-        console.warn('Supabase insert failed, buffering to offline storage:', error);
-        saveOfflineWorkLog({
-          user_id: workerProfile?.user_id || null,
-          farm_id: workerProfile?.farm_id || null,
-          worker_id: currentUser.id,
-          crop_id: cropId || null,
-          field_id: fieldId || null,
-          work_type: workType,
-          duration_minutes: parseInt(duration, 10) || 0,
-          status: 'completed',
-          work_date: manualDate,
-          material_id: matId || null,
-          material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,
-          memo: memo || null,
-          approval_status: 'pending'
-        });
+      const srv = await saveWorkerWorkLogAction(payload.user_id, payload, null);
+      if (!srv.success) {
+        const { error } = await supabase.from('work_logs').insert([payload]);
+        if (error) {
+          console.warn('Supabase insert failed, buffering to offline storage:', error);
+          saveOfflineWorkLog({
+            ...payload,
+            duration_minutes: parseInt(duration, 10) || 0
+          });
+        }
       }
 
       setIsSubmitting(false);

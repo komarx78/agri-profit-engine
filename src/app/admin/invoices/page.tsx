@@ -8,7 +8,8 @@ export default function AdminInvoicesRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/sales-management/invoices');
+    const qs = typeof window !== 'undefined' ? window.location.search : '';
+    router.replace(`/sales-management/invoices${qs}`);
   }, [router]);
 
   return (

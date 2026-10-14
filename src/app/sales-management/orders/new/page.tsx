@@ -13,7 +13,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
-import { getB2BCustomers, getB2BOrders, createB2BOrder } from '@/app/actions/b2b';
+import { getB2BCustomers, getB2BOrders, createB2BOrder, getSalesLogsAndMastersAction } from '@/app/actions/b2b';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { getJSTDate } from '@/lib/dateUtils';
@@ -51,16 +51,21 @@ export default function NewOrderPage() {
         if (cid) setSelectedCustomerId(cid);
       }
 
-      const [custRes, cropRes, ordRes] = await Promise.all([
+      const [custRes, mastersRes, ordRes] = await Promise.all([
         getB2BCustomers(tId),
-        supabase.from('crops').select('*').eq('user_id', tId).order('name'),
+        getSalesLogsAndMastersAction(tId),
         getB2BOrders(tId)
       ]);
       if (custRes.success) {
         setCustomers(custRes.customers || []);
         setCropDefaultPrices((custRes as any).cropDefaultPrices || {});
       }
-      if (cropRes.data) setCrops(cropRes.data);
+      if (mastersRes.success && mastersRes.crops) {
+        setCrops(mastersRes.crops);
+      } else {
+        const { data: cropData } = await supabase.from('crops').select('*').eq('user_id', tId).order('name');
+        if (cropData) setCrops(cropData);
+      }
       if (ordRes.success) setRecentOrders(ordRes.orders || []);
     }
     load();

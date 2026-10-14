@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getAccountingExportDataAction } from '@/app/actions/farm';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { FileSpreadsheet, Download, RefreshCw, Loader2, Info, AlertTriangle, Calendar, Settings } from 'lucide-react';
 import Papa from 'papaparse';
@@ -44,32 +45,47 @@ export default function AccountingExportPage() {
         throw new Error('テナントIDが特定できません');
       }
 
-      const [salesRes, purchasesRes, cropsRes, channelsRes] = await Promise.all([
-        supabase
-          .from('sales_logs')
-          .select('sales_date, total_sales, crop_id, channel_id')
-          .eq('user_id', tenantId)
-          .gte('sales_date', startDate)
-          .lte('sales_date', endDate),
-        
-        supabase
-          .from('material_purchases')
-          .select('purchase_date, supplier, total_price, notes, materials(name)')
-          .eq('user_id', tenantId)
-          .gte('purchase_date', startDate)
-          .lte('purchase_date', endDate),
+      let rawSales: any[] = [];
+      let rawPurchases: any[] = [];
+      let crops: any[] = [];
+      let channels: any[] = [];
+
+      const serverRes = await getAccountingExportDataAction(tenantId, startDate, endDate);
+      if (serverRes.success) {
+        rawSales = serverRes.salesLogs || [];
+        rawPurchases = serverRes.purchases || [];
+        crops = serverRes.crops || [];
+        channels = serverRes.channels || [];
+      } else {
+        const [salesRes, purchasesRes, cropsRes, channelsRes] = await Promise.all([
+          supabase
+            .from('sales_logs')
+            .select('sales_date, total_sales, crop_id, channel_id')
+            .eq('user_id', tenantId)
+            .gte('sales_date', startDate)
+            .lte('sales_date', endDate),
           
-        supabase.from('crops').select('id, name').eq('user_id', tenantId),
-        supabase.from('sales_channels').select('id, name').eq('user_id', tenantId)
-      ]);
+          supabase
+            .from('material_purchases')
+            .select('purchase_date, supplier, total_price, notes, materials(name)')
+            .eq('user_id', tenantId)
+            .gte('purchase_date', startDate)
+            .lte('purchase_date', endDate),
+            
+          supabase.from('crops').select('id, name').eq('user_id', tenantId),
+          supabase.from('sales_channels').select('id, name').eq('user_id', tenantId)
+        ]);
+        rawSales = salesRes.data || [];
+        rawPurchases = purchasesRes.data || [];
+        crops = cropsRes.data || [];
+        channels = channelsRes.data || [];
+      }
+      const purchasesRes = { data: rawPurchases };
 
-      const crops = cropsRes.data || [];
-      const channels = channelsRes.data || [];
-
-      const salesLogs = (salesRes.data || []).map(log => ({
+      const salesLogs = rawSales.map(log => ({
         ...log,
-        crops: { name: crops.find(c => c.id === log.crop_id)?.name || '不明な作目' },
-        sales_channels: { name: channels.find(c => c.id === log.channel_id)?.name || '不明な請求先' }
+        crops: { name: crops.find((c: any) => c.id === log.crop_id)?.name || '不明な作目' },
+        sales_channels: { name: channels.find((c: any) => c.id === log.channel_id)?.name || '不明な請求先' }
       }));
       
       const journalEntries: any[] = [];

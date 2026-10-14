@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getAdminCompanySettingsAction, saveAdminCompanySettingsAction } from '@/app/actions/farm';
 import { Settings, Save, CheckCircle2, Building, MapPin, Phone, FileText, Landmark, Calendar, ArrowRight, QrCode, Copy, Smartphone, Printer } from 'lucide-react';
 import Link from 'next/link';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
@@ -52,11 +53,18 @@ export default function SettingsPage() {
           }
         }
 
-        const { data, error } = await supabase
-          .from('company_settings')
-          .select('*')
-          .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
-          .maybeSingle();
+        let data: any = null;
+        const srv = await getAdminCompanySettingsAction(tenantId);
+        if (srv.success && srv.data) {
+          data = srv.data;
+        } else {
+          const res = await supabase
+            .from('company_settings')
+            .select('*')
+            .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+            .maybeSingle();
+          data = res.data;
+        }
 
         if (data) {
           setSettingsId(data.id);
@@ -109,21 +117,6 @@ export default function SettingsPage() {
       if (!tenantId) throw new Error('テナントIDが特定できません');
 
       const cleanFarmCode = (formData.farm_code || '').trim().toLowerCase().replace(/\s+/g, '');
-
-      // 🛡️ 司馬懿防壁：全国重複チェック（他社との農園コード衝突を物理遮断）
-      if (cleanFarmCode) {
-        const { data: duplicate } = await supabase
-          .from('company_settings')
-          .select('id, user_id, company_name')
-          .ilike('farm_code', cleanFarmCode)
-          .neq('user_id', tenantId)
-          .maybeSingle();
-
-        if (duplicate) {
-          throw new Error(`農園コード「${cleanFarmCode.toUpperCase()}」は既に別の農園様（${duplicate.company_name || '他社'}）で使用されています。\n末尾の番号を変更（例: ${cleanFarmCode}-2 または数字を変更）して再度お試しください。`);
-        }
-      }
-
       const dataToSave: any = {
         company_name: formData.company_name || '',
         postal_code: formData.postal_code || '',
@@ -138,20 +131,42 @@ export default function SettingsPage() {
         updated_at: new Date().toISOString()
       };
 
-      if (settingsId) {
-        const { error } = await supabase
-          .from('company_settings')
-          .update(dataToSave)
-          .eq('id', settingsId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase
-          .from('company_settings')
-          .insert([dataToSave])
-          .select()
-          .single();
-        if (error) throw error;
-        if (data) setSettingsId(data.id);
+      const srv = await saveAdminCompanySettingsAction(tenantId, dataToSave, settingsId);
+      if (!srv.success) {
+        if (srv.error && srv.error.includes('農園コード')) {
+          throw new Error(srv.error);
+        }
+        // クライアントフォールバック
+        if (cleanFarmCode) {
+          const { data: duplicate } = await supabase
+            .from('company_settings')
+            .select('id, user_id, company_name')
+            .ilike('farm_code', cleanFarmCode)
+            .neq('user_id', tenantId)
+            .maybeSingle();
+
+          if (duplicate) {
+            throw new Error(`農園コード「${cleanFarmCode.toUpperCase()}」は既に別の農園様（${duplicate.company_name || '他社'}）で使用されています。\n末尾の番号を変更（例: ${cleanFarmCode}-2 または数字を変更）して再度お試しください。`);
+          }
+        }
+
+        if (settingsId) {
+          const { error } = await supabase
+            .from('company_settings')
+            .update(dataToSave)
+            .eq('id', settingsId);
+          if (error) throw error;
+        } else {
+          const { data, error } = await supabase
+            .from('company_settings')
+            .insert([dataToSave])
+            .select()
+            .single();
+          if (error) throw error;
+          if (data) setSettingsId(data.id);
+        }
+      } else if (srv.data?.id) {
+        setSettingsId(srv.data.id);
       }
 
       if (typeof window !== 'undefined') {

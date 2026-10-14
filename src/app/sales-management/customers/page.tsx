@@ -29,7 +29,8 @@ import {
   updateB2BCustomer,
   deleteB2BCustomer,
   saveCustomerCropPricesAction,
-  saveCropDefaultSalesPricesAction
+  saveCropDefaultSalesPricesAction,
+  getSalesLogsAndMastersAction
 } from '@/app/actions/b2b';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
@@ -91,19 +92,20 @@ export default function CustomersPage() {
       const tid = await getCurrentTenantId();
       if (tid) setTenantId(tid);
 
-      const [custRes, cropRes] = await Promise.all([
+      const [custRes, mastersRes] = await Promise.all([
         getB2BCustomers(tid),
-        tid
-          ? supabase.from('crops').select('*').eq('user_id', tid).order('name')
-          : Promise.resolve({ data: [] })
+        tid ? getSalesLogsAndMastersAction(tid) : Promise.resolve({ success: false, crops: [] })
       ]);
 
       if (custRes.success) {
         setCustomers(custRes.customers || []);
         setCropDefaultPrices((custRes as any).cropDefaultPrices || {});
       }
-      if (cropRes.data) {
-        setCrops(cropRes.data);
+      if (mastersRes.success && mastersRes.crops) {
+        setCrops(mastersRes.crops);
+      } else if (tid) {
+        const { data: cropData } = await supabase.from('crops').select('*').eq('user_id', tid).order('name');
+        if (cropData) setCrops(cropData);
       }
     } finally {
       setLoading(false);

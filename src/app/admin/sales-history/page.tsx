@@ -8,7 +8,8 @@ export default function AdminSalesHistoryRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/sales-management/sales-history');
+    const qs = typeof window !== 'undefined' ? window.location.search : '';
+    router.replace(`/sales-management/sales-history${qs}`);
   }, [router]);
 
   return (

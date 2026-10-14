@@ -13,7 +13,7 @@ import { autoTranslateMasterData } from '@/app/actions/translate';
 
 import { getCurrentTenantId } from '@/lib/tenant';
 import { getJSTDate, getJSTDateWithOffset } from '@/lib/dateUtils';
-import { savePlannedTask, deletePlannedTask, copyTasksFromDate, cloneWorkerTasks, shiftTasksDate, getAdminTasksPageDataAction } from '@/app/actions/farm';
+import { savePlannedTask, deletePlannedTask, copyTasksFromDate, cloneWorkerTasks, shiftTasksDate, getAdminTasksPageDataAction, swapTaskStepOrderAction } from '@/app/actions/farm';
 
 const QUICK_TEMPLATES = [
   { title: '朝の収穫作業', icon: '🧺', defaultSlot: '午前' },
@@ -323,9 +323,12 @@ export default function TasksPage() {
 
     try {
       const activeTenantId = tenantId || await getCurrentTenantId();
-      await supabase.from('work_logs').update({ step_order: newOrderForCurrent }).eq('id', task.id).eq('user_id', activeTenantId);
-      await supabase.from('work_logs').update({ step_order: newOrderForTarget }).eq('id', targetTask.id).eq('user_id', activeTenantId);
       if (activeTenantId) {
+        const srv = await swapTaskStepOrderAction(activeTenantId, task.id, newOrderForCurrent, targetTask.id, newOrderForTarget);
+        if (!srv.success) {
+          await supabase.from('work_logs').update({ step_order: newOrderForCurrent }).eq('id', task.id).eq('user_id', activeTenantId);
+          await supabase.from('work_logs').update({ step_order: newOrderForTarget }).eq('id', targetTask.id).eq('user_id', activeTenantId);
+        }
         await fetchTasksData(activeTenantId);
       }
     } catch (e) {

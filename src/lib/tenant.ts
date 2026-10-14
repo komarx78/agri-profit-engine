@@ -11,8 +11,32 @@ export function normalizeTenantId(raw: string | null | undefined): string | null
   if (!raw || raw === 'null' || raw === 'undefined') return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;
-  const mapped = KNOWN_FARM_CODE_MAP[trimmed.toLowerCase()];
+  const lower = trimmed.toLowerCase();
+  const noHyphen = lower.replace(/-/g, '');
+  const mapped = KNOWN_FARM_CODE_MAP[lower] || KNOWN_FARM_CODE_MAP[noHyphen];
   return mapped || trimmed;
+}
+
+export async function resolveTenantUuid(raw: string | null | undefined): Promise<string | null> {
+  const normalized = normalizeTenantId(raw);
+  if (!normalized) return null;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalized)) {
+    return normalized;
+  }
+  try {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    const { data } = await supabase
+      .from('company_settings')
+      .select('user_id')
+      .ilike('farm_code', normalized)
+      .limit(1)
+      .maybeSingle();
+    if (data?.user_id) return data.user_id;
+  } catch (e) {}
+  return normalized;
 }
 
 /**
@@ -24,14 +48,15 @@ export async function getCurrentTenantId(): Promise<string | null> {
     if (typeof window !== 'undefined') {
       try {
         const urlParams = new URLSearchParams(window.location.search);
-        const urlFarm = normalizeTenantId(urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId'));
+        const rawUrlFarm = urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId');
+        const urlFarm = await resolveTenantUuid(rawUrlFarm);
         if (urlFarm) {
           try { localStorage.setItem('agri_owner_id', urlFarm); } catch (e) {}
           return urlFarm;
         }
 
         const match = window.location.pathname.match(/\/(?:portal|work|farm)\/([a-zA-Z0-9_-]+)/);
-        const pathFarm = normalizeTenantId(match?.[1]);
+        const pathFarm = await resolveTenantUuid(match?.[1]);
         if (pathFarm) {
           try { localStorage.setItem('agri_owner_id', pathFarm); } catch (e) {}
           return pathFarm;

@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, Polygon, InfoWindow } from '@react-google-maps/api';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
-import { getTenantCultivationPlansAction, getAdminMapDataAction } from '@/app/actions/farm';
+import { getTenantCultivationPlansAction, getAdminMapDataAction, saveMasterRecordAction, deleteMasterRecordAction, getFieldPolygonDetailAction } from '@/app/actions/farm';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { MapPin, Plus, Loader2, Save, X, Info, Search, Check, Trash2, Edit2, Palette, ArrowRight, FlaskConical } from 'lucide-react';
 import Link from 'next/link';
@@ -330,45 +330,45 @@ export default function MapPage() {
     
     try {
       setIsSaving(true);
-      
-      let error;
+      const tenantId = await getCurrentTenantId();
       
       if (selectedUnmappedFieldId) {
         // 既存マスタへの紐付け（Update）
-        const res = await supabase
-          .from('fields')
-          .update({ 
-            area_size: newArea,
-            polygon_coordinates: newPolygonPath,
-            color: newFieldColor
-          })
-          .eq('id', selectedUnmappedFieldId);
-        error = res.error;
+        const payload = {
+          area_size: newArea,
+          polygon_coordinates: newPolygonPath,
+          color: newFieldColor
+        };
+        const srv = tenantId ? await saveMasterRecordAction(tenantId, 'fields', payload, String(selectedUnmappedFieldId)) : { success: false };
+        if (!srv.success) {
+          const res = await supabase
+            .from('fields')
+            .update(payload)
+            .eq('id', selectedUnmappedFieldId);
+          if (res.error) throw res.error;
+        }
       } else {
         // 新規作成（Insert）
-        const tenantId = await getCurrentTenantId();
         const tNames = await autoTranslate(newFieldName);
-        const res = await supabase
-          .from('fields')
-          .insert([
-            { 
-              user_id: tenantId,
-              name: newFieldName,
-              name_vi: tNames.vi,
-              name_id: tNames.id,
-              name_zh: tNames.zh,
-              name_en: tNames.en,
-              name_si: tNames.si,
-              name_km: tNames.km,
-              area_size: newArea,
-              polygon_coordinates: newPolygonPath,
-              color: newFieldColor
-            }
-          ]);
-        error = res.error;
+        const payload = { 
+          user_id: tenantId,
+          name: newFieldName,
+          name_vi: tNames.vi,
+          name_id: tNames.id,
+          name_zh: tNames.zh,
+          name_en: tNames.en,
+          name_si: tNames.si,
+          name_km: tNames.km,
+          area_size: newArea,
+          polygon_coordinates: newPolygonPath,
+          color: newFieldColor
+        };
+        const srv = tenantId ? await saveMasterRecordAction(tenantId, 'fields', payload, null) : { success: false };
+        if (!srv.success) {
+          const res = await supabase.from('fields').insert([payload]);
+          if (res.error) throw res.error;
+        }
       }
-        
-      if (error) throw error;
       
       setIsSaveModalOpen(false);
       setNewFieldName('');
@@ -391,12 +391,15 @@ export default function MapPage() {
     if (!confirm(`本当に「${fieldName}」を削除してもよろしいですか？\nこの操作は取り消せません。`)) return;
     
     try {
-      const { error } = await supabase
-        .from('fields')
-        .delete()
-        .eq('id', fieldId);
-        
-      if (error) throw error;
+      const tenantId = await getCurrentTenantId();
+      const srv = tenantId ? await deleteMasterRecordAction(tenantId, 'fields', String(fieldId)) : { success: false };
+      if (!srv.success) {
+        const { error } = await supabase
+          .from('fields')
+          .delete()
+          .eq('id', fieldId);
+        if (error) throw error;
+      }
       
       alert('削除しました。');
       setSelectedField(null);
@@ -412,21 +415,25 @@ export default function MapPage() {
   const handleSaveFieldName = async () => {
     if (!selectedField || !editName.trim()) return;
     try {
+      const tenantId = await getCurrentTenantId();
       const tNames = await autoTranslate(editName.trim());
-      const { error } = await supabase
-        .from('fields')
-        .update({ 
-          name: editName.trim(),
-          name_vi: tNames.vi,
-          name_id: tNames.id,
-          name_zh: tNames.zh,
-          name_en: tNames.en,
-          name_si: tNames.si,
-          name_km: tNames.km
-        })
-        .eq('id', selectedField.id);
-        
-      if (error) throw error;
+      const payload = { 
+        name: editName.trim(),
+        name_vi: tNames.vi,
+        name_id: tNames.id,
+        name_zh: tNames.zh,
+        name_en: tNames.en,
+        name_si: tNames.si,
+        name_km: tNames.km
+      };
+      const srv = tenantId ? await saveMasterRecordAction(tenantId, 'fields', payload, String(selectedField.id)) : { success: false };
+      if (!srv.success) {
+        const { error } = await supabase
+          .from('fields')
+          .update(payload)
+          .eq('id', selectedField.id);
+        if (error) throw error;
+      }
       
       // ローカルのステートも更新
       setSelectedField({ ...selectedField, name: editName.trim() });
@@ -448,6 +455,7 @@ export default function MapPage() {
     }
     
     try {
+      const tenantId = await getCurrentTenantId();
       const pathArray = polygon.getPath().getArray();
       const newPath = pathArray.map(p => ({ lat: p.lat(), lng: p.lng() }));
       
@@ -458,15 +466,17 @@ export default function MapPage() {
         newAreaSize = Number((areaSqMeters / 100).toFixed(1));
       }
 
-      const { error } = await supabase
-        .from('fields')
-        .update({ 
-          polygon_coordinates: newPath,
-          area_size: newAreaSize || undefined // 計算失敗時は更新しない
-        })
-        .eq('id', editingFieldId);
+      const payload: Record<string, any> = { polygon_coordinates: newPath };
+      if (newAreaSize) payload.area_size = newAreaSize;
 
-      if (error) throw error;
+      const srv = tenantId ? await saveMasterRecordAction(tenantId, 'fields', payload, String(editingFieldId)) : { success: false };
+      if (!srv.success) {
+        const { error } = await supabase
+          .from('fields')
+          .update(payload)
+          .eq('id', editingFieldId);
+        if (error) throw error;
+      }
 
       alert('形を修正しました！面積も自動再計算されています。');
       setEditingFieldId(null);
@@ -482,11 +492,15 @@ export default function MapPage() {
   // 色を変更する
   const handleChangeColor = async (fieldId: number, color: string) => {
     try {
-      const { error } = await supabase
-        .from('fields')
-        .update({ color })
-        .eq('id', fieldId);
-      if (error) throw error;
+      const tenantId = await getCurrentTenantId();
+      const srv = tenantId ? await saveMasterRecordAction(tenantId, 'fields', { color }, String(fieldId)) : { success: false };
+      if (!srv.success) {
+        const { error } = await supabase
+          .from('fields')
+          .update({ color })
+          .eq('id', fieldId);
+        if (error) throw error;
+      }
       
       // 再取得
       fetchFieldsData();
@@ -513,6 +527,18 @@ export default function MapPage() {
     // 実際のデータを取得（最新の作付計画、作業履歴、土壌診断）
     try {
       const tenantId = await getCurrentTenantId();
+      if (tenantId) {
+        const detailRes = await getFieldPolygonDetailAction(tenantId, field.id);
+        if (detailRes.success) {
+          const fieldPlans = (detailRes.plans || [])
+            .filter((p: any) => p.field_id === field.id)
+            .sort((a: any, b: any) => (Number(b.year) - Number(a.year)) || (Number(b.start_month) - Number(a.start_month)));
+          const latestPlan = fieldPlans.length > 0 ? fieldPlans[0] : null;
+          setSelectedFieldDetails({ plan: latestPlan, works: detailRes.works || [], soil: detailRes.soil } as any);
+          return;
+        }
+      }
+
       const [plansRes, worksRes, soilRes] = await Promise.all([
         tenantId ? getTenantCultivationPlansAction(tenantId) : Promise.resolve({ success: true, data: [] }),
         supabase

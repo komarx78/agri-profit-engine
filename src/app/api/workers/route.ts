@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-    const supabaseKey = anonKey || serviceRoleKey;
+    const supabaseKey = serviceRoleKey || anonKey;
 
     if (!supabaseUrl || !supabaseKey) {
       return NextResponse.json({ error: 'Supabase設定が不足しています', workers: [] }, { status: 500 });

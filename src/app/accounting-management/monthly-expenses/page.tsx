@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getMonthlyExpensesDataAction, saveMonthlyExpensesAction } from '@/app/actions/farm';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Receipt, Save, Loader2, Calendar, TrendingDown, RefreshCw, AlertCircle, Edit2 } from 'lucide-react';
 
@@ -32,6 +33,20 @@ export default function MonthlyExpensesPage() {
     try {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
+      const serverRes = await getMonthlyExpensesDataAction(tenantId, selectedMonth);
+      if (serverRes.success) {
+        const newFormData = { fuel: '', machinery: '', other: '' };
+        (serverRes.monthData || []).forEach((row: any) => {
+          if (row.expense_type === 'fuel') newFormData.fuel = row.amount.toString();
+          if (row.expense_type === 'machinery') newFormData.machinery = row.amount.toString();
+          if (row.expense_type === 'other') newFormData.other = row.amount.toString();
+        });
+        setFormData(newFormData);
+        setHistoryLogs(serverRes.historyData || []);
         setIsLoading(false);
         return;
       }
@@ -80,22 +95,29 @@ export default function MonthlyExpensesPage() {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) throw new Error('テナントIDが特定できませんでした');
 
-      const inserts = [
-        { user_id: tenantId, month: selectedMonth, expense_type: 'fuel', amount: Number(formData.fuel) || 0 },
-        { user_id: tenantId, month: selectedMonth, expense_type: 'machinery', amount: Number(formData.machinery) || 0 },
-        { user_id: tenantId, month: selectedMonth, expense_type: 'other', amount: Number(formData.other) || 0 }
-      ];
+      const saveRes = await saveMonthlyExpensesAction(tenantId, selectedMonth, {
+        fuel: Number(formData.fuel) || 0,
+        machinery: Number(formData.machinery) || 0,
+        other: Number(formData.other) || 0
+      });
 
-      const { error } = await supabase
-        .from('monthly_expenses')
-        .upsert(inserts, { onConflict: 'user_id, month, expense_type' });
+      if (!saveRes.success) {
+        const inserts = [
+          { user_id: tenantId, month: selectedMonth, expense_type: 'fuel', amount: Number(formData.fuel) || 0 },
+          { user_id: tenantId, month: selectedMonth, expense_type: 'machinery', amount: Number(formData.machinery) || 0 },
+          { user_id: tenantId, month: selectedMonth, expense_type: 'other', amount: Number(formData.other) || 0 }
+        ];
 
-      if (error) {
-        // user_id が一意キーに含まれていない場合のフォールバック
-        const { error: fErr } = await supabase
+        const { error } = await supabase
           .from('monthly_expenses')
-          .upsert(inserts, { onConflict: 'month, expense_type' });
-        if (fErr) throw fErr;
+          .upsert(inserts, { onConflict: 'user_id, month, expense_type' });
+
+        if (error) {
+          const { error: fErr } = await supabase
+            .from('monthly_expenses')
+            .upsert(inserts, { onConflict: 'month, expense_type' });
+          if (fErr) throw fErr;
+        }
       }
       
       alert(`${selectedMonth}の経費を保存しました。`);

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getAdminMastersDataAction, getSprayPastLogsAction, saveSprayRecordsAction } from '@/app/actions/farm';
 import { getJSTDate } from '@/lib/dateUtils';
 import Link from 'next/link';
 
@@ -82,13 +83,21 @@ function SprayManagementContent() {
         return;
       }
 
-      const [cropsRes, fieldsRes] = await Promise.all([
-        supabase.from('crops').select('*').eq('user_id', activeTenantId).order('name'),
-        supabase.from('fields').select('*').eq('user_id', activeTenantId).order('name')
-      ]);
+      let fetchedCrops: any[] = [];
+      let fetchedFields: any[] = [];
 
-      const fetchedCrops = cropsRes.data || [];
-      const fetchedFields = fieldsRes.data || [];
+      const srvMasters = await getAdminMastersDataAction(activeTenantId);
+      if (srvMasters.success) {
+        fetchedCrops = srvMasters.crops || [];
+        fetchedFields = srvMasters.fields || [];
+      } else {
+        const [cropsRes, fieldsRes] = await Promise.all([
+          supabase.from('crops').select('*').eq('user_id', activeTenantId).order('name'),
+          supabase.from('fields').select('*').eq('user_id', activeTenantId).order('name')
+        ]);
+        fetchedCrops = cropsRes.data || [];
+        fetchedFields = fieldsRes.data || [];
+      }
       
       setCrops(fetchedCrops);
       setFields(fetchedFields);
@@ -126,11 +135,16 @@ function SprayManagementContent() {
         return;
       }
       // 過去の自社散布履歴を取得（使用回数計算用）
-      const { data: pastSprays } = await supabase
-        .from('work_logs')
-        .select('*')
-        .eq('user_id', tenantId)
-        .like('work_type', '%農薬%');
+      const srvPast = await getSprayPastLogsAction(tenantId);
+      let pastSprays = srvPast.success ? srvPast.data : null;
+      if (!pastSprays) {
+        const { data: clientPast } = await supabase
+          .from('work_logs')
+          .select('*')
+          .eq('user_id', tenantId)
+          .like('work_type', '%農薬%');
+        pastSprays = clientPast || [];
+      }
 
       // 本番APIから作物の適用農薬を全件取得
       const res = await fetch('/api/pesticide-check', {
@@ -166,7 +180,7 @@ function SprayManagementContent() {
         // 過去ログとの突合
         let usedCount = 0;
         if (pastSprays) {
-          usedCount = pastSprays.filter(log => log.memo && log.memo.includes(p.name)).length;
+          usedCount = pastSprays.filter((log: any) => log.memo && log.memo.includes(p.name)).length;
         }
 
         // RACコード / 有効成分名
@@ -273,8 +287,11 @@ function SprayManagementContent() {
         created_at: timestamp
       }));
 
-      const { error } = await supabase.from('work_logs').insert(recordsToInsert);
-      if (error) throw error;
+      const srv = await saveSprayRecordsAction(tenantId, recordsToInsert);
+      if (!srv.success) {
+        const { error } = await supabase.from('work_logs').insert(recordsToInsert);
+        if (error) throw error;
+      }
 
       setToastMessage(`${selectedFieldIds.length}箇所の圃場に ${selectedPesticideObjects.length}種の農薬散布を記録しました！`);
       setIsSubmitModalOpen(false);

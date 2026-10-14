@@ -27,6 +27,7 @@ import { translateSingleText } from '@/app/actions/translate';
 import { PwaBottomBanner } from '@/components/PwaInstallPrompt';
 import { LineLinkModal } from '@/components/LineLinkModal';
 import Link from 'next/link';
+import { resolveTenantUuid } from '@/lib/tenant';
 import { getJSTDate, getJSTTime, formatDisplayTime, parseTimeToMinutes, getAttendancePeriod, getDateListBetween } from '@/lib/dateUtils';
 import WorkEntryPage from '../work/page';
 
@@ -361,10 +362,11 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               }
             }
             if (farmParam && farmParam !== 'null' && farmParam !== 'undefined') {
-              urlRequestedFarmId = farmParam;
-              setActiveFarmId(farmParam);
-              localStorage.setItem('agri_owner_id', farmParam);
-              ownerId = farmParam;
+              const resolvedParam = (await resolveTenantUuid(farmParam)) || farmParam;
+              urlRequestedFarmId = resolvedParam;
+              setActiveFarmId(resolvedParam);
+              localStorage.setItem('agri_owner_id', resolvedParam);
+              ownerId = resolvedParam;
             }
           } catch (e) {}
         }

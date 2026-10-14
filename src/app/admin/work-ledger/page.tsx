@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getAdminWorkLedgerDataAction, getAdminCompanySettingsAction } from '@/app/actions/farm';
 import { Table, Download, Loader2, Calendar as CalendarIcon, Briefcase, Calendar, Sparkles } from 'lucide-react';
 import Papa from 'papaparse';
 import { getJSTDate, getAttendancePeriod } from '@/lib/dateUtils';
@@ -42,13 +43,8 @@ export default function WorkLedgerPage() {
         }
 
         if (tenantId) {
-          const { data: compData } = await supabase
-            .from('company_settings')
-            .select('attendance_closing_day, attendance_rules')
-            .eq('user_id', tenantId)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+          const srvComp = await getAdminCompanySettingsAction(tenantId);
+          const compData = srvComp.success && srvComp.data ? srvComp.data : null;
 
           if (compData && compData.attendance_closing_day !== undefined && compData.attendance_closing_day !== null) {
             const dbVal = Number(compData.attendance_closing_day);
@@ -123,6 +119,14 @@ export default function WorkLedgerPage() {
     try {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) {
+        setIsLoading(false);
+        return;
+      }
+
+      const srv = await getAdminWorkLedgerDataAction(tenantId, startDate, endDate);
+      if (srv.success) {
+        setWorkLogs(srv.workLogs || []);
+        setSalesLogs(srv.salesLogs || []);
         setIsLoading(false);
         return;
       }

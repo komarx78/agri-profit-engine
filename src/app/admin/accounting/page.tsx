@@ -8,7 +8,8 @@ export default function AdminAccountingRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/accounting-management/accounting');
+    const qs = typeof window !== 'undefined' ? window.location.search : '';
+    router.replace(`/accounting-management/accounting${qs}`);
   }, [router]);
 
   return (
