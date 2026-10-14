@@ -1145,7 +1145,17 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
       const areaAcre = targetField?.area_size ? Number(targetField.area_size) : 10;
 
       // 旬・ステージ・定植日メタデータをvarietyカラムへ安全に構造化格納（DBスキーマ変更不要・エラーゼロ）
+      // 編集時は既存METAを引き継ぐ（予実ボードで設定した目標単価 tp 等を消さない）
+      let prevMeta: Record<string, any> = {};
+      if (editingPlanId) {
+        const prevPlan = rawCultivationPlans.find((p: any) => p.id === editingPlanId);
+        const prevMatch = String(prevPlan?.variety || '').match(/\|\|META:(\{.*\})\s*$/);
+        if (prevMatch) {
+          try { prevMeta = JSON.parse(prevMatch[1]) || {}; } catch { prevMeta = {}; }
+        }
+      }
       const metaObj = {
+        ...prevMeta,
         st: planFormStartTerm,
         et: planFormEndTerm,
         sm: Number(planFormSeedlingMonth) || 0,

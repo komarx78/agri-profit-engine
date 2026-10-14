@@ -1,1059 +1,1207 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from 'react';
+/**
+ * 栽培計画・予実（作付け別の採算ボード）
+ *
+ * 役割分担:
+ *  - 作付けの日程（いつ・どの畑で・何を育てるか）の登録・変更 →「作付け・作業日誌」(/admin/cultivations) に一本化
+ *  - 本画面 → 登録済みの作付けごとに「目標 vs 実績（収量・売上）」「かかった費用」「残った所得」を答え合わせする
+ *
+ * 集計の根拠（すべて実データ）:
+ *  - 作業時間・人件費: work_logs（plan_id一致 または 同じ圃場×作目×栽培期間内）× workers.hourly_wage
+ *  - 資材費: work_logs.material_quantity × materials.default_price ＋ material_costs（同じ作目×期間内×品目名に圃場名を含む）
+ *  - 光熱・機械・その他: monthly_expenses の実費を面積で按分（実費の無い月のみ作目マスタの概算値を使用し、その旨を表示）
+ *  - 収量・売上: sales_logs（plan_id一致 または 同じ圃場×作目×栽培期間〜終了1ヶ月後）
+ *  - 目標収量・目標単価: cultivation_plans_v2.variety 内のメタ情報（||META: ty / tp）に保存（DB構造の変更なし）
+ */
+
+import React, { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { getJSTDate } from '@/lib/dateUtils';
-import { HelpTooltip } from '@/components/HelpTooltip';
-import { Calendar, Save, Loader2, ChevronLeft, ChevronRight, Plus, Trash2, X, BarChart2, User, ChevronDown, ChevronUp, PieChart as PieChartIcon, Sprout } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
+import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
+import {
+  Calendar,
+  Loader2,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Trash2,
+  Target,
+  Package,
+  FileText,
+  TrendingUp,
+  AlertTriangle,
+  Clock,
+  Sprout,
+  RefreshCw,
+  Wallet
+} from 'lucide-react';
+
+// 時給が未設定の作業者に使う仮の時給（画面上で必ず明示する）
+const FALLBACK_HOURLY_WAGE = 1000;
+
+type MetaObj = Record<string, any>;
+
+// variety カラムの「品種名 ||META:{...}」を分解
+const parsePlanMeta = (raw: string | null | undefined): { clean: string; meta: MetaObj } => {
+  const str = String(raw || '');
+  const idx = str.indexOf('||META:');
+  if (idx === -1) return { clean: str.trim(), meta: {} };
+  let meta: MetaObj = {};
+  try {
+    meta = JSON.parse(str.slice(idx + 7).trim()) || {};
+  } catch (e) {
+    meta = {};
+  }
+  return { clean: str.slice(0, idx).trim(), meta };
+};
+
+const serializePlanMeta = (clean: string, meta: MetaObj) =>
+  `${clean.trim()} ||META:${JSON.stringify(meta)}`.trim();
+
+const termLabel = (t?: number) => (t === 2 ? '中旬' : t === 3 ? '下旬' : '上旬');
+
+const yen = (n: number) => `¥${Math.round(n || 0).toLocaleString()}`;
+const kg = (n: number) => `${(Math.round((n || 0) * 10) / 10).toLocaleString()} kg`;
+const hoursLabel = (h: number) => {
+  const totalMin = Math.round((h || 0) * 60);
+  const hh = Math.floor(totalMin / 60);
+  const mm = totalMin % 60;
+  if (hh === 0) return `${mm}分`;
+  return mm === 0 ? `${hh}時間` : `${hh}時間${mm}分`;
+};
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const lastDayOf = (y: number, m: number) => new Date(y, m, 0).getDate();
+
+// 作付けの集計対象期間（育苗開始月〜収穫完了月の月末）
+const getPlanWindow = (plan: any, meta: MetaObj) => {
+  const y = Number(plan.year) || new Date().getFullYear();
+  const sm = Number(plan.start_month) || 1;
+  const em = Number(plan.end_month) || sm;
+  const seedM = Number(meta.sm) || 0;
+
+  let startY = y;
+  let startM = sm;
+  if (seedM > 0) {
+    startM = seedM;
+    startY = seedM > sm ? y - 1 : y;
+  }
+  const endY = em < sm ? y + 1 : y;
+
+  // 売上は収穫完了後の出荷も含めるため、終了月の翌月末まで
+  const salesEndM = em === 12 ? 1 : em + 1;
+  const salesEndY = em === 12 ? endY + 1 : endY;
+
+  return {
+    start: `${startY}-${pad2(startM)}-01`,
+    end: `${endY}-${pad2(em)}-${pad2(lastDayOf(endY, em))}`,
+    salesEnd: `${salesEndY}-${pad2(salesEndM)}-${pad2(lastDayOf(salesEndY, salesEndM))}`,
+    months: (() => {
+      const list: string[] = [];
+      let cy = startY;
+      let cm = startM;
+      for (let i = 0; i < 24; i++) {
+        list.push(`${cy}-${pad2(cm)}`);
+        if (cy === endY && cm === em) break;
+        cm++;
+        if (cm > 12) {
+          cm = 1;
+          cy++;
+        }
+      }
+      return list;
+    })()
+  };
+};
 
 export default function CultivationSchedulePage() {
+  const [tenantId, setTenantId] = useState<string>('');
+  const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string>('');
+
   const [fields, setFields] = useState<any[]>([]);
   const [crops, setCrops] = useState<any[]>([]);
-  const [cropStandards, setCropStandards] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
-  const [monthlyExpenses, setMonthlyExpenses] = useState<any[]>([]);
-  
-  // 分析用ステート
-  const [allWorkLogs, setAllWorkLogs] = useState<any[]>([]);
-  const [allSalesLogs, setAllSalesLogs] = useState<any[]>([]);
-  const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
-  
-  const [isLoading, setIsLoading] = useState(true);
-  const [year, setYear] = useState(new Date().getFullYear());
-
-  // 新規計画モーダル用ステート
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState<any>({ field_id: '', crop_id: '', variety: '', start_month: 8, end_month: 11 });
-  const [isSaving, setIsSaving] = useState(false);
-
-  // 詳細パネル(予実管理)用ステート
-  const [selectedPlan, setSelectedPlan] = useState<any | null>(null);
-  const [activeTab, setActiveTab] = useState<'work' | 'sales' | 'analysis'>('work');
   const [workLogs, setWorkLogs] = useState<any[]>([]);
   const [salesLogs, setSalesLogs] = useState<any[]>([]);
-  const [isPanelLoading, setIsPanelLoading] = useState(false);
-  
-  // 新規入力用ステート
-  const [newWork, setNewWork] = useState({ date: getJSTDate(), type: '播種', duration: '', note: '' });
-  const [newSales, setNewSales] = useState({ date: getJSTDate(), quantity: '', price: '', channel: '直売所' });
+  const [materialCosts, setMaterialCosts] = useState<any[]>([]);
+  const [monthlyExpenses, setMonthlyExpenses] = useState<any[]>([]);
 
-  // 8月〜7月の月配列
-  const months = [8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7];
+  const [cropFilter, setCropFilter] = useState<string>('all');
+  const [sortMode, setSortMode] = useState<'profit' | 'area' | 'progress' | 'field'>('profit');
+
+  // 目標設定モーダル
+  const [targetPlan, setTargetPlan] = useState<any | null>(null);
+  const [targetYieldInput, setTargetYieldInput] = useState('');
+  const [targetPriceInput, setTargetPriceInput] = useState('');
+  const [isSavingTarget, setIsSavingTarget] = useState(false);
+
+  // 出荷・売上記録モーダル
+  const [salesPlan, setSalesPlan] = useState<any | null>(null);
+  const [salesDate, setSalesDate] = useState<string>(() => getJSTDate());
+  const [salesQty, setSalesQty] = useState('');
+  const [salesUnitPrice, setSalesUnitPrice] = useState('');
+  const [salesTotal, setSalesTotal] = useState('');
+  const [salesMemo, setSalesMemo] = useState('');
+  const [isSavingSales, setIsSavingSales] = useState(false);
+
+  // 明細ドロワー
+  const [detailPlanId, setDetailPlanId] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<'cost' | 'work' | 'sales'>('cost');
+
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year]);
 
   const fetchData = async () => {
     setIsLoading(true);
+    setLoadError('');
     try {
-      const tenantId = await getCurrentTenantId();
-      if (!tenantId) {
+      const tid = await getCurrentTenantId();
+      if (!tid) {
+        setLoadError('農園の情報が確認できませんでした。お手数ですが、もう一度ログインしてください。');
         setIsLoading(false);
         return;
       }
+      setTenantId(tid);
 
-      const [fRes, cRes, csRes, pRes, expRes, workRes, salesRes] = await Promise.all([
-        supabase.from('fields').select('*').eq('user_id', tenantId).order('name'),
-        supabase.from('crops').select('*').eq('user_id', tenantId).order('name'),
-        supabase.from('crop_standards').select('*'),
-        supabase.from('cultivation_plans_v2').select(`
-          *,
-          crops ( * )
-        `).eq('user_id', tenantId).eq('year', year),
-        supabase.from('monthly_expenses').select('*').eq('user_id', tenantId),
-        supabase.from('work_logs').select('*, workers(name), materials(default_price)').eq('user_id', tenantId),
-        supabase.from('sales_logs').select('*').eq('user_id', tenantId)
+      // 年またぎ・育苗期間・収穫後出荷をカバーする取得範囲
+      const rangeStart = `${year - 1}-01-01`;
+      const rangeEnd = `${year + 1}-12-31`;
+
+      const [fRes, cRes, pRes, wRes, sRes, mcRes, expRes] = await Promise.all([
+        supabase.from('fields').select('*').eq('user_id', tid).order('name'),
+        supabase.from('crops').select('*').eq('user_id', tid).order('name'),
+        supabase.from('cultivation_plans_v2').select('*, crops(*)').eq('user_id', tid).eq('year', year),
+        supabase
+          .from('work_logs')
+          .select('*, workers(name, hourly_wage), materials(name, default_price, category, unit)')
+          .eq('user_id', tid)
+          .gte('work_date', rangeStart)
+          .lte('work_date', rangeEnd),
+        supabase.from('sales_logs').select('*').eq('user_id', tid).gte('sales_date', rangeStart).lte('sales_date', rangeEnd),
+        supabase.from('material_costs').select('*').eq('user_id', tid).gte('expense_date', rangeStart).lte('expense_date', rangeEnd),
+        supabase.from('monthly_expenses').select('*').eq('user_id', tid)
       ]);
-      
+
+      if (pRes.error) throw pRes.error;
+      if (wRes.error) throw wRes.error;
+      if (sRes.error) throw sRes.error;
+
       setFields(fRes.data || []);
       setCrops(cRes.data || []);
-      setCropStandards(csRes.data || []);
-      setMonthlyExpenses(expRes.data || []);
-      setAllWorkLogs(workRes.data || []);
-      setAllSalesLogs(salesRes.data || []);
-      
-      if (pRes.error && pRes.error.code !== '42P01') {
-        console.error("Plans fetch error:", pRes.error);
-      }
-      setPlans(
-        (pRes.data || []).map((p: any) => ({
-          ...p,
-          variety: p.variety ? String(p.variety).replace(/\|\|META:.*$/, '').trim() : ''
-        }))
-      );
-      
-    } catch (err) {
+      setPlans(pRes.data || []);
+      setWorkLogs(wRes.data || []);
+      setSalesLogs(sRes.data || []);
+      // 資材経費・月次経費テーブルは未使用の農園もあるため、取得失敗時は0件として扱う
+      setMaterialCosts(mcRes.error ? [] : mcRes.data || []);
+      setMonthlyExpenses(expRes.error ? [] : expRes.data || []);
+    } catch (err: any) {
       console.error(err);
+      setLoadError('データの読み込みに失敗しました。通信環境をご確認のうえ「再読み込み」を押してください。');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleOpenModal = (fieldId: string, month: number) => {
-    setFormData({
-      field_id: fieldId,
-      crop_id: '',
-      variety: '',
-      start_month: month,
-      end_month: month < 8 ? month + 1 : (month === 12 ? 1 : month + 1) // 適当な初期値
-    });
-    setIsModalOpen(true);
-  };
+  const totalFarmArea = useMemo(
+    () => fields.reduce((sum, f) => sum + (Number(f.area_size) || 0), 0),
+    [fields]
+  );
 
-  const handleSavePlan = async () => {
-    if (!formData.crop_id) {
-      alert("作目を選択してください");
-      return;
-    }
-    
-    setIsSaving(true);
-    try {
-      const tenantId = await getCurrentTenantId();
-      if (!tenantId) {
-        throw new Error("ログインセッションが見つかりません。再ログインしてください。");
-      }
+  // --- 作付けごとの予実・採算レポート ---
+  const planReports = useMemo(() => {
+    return plans.map(plan => {
+      const { clean: varietyName, meta } = parsePlanMeta(plan.variety);
+      const field = fields.find(f => f.id === plan.field_id);
+      const crop = plan.crops || crops.find(c => c.id === plan.crop_id);
+      const fieldName = field?.name || '圃場未設定';
+      const cropName = crop?.name || '作目未設定';
+      const areaRaw = Number(field?.area_size) || Number(plan.calculated_area) || 0;
+      const hasArea = areaRaw > 0;
+      const win = getPlanWindow(plan, meta);
 
-      // 1. 自動計算のための情報を取得
-      const field = fields.find(f => f.id === formData.field_id);
-      const standard = cropStandards.find(s => s.crop_id === formData.crop_id);
-      
-      const area = field?.area_size || 0;
-      const seedlingsPer10a = standard?.seedlings_per_10a || 0;
-      
-      // 計算: 面積(a) / 10 * 10aあたりの苗数
-      const calculatedSeedlings = (area / 10) * seedlingsPer10a;
-      
-      const insertData = {
-        user_id: tenantId,
-        field_id: formData.field_id,
-        crop_id: formData.crop_id,
-        variety: formData.variety || null,
-        year: year,
-        start_month: formData.start_month,
-        end_month: formData.end_month,
-        calculated_area: area,
-        calculated_seedlings: calculatedSeedlings
-      };
-      
-      const { error } = await supabase.from('cultivation_plans_v2').insert([insertData]);
-      if (error) throw error;
-      
-      alert("作付計画を登録しました！\n（必要苗数などが自動計算されました）");
-      setIsModalOpen(false);
-      fetchData();
-    } catch (err: any) {
-      console.error(err);
-      alert(`保存エラー: ${err.message}`);
-    } finally {
-      setIsSaving(false);
-    }
-  };
+      // 1. 作業記録（予定・差し戻しは除外）
+      const pWorks = workLogs.filter(w => {
+        if (w.status === 'planned' || w.approval_status === 'rejected') return false;
+        if (w.plan_id) return w.plan_id === plan.id;
+        if (w.field_id !== plan.field_id) return false;
+        if (w.crop_id && w.crop_id !== plan.crop_id) return false;
+        const d = String(w.work_date || '');
+        return d >= win.start && d <= win.end;
+      });
 
-  const handleDeletePlan = async (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (!confirm("この計画を削除しますか？\n（関連する育苗スケジュールも削除されます）")) return;
-    
-    try {
-      const tenantId = await getCurrentTenantId();
-      let query = supabase.from('cultivation_plans_v2').delete().eq('id', id);
-      if (tenantId) {
-        query = query.eq('user_id', tenantId);
-      }
-      const { error } = await query;
-      if (error) throw error;
-      if (selectedPlan?.id === id) setSelectedPlan(null);
-      fetchData();
-    } catch (err: any) {
-      alert(`削除エラー: ${err.message}`);
-    }
-  };
-
-  // 詳細パネル関連
-  const handleOpenDetails = async (plan: any) => {
-    setSelectedPlan(plan);
-    setActiveTab('work');
-    fetchPlanDetails(plan);
-  };
-
-  const fetchPlanDetails = async (plan: any) => {
-    setIsPanelLoading(true);
-    try {
-      const tenantId = await getCurrentTenantId();
-      if (!tenantId) {
-        setIsPanelLoading(false);
-        return;
-      }
-      const workQuery = supabase.from('work_logs').select(`
-        *,
-        workers (name, hourly_wage),
-        materials (default_price, category)
-      `).or(`plan_id.eq.${plan.id},crop_id.eq.${plan.crop_id}`)
-        .eq('user_id', tenantId)
-        .order('work_date', { ascending: false });
-
-      const salesQuery = supabase.from('sales_logs').select('*')
-        .or(`plan_id.eq.${plan.id},crop_id.eq.${plan.crop_id}`)
-        .eq('user_id', tenantId)
-        .order('sales_date', { ascending: false });
-
-      const [workRes, salesRes] = await Promise.all([workQuery, salesQuery]);
-      setWorkLogs(workRes.data || []);
-      setSalesLogs(salesRes.data || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsPanelLoading(false);
-    }
-  };
-
-  const handleAddWork = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedPlan) return;
-    setIsSaving(true);
-    try {
-      const tenantId = await getCurrentTenantId();
-      const { error } = await supabase.from('work_logs').insert([{
-        user_id: tenantId,
-        plan_id: selectedPlan.id,
-        crop_id: selectedPlan.crop_id,
-        field_id: selectedPlan.field_id,
-        work_date: newWork.date,
-        work_type: newWork.type,
-        duration_minutes: Number(newWork.duration) || 0,
-        notes: newWork.note,
-        status: 'completed'
-      }]);
-      if (error) throw error;
-      setNewWork({ ...newWork, duration: '', note: '' });
-      fetchPlanDetails(selectedPlan);
-    } catch (err: any) {
-      alert(`エラー: ${err.message}`);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleAddSales = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedPlan) return;
-    setIsSaving(true);
-    try {
-      const tenantId = await getCurrentTenantId();
-      const { error } = await supabase.from('sales_logs').insert([{
-        user_id: tenantId,
-        plan_id: selectedPlan.id,
-        crop_id: selectedPlan.crop_id,
-        sales_date: newSales.date,
-        quantity: Number(newSales.quantity) || 0,
-        total_sales: Number(newSales.price) || 0,
-        status: 'completed'
-      }]);
-      if (error) throw error;
-      setNewSales({ ...newSales, quantity: '', price: '' });
-      fetchPlanDetails(selectedPlan);
-    } catch (err: any) {
-      alert(`エラー: ${err.message}`);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // 年度の切り替え
-  const handlePrevYear = () => setYear(y => y - 1);
-  const handleNextYear = () => setYear(y => y + 1);
-
-  // 月が指定期間に含まれるか判定（年またぎ考慮）
-  const isMonthInPlan = (month: number, startM: number, endM: number) => {
-    // 8月始まりのインデックス (8月=0, 7月=11)
-    const monthIndex = month >= 8 ? month - 8 : month + 4;
-    const startIndex = startM >= 8 ? startM - 8 : startM + 4;
-    const endIndex = endM >= 8 ? endM - 8 : endM + 4;
-    
-    if (startIndex <= endIndex) {
-      return monthIndex >= startIndex && monthIndex <= endIndex;
-    } else {
-      // 終了月が開始月より前にある場合は論理エラーだが一応対応
-      return monthIndex >= startIndex || monthIndex <= endIndex;
-    }
-  };
-
-  // 作目別サマリーの計算
-  const cropStats = useMemo(() => {
-    const stats: Record<string, any> = {};
-    crops.forEach(c => {
-      stats[c.id] = {
-        id: c.id,
-        name: c.name,
-        plannedSales: 0,
-        actualSales: 0,
-        plannedWorkHours: 0,
-        actualWorkHours: 0,
-        plannedMaterialCost: 0,
-        actualMaterialCost: 0,
-      };
-    });
-    
-    allSalesLogs.forEach(s => {
-      if (s.crop_id && stats[s.crop_id]) {
-        if (s.status === 'planned') stats[s.crop_id].plannedSales += (s.total_sales || 0);
-        else if (s.status === 'completed') stats[s.crop_id].actualSales += (s.total_sales || 0);
-      }
-    });
-    
-    allWorkLogs.forEach(w => {
-      if (w.crop_id && stats[w.crop_id]) {
-        const hours = (w.duration_minutes || 0) / 60;
-        const matCost = (w.material_quantity || 0) * (w.materials?.default_price || 0);
-        
-        if (w.status === 'planned') {
-          stats[w.crop_id].plannedWorkHours += hours;
-          stats[w.crop_id].plannedMaterialCost += matCost;
-        } else if (w.status === 'completed') {
-          stats[w.crop_id].actualWorkHours += hours;
-          stats[w.crop_id].actualMaterialCost += matCost;
+      let workHours = 0;
+      let laborCost = 0;
+      let fallbackWageCount = 0;
+      let workMaterialCost = 0;
+      pWorks.forEach(w => {
+        const h = (Number(w.duration_minutes) || 0) / 60;
+        workHours += h;
+        const wage = Number(w.workers?.hourly_wage) || 0;
+        if (wage > 0) {
+          laborCost += h * wage;
+        } else {
+          laborCost += h * FALLBACK_HOURLY_WAGE;
+          if (h > 0) fallbackWageCount++;
         }
-      }
-    });
+        if (w.material_quantity && w.materials?.default_price) {
+          workMaterialCost += Number(w.material_quantity) * Number(w.materials.default_price);
+        }
+      });
 
-    const baseHourlyWage = 1000;
-    const estimateCostRate = 20;
+      // 2. 資材経費（material_costs：圃場名が品目名に含まれ、同じ作目・期間内のもの）
+      const pMatCosts = materialCosts.filter(mc => {
+        if (mc.crop_id && mc.crop_id !== plan.crop_id) return false;
+        const d = String(mc.expense_date || '');
+        if (d < win.start || d > win.end) return false;
+        return field?.name ? String(mc.item_name || '').includes(field.name) : false;
+      });
+      const extraMaterialCost = pMatCosts.reduce((s, mc) => s + (Number(mc.amount) || 0), 0);
+      const materialCost = workMaterialCost + extraMaterialCost;
 
-    return Object.values(stats).map(stat => {
-      const plannedMatCost = stat.plannedMaterialCost || Math.round(stat.plannedSales * (estimateCostRate / 100));
-      const plannedLaborCost = stat.plannedWorkHours * baseHourlyWage;
-      const plannedCost = plannedLaborCost + plannedMatCost;
-      const plannedProfit = stat.plannedSales - plannedCost;
+      // 3. 光熱・機械・その他（月次実費の面積按分／実費の無い月は作目マスタの概算）
+      const areaRatio = totalFarmArea > 0 && hasArea ? areaRaw / totalFarmArea : 0;
+      const monthsCount = win.months.length || 1;
+      const estFuel = ((Number(crop?.est_fuel_cost_10a) || 0) * (areaRaw / 10)) / monthsCount;
+      const estMachine = ((Number(crop?.est_machinery_cost_10a) || 0) * (areaRaw / 10)) / monthsCount;
+      const estOther = ((Number(crop?.est_other_cost_10a) || 0) * (areaRaw / 10)) / monthsCount;
+      let overheadCost = 0;
+      let overheadActualMonths = 0;
+      let overheadEstimatedMonths = 0;
+      win.months.forEach(mStr => {
+        const rows = monthlyExpenses.filter(e => e.month === mStr);
+        if (rows.length > 0) {
+          const sum = rows
+            .filter(e => ['fuel', 'machinery', 'other'].includes(e.expense_type))
+            .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+          overheadCost += sum * areaRatio;
+          overheadActualMonths++;
+        } else {
+          const est = estFuel + estMachine + estOther;
+          if (est > 0) overheadEstimatedMonths++;
+          overheadCost += est;
+        }
+      });
 
-      const actualMatCost = stat.actualMaterialCost || Math.round(stat.actualSales * (estimateCostRate / 100));
-      const actualLaborCost = stat.actualWorkHours * baseHourlyWage;
-      const actualCost = actualLaborCost + actualMatCost;
-      const actualProfit = stat.actualSales - actualCost;
+      // 4. 出荷・売上
+      const pSales = salesLogs.filter(s => {
+        if (s.status === 'planned') return false;
+        if (s.plan_id) return s.plan_id === plan.id;
+        if (s.field_id !== plan.field_id) return false;
+        if (s.crop_id && s.crop_id !== plan.crop_id) return false;
+        const d = String(s.sales_date || '');
+        return d >= win.start && d <= win.salesEnd;
+      });
+      let actualYieldKg = 0;
+      let actualSales = 0;
+      let nonKgCount = 0;
+      pSales.forEach(s => {
+        actualSales += Number(s.total_sales) || 0;
+        const isAmountOnly = String(s.memo || '').includes(':売上]');
+        const unit = String(s.unit || 'kg').toLowerCase();
+        if (!isAmountOnly) {
+          if (unit === 'kg' || unit === 'ｋｇ') actualYieldKg += Number(s.quantity) || 0;
+          else if (Number(s.quantity) > 0) nonKgCount++;
+        }
+      });
 
-      const progressRate = stat.plannedSales > 0 ? Math.round((stat.actualSales / stat.plannedSales) * 100) : 0;
+      // 5. 目標
+      const targetYieldKg = Number(meta.ty) || 0;
+      const targetUnitPrice = Number(meta.tp) || 0;
+      const targetSales = targetYieldKg > 0 && targetUnitPrice > 0 ? targetYieldKg * targetUnitPrice : 0;
+
+      const totalCost = laborCost + materialCost + overheadCost;
+      const profit = actualSales - totalCost;
+      const profitPer10a = hasArea ? profit * (10 / areaRaw) : null;
+      const profitPerHour = workHours > 0 ? profit / workHours : null;
+      const yieldProgress = targetYieldKg > 0 ? Math.round((actualYieldKg / targetYieldKg) * 100) : null;
+      const salesProgress = targetSales > 0 ? Math.round((actualSales / targetSales) * 100) : null;
 
       return {
-        ...stat,
-        plannedCost, plannedProfit, actualCost, actualProfit, progressRate
+        plan,
+        meta,
+        varietyName,
+        fieldName,
+        cropName,
+        cropId: plan.crop_id,
+        areaRaw,
+        hasArea,
+        periodLabel: `${plan.start_month}月${termLabel(meta.st)}〜${plan.end_month}月${termLabel(meta.et)}`,
+        harvestLabel: meta.hm ? `${meta.hm}月${termLabel(meta.ht)}〜` : '',
+        win,
+        works: pWorks,
+        sales: pSales,
+        matCosts: pMatCosts,
+        workHours,
+        laborCost,
+        fallbackWageCount,
+        workMaterialCost,
+        extraMaterialCost,
+        materialCost,
+        overheadCost,
+        overheadActualMonths,
+        overheadEstimatedMonths,
+        actualYieldKg,
+        actualSales,
+        nonKgCount,
+        targetYieldKg,
+        targetUnitPrice,
+        targetSales,
+        totalCost,
+        profit,
+        profitPer10a,
+        profitPerHour,
+        yieldProgress,
+        salesProgress
       };
-    }).filter(s => s.plannedSales > 0 || s.actualSales > 0 || s.plannedWorkHours > 0 || s.actualWorkHours > 0)
-      .sort((a, b) => b.plannedSales - a.plannedSales);
-  }, [crops, allSalesLogs, allWorkLogs]);
-
-  // 作業者別の実績稼働時間の集計
-  const workerTimeStats = useMemo(() => {
-    const stats: Record<string, { name: string; actualHours: number }> = {};
-    
-    allWorkLogs.forEach(w => {
-      if (w.status === 'completed') {
-        const workerName = w.workers?.name || '未定/その他';
-        if (!stats[workerName]) {
-          stats[workerName] = { name: workerName, actualHours: 0 };
-        }
-        stats[workerName].actualHours += (w.duration_minutes || 0) / 60;
-      }
     });
-    
-    return Object.values(stats)
-      .filter(w => w.actualHours > 0)
-      .sort((a, b) => b.actualHours - a.actualHours);
-  }, [allWorkLogs]);
+  }, [plans, fields, crops, workLogs, salesLogs, materialCosts, monthlyExpenses, totalFarmArea]);
 
-  const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+  const visibleReports = useMemo(() => {
+    const list = planReports.filter(r => cropFilter === 'all' || r.cropId === cropFilter);
+    return [...list].sort((a, b) => {
+      if (sortMode === 'area') return b.areaRaw - a.areaRaw;
+      if (sortMode === 'progress') return (b.salesProgress ?? b.yieldProgress ?? -1) - (a.salesProgress ?? a.yieldProgress ?? -1);
+      if (sortMode === 'field') return a.fieldName.localeCompare(b.fieldName, 'ja');
+      return b.profit - a.profit;
+    });
+  }, [planReports, cropFilter, sortMode]);
+
+  const summary = useMemo(() => {
+    const s = visibleReports.reduce(
+      (acc, r) => {
+        acc.area += r.areaRaw;
+        acc.targetSales += r.targetSales;
+        acc.actualSales += r.actualSales;
+        acc.cost += r.totalCost;
+        acc.hours += r.workHours;
+        acc.targetYield += r.targetYieldKg;
+        acc.actualYield += r.actualYieldKg;
+        if (r.targetSales <= 0) acc.noTargetCount++;
+        return acc;
+      },
+      { area: 0, targetSales: 0, actualSales: 0, cost: 0, hours: 0, targetYield: 0, actualYield: 0, noTargetCount: 0 }
+    );
+    const profit = s.actualSales - s.cost;
+    return {
+      ...s,
+      profit,
+      profitPerHour: s.hours > 0 ? profit / s.hours : null,
+      salesProgress: s.targetSales > 0 ? Math.round((s.actualSales / s.targetSales) * 100) : null
+    };
+  }, [visibleReports]);
+
+  const cropChips = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; count: number }>();
+    planReports.forEach(r => {
+      if (!r.cropId) return;
+      const prev = map.get(r.cropId) || { id: r.cropId, name: r.cropName, count: 0 };
+      prev.count++;
+      map.set(r.cropId, prev);
+    });
+    return Array.from(map.values());
+  }, [planReports]);
+
+  const detailReport = useMemo(
+    () => planReports.find(r => r.plan.id === detailPlanId) || null,
+    [planReports, detailPlanId]
+  );
+
+  const farmQuery = tenantId ? `?farm=${tenantId}` : '';
+
+  // --- 目標設定 ---
+  const openTargetModal = (r: any) => {
+    setTargetPlan(r);
+    setTargetYieldInput(r.targetYieldKg > 0 ? String(r.targetYieldKg) : '');
+    setTargetPriceInput(r.targetUnitPrice > 0 ? String(r.targetUnitPrice) : '');
+  };
+
+  const handleSaveTarget = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetPlan) return;
+    const yieldVal = Number(targetYieldInput);
+    const priceVal = Number(targetPriceInput);
+    if (targetYieldInput !== '' && (isNaN(yieldVal) || yieldVal < 0)) {
+      alert('目標収穫量は0以上の数字で入力してください（例: 8000）');
+      return;
+    }
+    if (targetPriceInput !== '' && (isNaN(priceVal) || priceVal < 0)) {
+      alert('目標単価は0以上の数字で入力してください（例: 120）');
+      return;
+    }
+    setIsSavingTarget(true);
+    try {
+      const { clean, meta } = parsePlanMeta(targetPlan.plan.variety);
+      const nextMeta = { ...meta, ty: targetYieldInput === '' ? '' : yieldVal, tp: targetPriceInput === '' ? '' : priceVal };
+      const { error } = await supabase
+        .from('cultivation_plans_v2')
+        .update({ variety: serializePlanMeta(clean, nextMeta) })
+        .eq('id', targetPlan.plan.id)
+        .eq('user_id', tenantId);
+      if (error) throw error;
+      setTargetPlan(null);
+      setToast(`「${targetPlan.fieldName}・${targetPlan.cropName}」の目標を保存しました`);
+      await fetchData();
+    } catch (err: any) {
+      console.error(err);
+      alert('目標の保存に失敗しました。時間をおいてもう一度お試しください。');
+    } finally {
+      setIsSavingTarget(false);
+    }
+  };
+
+  // --- 出荷・売上記録 ---
+  const openSalesModal = (r: any) => {
+    setSalesPlan(r);
+    setSalesDate(getJSTDate());
+    setSalesQty('');
+    setSalesUnitPrice(r.targetUnitPrice > 0 ? String(r.targetUnitPrice) : '');
+    setSalesTotal('');
+    setSalesMemo('');
+  };
+
+  const computedSalesTotal = useMemo(() => {
+    if (salesTotal !== '') return Number(salesTotal) || 0;
+    const q = Number(salesQty) || 0;
+    const p = Number(salesUnitPrice) || 0;
+    return q > 0 && p > 0 ? Math.round(q * p) : 0;
+  }, [salesQty, salesUnitPrice, salesTotal]);
+
+  const handleSaveSales = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!salesPlan) return;
+    const q = Number(salesQty);
+    if (!salesDate) {
+      alert('出荷日を選んでください');
+      return;
+    }
+    if (salesQty === '' || isNaN(q) || q <= 0) {
+      alert('出荷量（kg）を入力してください（例: 120）');
+      return;
+    }
+    setIsSavingSales(true);
+    try {
+      const { error } = await supabase.from('sales_logs').insert([
+        {
+          user_id: tenantId,
+          plan_id: salesPlan.plan.id,
+          field_id: salesPlan.plan.field_id,
+          crop_id: salesPlan.plan.crop_id,
+          sales_date: salesDate,
+          quantity: q,
+          unit: 'kg',
+          total_sales: computedSalesTotal > 0 ? computedSalesTotal : null,
+          memo: salesMemo.trim() || null,
+          status: 'completed'
+        }
+      ]);
+      if (error) throw error;
+      setSalesPlan(null);
+      setToast(`出荷 ${q}kg${computedSalesTotal > 0 ? `（${yen(computedSalesTotal)}）` : ''} を記録しました`);
+      await fetchData();
+    } catch (err: any) {
+      console.error(err);
+      alert('出荷・売上の保存に失敗しました。時間をおいてもう一度お試しください。');
+    } finally {
+      setIsSavingSales(false);
+    }
+  };
+
+  const handleDeleteSales = async (salesId: string) => {
+    if (!confirm('この出荷・売上の記録を削除しますか？（元に戻せません）')) return;
+    try {
+      const { error } = await supabase.from('sales_logs').delete().eq('id', salesId).eq('user_id', tenantId);
+      if (error) throw error;
+      setToast('出荷・売上の記録を削除しました');
+      await fetchData();
+    } catch (err: any) {
+      console.error(err);
+      alert('削除に失敗しました。時間をおいてもう一度お試しください。');
+    }
+  };
+
+  const ProgressBar = ({ value }: { value: number | null }) => {
+    if (value === null) return null;
+    const w = Math.max(0, Math.min(100, value));
+    const color = value >= 100 ? 'bg-emerald-500' : value >= 60 ? 'bg-amber-400' : 'bg-rose-400';
+    return (
+      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+        <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${w}%` }} />
+      </div>
+    );
+  };
 
   return (
-    <div className="max-w-[95vw] mx-auto space-y-6 pb-12 relative">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2 md:gap-3">
-            <Calendar className="w-6 h-6 md:w-8 md:h-8 text-blue-600 flex-shrink-0" />
-            栽培計画表 (作付カレンダー)
-            <HelpTooltip content="年度ごとの作付計画（いつ、どこで、何を育てるか）を登録します。この計画をもとに必要な苗や資材の量が自動計算されます。" className="ml-1" />
-          </h1>
-          <p className="text-xs md:text-sm text-slate-500 mt-2 font-medium">ここで作付計画を立てると、マスタの基準値に基づき必要な苗や資材の量が自動計算されます。</p>
-        </div>
-        
-        <div className="flex items-center gap-2 md:gap-4">
-          <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-            <button onClick={handlePrevYear} className="p-2 hover:bg-slate-100 transition-colors">
-              <ChevronLeft className="w-5 h-5 text-slate-600" />
-            </button>
-            <div className="px-4 font-black text-slate-700">{year}年度</div>
-            <button onClick={handleNextYear} className="p-2 hover:bg-slate-100 transition-colors">
-              <ChevronRight className="w-5 h-5 text-slate-600" />
-            </button>
-          </div>
-          
-          <button 
-            onClick={fetchData}
-            className="px-4 py-2 text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 font-bold transition-colors"
-          >
-            リロード
-          </button>
-        </div>
-      </div>
+    <AdminOnlyGuard>
+      <div className="max-w-6xl mx-auto space-y-5 pb-16">
+        {/* ヘッダー */}
+        <header className="bg-white p-5 sm:p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black text-slate-800 flex items-center gap-2.5">
+                <TrendingUp className="w-7 h-7 text-blue-600" />
+                <span>栽培計画・予実（作付けごとの採算）</span>
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-500 font-bold mt-1">
+                作付けごとに「目標に対して、どれだけ穫れて・売れて・お金がかかり・いくら残ったか」を答え合わせする画面です。
+              </p>
+            </div>
 
-      {isLoading ? (
-        <div className="p-12 flex justify-center text-blue-600">
-          <Loader2 className="w-8 h-8 animate-spin" />
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto relative">
-            <table className="w-full text-sm text-left whitespace-nowrap">
-              <thead className="text-xs text-slate-700 bg-slate-50 sticky top-0 z-10">
-                <tr>
-                  <th className="px-3 py-4 border-b border-r font-black min-w-[150px] sticky left-0 bg-slate-100 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">圃場名</th>
-                  <th className="px-3 py-4 border-b border-r font-bold text-center min-w-[80px]">面積(a)</th>
-                  
-                  {/* 横軸: 8月〜7月 */}
-                  {months.map((month) => (
-                    <th key={month} className="px-2 py-4 border-b border-r font-bold text-center min-w-[120px]">
-                      {month}月
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {fields.map((field) => {
-                  const fieldPlans = plans.filter(p => p.field_id === field.id);
-                  
-                  return (
-                    <tr key={field.id} className="border-b hover:bg-slate-50/50 transition-colors h-16">
-                      <td className="px-3 py-3 border-r sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                        <span className="font-bold text-slate-700">{field.name}</span>
-                      </td>
-                      <td className="px-3 py-3 border-r text-center text-slate-500 font-medium bg-slate-50/30">
-                        {field.area_size || '-'}
-                      </td>
-                      
-                      {/* 月別セル */}
-                      {months.map((month) => {
-                        // この月に開始する計画があるか
-                        const startingPlans = fieldPlans.filter(p => p.start_month === month);
-                        // この月をまたいでいる計画があるか
-                        const ongoingPlans = fieldPlans.filter(p => p.start_month !== month && isMonthInPlan(month, p.start_month, p.end_month));
-                        
-                        return (
-                          <td key={month} className="p-1 border-r relative align-top">
-                            <div className="min-h-[60px] relative group">
-                              {/* 背景の追加ボタン */}
-                              <button 
-                                onClick={() => handleOpenModal(field.id, month)}
-                                className="absolute inset-0 w-full h-full flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-blue-50/50 transition-all z-0 rounded"
-                              >
-                                <Plus className="w-5 h-5 text-blue-400" />
-                              </button>
-                              
-                              {/* 計画バーの表示 */}
-                              <div className="relative z-10 space-y-1 mt-1">
-                                {startingPlans.map(plan => (
-                                  <div 
-                                    key={plan.id} 
-                                    onClick={() => handleOpenDetails(plan)}
-                                    className="bg-blue-100 border border-blue-200 rounded-md p-1.5 shadow-sm flex items-start justify-between group/item cursor-pointer hover:bg-blue-200 transition-colors"
-                                  >
-                                    <div>
-                                      <div className="font-bold text-blue-800 text-xs">
-                                        {plan.crops?.name} {plan.variety && <span className="text-blue-600">{plan.variety}</span>}
-                                      </div>
-                                      {plan.calculated_seedlings > 0 && (
-                                        <div className="text-[10px] text-blue-600 font-medium mt-0.5">
-                                          必要苗: {plan.calculated_seedlings.toLocaleString()}
-                                        </div>
-                                      )}
-                                      <div className="text-[10px] text-blue-400">
-                                        〜{plan.end_month}月
-                                      </div>
-                                    </div>
-                                    <button 
-                                      onClick={(e) => handleDeletePlan(plan.id, e)}
-                                      className="opacity-0 group-hover/item:opacity-100 p-0.5 text-blue-400 hover:text-red-500 hover:bg-white rounded"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                ))}
-                                
-                                {ongoingPlans.map(plan => (
-                                  <div key={`ongoing-${plan.id}`} className="h-4 bg-blue-100/50 rounded-full w-full"></div>
-                                ))}
-                              </div>
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-                {fields.length === 0 && (
-                  <tr>
-                    <td colSpan={2 + months.length} className="p-8 text-center text-slate-400 font-bold">
-                      圃場データがありません。「マスタ管理」から圃場を登録してください。
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* 新規計画モーダル */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-blue-50/50">
-              <h3 className="text-lg font-black text-blue-800">
-                作付計画の追加
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition-colors">
-                <X className="w-5 h-5" />
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center bg-slate-100 rounded-xl p-1 border border-slate-200 text-xs font-black">
+                <button type="button" onClick={() => setYear(y => y - 1)} className="px-2 py-1.5 text-slate-600 hover:text-slate-900 cursor-pointer flex items-center">
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="px-3 py-1 bg-white text-blue-700 rounded-lg shadow-2xs">{year}年度</span>
+                <button type="button" onClick={() => setYear(y => y + 1)} className="px-2 py-1.5 text-slate-600 hover:text-slate-900 cursor-pointer flex items-center">
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={fetchData}
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                再読み込み
               </button>
             </div>
-            
-            <div className="p-6 space-y-4">
-              <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 text-sm font-bold text-blue-800 mb-4">
-                対象: {fields.find(f => f.id === formData.field_id)?.name} 
-                ({fields.find(f => f.id === formData.field_id)?.area_size || 0}a)
+          </div>
+
+          {/* 役割分担の案内 */}
+          <div className="bg-blue-50/70 border border-blue-200 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <p className="text-xs font-bold text-blue-900 leading-relaxed">
+              💡 <span className="font-black">作付けの日程（いつ・どの畑で・何を育てるか）</span>の登録や変更、日々の作業・防除・施肥の記録は
+              <span className="font-black">「作付け・作業日誌」</span>で行います。ここではその結果を、お金と収量で確認します。
+            </p>
+            <Link
+              href={`/admin/cultivations${farmQuery}`}
+              className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm"
+            >
+              <Calendar className="w-4 h-4" />
+              作付けの日程を登録・変更する
+            </Link>
+          </div>
+        </header>
+
+        {isLoading ? (
+          <div className="bg-white p-16 rounded-3xl border border-slate-200 flex flex-col items-center gap-3 text-slate-400">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            <p className="text-xs font-bold">作付けごとの収量・売上・費用を集計しています...</p>
+          </div>
+        ) : loadError ? (
+          <div className="bg-rose-50 p-8 rounded-3xl border border-rose-200 text-center space-y-3">
+            <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto" />
+            <p className="text-sm font-black text-rose-800">{loadError}</p>
+            <button type="button" onClick={fetchData} className="px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-black cursor-pointer">
+              再読み込み
+            </button>
+          </div>
+        ) : planReports.length === 0 ? (
+          <div className="bg-white p-10 rounded-3xl border border-slate-200 text-center space-y-3">
+            <Sprout className="w-10 h-10 text-emerald-500 mx-auto" />
+            <p className="text-base font-black text-slate-800">{year}年度の作付けがまだ登録されていません</p>
+            <p className="text-xs font-bold text-slate-500">
+              「作付け・作業日誌」の年間栽培こよみ表で、畑と作目・日程を登録すると、ここに採算ボードが自動で表示されます。
+            </p>
+            <Link
+              href={`/admin/cultivations${farmQuery}`}
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-black shadow-sm"
+            >
+              <Calendar className="w-4 h-4" />
+              作付けを登録しにいく
+            </Link>
+          </div>
+        ) : (
+          <>
+            {/* 農園全体サマリー */}
+            <section className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+                <span className="text-[11px] font-bold text-slate-400 block">🌱 作付け数・面積</span>
+                <div className="text-lg font-black text-slate-900 mt-0.5">
+                  {visibleReports.length}件 <span className="text-xs font-bold text-slate-500">({Math.round(summary.area * 10) / 10}a)</span>
+                </div>
               </div>
-              
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">作目 (必須)</label>
-                <select
-                  value={formData.crop_id}
-                  onChange={e => setFormData({...formData, crop_id: e.target.value})}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold"
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+                <span className="text-[11px] font-bold text-slate-400 block">💰 売上（実績 / 目標）</span>
+                <div className="text-lg font-black text-slate-900">{yen(summary.actualSales)}</div>
+                <div className="text-[11px] font-bold text-slate-500">
+                  目標 {summary.targetSales > 0 ? yen(summary.targetSales) : '未設定'}
+                  {summary.salesProgress !== null && <span className="ml-1 text-blue-700">（{summary.salesProgress}%）</span>}
+                </div>
+                <ProgressBar value={summary.salesProgress} />
+              </div>
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+                <span className="text-[11px] font-bold text-slate-400 block">💸 かかった費用（概算）</span>
+                <div className="text-lg font-black text-rose-700 mt-0.5">{yen(summary.cost)}</div>
+                <div className="text-[11px] font-bold text-slate-500">人件費・資材費・光熱/機械など</div>
+              </div>
+              <div className={`p-4 rounded-2xl border shadow-2xs ${summary.profit >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
+                <span className="text-[11px] font-bold text-slate-500 block">📈 残ったお金（所得・概算）</span>
+                <div className={`text-lg font-black mt-0.5 ${summary.profit >= 0 ? 'text-emerald-800' : 'text-rose-700'}`}>{yen(summary.profit)}</div>
+                <div className="text-[11px] font-bold text-slate-500">売上 − 費用</div>
+              </div>
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs col-span-2 lg:col-span-1">
+                <span className="text-[11px] font-bold text-slate-400 block">⏱️ 1時間あたりの所得</span>
+                <div className="text-lg font-black text-slate-900 mt-0.5">
+                  {summary.profitPerHour !== null ? yen(summary.profitPerHour) : '—'}
+                </div>
+                <div className="text-[11px] font-bold text-slate-500">作業 {hoursLabel(summary.hours)}</div>
+              </div>
+            </section>
+
+            {summary.noTargetCount > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2.5 text-xs font-bold text-amber-900 flex items-center gap-2">
+                <Target className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  {summary.noTargetCount}件の作付けで目標（収穫量・単価）が未設定です。各カードの「🎯 目標を設定」から入れると、達成率が表示されます。
+                </span>
+              </div>
+            )}
+
+            {/* 絞り込み・並び替え */}
+            <section className="bg-white p-3.5 rounded-2xl border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                <span className="text-[11px] font-black text-slate-400 mr-1 shrink-0">作目:</span>
+                <button
+                  type="button"
+                  onClick={() => setCropFilter('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap cursor-pointer ${
+                    cropFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
                 >
-                  <option value="">選択してください</option>
-                  {crops.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
+                  すべて ({planReports.length})
+                </button>
+                {cropChips.map(c => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setCropFilter(cropFilter === c.id ? 'all' : c.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap cursor-pointer ${
+                      cropFilter === c.id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    🌱 {c.name} ({c.count})
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] font-black text-slate-400">並び順:</span>
+                <select
+                  value={sortMode}
+                  onChange={e => setSortMode(e.target.value as any)}
+                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-800 cursor-pointer"
+                >
+                  <option value="profit">残ったお金が多い順</option>
+                  <option value="progress">達成率が高い順</option>
+                  <option value="area">面積が広い順</option>
+                  <option value="field">圃場名順</option>
                 </select>
               </div>
-              
+            </section>
+
+            {/* 作付けごとの採算カード */}
+            <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {visibleReports.map(r => (
+                <article key={r.plan.id} className="bg-white rounded-3xl border border-slate-200 shadow-2xs p-5 space-y-4">
+                  {/* 見出し */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h2 className="text-base font-black text-slate-900">{r.fieldName}</h2>
+                        <span className="px-2 py-0.5 text-[11px] font-black bg-slate-100 text-slate-700 border border-slate-200 rounded-lg">
+                          {r.hasArea ? `${r.areaRaw}a` : '面積未設定'}
+                        </span>
+                      </div>
+                      <p className="text-sm font-black text-emerald-800 mt-0.5 truncate">
+                        🌱 {r.cropName}
+                        {r.varietyName ? <span className="text-xs font-bold text-emerald-600">（{r.varietyName}）</span> : null}
+                      </p>
+                      <p className="text-[11px] font-bold text-slate-500 mt-0.5">
+                        📅 {r.periodLabel}
+                        {r.harvestLabel && <span className="ml-1.5">🧺 収穫 {r.harvestLabel}</span>}
+                      </p>
+                    </div>
+                    <div className={`shrink-0 text-right px-3 py-2 rounded-2xl border ${r.profit >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
+                      <span className="text-[10px] font-bold text-slate-500 block">残ったお金（概算）</span>
+                      <span className={`text-base font-black ${r.profit >= 0 ? 'text-emerald-800' : 'text-rose-700'}`}>{yen(r.profit)}</span>
+                    </div>
+                  </div>
+
+                  {/* 予実 */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-1.5">
+                      <span className="text-[11px] font-black text-slate-500 block">🧺 収穫量</span>
+                      <div className="text-sm font-black text-slate-900">{kg(r.actualYieldKg)}</div>
+                      <div className="text-[11px] font-bold text-slate-500">
+                        目標 {r.targetYieldKg > 0 ? kg(r.targetYieldKg) : '未設定'}
+                        {r.yieldProgress !== null && <span className="ml-1 text-blue-700">（{r.yieldProgress}%）</span>}
+                      </div>
+                      <ProgressBar value={r.yieldProgress} />
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-1.5">
+                      <span className="text-[11px] font-black text-slate-500 block">💰 売上</span>
+                      <div className="text-sm font-black text-slate-900">{yen(r.actualSales)}</div>
+                      <div className="text-[11px] font-bold text-slate-500">
+                        目標 {r.targetSales > 0 ? yen(r.targetSales) : '未設定'}
+                        {r.salesProgress !== null && <span className="ml-1 text-blue-700">（{r.salesProgress}%）</span>}
+                      </div>
+                      <ProgressBar value={r.salesProgress} />
+                    </div>
+                  </div>
+
+                  {/* 費用内訳 */}
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                    <div className="grid grid-cols-3 text-center divide-x divide-slate-200 bg-white">
+                      <div className="p-2.5">
+                        <span className="text-[10px] font-bold text-slate-400 block">👷 人件費</span>
+                        <span className="text-xs font-black text-slate-800">{yen(r.laborCost)}</span>
+                        <span className="text-[10px] font-bold text-slate-400 block">{hoursLabel(r.workHours)}</span>
+                      </div>
+                      <div className="p-2.5">
+                        <span className="text-[10px] font-bold text-slate-400 block">🧪 資材費</span>
+                        <span className="text-xs font-black text-slate-800">{yen(r.materialCost)}</span>
+                        <span className="text-[10px] font-bold text-slate-400 block">農薬・肥料など</span>
+                      </div>
+                      <div className="p-2.5">
+                        <span className="text-[10px] font-bold text-slate-400 block">⛽ 光熱・機械等</span>
+                        <span className="text-xs font-black text-slate-800">{yen(r.overheadCost)}</span>
+                        <span className="text-[10px] font-bold text-slate-400 block">面積で按分</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 text-center divide-x divide-slate-200 bg-slate-50 border-t border-slate-200">
+                      <div className="p-2">
+                        <span className="text-[10px] font-bold text-slate-400 block">費用合計</span>
+                        <span className="text-xs font-black text-rose-700">{yen(r.totalCost)}</span>
+                      </div>
+                      <div className="p-2">
+                        <span className="text-[10px] font-bold text-slate-400 block">10aあたり所得</span>
+                        <span className="text-xs font-black text-slate-800">{r.profitPer10a !== null ? yen(r.profitPer10a) : '面積未設定'}</span>
+                      </div>
+                      <div className="p-2">
+                        <span className="text-[10px] font-bold text-slate-400 block">1時間あたり所得</span>
+                        <span className="text-xs font-black text-slate-800">{r.profitPerHour !== null ? yen(r.profitPerHour) : '作業記録なし'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 注意書き（推定値を隠さない） */}
+                  {(r.fallbackWageCount > 0 || r.overheadEstimatedMonths > 0 || r.sales.length === 0 || r.nonKgCount > 0) && (
+                    <ul className="space-y-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                      {r.sales.length === 0 && <li>・出荷・売上がまだ記録されていません（下の「📦 出荷・売上を記録」から入力できます）</li>}
+                      {r.fallbackWageCount > 0 && (
+                        <li>・時給が未設定の作業者の記録が{r.fallbackWageCount}件あり、仮に時給{yen(FALLBACK_HOURLY_WAGE)}で計算しています（マスタ管理で時給を設定すると正確になります）</li>
+                      )}
+                      {r.overheadEstimatedMonths > 0 && (
+                        <li>・光熱・機械等は、実費の無い{r.overheadEstimatedMonths}ヶ月分を作目マスタの概算値で計算しています</li>
+                      )}
+                      {r.nonKgCount > 0 && <li>・kg以外の単位の出荷が{r.nonKgCount}件あり、収穫量には含めていません</li>}
+                    </ul>
+                  )}
+
+                  {/* 操作ボタン */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => openSalesModal(r)}
+                      className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-2xs cursor-pointer"
+                    >
+                      <Package className="w-3.5 h-3.5" />
+                      出荷・売上を記録
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openTargetModal(r)}
+                      className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer"
+                    >
+                      <Target className="w-3.5 h-3.5" />
+                      目標を設定
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDetailPlanId(r.plan.id);
+                        setDetailTab('cost');
+                      }}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer"
+                    >
+                      <Wallet className="w-3.5 h-3.5" />
+                      明細を見る
+                    </button>
+                    <a
+                      href={`/admin/report/${r.plan.id}${farmQuery}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black flex items-center gap-1"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      PDFレポート
+                    </a>
+                    <Link
+                      href={`/admin/cultivations${farmQuery}`}
+                      className="ml-auto px-3 py-2 text-blue-700 hover:bg-blue-50 rounded-xl text-xs font-black flex items-center gap-1"
+                    >
+                      <Calendar className="w-3.5 h-3.5" />
+                      日程を変更
+                    </Link>
+                  </div>
+                </article>
+              ))}
+            </section>
+
+            {visibleReports.length === 0 && (
+              <div className="bg-white p-10 rounded-3xl border border-slate-200 text-center space-y-2">
+                <p className="text-sm font-black text-slate-700">この作目の作付けは見つかりませんでした。</p>
+                <button type="button" onClick={() => setCropFilter('all')} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-black cursor-pointer">
+                  すべての作目を表示する
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* 🎯 目標設定モーダル */}
+      {targetPlan && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200">
+            <div className="flex items-start justify-between gap-2 mb-4 pb-3 border-b border-slate-100">
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">品種 (任意)</label>
-                <input 
-                  type="text" 
-                  value={formData.variety || ''} 
-                  onChange={e => setFormData({...formData, variety: e.target.value})}
-                  className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold"
-                  placeholder="例: スノークラウン"
+                <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+                  <Target className="w-5 h-5 text-amber-600" />
+                  目標を設定
+                </h3>
+                <p className="text-[11px] font-bold text-slate-500 mt-0.5">
+                  {targetPlan.fieldName}・{targetPlan.cropName}（{targetPlan.hasArea ? `${targetPlan.areaRaw}a` : '面積未設定'}）
+                </p>
+              </div>
+              <button type="button" onClick={() => setTargetPlan(null)} className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveTarget} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-600 block mb-1">目標収穫量（kg）</label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  value={targetYieldInput}
+                  onChange={e => setTargetYieldInput(e.target.value)}
+                  placeholder="例: 8000"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-base font-black text-slate-800 outline-none focus:ring-2 focus:ring-amber-400"
                 />
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">開始月</label>
-                  <select
-                    value={formData.start_month}
-                    onChange={e => setFormData({...formData, start_month: Number(e.target.value)})}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold"
-                  >
-                    {months.map(m => (
-                      <option key={m} value={m}>{m}月</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">終了予定月</label>
-                  <select
-                    value={formData.end_month}
-                    onChange={e => setFormData({...formData, end_month: Number(e.target.value)})}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold"
-                  >
-                    {months.map(m => (
-                      <option key={m} value={m}>{m}月</option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="text-xs font-bold text-slate-600 block mb-1">目標単価（円 / kg）</label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  value={targetPriceInput}
+                  onChange={e => setTargetPriceInput(e.target.value)}
+                  placeholder="例: 120"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-base font-black text-slate-800 outline-none focus:ring-2 focus:ring-amber-400"
+                />
               </div>
-              
-              {/* 自動計算プレビュー */}
-              {formData.crop_id && (
-                <div className="mt-4 p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
-                  <div className="text-xs font-bold text-emerald-600 mb-1">自動計算予測</div>
-                  <div className="text-sm font-black text-emerald-800">
-                    {(() => {
-                      const field = fields.find(f => f.id === formData.field_id);
-                      const standard = cropStandards.find(s => s.crop_id === formData.crop_id);
-                      const area = field?.area_size || 0;
-                      const seedlings = standard?.seedlings_per_10a || 0;
-                      if (!area || !seedlings) return "※面積または基準苗数が未設定のため計算できません";
-                      return `必要苗数: ${((area / 10) * seedlings).toLocaleString()} 株`;
-                    })()}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="p-4 bg-slate-50 flex gap-3 border-t border-slate-100">
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                disabled={isSaving}
-                className="flex-1 py-3 text-slate-500 font-bold bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
-              >
-                キャンセル
-              </button>
-              <button 
-                onClick={handleSavePlan}
-                disabled={isSaving}
-                className="flex-1 py-3 text-white font-bold bg-blue-600 rounded-xl hover:bg-blue-700 shadow-sm transition-colors flex items-center justify-center gap-2"
-              >
-                {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : '計画を登録する'}
-              </button>
-            </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-xs font-bold text-amber-900">
+                目標売上：
+                <span className="text-base font-black ml-1">
+                  {Number(targetYieldInput) > 0 && Number(targetPriceInput) > 0
+                    ? yen(Number(targetYieldInput) * Number(targetPriceInput))
+                    : '収穫量と単価を入れると自動で計算します'}
+                </span>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setTargetPlan(null)} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer">
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingTarget}
+                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer"
+                >
+                  {isSavingTarget && <Loader2 className="w-4 h-4 animate-spin" />}
+                  目標を保存
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {selectedPlan && (
-        <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-50 flex justify-end">
-          <div className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+      {/* 📦 出荷・売上記録モーダル */}
+      {salesPlan && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200">
+            <div className="flex items-start justify-between gap-2 mb-4 pb-3 border-b border-slate-100">
               <div>
-                <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
-                  {selectedPlan.crops?.name} {selectedPlan.variety && <span className="text-sm font-medium text-slate-500">({selectedPlan.variety})</span>}
+                <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+                  <Package className="w-5 h-5 text-emerald-600" />
+                  出荷・売上を記録
                 </h3>
-                <p className="text-xs text-slate-500 font-medium mt-1">
-                  {fields.find(f => f.id === selectedPlan.field_id)?.name} / {selectedPlan.start_month}月〜{selectedPlan.end_month}月
+                <p className="text-[11px] font-bold text-slate-500 mt-0.5">
+                  {salesPlan.fieldName}・{salesPlan.cropName} の作付けに記録します
                 </p>
               </div>
-              <button 
-                onClick={() => setSelectedPlan(null)}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition-colors"
-              >
+              <button type="button" onClick={() => setSalesPlan(null)} className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveSales} className="space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-600 block mb-1">出荷日</label>
+                  <input
+                    type="date"
+                    value={salesDate}
+                    onChange={e => setSalesDate(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-600 block mb-1">出荷量（kg）</label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.1"
+                    value={salesQty}
+                    onChange={e => setSalesQty(e.target.value)}
+                    placeholder="例: 120"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-800 outline-none focus:ring-2 focus:ring-emerald-400"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-600 block mb-1">単価（円 / kg・任意）</label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    value={salesUnitPrice}
+                    onChange={e => {
+                      setSalesUnitPrice(e.target.value);
+                      setSalesTotal('');
+                    }}
+                    placeholder="例: 120"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-600 block mb-1">売上金額（円・任意）</label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    value={salesTotal}
+                    onChange={e => setSalesTotal(e.target.value)}
+                    placeholder={computedSalesTotal > 0 ? String(computedSalesTotal) : '例: 14400'}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none"
+                  />
+                </div>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-2.5 text-xs font-bold text-emerald-900">
+                記録される売上：
+                <span className="text-base font-black ml-1">{computedSalesTotal > 0 ? yen(computedSalesTotal) : '金額未定（出荷量のみ記録）'}</span>
+                <p className="text-[10px] font-bold text-emerald-700 mt-0.5">※金額が後で決まる場合は空欄のままで大丈夫です。</p>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-600 block mb-1">メモ（出荷先など・任意）</label>
+                <input
+                  type="text"
+                  value={salesMemo}
+                  onChange={e => setSalesMemo(e.target.value)}
+                  placeholder="例: JA出荷、直売所 など"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button type="button" onClick={() => setSalesPlan(null)} className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer">
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingSales}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer"
+                >
+                  {isSavingSales && <Loader2 className="w-4 h-4 animate-spin" />}
+                  記録する
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 明細ドロワー */}
+      {detailReport && (
+        <div className="fixed inset-0 z-50 bg-slate-900/30 backdrop-blur-xs flex justify-end" onClick={() => setDetailPlanId(null)}>
+          <div className="bg-white w-full max-w-lg h-full shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-slate-100 flex items-start justify-between gap-2 bg-slate-50">
+              <div>
+                <h3 className="text-base font-black text-slate-800">
+                  {detailReport.fieldName}・{detailReport.cropName}
+                </h3>
+                <p className="text-[11px] font-bold text-slate-500 mt-0.5">
+                  集計期間: {detailReport.win.start.replace(/-/g, '/')} 〜 {detailReport.win.end.replace(/-/g, '/')}
+                  （出荷は {detailReport.win.salesEnd.replace(/-/g, '/')} まで）
+                </p>
+              </div>
+              <button type="button" onClick={() => setDetailPlanId(null)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-full cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="flex border-b border-slate-200">
-              <button
-                onClick={() => setActiveTab('work')}
-                className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'work' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
-              >
-                作業記録
-              </button>
-              <button
-                onClick={() => setActiveTab('sales')}
-                className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'sales' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
-              >
-                出荷記録
-              </button>
-              <button
-                onClick={() => setActiveTab('analysis')}
-                className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'analysis' ? 'border-amber-600 text-amber-700' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}
-              >
-                📊 分析
-              </button>
+              {[
+                { id: 'cost', label: `💸 費用の内訳` },
+                { id: 'work', label: `👷 作業 (${detailReport.works.length})` },
+                { id: 'sales', label: `📦 出荷・売上 (${detailReport.sales.length})` }
+              ].map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setDetailTab(t.id as any)}
+                  className={`flex-1 py-3 text-xs font-black border-b-2 cursor-pointer ${
+                    detailTab === t.id ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
-              {isPanelLoading ? (
-                <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
-              ) : (
+            <div className="flex-1 overflow-y-auto p-4 bg-slate-50 space-y-3">
+              {detailTab === 'cost' && (
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden text-sm">
+                  {[
+                    { label: `👷 人件費（作業 ${hoursLabel(detailReport.workHours)}）`, value: detailReport.laborCost },
+                    { label: '🧪 資材費（作業記録の使用資材）', value: detailReport.workMaterialCost },
+                    { label: `🧾 資材費（資材経費の記録 ${detailReport.matCosts.length}件）`, value: detailReport.extraMaterialCost },
+                    {
+                      label: `⛽ 光熱・機械等（実費${detailReport.overheadActualMonths}ヶ月・概算${detailReport.overheadEstimatedMonths}ヶ月）`,
+                      value: detailReport.overheadCost
+                    }
+                  ].map(row => (
+                    <div key={row.label} className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+                      <span className="text-xs font-bold text-slate-600">{row.label}</span>
+                      <span className="text-sm font-black text-slate-800">{yen(row.value)}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
+                    <span className="text-xs font-black text-slate-700">費用合計</span>
+                    <span className="text-base font-black text-rose-700">{yen(detailReport.totalCost)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-xs font-black text-slate-700">売上 {yen(detailReport.actualSales)} − 費用 ＝ 残ったお金</span>
+                    <span className={`text-base font-black ${detailReport.profit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{yen(detailReport.profit)}</span>
+                  </div>
+                </div>
+              )}
+
+              {detailTab === 'work' &&
+                (detailReport.works.length === 0 ? (
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center text-xs font-bold text-slate-500 space-y-2">
+                    <p>この作付けの作業記録はまだありません。</p>
+                    <Link href={`/admin/cultivations${farmQuery}`} className="inline-block px-4 py-2 bg-blue-600 text-white rounded-xl font-black">
+                      作業日誌で記録する
+                    </Link>
+                  </div>
+                ) : (
+                  [...detailReport.works]
+                    .sort((a: any, b: any) => String(b.work_date).localeCompare(String(a.work_date)))
+                    .map((w: any) => {
+                      const h = (Number(w.duration_minutes) || 0) / 60;
+                      const wage = Number(w.workers?.hourly_wage) || 0;
+                      return (
+                        <div key={w.id} className="bg-white p-3 rounded-xl border border-slate-200 flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-[11px] font-bold text-slate-500 flex items-center gap-1.5">
+                              <span>{String(w.work_date || '').replace(/-/g, '/')}</span>
+                              {w.workers?.name && <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded">{w.workers.name}</span>}
+                            </div>
+                            <div className="text-sm font-black text-slate-800 truncate">{w.work_type || w.task_title || '作業'}</div>
+                            {w.materials?.name && w.material_quantity ? (
+                              <div className="text-[11px] font-bold text-rose-700">
+                                🧪 {w.materials.name} {w.material_quantity}
+                                {w.materials.unit || ''}
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-xs font-black text-slate-800 flex items-center gap-1 justify-end">
+                              <Clock className="w-3 h-3 text-slate-400" />
+                              {hoursLabel(h)}
+                            </div>
+                            <div className="text-[10px] font-bold text-slate-400">
+                              {wage > 0 ? `時給${yen(wage)}` : `時給未設定（仮${yen(FALLBACK_HOURLY_WAGE)}）`}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                ))}
+
+              {detailTab === 'sales' && (
                 <>
-                  {activeTab === 'work' && (
-                    <div className="space-y-6">
-                      {/* 作業記録追加フォーム */}
-                      <form onSubmit={handleAddWork} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                        <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Plus className="w-4 h-4"/>作業を追加</h4>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">日付</label>
-                            <input type="date" required value={newWork.date} onChange={e => setNewWork({...newWork, date: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm" />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">作業種類</label>
-                            <select value={newWork.type} onChange={e => setNewWork({...newWork, type: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm">
-                              <option>播種</option>
-                              <option>定植</option>
-                              <option>水やり</option>
-                              <option>肥料・農薬</option>
-                              <option>草刈り</option>
-                              <option>収穫</option>
-                              <option>片付け・メンテ</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">所要時間(分)</label>
-                            <input type="number" required placeholder="60" value={newWork.duration} onChange={e => setNewWork({...newWork, duration: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm" />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">メモ(任意)</label>
-                            <input type="text" placeholder="例: 10畝完了" value={newWork.note} onChange={e => setNewWork({...newWork, note: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm" />
-                          </div>
-                        </div>
-                        <button disabled={isSaving} className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition-colors">
-                          {isSaving ? '保存中...' : '記録する'}
-                        </button>
-                      </form>
-
-                      {/* 作業履歴一覧 */}
-                      <div className="space-y-3">
-                        {workLogs.map(log => (
-                          <div key={log.id} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex justify-between items-start">
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <div className="text-xs font-bold text-slate-500">{log.work_date}</div>
-                                {log.workers?.name && (
-                                  <div className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                    <User className="w-3 h-3" /> {log.workers.name}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="font-bold text-slate-800">{log.work_type}</div>
-                              {log.notes && <div className="text-xs text-slate-500 mt-1">{log.notes}</div>}
-                            </div>
-                            <div className="text-right">
-                              <div className="text-sm font-black text-blue-600">{log.duration_minutes} 分</div>
-                              <div className="text-[10px] text-slate-400">完了</div>
-                            </div>
-                          </div>
-                        ))}
-                        {workLogs.length === 0 && <p className="text-center text-sm text-slate-400 py-4">作業履歴はありません</p>}
-                      </div>
+                  <button
+                    type="button"
+                    onClick={() => openSalesModal(detailReport)}
+                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Package className="w-4 h-4" />
+                    出荷・売上を記録する
+                  </button>
+                  {detailReport.sales.length === 0 ? (
+                    <div className="bg-white p-6 rounded-2xl border border-slate-200 text-center text-xs font-bold text-slate-500">
+                      この作付けの出荷・売上はまだ記録されていません。
                     </div>
-                  )}
-
-                  {activeTab === 'sales' && (
-                    <div className="space-y-6">
-                      {/* 出荷記録追加フォーム */}
-                      <form onSubmit={handleAddSales} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-                        <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Plus className="w-4 h-4"/>出荷を追加</h4>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">日付</label>
-                            <input type="date" required value={newSales.date} onChange={e => setNewSales({...newSales, date: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm" />
+                  ) : (
+                    [...detailReport.sales]
+                      .sort((a: any, b: any) => String(b.sales_date).localeCompare(String(a.sales_date)))
+                      .map((s: any) => (
+                        <div key={s.id} className="bg-white p-3 rounded-xl border border-slate-200 flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-[11px] font-bold text-slate-500">{String(s.sales_date || '').replace(/-/g, '/')}</div>
+                            <div className="text-sm font-black text-slate-800">
+                              {Number(s.quantity) || 0}
+                              {s.unit || 'kg'}
+                            </div>
+                            {s.memo && <div className="text-[11px] font-bold text-slate-500 truncate">{s.memo}</div>}
                           </div>
-                          <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">出荷先(チャネル)</label>
-                            <select value={newSales.channel} onChange={e => setNewSales({...newSales, channel: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm">
-                              <option>直売所</option>
-                              <option>スーパー</option>
-                              <option>飲食店</option>
-                              <option>市場</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">数量</label>
-                            <input type="number" required placeholder="例: 50" value={newSales.quantity} onChange={e => setNewSales({...newSales, quantity: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm" />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">売上額(円)</label>
-                            <input type="number" required placeholder="例: 10000" value={newSales.price} onChange={e => setNewSales({...newSales, price: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm" />
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-sm font-black text-emerald-700">
+                              {s.total_sales !== null && s.total_sales !== undefined ? yen(Number(s.total_sales)) : '金額未定'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSales(s.id)}
+                              className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                              title="この記録を削除"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
-                        <button disabled={isSaving} className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-sm transition-colors">
-                          {isSaving ? '保存中...' : '記録する'}
-                        </button>
-                      </form>
-
-                      {/* 出荷履歴一覧 */}
-                      <div className="space-y-3">
-                        {salesLogs.map(log => (
-                          <div key={log.id} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex justify-between items-start">
-                            <div>
-                              <div className="text-xs font-bold text-slate-500">{log.sales_date}</div>
-                              <div className="font-bold text-slate-800">数量: {log.quantity}</div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-sm font-black text-emerald-600">¥ {log.total_sales?.toLocaleString()}</div>
-                              <div className="text-[10px] text-slate-400">完了</div>
-                            </div>
-                          </div>
-                        ))}
-                        {salesLogs.length === 0 && <p className="text-center text-sm text-slate-400 py-4">出荷履歴はありません</p>}
-                      </div>
-                    </div>
-                  )}
-
-                  {activeTab === 'analysis' && (
-                    <div className="space-y-6">
-                      {(() => {
-                        const areaStr = fields.find(f => f.id === selectedPlan.field_id)?.area_size || selectedPlan.calculated_area;
-                        const rawArea = Number(areaStr);
-                        const area = rawArea > 0 ? rawArea : 1; // 0除算防止
-                        const multiplier = 10 / area;
-                        
-                        // 売上集計
-                        const totalSalesQuantity = salesLogs.reduce((sum, log) => sum + (Number(log.quantity) || 0), 0);
-                        const totalSalesAmount = salesLogs.reduce((sum, log) => sum + (Number(log.total_sales) || 0), 0);
-                        
-                        // 作業時間集計
-                        const totalWorkMinutes = workLogs.reduce((sum, log) => sum + (Number(log.duration_minutes) || 0), 0);
-                        const totalWorkHours = totalWorkMinutes / 60;
-                        
-                        // 費用集計
-                        let totalLaborCost = 0;
-                        const materialCostByCategory: Record<string, number> = {};
-                        
-                        // 作業タイプ別時間割合
-                        const workTypeHours: Record<string, number> = {};
-                        const workerTypeHours: Record<string, number> = {};
-                        
-                        workLogs.forEach(log => {
-                          const durationH = (Number(log.duration_minutes) || 0) / 60;
-                          
-                          // 作業タイプ集計
-                          const wType = log.work_type || 'その他';
-                          workTypeHours[wType] = (workTypeHours[wType] || 0) + durationH;
-                          
-                          // 作業者集計
-                          const wName = log.workers?.name || '不明';
-                          workerTypeHours[wName] = (workerTypeHours[wName] || 0) + durationH;
-                          
-                          // 人件費
-                          const wage = log.workers?.hourly_wage || 1000;
-                          totalLaborCost += durationH * wage;
-                          
-                          // 資材費
-                          if (log.material_quantity && log.materials) {
-                            const cost = log.material_quantity * (log.materials.default_price || 0);
-                            const cat = log.materials.category || '諸材料費';
-                            materialCostByCategory[cat] = (materialCostByCategory[cat] || 0) + cost;
-                          }
-                        });
-                        
-                        // 10a換算値
-                        const yield10a = totalSalesQuantity * multiplier;
-                        const revenue10a = totalSalesAmount * multiplier;
-                        const unitPrice = totalSalesQuantity > 0 ? totalSalesAmount / totalSalesQuantity : 0;
-                        
-                        const laborCost10a = totalLaborCost * multiplier;
-                        let totalMaterialCost10a = 0;
-                        const costs10a: Record<string, number> = {};
-                        Object.keys(materialCostByCategory).forEach(cat => {
-                          const c10a = materialCostByCategory[cat] * multiplier;
-                          costs10a[cat] = c10a;
-                          totalMaterialCost10a += c10a;
-                        });
-
-                        // ハイブリッド経費按分ロジック
-                        // 1. 農場全体の面積合計
-                        const totalFarmArea = fields.reduce((sum, f) => sum + (Number(f.area_size) || 0), 0);
-                        const areaRatio = totalFarmArea > 0 ? area / totalFarmArea : 0;
-                        
-                        // 2. 栽培期間の月リストを作成 (最大12ヶ月)
-                        const planMonths: string[] = [];
-                        let currentM = selectedPlan.start_month;
-                        let y = currentM >= 8 ? selectedPlan.year : selectedPlan.year + 1;
-                        for (let i = 0; i < 12; i++) {
-                          planMonths.push(`${y}-${String(currentM).padStart(2, '0')}`);
-                          if (currentM === selectedPlan.end_month) break;
-                          currentM++;
-                          if (currentM > 12) { currentM = 1; y++; }
-                        }
-
-                        // 3. マスタの概算（予算）を取得し、1ヶ月・自圃場面積あたりに変換
-                        const cropMaster = crops.find(c => c.id === selectedPlan.crop_id);
-                        const totalMonths = planMonths.length || 1;
-                        const estFuelPerMonth = ((cropMaster?.est_fuel_cost_10a || 0) * (area / 10)) / totalMonths;
-                        const estMachineryPerMonth = ((cropMaster?.est_machinery_cost_10a || 0) * (area / 10)) / totalMonths;
-                        const estOtherPerMonth = ((cropMaster?.est_other_cost_10a || 0) * (area / 10)) / totalMonths;
-
-                        // 4. 各月の実費または予算を加算
-                        let totalFuelArea = 0;
-                        let totalMachineryArea = 0;
-                        let totalOtherArea = 0;
-
-                        planMonths.forEach(mStr => {
-                          const monthLogs = monthlyExpenses.filter(e => e.month === mStr);
-                          if (monthLogs.length > 0) {
-                            // 実績あり：全体経費 × 面積按分率
-                            totalFuelArea += (monthLogs.find(e => e.expense_type === 'fuel')?.amount || 0) * areaRatio;
-                            totalMachineryArea += (monthLogs.find(e => e.expense_type === 'machinery')?.amount || 0) * areaRatio;
-                            totalOtherArea += (monthLogs.find(e => e.expense_type === 'other')?.amount || 0) * areaRatio;
-                          } else {
-                            // 実績なし：予算（概算）
-                            totalFuelArea += estFuelPerMonth;
-                            totalMachineryArea += estMachineryPerMonth;
-                            totalOtherArea += estOtherPerMonth;
-                          }
-                        });
-
-                        // 5. 10aあたりに再換算して costs10a に組み込む
-                        const fuel10a = totalFuelArea * multiplier;
-                        const machinery10a = totalMachineryArea * multiplier;
-                        const other10a = totalOtherArea * multiplier;
-                        
-                        costs10a['動力光熱費'] = (costs10a['動力光熱費'] || 0) + fuel10a;
-                        costs10a['機械・車両費 (参考)'] = (costs10a['機械・車両費 (参考)'] || 0) + machinery10a;
-                        costs10a['その他経費'] = (costs10a['その他経費'] || 0) + other10a;
-                        totalMaterialCost10a += (fuel10a + machinery10a + other10a);
-                        
-                        const totalCost10a = laborCost10a + totalMaterialCost10a;
-                        const profit10a = revenue10a - totalCost10a;
-                        const profitMargin = revenue10a > 0 ? (profit10a / revenue10a) * 100 : 0;
-                        
-                        const laborHours10a = totalWorkHours * multiplier;
-                        const profitPerHour = laborHours10a > 0 ? profit10a / laborHours10a : 0;
-                        
-                        // 円グラフデータ (作業別)
-                        const pieData = Object.keys(workTypeHours).map(k => ({
-                          name: k,
-                          value: Number((workTypeHours[k] * multiplier).toFixed(1))
-                        })).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
-
-                        // 円グラフデータ (作業者別)
-                        const workerPieData = Object.keys(workerTypeHours).map(k => ({
-                          name: k,
-                          value: Number((workerTypeHours[k] * multiplier).toFixed(1))
-                        })).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
-                        
-                        const PIE_COLORS = ['#fb7185', '#f43f5e', '#e11d48', '#fda4af', '#be123c', '#9f1239', '#ffe4e6'];
-                        const WORKER_COLORS = ['#3b82f6', '#60a5fa', '#2563eb', '#93c5fd', '#1d4ed8', '#bfdbfe', '#1e3a8a'];
-                        
-                        return (
-                          <>
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative">
-                              <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-4">
-                                <h4 className="text-lg font-black text-slate-800 flex items-center gap-2">
-                                  <BarChart2 className="w-5 h-5 text-amber-500" />
-                                  経営指標 (10a当たり)
-                                </h4>
-                                <a 
-                                  href={`/admin/report/${selectedPlan.id}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs font-bold bg-amber-100 hover:bg-amber-200 text-amber-700 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
-                                >
-                                  📄 詳細レポート(PDF印刷)
-                                </a>
-                              </div>
-                              
-                              <div className="text-xs text-slate-500 mb-4 bg-amber-50 p-3 rounded-lg border border-amber-100 font-medium">
-                                ※ 現在の圃場面積({area}a)から10aあたりの数値を自動換算しています。<br/>
-                                （換算倍率: {multiplier.toFixed(2)}倍）
-                              </div>
-                              
-                              <table className="w-full text-sm mb-4 border-collapse">
-                                <tbody>
-                                  <tr className="border-b border-slate-100"><td className="py-2 text-slate-500 font-bold">生産量(kg)</td><td className="py-2 text-right font-black text-slate-800">{Math.round(yield10a).toLocaleString()}</td></tr>
-                                  <tr className="border-b border-slate-100"><td className="py-2 text-slate-500 font-bold">単価(円/kg)</td><td className="py-2 text-right font-black text-slate-800">{Math.round(unitPrice).toLocaleString()}</td></tr>
-                                  <tr className="border-b border-slate-100"><td className="py-2 text-slate-500 font-bold">粗収益(円)</td><td className="py-2 text-right font-black text-amber-600">{Math.round(revenue10a).toLocaleString()}</td></tr>
-                                  <tr className="border-b border-slate-100"><td className="py-2 text-slate-500 font-bold">所得(円)</td><td className="py-2 text-right font-black text-blue-600">{Math.round(profit10a).toLocaleString()}</td></tr>
-                                  <tr className="border-b border-slate-100"><td className="py-2 text-slate-500 font-bold">所得率(%)</td><td className="py-2 text-right font-black text-slate-800">{Math.round(profitMargin)}</td></tr>
-                                  <tr className="border-b border-slate-100"><td className="py-2 text-slate-500 font-bold">労働時間(時間)</td><td className="py-2 text-right font-black text-slate-800">{Math.round(laborHours10a).toLocaleString()}</td></tr>
-                                  <tr className="border-b border-slate-100"><td className="py-2 text-slate-500 font-bold">1時間当たり所得(円)</td><td className="py-2 text-right font-black text-slate-800">{Math.round(profitPerHour).toLocaleString()}</td></tr>
-                                </tbody>
-                              </table>
-                              
-                              <h5 className="text-sm font-black text-slate-700 mt-6 mb-2 border-b border-slate-100 pb-1">費用の内訳 (10a当たり)</h5>
-                              <table className="w-full text-sm border-collapse">
-                                <tbody>
-                                  {Object.keys(costs10a).map(cat => (
-                                    <tr key={cat} className="border-b border-slate-100">
-                                      <td className="py-2 text-slate-500 font-medium">{cat}</td>
-                                      <td className="py-2 text-right text-slate-700">{Math.round(costs10a[cat]).toLocaleString()}</td>
-                                    </tr>
-                                  ))}
-                                  <tr className="border-b border-slate-100">
-                                    <td className="py-2 text-slate-500 font-medium">人件費 (参考値)</td>
-                                    <td className="py-2 text-right text-slate-700">{Math.round(laborCost10a).toLocaleString()}</td>
-                                  </tr>
-                                  <tr className="bg-slate-50 font-black text-slate-800">
-                                    <td className="py-2 px-2">合計</td>
-                                    <td className="py-2 px-2 text-right">{Math.round(totalCost10a).toLocaleString()}</td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                <h4 className="text-sm font-black text-slate-700 mb-4 text-center">10a当たり作業別時間割合</h4>
-                                {pieData.length > 0 ? (
-                                  <div className="h-64">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                      <PieChart margin={{ top: 10, right: 40, bottom: 10, left: 40 }}>
-                                        <Pie
-                                          data={pieData}
-                                          cx="50%"
-                                          cy="50%"
-                                          innerRadius={35}
-                                          outerRadius={60}
-                                          paddingAngle={2}
-                                          dataKey="value"
-                                          label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-                                          labelLine={true}
-                                        >
-                                          {pieData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                                          ))}
-                                        </Pie>
-                                        <RechartsTooltip formatter={(value: any) => [`${value} 時間/10a`, '時間']} />
-                                      </PieChart>
-                                    </ResponsiveContainer>
-                                  </div>
-                                ) : (
-                                  <p className="text-center text-sm text-slate-400 py-8">作業記録がありません</p>
-                                )}
-                              </div>
-                              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                <h4 className="text-sm font-black text-slate-700 mb-4 text-center">10a当たり作業者別割合</h4>
-                                {workerPieData.length > 0 ? (
-                                  <div className="h-64">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                      <PieChart margin={{ top: 10, right: 40, bottom: 10, left: 40 }}>
-                                        <Pie
-                                          data={workerPieData}
-                                          cx="50%"
-                                          cy="50%"
-                                          innerRadius={35}
-                                          outerRadius={60}
-                                          paddingAngle={2}
-                                          dataKey="value"
-                                          label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-                                          labelLine={true}
-                                        >
-                                          {workerPieData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={WORKER_COLORS[index % WORKER_COLORS.length]} />
-                                          ))}
-                                        </Pie>
-                                        <RechartsTooltip formatter={(value: any) => [`${value} 時間/10a`, '時間']} />
-                                      </PieChart>
-                                    </ResponsiveContainer>
-                                  </div>
-                                ) : (
-                                  <p className="text-center text-sm text-slate-400 py-8">作業記録がありません</p>
-                                )}
-                              </div>
-                            </div>
-                            
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                              <table className="w-full text-sm mt-4 border-collapse">
-                                <thead>
-                                  <tr className="border-b-2 border-slate-200 text-slate-500">
-                                    <th className="py-2 text-left font-bold">作業内容</th>
-                                    <th className="py-2 text-right font-bold">労働時間 (h/10a)</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {pieData.map((d, i) => (
-                                    <tr key={i} className="border-b border-slate-100">
-                                      <td className="py-2 text-slate-700">{d.name}</td>
-                                      <td className="py-2 text-right font-black text-slate-700">{d.value.toFixed(1)}</td>
-                                    </tr>
-                                  ))}
-                                  <tr className="bg-slate-50 font-black text-slate-800">
-                                    <td className="py-2 px-2">合計</td>
-                                    <td className="py-2 px-2 text-right">{Math.round(laborHours10a).toLocaleString()}</td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
+                      ))
                   )}
                 </>
               )}
@@ -1061,6 +1209,12 @@ export default function CultivationSchedulePage() {
           </div>
         </div>
       )}
-    </div>
+
+      {toast && (
+        <div className="fixed top-20 right-6 z-[60] bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-xl text-xs font-black">
+          {toast}
+        </div>
+      )}
+    </AdminOnlyGuard>
   );
 }
