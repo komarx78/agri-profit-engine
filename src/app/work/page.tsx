@@ -286,6 +286,7 @@ export default function WorkEntryPage({
   const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
   const [offlineSyncNotice, setOfflineSyncNotice] = useState<string | null>(null);
   const [lastAddedStamp, setLastAddedStamp] = useState<string | null>(null);
+  const [showOptionalDetails, setShowOptionalDetails] = useState<boolean>(false);
   const [showLineModal, setShowLineModal] = useState(false);
 
   // 生産性共有ステート
@@ -2166,138 +2167,196 @@ export default function WorkEntryPage({
                 )}
               </section>
 
-              <section className="bg-slate-900/40 p-4 rounded-2xl border border-slate-700/50 shadow-sm space-y-4">
-                <div>
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
-                    <Package className="w-4 h-4" />{t('material', language)}
-                  </h2>
-                  <div className="space-y-3">
-                    <select value={selectedMaterial} onChange={(e) => setSelectedMaterial(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-700 text-sm font-bold">
-                        <option value="">--</option>
-                        {materials.map(m => <option key={m.id} value={m.name}>{getTranslatedName(m, language)}</option>)}
-                    </select>
-                    {selectedMaterial && (
-                      <div className="flex items-center gap-3">
-                        <input type="number" value={materialQuantity} onChange={(e) => setMaterialQuantity(e.target.value)} placeholder={t('usageAmount', language)} className="flex-1 px-3 py-3 bg-slate-950 border border-slate-700 text-white rounded-xl font-bold" />
-                        <div className="text-sm font-bold text-slate-400">{materials.find(m => m.name === selectedMaterial)?.unit}</div>
+              {inputMode === 'manual' && (
+                <section className="bg-sky-900/30 p-4 rounded-2xl border border-sky-800/40 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-xs font-bold text-sky-400 flex items-center gap-1.5">
+                      <Clock className="w-4 h-4" />
+                      {t('workingTime', language)}
+                    </h2>
+                    <span className="text-[11px] font-bold text-sky-300/80">
+                      {duration ? `${(Number(duration) / 60).toFixed(1).replace(/\.0$/, '')} 時間 (${duration}分)` : ''}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {[
+                      { min: '30', label: '30分' },
+                      { min: '60', label: '1時間' },
+                      { min: '120', label: '2時間' },
+                      { min: '180', label: '3時間' },
+                      { min: '240', label: '4時間' },
+                    ].map((preset) => (
+                      <button
+                        key={preset.min}
+                        type="button"
+                        onClick={() => setDuration(preset.min)}
+                        className={`py-2 px-1 rounded-xl text-xs font-black border transition-all cursor-pointer active:scale-95 ${
+                          duration === preset.min
+                            ? 'bg-sky-500 text-slate-950 border-sky-300 shadow-md'
+                            : 'bg-slate-900/80 text-sky-200 border-sky-800/60 hover:bg-sky-900/50'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                  <input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="分単位で入力（例: 90）" className="w-full py-3 px-4 text-2xl font-black text-center bg-emerald-950/80 rounded-xl border border-sky-700/50 text-white" required />
+                </section>
+              )}
+
+              {/* 任意項目（資材・写真・メモ・動画）の折りたたみボタン */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowOptionalDetails(prev => !prev)}
+                  className={`w-full py-3 px-4 rounded-2xl border font-black text-xs flex items-center justify-between transition-all cursor-pointer ${
+                    showOptionalDetails || selectedMaterial || photoPreview || memo || videoFile
+                      ? 'bg-slate-800/90 border-emerald-500/40 text-emerald-300'
+                      : 'bg-slate-900/60 border-slate-700/70 text-slate-300 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span>📦📷💬</span>
+                    <span>資材・写真・メモ・動画を追加する（任意）</span>
+                    {(selectedMaterial || photoPreview || memo || videoFile) && (
+                      <span className="bg-emerald-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full">
+                        入力あり
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-sm font-black">
+                    {showOptionalDetails ? '▲ 閉じる' : '▼ 開く'}
+                  </span>
+                </button>
+              </div>
+
+              {(showOptionalDetails || Boolean(selectedMaterial || photoPreview || memo || videoFile)) && (
+                <section className="bg-slate-900/40 p-4 rounded-2xl border border-slate-700/50 shadow-sm space-y-4 animate-in fade-in duration-200">
+                  <div>
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
+                      <Package className="w-4 h-4" />{t('material', language)}
+                    </h2>
+                    <div className="space-y-3">
+                      <select value={selectedMaterial} onChange={(e) => setSelectedMaterial(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-700 text-sm font-bold">
+                          <option value="">--</option>
+                          {materials.map(m => <option key={m.id} value={m.name}>{getTranslatedName(m, language)}</option>)}
+                      </select>
+                      {selectedMaterial && (
+                        <div className="flex items-center gap-3">
+                          <input type="number" value={materialQuantity} onChange={(e) => setMaterialQuantity(e.target.value)} placeholder={t('usageAmount', language)} className="flex-1 px-3 py-3 bg-slate-950 border border-slate-700 text-white rounded-xl font-bold" />
+                          <div className="text-sm font-bold text-slate-400">{materials.find(m => m.name === selectedMaterial)?.unit}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4" />{t('photo', language)}
+                    </h2>
+                    {!photoPreview ? (
+                      <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-700 border-dashed rounded-xl cursor-pointer bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                        <span className="text-3xl mb-2">📷</span>
+                        <span className="text-xs text-slate-400 font-bold">{t('photoTakeOrSelect', language)}</span>
+                        <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                      </label>
+                    ) : (
+                      <div className="relative w-full rounded-xl overflow-hidden border-2 border-emerald-500/50">
+                        <img src={photoPreview} alt="Preview" className="w-full h-48 object-cover" />
+                        <button type="button" onClick={clearPhoto} className="absolute top-2 right-2 bg-black/70 text-white w-8 h-8 rounded-full">×</button>
                       </div>
                     )}
                   </div>
-                </div>
-
-                <div>
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
-                    <ImageIcon className="w-4 h-4" />{t('photo', language)}
-                  </h2>
-                  {!photoPreview ? (
-                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-700 border-dashed rounded-xl cursor-pointer bg-slate-800/50 hover:bg-slate-800 transition-colors">
-                      <span className="text-3xl mb-2">📷</span>
-                      <span className="text-xs text-slate-400 font-bold">{t('photoTakeOrSelect', language)}</span>
-                      <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
-                    </label>
-                  ) : (
-                    <div className="relative w-full rounded-xl overflow-hidden border-2 border-emerald-500/50">
-                      <img src={photoPreview} alt="Preview" className="w-full h-48 object-cover" />
-                      <button type="button" onClick={clearPhoto} className="absolute top-2 right-2 bg-black/70 text-white w-8 h-8 rounded-full">×</button>
+                  
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                        <FileText className="w-4 h-4" />{t('memoSectionLabel', language)}
+                      </h2>
+                      <span className="text-[10px] text-emerald-400 font-bold">
+                        {t('stamp_tapHint', language)}
+                      </span>
                     </div>
-                  )}
-                </div>
-                
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                      <FileText className="w-4 h-4" />{t('memoSectionLabel', language)}
-                    </h2>
-                    <span className="text-[10px] text-emerald-400 font-bold">
-                      {t('stamp_tapHint', language)}
-                    </span>
-                  </div>
 
-                  {/* 🎨 提案③: 多言語ピクトグラムスタンプパレット（現場直感・文字切れゼロ設計） */}
-                  <div className="mb-3 bg-slate-900/90 p-3.5 rounded-2xl border border-slate-700/80 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-xs font-black text-slate-200">
-                        <Sparkles className="w-4 h-4 text-amber-400" />
-                        <span>{t('stamp_sectionTitle', language)}</span>
+                    {/* 🎨 提案③: 多言語ピクトグラムスタンプパレット（現場直感・文字切れゼロ設計） */}
+                    <div className="mb-3 bg-slate-900/90 p-3.5 rounded-2xl border border-slate-700/80 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-xs font-black text-slate-200">
+                          <Sparkles className="w-4 h-4 text-amber-400" />
+                          <span>{t('stamp_sectionTitle', language)}</span>
+                        </div>
+                        {lastAddedStamp && (
+                          <span className="text-[11px] font-black text-emerald-400 bg-emerald-950/80 border border-emerald-500/50 px-2 py-0.5 rounded-full animate-in fade-in flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>{lastAddedStamp} 追加済</span>
+                          </span>
+                        )}
                       </div>
-                      {lastAddedStamp && (
-                        <span className="text-[11px] font-black text-emerald-400 bg-emerald-950/80 border border-emerald-500/50 px-2 py-0.5 rounded-full animate-in fade-in flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" />
-                          <span>{lastAddedStamp} 追加済</span>
-                        </span>
-                      )}
+
+                      <div className="grid grid-cols-2 gap-2.5">
+                        {[
+                          { emoji: '🧺', key: 'stamp_harvest', text: '【現場報告】🧺 収穫完了', color: 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/40' },
+                          { emoji: '🐛', key: 'stamp_pest', text: '【現場報告】🐛 害虫・病気発見（要確認）', color: 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border-rose-500/40' },
+                          { emoji: '💧', key: 'stamp_water', text: '【現場報告】💧 水やり・潅水完了', color: 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border-blue-500/40' },
+                          { emoji: '✂️', key: 'stamp_weed', text: '【現場報告】✂️ 除草・草刈り完了', color: 'bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border-teal-500/40' },
+                          { emoji: '🧪', key: 'stamp_fertilizer', text: '【現場報告】🧪 追肥・施肥完了', color: 'bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border-indigo-500/40' },
+                          { emoji: '⚠️', key: 'stamp_machine', text: '【現場報告】⚠️ 機械トラブル・異変あり', color: 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40' },
+                          { emoji: '🧹', key: 'stamp_clean', text: '【現場報告】🧹 片付け・清掃完了', color: 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600' },
+                          { emoji: '👍', key: 'stamp_good', text: '【現場報告】👍 順調・問題なし', color: 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-200 border-emerald-400/50' },
+                        ].map(stamp => {
+                          const rawLabel = t(stamp.key, language);
+                          const cleanLabel = rawLabel.replace(/^[^\s]+\s*/, '');
+                          return (
+                            <button
+                              key={stamp.key}
+                              type="button"
+                              onClick={() => {
+                                setMemo(prev => {
+                                  const clean = prev.trim();
+                                  return clean ? `${clean}\n${stamp.text}` : stamp.text;
+                                });
+                                setLastAddedStamp(cleanLabel || stamp.emoji);
+                                setTimeout(() => setLastAddedStamp(null), 2000);
+                              }}
+                              className={`p-2.5 sm:p-3 rounded-2xl border flex items-center gap-2.5 transition-all active:scale-95 cursor-pointer shadow-sm text-left ${stamp.color}`}
+                            >
+                              <span className="text-2xl shrink-0 p-1 bg-black/30 rounded-xl flex items-center justify-center">
+                                {stamp.emoji}
+                              </span>
+                              <span className="text-xs font-black leading-tight break-words whitespace-normal flex-1">
+                                {cleanLabel || rawLabel}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2.5">
-                      {[
-                        { emoji: '🧺', key: 'stamp_harvest', text: '【現場報告】🧺 収穫完了', color: 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/40' },
-                        { emoji: '🐛', key: 'stamp_pest', text: '【現場報告】🐛 害虫・病気発見（要確認）', color: 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border-rose-500/40' },
-                        { emoji: '💧', key: 'stamp_water', text: '【現場報告】💧 水やり・潅水完了', color: 'bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border-blue-500/40' },
-                        { emoji: '✂️', key: 'stamp_weed', text: '【現場報告】✂️ 除草・草刈り完了', color: 'bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border-teal-500/40' },
-                        { emoji: '🧪', key: 'stamp_fertilizer', text: '【現場報告】🧪 追肥・施肥完了', color: 'bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border-indigo-500/40' },
-                        { emoji: '⚠️', key: 'stamp_machine', text: '【現場報告】⚠️ 機械トラブル・異変あり', color: 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40' },
-                        { emoji: '🧹', key: 'stamp_clean', text: '【現場報告】🧹 片付け・清掃完了', color: 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-600' },
-                        { emoji: '👍', key: 'stamp_good', text: '【現場報告】👍 順調・問題なし', color: 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-200 border-emerald-400/50' },
-                      ].map(stamp => {
-                        const rawLabel = t(stamp.key, language);
-                        const cleanLabel = rawLabel.replace(/^[^\s]+\s*/, '');
-                        return (
-                          <button
-                            key={stamp.key}
-                            type="button"
-                            onClick={() => {
-                              setMemo(prev => {
-                                const clean = prev.trim();
-                                return clean ? `${clean}\n${stamp.text}` : stamp.text;
-                              });
-                              setLastAddedStamp(cleanLabel || stamp.emoji);
-                              setTimeout(() => setLastAddedStamp(null), 2000);
-                            }}
-                            className={`p-2.5 sm:p-3 rounded-2xl border flex items-center gap-2.5 transition-all active:scale-95 cursor-pointer shadow-sm text-left ${stamp.color}`}
-                          >
-                            <span className="text-2xl shrink-0 p-1 bg-black/30 rounded-xl flex items-center justify-center">
-                              {stamp.emoji}
-                            </span>
-                            <span className="text-xs font-black leading-tight break-words whitespace-normal flex-1">
-                              {cleanLabel || rawLabel}
-                            </span>
-                          </button>
-                        );
-                      })}
+                    <textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={t('workMemoPlaceholder', language)} className="w-full h-24 p-3 bg-slate-950 border border-slate-700 text-white rounded-xl text-sm" />
+                  </div>
+
+                  <div>
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
+                      <Video className="w-4 h-4" />{t('videoSectionLabel', language)}
+                    </h2>
+                    <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                      <input 
+                        type="file" 
+                        accept="video/mp4,video/quicktime,video/webm" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file && file.size > 50 * 1024 * 1024) {
+                            alert(t('videoSizeLimitAlert', language));
+                            e.target.value = '';
+                            setVideoFile(null);
+                          } else {
+                            setVideoFile(file || null);
+                          }
+                        }}
+                        className="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-emerald-500/20 file:text-emerald-400"
+                      />
                     </div>
                   </div>
-
-                  <textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder={t('workMemoPlaceholder', language)} className="w-full h-24 p-3 bg-slate-950 border border-slate-700 text-white rounded-xl text-sm" />
-                </div>
-
-                <div>
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
-                    <Video className="w-4 h-4" />{t('videoSectionLabel', language)}
-                  </h2>
-                  <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-                    <input 
-                      type="file" 
-                      accept="video/mp4,video/quicktime,video/webm" 
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file && file.size > 50 * 1024 * 1024) {
-                          alert(t('videoSizeLimitAlert', language));
-                          e.target.value = '';
-                          setVideoFile(null);
-                        } else {
-                          setVideoFile(file || null);
-                        }
-                      }}
-                      className="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-emerald-500/20 file:text-emerald-400"
-                    />
-                  </div>
-                </div>
-              </section>
-
-              {inputMode === 'manual' && (
-                <section className="bg-sky-900/30 p-4 rounded-2xl border border-sky-800/40">
-                  <h2 className="text-xs font-bold text-sky-400 mb-2">{t('workingTime', language)}</h2>
-                  <input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} className="w-full py-3 px-4 text-2xl font-black text-center bg-emerald-950/80 rounded-xl border border-sky-700/50 text-white" required />
                 </section>
               )}
             </div>

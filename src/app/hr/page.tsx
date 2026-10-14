@@ -1151,11 +1151,6 @@ export default function HrManagementPage() {
                     ? 'bg-purple-100 text-purple-800 border-purple-200'
                     : 'bg-stone-100 text-stone-500 border-stone-200';
 
-                const diffMinutes = calc.netMinutes - logTotalMinutes;
-                const hasWorklogGap = Boolean(
-                  attendance && attendance.clock_out && calc.netMinutes > 0 && Math.abs(diffMinutes) >= 30
-                );
-
                 return (
                   <div
                     key={worker.id}
@@ -1221,52 +1216,6 @@ export default function HrManagementPage() {
                       ) : (
                         <div className="text-xs text-stone-400 font-medium">
                           この日の出退勤打刻はありません
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 中央：その日に記録された農作業内容 ＆ 実労働との照合バッジ */}
-                    <div className="flex flex-col gap-1.5">
-                      {logs.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {logs.map((log) => {
-                            const cName = getCropLabel(log);
-                            const tName = getTaskLabel(log);
-                            return (
-                              <span
-                                key={log.id}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold"
-                              >
-                                <Sprout size={12} />
-                                <span>
-                                  {cName ? `${cName}：` : ''}
-                                  {tName}（{log.duration_minutes}分）
-                                </span>
-                              </span>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {attendance && attendance.clock_out && calc.netMinutes > 0 && (
-                        <div className="flex items-center">
-                          {hasWorklogGap ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-bold">
-                              <AlertCircle size={12} className="text-amber-600 shrink-0" />
-                              <span>
-                                {logTotalMinutes === 0
-                                  ? `農作業記録が未入力です（実労働 ${formatMinutesToHoursText(calc.netMinutes)}）`
-                                  : diffMinutes > 0
-                                  ? `農作業記録 合計${formatMinutesToHoursText(logTotalMinutes)}（残り${formatMinutesToHoursText(diffMinutes)}分の作業が未記入）`
-                                  : `農作業記録 合計${formatMinutesToHoursText(logTotalMinutes)}（実労働より${formatMinutesToHoursText(Math.abs(diffMinutes))}超過）`}
-                              </span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-stone-100 text-stone-600 text-[11px] font-bold">
-                              <Check size={12} className="text-emerald-600 shrink-0" />
-                              <span>農作業記録 合計 {formatMinutesToHoursText(logTotalMinutes)}（出退勤と一致）</span>
-                            </span>
-                          )}
                         </div>
                       )}
                     </div>
@@ -2254,7 +2203,7 @@ export default function HrManagementPage() {
                       <th className="py-2 px-2.5">退勤</th>
                       <th className="py-2 px-2.5">休憩</th>
                       <th className="py-2 px-2.5">実労働</th>
-                      <th className="py-2 px-2.5">主な作業・備考</th>
+                      <th className="py-2 px-2.5">備考（休暇等）</th>
                       <th className="py-2 px-2.5 text-right">日額目安</th>
                       <th className="py-2 px-2 text-center print:hidden">修正</th>
                     </tr>
@@ -2297,14 +2246,6 @@ export default function HrManagementPage() {
                               <span className="text-purple-700 font-bold">
                                 🏖️ {d.leave.type || d.leave.leave_type || '有給休暇'}（{d.leave.status}）
                               </span>
-                            ) : d.logs.length > 0 ? (
-                              d.logs
-                                .map((l) => {
-                                  const c = getCropLabel(l);
-                                  const t = getTaskLabel(l);
-                                  return `${c ? c + ' ' : ''}${t}`;
-                                })
-                                .join('、')
                             ) : (
                               ''
                             )}
@@ -2441,7 +2382,7 @@ export default function HrManagementPage() {
                           <th className="py-1.5 px-2.5">退勤</th>
                           <th className="py-1.5 px-2.5">休憩</th>
                           <th className="py-1.5 px-2.5">実労働</th>
-                          <th className="py-1.5 px-2.5">主な作業・備考</th>
+                          <th className="py-1.5 px-2.5">備考（休暇等）</th>
                           <th className="py-1.5 px-2.5 text-right">日額目安</th>
                         </tr>
                       </thead>
@@ -2480,14 +2421,6 @@ export default function HrManagementPage() {
                                   <span className="text-purple-700 font-bold">
                                     🏖️ {d.leave.type || d.leave.leave_type || '有給休暇'}（{d.leave.status}）
                                   </span>
-                                ) : d.logs.length > 0 ? (
-                                  d.logs
-                                    .map((l) => {
-                                      const c = getCropLabel(l);
-                                      const t = getTaskLabel(l);
-                                      return `${c ? c + ' ' : ''}${t}`;
-                                    })
-                                    .join('、')
                                 ) : (
                                   ''
                                 )}

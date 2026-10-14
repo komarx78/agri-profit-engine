@@ -155,6 +155,16 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
     overtimeMinutes: number;
   }>({ workDays: 0, totalMinutes: 0, overtimeMinutes: 0 });
 
+  // 📱 スマホ表示時の4大完全分離モード ('attendance'=出退勤・タイムカード, 'work'=作業・出荷記録, 'schedule'=予定・日報・稼働状況, 'info'=掲示板・動画マニュアル)
+  const [mobilePrimaryView, setMobilePrimaryView] = useState<'attendance' | 'work' | 'schedule' | 'info'>(() => {
+    if (typeof window !== 'undefined') {
+      const tabParam = new URLSearchParams(window.location.search).get('tab');
+      if (tabParam === 'work' || tabParam === 'sales') return 'work';
+      if (tabParam === 'tasks' || tabParam === 'reports' || tabParam === 'calendar' || tabParam === 'status') return 'schedule';
+    }
+    return 'attendance';
+  });
+
   // 👥 チーム稼働状況 & 作業日報まとめ・作業記録・出荷タブ用ステート
   const [activePortalTab, setActivePortalTab] = useState<'status' | 'reports' | 'calendar' | 'tasks' | 'work' | 'sales'>(() => {
     if (typeof window !== 'undefined') {
@@ -168,9 +178,15 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
 
   const switchToPortalTab = (tab: 'status' | 'reports' | 'calendar' | 'tasks' | 'work' | 'sales') => {
     setActivePortalTab(tab);
+    if (tab === 'work' || tab === 'sales') {
+      setMobilePrimaryView('work');
+    } else {
+      setMobilePrimaryView('schedule');
+    }
     if (typeof window !== 'undefined') {
       const el = document.getElementById('portal-main-tabs');
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      else window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
   
@@ -2877,11 +2893,87 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+      <main className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8 pb-24 lg:pb-8 space-y-5">
         
-        {/* 🎨 提案③: 迷子ゼロ・スマートナビゲーションバナー（今やるべき行動を特大カードで自動案内） */}
+        {/* 📱 スマホ専用：迷子ゼロ「4大画面」完全分離スイッチャー（出退勤と作業記録をバッサリ分離） */}
+        <div className="lg:hidden bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-4 gap-1 sticky top-14 z-40">
+          <button
+            type="button"
+            onClick={() => {
+              setMobilePrimaryView('attendance');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl font-black text-[11px] transition-all cursor-pointer ${
+              mobilePrimaryView === 'attendance'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Clock className="w-4 h-4" />
+            <span className="truncate">出退勤</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMobilePrimaryView('work');
+              if (activePortalTab !== 'work' && activePortalTab !== 'sales') {
+                setActivePortalTab('work');
+              }
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl font-black text-[11px] transition-all cursor-pointer ${
+              mobilePrimaryView === 'work'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Sprout className="w-4 h-4" />
+            <span className="truncate">作業・出荷</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMobilePrimaryView('schedule');
+              if (activePortalTab === 'work' || activePortalTab === 'sales') {
+                setActivePortalTab('tasks');
+              }
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`relative flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl font-black text-[11px] transition-all cursor-pointer ${
+              mobilePrimaryView === 'schedule'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <CalendarIcon className="w-4 h-4" />
+            <span className="truncate">予定・日報</span>
+            {todayTasksProgress.total - todayTasksProgress.completed > 0 && (
+              <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-rose-500"></span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMobilePrimaryView('info');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl font-black text-[11px] transition-all cursor-pointer ${
+              mobilePrimaryView === 'info'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span className="truncate">連絡・動画</span>
+          </button>
+        </div>
+
+        {/* 🎨 提案③: 迷子ゼロ・スマートナビゲーションバナー（スマホでは「出退勤」画面のときのみ表示し、作業記録画面の邪魔をしない） */}
         {currentUser && (
-          <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200">
+          <div className={`${mobilePrimaryView === 'attendance' ? 'block' : 'hidden lg:block'} bg-white rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200`}>
             <div className="text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
               <span>{t('nav_actionPrompt', language)}</span>
@@ -2976,11 +3068,11 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
         {/* 📱 現場ホーム（一般スタッフ・パート用 出退勤打刻・タスク・日報・掲示板・マニュアル） */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
-          {/* 左側カラム */}
-          <div className="lg:col-span-4 space-y-6">
+          {/* 左側カラム（スマホでは「出退勤」または「連絡・動画」選択時のみ表示） */}
+          <div className={`${(mobilePrimaryView === 'attendance' || mobilePrimaryView === 'info') ? 'block' : 'hidden lg:block'} lg:col-span-4 space-y-6`}>
             
-            {/* 出退勤 */}
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 relative overflow-hidden">
+            {/* 出退勤（スマホでは「出退勤」タブ選択時のみ表示） */}
+            <div className={`${mobilePrimaryView === 'attendance' ? 'block' : 'hidden lg:block'} bg-white rounded-3xl p-6 shadow-sm border border-slate-200 relative overflow-hidden`}>
               <div className="absolute top-0 right-0 p-4 opacity-5">
                 <Clock className="w-24 h-24" />
               </div>
@@ -3149,7 +3241,7 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
 
               {/* 👥 農場の今（稼働状況クイックサマリー） */}
               <div 
-                onClick={() => setActivePortalTab('status')}
+                onClick={() => switchToPortalTab('status')}
                 className="mb-4 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-slate-50 border border-emerald-200/80 rounded-2xl p-3 shadow-xs cursor-pointer hover:border-emerald-400 hover:shadow-md transition-all active:scale-[0.99] group"
               >
                 <div className="flex items-center justify-between mb-2">
@@ -3276,8 +3368,8 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               })()}
             </div>
 
-            {/* 📋 本日のやることリスト（Today's ToDo） */}
-            <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200 relative overflow-hidden space-y-4">
+            {/* 📋 本日のやることリスト（PCの左カラム専用・スマホでは「予定・日報」画面に完全分離して二重表示を防止） */}
+            <div className="hidden lg:block bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200 relative overflow-hidden space-y-4">
               {/* カードヘッダー */}
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -3487,8 +3579,8 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               </div>
             </div>
 
-            {/* マニュアル動画 */}
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+            {/* マニュアル動画（スマホでは「連絡・動画」タブ選択時のみ表示） */}
+            <div className={`${mobilePrimaryView === 'info' ? 'block' : 'hidden lg:block'} bg-white rounded-3xl p-6 shadow-sm border border-slate-200`}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
                   <PlayCircle className="w-5 h-5 text-rose-500" /> {t('manualVideo', language)}
@@ -3516,9 +3608,9 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               </div>
             </div>
 
-            {/* 承認待ち */}
+            {/* 承認待ち（スマホでは「連絡・動画」タブ選択時のみ表示） */}
             {role === 'admin' && (
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+              <div className={`${mobilePrimaryView === 'info' ? 'block' : 'hidden lg:block'} bg-white rounded-3xl p-6 shadow-sm border border-slate-200`}>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
                     <Inbox className="w-5 h-5 text-amber-500" /> {t('approvalInbox', language)}
@@ -3550,8 +3642,8 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               </div>
             )}
 
-            {/* 社内掲示板 */}
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+            {/* 社内掲示板（スマホでは「連絡・動画」タブ選択時のみ表示） */}
+            <div className={`${mobilePrimaryView === 'info' ? 'block' : 'hidden lg:block'} bg-white rounded-3xl p-6 shadow-sm border border-slate-200`}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-purple-500" /> {t('noticeBoard', language)}
@@ -3593,21 +3685,21 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             
           </div>
 
-          {/* 右側カラム：統合機能タブ（📋 本日のやること / 🚜 作業記録 / 🚚 出荷・納品 / 👥 農場の今 / 📄 作業日報まとめ / 📅 スケジュール） */}
-          <div id="portal-main-tabs" className="lg:col-span-8 space-y-4">
+          {/* 右側カラム：統合機能タブ（スマホでは「作業・出荷」または「予定・日報」選択時のみ表示し、出退勤画面から完全分離！） */}
+          <div id="portal-main-tabs" className={`${(mobilePrimaryView === 'work' || mobilePrimaryView === 'schedule') ? 'block' : 'hidden lg:block'} lg:col-span-8 space-y-4`}>
             
-            {/* タブナビゲーション */}
+            {/* タブナビゲーション（スマホでは選択中のモードに応じたタブのみをスッキリ表示） */}
             <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-1.5 overflow-x-auto">
               <button
                 type="button"
                 onClick={() => setActivePortalTab('tasks')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+                className={`${mobilePrimaryView === 'work' ? 'hidden lg:flex' : 'flex'} flex-1 sm:flex-initial items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
                   activePortalTab === 'tasks'
                     ? 'bg-emerald-600 text-white shadow-sm scale-[1.01]'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
-                <CheckSquare className="w-4 h-4" />
+                <CheckSquare className="w-4 h-4 shrink-0" />
                 <span>{t('tabTasks', language)}</span>
                 {todayTasksProgress.total > 0 && (
                   <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
@@ -3623,39 +3715,39 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               <button
                 type="button"
                 onClick={() => setActivePortalTab('work')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+                className={`${mobilePrimaryView === 'schedule' ? 'hidden lg:flex' : 'flex'} flex-1 sm:flex-initial items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
                   activePortalTab === 'work'
                     ? 'bg-emerald-700 text-white shadow-sm scale-[1.01]'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
-                <Sprout className="w-4 h-4" />
+                <Sprout className="w-4 h-4 shrink-0" />
                 <span>{t('workRecord', language)}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActivePortalTab('sales')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+                className={`${mobilePrimaryView === 'schedule' ? 'hidden lg:flex' : 'flex'} flex-1 sm:flex-initial items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
                   activePortalTab === 'sales'
                     ? 'bg-emerald-700 text-white shadow-sm scale-[1.01]'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
-                <Truck className="w-4 h-4" />
+                <Truck className="w-4 h-4 shrink-0" />
                 <span>{t('tabSales', language)}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActivePortalTab('status')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+                className={`${mobilePrimaryView === 'work' ? 'hidden lg:flex' : 'flex'} flex-1 sm:flex-initial items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
                   activePortalTab === 'status'
                     ? 'bg-slate-800 text-white shadow-sm scale-[1.01]'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
-                <Users className="w-4 h-4" />
+                <Users className="w-4 h-4 shrink-0" />
                 <span>{t('tabTeamLive', language)}</span>
                 {currentlyWorkingCount > 0 && (
                   <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
@@ -3669,13 +3761,13 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               <button
                 type="button"
                 onClick={() => setActivePortalTab('reports')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+                className={`${mobilePrimaryView === 'work' ? 'hidden lg:flex' : 'flex'} flex-1 sm:flex-initial items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
                   activePortalTab === 'reports'
                     ? 'bg-blue-600 text-white shadow-sm scale-[1.01]'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
-                <FileText className="w-4 h-4" />
+                <FileText className="w-4 h-4 shrink-0" />
                 <span>{t('tabWorkReports', language)}</span>
                 {dailyWorkLogs.length > 0 && (
                   <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
@@ -3689,13 +3781,13 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
               <button
                 type="button"
                 onClick={() => setActivePortalTab('calendar')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
+                className={`${mobilePrimaryView === 'work' ? 'hidden lg:flex' : 'flex'} flex-1 sm:flex-initial items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-xl font-black text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer ${
                   activePortalTab === 'calendar'
                     ? 'bg-slate-800 text-white shadow-sm scale-[1.01]'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
-                <CalendarIcon className="w-4 h-4" />
+                <CalendarIcon className="w-4 h-4 shrink-0" />
                 <span>{t('tabSchedule', language)}</span>
               </button>
             </div>
@@ -6574,8 +6666,88 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
         }}
       />
 
+      {/* 📱 スマホ専用：画面下部固定「4大メニューバー」（親指1本で出退勤・作業記録を瞬時に切り替え） */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+        <div className="max-w-md mx-auto grid grid-cols-4 gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              setMobilePrimaryView('attendance');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl font-black text-[11px] transition-all cursor-pointer ${
+              mobilePrimaryView === 'attendance'
+                ? 'bg-emerald-50 text-emerald-700'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Clock className={`w-5 h-5 ${mobilePrimaryView === 'attendance' ? 'text-emerald-600 stroke-[2.5]' : ''}`} />
+            <span>出退勤</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMobilePrimaryView('work');
+              if (activePortalTab !== 'work' && activePortalTab !== 'sales') {
+                setActivePortalTab('work');
+              }
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl font-black text-[11px] transition-all cursor-pointer ${
+              mobilePrimaryView === 'work'
+                ? 'bg-blue-50 text-blue-700'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Sprout className={`w-5 h-5 ${mobilePrimaryView === 'work' ? 'text-blue-600 stroke-[2.5]' : ''}`} />
+            <span>作業・出荷</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMobilePrimaryView('schedule');
+              if (activePortalTab === 'work' || activePortalTab === 'sales') {
+                setActivePortalTab('tasks');
+              }
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`relative flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl font-black text-[11px] transition-all cursor-pointer ${
+              mobilePrimaryView === 'schedule'
+                ? 'bg-amber-50 text-amber-800'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <CalendarIcon className={`w-5 h-5 ${mobilePrimaryView === 'schedule' ? 'text-amber-600 stroke-[2.5]' : ''}`} />
+            <span>予定・日報</span>
+            {todayTasksProgress.total - todayTasksProgress.completed > 0 && (
+              <span className="absolute top-1 right-4 w-2 h-2 rounded-full bg-rose-500"></span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMobilePrimaryView('info');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-xl font-black text-[11px] transition-all cursor-pointer ${
+              mobilePrimaryView === 'info'
+                ? 'bg-purple-50 text-purple-700'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <MessageSquare className={`w-5 h-5 ${mobilePrimaryView === 'info' ? 'text-purple-600 stroke-[2.5]' : ''}`} />
+            <span>連絡・動画</span>
+          </button>
+        </div>
+      </nav>
+
       {/* 📱 ページの最下部に配置するアプリ化案内バナー（画面に被らない安全配置） */}
-      <PwaBottomBanner language={language} />
+      <div className="pb-16 lg:pb-0">
+        <PwaBottomBanner language={language} />
+      </div>
     </div>
   );
 }
