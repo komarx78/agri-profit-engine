@@ -36,7 +36,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { CultivationActionSheet, CultivationTarget } from '@/components/CultivationActionSheet';
 import { PesticideLogReportModal } from '@/components/PesticideLogReportModal';
-import { saveWorkerShareSettings, getWorkerShareSettings } from '@/app/actions/farm';
+import { saveWorkerShareSettings, getWorkerShareSettings, getTenantCultivationPlansAction, getTenantCropStandardsAction, saveTenantCultivationPlanAction, deleteTenantCultivationPlanAction } from '@/app/actions/farm';
 import { generateComprehensiveSearchKeywords, isFuzzyMatch } from '@/lib/fuzzySearch';
 import { getJSTDate } from '@/lib/dateUtils';
 import Link from 'next/link';
@@ -330,11 +330,12 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
       setCurrentTenantId(tenantId);
 
       // 🚀 【Phase 1】ファーストビュー（作付け一覧）に必須な超軽量データのみ最優先取得
-      const [fRes, cRes, pRes, compRes] = await Promise.all([
+      const [fRes, cRes, pRes, compRes, stdRes] = await Promise.all([
         supabase.from('fields').select('*').eq('user_id', tenantId).order('name'),
         supabase.from('crops').select('*').eq('user_id', tenantId).order('name'),
-        supabase.from('cultivation_plans_v2').select('*, crops(*)').eq('user_id', tenantId).order('created_at', { ascending: false }),
-        supabase.from('company_settings').select('company_name').or(`user_id.eq.${tenantId},id.eq.${tenantId}`).maybeSingle()
+        getTenantCultivationPlansAction(tenantId),
+        supabase.from('company_settings').select('company_name').or(`user_id.eq.${tenantId},id.eq.${tenantId}`).maybeSingle(),
+        getTenantCropStandardsAction(tenantId)
       ]);
 
       const fetchedFields = fRes.data || [];
@@ -350,17 +351,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
 
       setFields(fetchedFields);
       setCrops(fetchedCrops);
-
-      // 自社の作目に紐づく栽培基準だけを取得（crop_id で自社に限定）
-      if (fetchedCrops.length > 0) {
-        const { data: stdData } = await supabase
-          .from('crop_standards')
-          .select('*')
-          .in('crop_id', fetchedCrops.map((c: any) => c.id));
-        setCropStandards(stdData || []);
-      } else {
-        setCropStandards([]);
-      }
+      setCropStandards(stdRes.data || []);
 
       let initialCropId = selectedSprayCropId;
       if (fetchedCrops.length > 0 && !initialCropId) {
@@ -1228,19 +1219,11 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
         calculated_seedlings: realAreaA && seedlingsPer10a ? Math.ceil((realAreaA / 10) * seedlingsPer10a) : null
       };
 
+      const saveRes = await saveTenantCultivationPlanAction(tenantId, editingPlanId || null, payload);
+      if (!saveRes.success) throw new Error(saveRes.error || '保存に失敗しました');
       if (editingPlanId) {
-        const { error } = await supabase
-          .from('cultivation_plans_v2')
-          .update(payload)
-          .eq('id', editingPlanId)
-          .eq('user_id', tenantId);
-        if (error) throw error;
         showToast('栽培こよみ・作付スケジュールを更新しました！');
       } else {
-        const { error } = await supabase
-          .from('cultivation_plans_v2')
-          .insert([payload]);
-        if (error) throw error;
         showToast('年間栽培こよみ・作付スケジュールを登録しました！');
       }
 
@@ -1258,12 +1241,8 @@ export default function CultivationsHub({ initialSubTab = 'cultivations', initia
     try {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) return;
-      const { error } = await supabase
-        .from('cultivation_plans_v2')
-        .delete()
-        .eq('id', planId)
-        .eq('user_id', tenantId);
-      if (error) throw error;
+      const delRes = await deleteTenantCultivationPlanAction(tenantId, planId);
+      if (!delRes.success) throw new Error(delRes.error || '削除に失敗しました');
       showToast('作付スケジュールを削除しました。');
       setIsPlanModalOpen(false);
       await fetchAllData();

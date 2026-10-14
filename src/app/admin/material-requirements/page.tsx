@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getTenantCultivationPlansAction, getTenantCropStandardsAction } from '@/app/actions/farm';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Package, Loader2, ChevronLeft, ChevronRight, Calculator, Info } from 'lucide-react';
 
@@ -28,20 +29,12 @@ export default function MaterialRequirementsPage() {
 
       const [mRes, pRes, csRes] = await Promise.all([
         supabase.from('materials').select('*').eq('user_id', tenantId).order('name'),
-        supabase.from('cultivation_plans_v2').select(`
-          *,
-          fields ( name ),
-          crops ( name )
-        `).eq('user_id', tenantId).eq('year', year),
-        supabase.from('crop_standards').select('*')
+        getTenantCultivationPlansAction(tenantId, year),
+        getTenantCropStandardsAction(tenantId)
       ]);
       
       setMaterials(mRes.data || []);
       setCropStandards(csRes.data || []);
-      
-      if (pRes.error && pRes.error.code !== '42P01') {
-        console.error("Plans fetch error:", pRes.error);
-      }
       setPlans(pRes.data || []);
       
     } catch (err) {

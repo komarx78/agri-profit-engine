@@ -3,6 +3,7 @@
 import React, { useEffect, useState, use } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getTenantCultivationPlansAction } from '@/app/actions/farm';
 import { getJSTDate } from '@/lib/dateUtils';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Printer, Loader2, ChevronLeft } from 'lucide-react';
@@ -54,22 +55,10 @@ export default function ReportPage({ params }: { params: Promise<{ plan_id: stri
       }
       setTenantId(currentTenant);
 
-      // 計画データの取得 (自社テナント限定)
-      const planQuery = supabase
-        .from('cultivation_plans_v2')
-        .select(`
-          *,
-          fields ( name, area_size ),
-          crops ( * )
-        `)
-        .eq('id', unwrappedParams.plan_id)
-        .eq('user_id', tenantId);
-
-      const { data: planRes, error: planErr } = await planQuery.single();
-        
-      if (planErr) throw planErr;
-      
-      const plan = planRes;
+      // 計画データの取得 (自社テナント限定・同じ農園の全員が見られるサーバー窓口経由)
+      const plansRes = await getTenantCultivationPlansAction(currentTenant);
+      const plan = (plansRes.data || []).find((p: any) => p.id === unwrappedParams.plan_id);
+      if (!plan) throw new Error('対象の作付け計画が見つかりません');
       setPlanData(plan);
       
       const rawArea = Number(plan.fields?.area_size || plan.calculated_area);

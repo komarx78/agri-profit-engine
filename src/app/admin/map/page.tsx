@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, Polygon, InfoWindow } from '@react-google-maps/api';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getTenantCultivationPlansAction } from '@/app/actions/farm';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { MapPin, Plus, Loader2, Save, X, Info, Search, Check, Trash2, Edit2, Palette, ArrowRight, FlaskConical } from 'lucide-react';
 import Link from 'next/link';
@@ -474,13 +475,7 @@ export default function MapPage() {
     try {
       const tenantId = await getCurrentTenantId();
       const [plansRes, worksRes, soilRes] = await Promise.all([
-        supabase
-          .from('cultivation_plans_v2')
-          .select(`*, crops(name)`)
-          .eq('field_id', field.id)
-          .order('year', { ascending: false })
-          .order('start_month', { ascending: false })
-          .limit(1),
+        tenantId ? getTenantCultivationPlansAction(tenantId) : Promise.resolve({ success: true, data: [] }),
         supabase
           .from('work_logs')
           .select(`*`)
@@ -495,7 +490,10 @@ export default function MapPage() {
           .limit(1)
       ]);
 
-      const latestPlan = plansRes.data && plansRes.data.length > 0 ? plansRes.data[0] : null;
+      const fieldPlans = (plansRes.data || [])
+        .filter((p: any) => p.field_id === field.id)
+        .sort((a: any, b: any) => (Number(b.year) - Number(a.year)) || (Number(b.start_month) - Number(a.start_month)));
+      const latestPlan = fieldPlans.length > 0 ? fieldPlans[0] : null;
       const works = worksRes.data || [];
       const latestSoil = soilRes.data && soilRes.data.length > 0 ? soilRes.data[0] : null;
 

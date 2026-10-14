@@ -21,6 +21,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { getJSTDate } from '@/lib/dateUtils';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
+import { getTenantCultivationPlansAction, saveTenantCultivationPlanAction } from '@/app/actions/farm';
 import {
   Calendar,
   Loader2,
@@ -185,7 +186,7 @@ export default function CultivationSchedulePage() {
       const [fRes, cRes, pRes, wRes, sRes, mcRes, expRes] = await Promise.all([
         supabase.from('fields').select('*').eq('user_id', tid).order('name'),
         supabase.from('crops').select('*').eq('user_id', tid).order('name'),
-        supabase.from('cultivation_plans_v2').select('*, crops(*)').eq('user_id', tid).eq('year', year),
+        getTenantCultivationPlansAction(tid, year),
         supabase
           .from('work_logs')
           .select('*, workers(name, hourly_wage), materials(name, default_price, category, unit)')
@@ -197,7 +198,7 @@ export default function CultivationSchedulePage() {
         supabase.from('monthly_expenses').select('*').eq('user_id', tid)
       ]);
 
-      if (pRes.error) throw pRes.error;
+      if (!pRes.success) throw new Error(pRes.error || '計画取得エラー');
       if (wRes.error) throw wRes.error;
       if (sRes.error) throw sRes.error;
 
@@ -451,12 +452,10 @@ export default function CultivationSchedulePage() {
     try {
       const { clean, meta } = parsePlanMeta(targetPlan.plan.variety);
       const nextMeta = { ...meta, ty: targetYieldInput === '' ? '' : yieldVal, tp: targetPriceInput === '' ? '' : priceVal };
-      const { error } = await supabase
-        .from('cultivation_plans_v2')
-        .update({ variety: serializePlanMeta(clean, nextMeta) })
-        .eq('id', targetPlan.plan.id)
-        .eq('user_id', tenantId);
-      if (error) throw error;
+      const saveRes = await saveTenantCultivationPlanAction(tenantId, targetPlan.plan.id, {
+        variety: serializePlanMeta(clean, nextMeta)
+      });
+      if (!saveRes.success) throw new Error(saveRes.error || '保存エラー');
       setTargetPlan(null);
       setToast(`「${targetPlan.fieldName}・${targetPlan.cropName}」の目標を保存しました`);
       await fetchData();

@@ -6,6 +6,7 @@ import { HelpTooltip } from '@/components/HelpTooltip';
 import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft, Coffee, Briefcase, FlaskConical, Wheat, Truck, Smartphone, MessageSquare, Search, Table, LayoutGrid } from 'lucide-react';
 import Papa from 'papaparse';
 import { autoTranslateMasterData } from '@/app/actions/translate';
+import { getTenantCropStandardsAction, saveTenantCropStandardAction } from '@/app/actions/farm';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { LineLinkModal } from '@/components/LineLinkModal';
 
@@ -104,7 +105,7 @@ export default function MastersPage() {
         supabase.from('workers').select('*').eq('user_id', userId).order('name'),
         supabase.from('materials').select('*').eq('user_id', userId).order('name'),
         supabase.from('sales_prices').select('*').eq('user_id', userId).order('crop_name'),
-        supabase.from('crop_standards').select('*'),
+        getTenantCropStandardsAction(userId),
         supabase.from('sales_channels').select('*').eq('user_id', userId).order('name'),
         supabase.from('departments').select('*').eq('tenant_id', userId).order('name')
       ]);
@@ -347,14 +348,13 @@ export default function MastersPage() {
         insertedId = savedData[0].id;
       }
       
-      // 作目の場合は基準値も保存
+      // 作目の場合は基準値も保存（同じ農園のスタッフ・管理者でも保存できるようサーバー窓口経由）
       let nurseryColumnsMissing = false;
       if (table === 'crops' && insertedId) {
         const hasNurseryInput = NURSERY_STANDARD_KEYS.some(k => formData[k] !== undefined && formData[k] !== '' && formData[k] !== null);
         // formData.seedlings_per_10a が入力されていれば保存、なければ削除
         if (formData.seedlings_per_10a || formData.seedlings_per_10a === 0 || formData.materials_per_10a || hasNurseryInput) {
           const baseStandardData = {
-            crop_id: insertedId,
             variety: formData.variety || null,
             seedlings_per_10a: Number(formData.seedlings_per_10a) || 0,
             materials_per_10a: formData.materials_per_10a || []
@@ -366,44 +366,13 @@ export default function MastersPage() {
             nurseryData[k] = v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v);
           });
           const standardData = { ...baseStandardData, ...nurseryData };
-          
-          // 一旦既存の基準があるか確認
-          const { data: existingStandard } = await supabase
-            .from('crop_standards')
-            .select('id')
-            .eq('crop_id', insertedId)
-            .is('variety', null) // シンプル化のため一旦variety=nullの基本基準として扱う
-            .maybeSingle();
-            
-          const runSave = (payload: any) => existingStandard
-            ? supabase.from('crop_standards').update(payload).eq('id', existingStandard.id)
-            : supabase.from('crop_standards').insert([payload]);
 
-          const { error: stdErr } = await runSave(standardData);
-          if (stdErr) {
-            const msg = `${stdErr.message || ''} ${(stdErr as any).details || ''}`;
-            // 季節別育苗日数の列だけまだ無い場合は、基本の6列＋baseStandardDataで保存を試みる
-            if (/nursery_days_(spring|summer|autumn|winter)/i.test(msg)) {
-              const withoutSeasonal = { ...standardData };
-              delete (withoutSeasonal as any).nursery_days_spring;
-              delete (withoutSeasonal as any).nursery_days_summer;
-              delete (withoutSeasonal as any).nursery_days_autumn;
-              delete (withoutSeasonal as any).nursery_days_winter;
-              const { error: retrySeasonalErr } = await runSave(withoutSeasonal);
-              if (!retrySeasonalErr) {
-                alert('基本の育苗基準は保存しました。\n※「季節ごとの育苗日数（春・夏・秋・冬）」を保存するには、更新された「18_育苗基準カラム追加.sql」をSupabaseで一度実行してください。');
-              } else {
-                const { error: retryErr } = await runSave(baseStandardData);
-                if (retryErr) throw retryErr;
-                nurseryColumnsMissing = hasNurseryInput;
-              }
-            } else if (/column|schema cache|nursery_days|germination|tray_cells|seeds_per_cell|potting_days/i.test(msg)) {
-              const { error: retryErr } = await runSave(baseStandardData);
-              if (retryErr) throw retryErr;
-              nurseryColumnsMissing = hasNurseryInput;
-            } else {
-              throw stdErr;
-            }
+          const stdRes = await saveTenantCropStandardAction(tenantId, insertedId, standardData);
+          if (!stdRes.success) throw new Error(stdRes.error || '作目基準の保存に失敗しました');
+          if (stdRes.seasonalColumnsMissing) {
+            alert('基本の育苗基準は保存しました。\n※「季節ごとの育苗日数（春・夏・秋・冬）」を保存するには、更新された「18_育苗基準カラム追加.sql」をSupabaseで一度実行してください。');
+          } else if (stdRes.nurseryColumnsMissing) {
+            nurseryColumnsMissing = hasNurseryInput;
           }
         }
       }

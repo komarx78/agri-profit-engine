@@ -1126,3 +1126,284 @@ export async function reopenPortalTask(tenantId: string, taskId: string) {
     return { success: false, error: err.message || '更新に失敗しました' };
   }
 }
+
+// =====================================================================
+// 農園単位（同じ農園のオーナー・家族・PINログインスタッフ全員）で共有し、
+// よその農園からは完全に遮断する 育苗・作付けこよみ・作目基準 サーバー窓口
+// =====================================================================
+async function resolveOwnerId(supabase: any, tenantId: string): Promise<string | null> {
+  if (!tenantId || tenantId === 'null' || tenantId === 'undefined') return null;
+  let ownerId = tenantId;
+  try {
+    const { data: comp } = await supabase
+      .from('company_settings')
+      .select('user_id')
+      .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+      .limit(1)
+      .maybeSingle();
+    if (comp?.user_id) ownerId = comp.user_id;
+  } catch {}
+  return ownerId;
+}
+
+// 1) 育苗スケジュール画面の一括取得（同じ農園の作付け・基準・育苗記録）
+export async function getNurseryPageData(tenantId: string, year: number) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const { data: plansData, error: plansErr } = await supabase
+      .from('cultivation_plans_v2')
+      .select('*, fields(*), crops(name)')
+      .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`)
+      .eq('year', year);
+    if (plansErr) throw plansErr;
+    const plans = plansData || [];
+
+    const { data: cropsData } = await supabase
+      .from('crops')
+      .select('id')
+      .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`);
+    const cropIds = Array.from(new Set([...(cropsData || []).map((c: any) => c.id), ...plans.map((p: any) => p.crop_id)].filter(Boolean)));
+
+    let standards: any[] = [];
+    if (cropIds.length > 0) {
+      const { data: stdData } = await supabase.from('crop_standards').select('*').in('crop_id', cropIds);
+      standards = stdData || [];
+    }
+
+    let schedules: any[] = [];
+    if (plans.length > 0) {
+      const { data: schData, error: schErr } = await supabase
+        .from('nursery_schedules_v2')
+        .select('*')
+        .in('plan_id', plans.map((p: any) => p.id));
+      if (schErr) throw schErr;
+      schedules = schData || [];
+    }
+
+    return { success: true, plans, standards, schedules, ownerId };
+  } catch (err: any) {
+    console.error('getNurseryPageData error:', err);
+    return { success: false, error: err.message || '育苗データの取得に失敗しました。' };
+  }
+}
+
+// 2) 育苗スケジュールの記録・設定の保存（同じ農園のplan_idか検証してから保存）
+export async function saveNurseryScheduleAction(
+  tenantId: string,
+  params: { scheduleId?: string | null; planId: string; scheduleData: any; sownQuantity: number }
+) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    // 対象の作付けがこの農園のものか厳格に検証
+    const { data: planRow } = await supabase
+      .from('cultivation_plans_v2')
+      .select('id, user_id')
+      .eq('id', params.planId)
+      .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`)
+      .maybeSingle();
+    if (!planRow) {
+      return { success: false, error: 'この農園の作付けデータが見つかりません。' };
+    }
+
+    if (params.scheduleId) {
+      const { data, error } = await supabase
+        .from('nursery_schedules_v2')
+        .update({ schedule_data: params.scheduleData, sown_quantity: params.sownQuantity })
+        .eq('id', params.scheduleId)
+        .eq('plan_id', params.planId)
+        .select()
+        .single();
+      if (error) throw error;
+      return { success: true, data };
+    } else {
+      const { data, error } = await supabase
+        .from('nursery_schedules_v2')
+        .insert({
+          user_id: planRow.user_id || ownerId,
+          plan_id: params.planId,
+          schedule_data: params.scheduleData,
+          sown_quantity: params.sownQuantity
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return { success: true, data };
+    }
+  } catch (err: any) {
+    console.error('saveNurseryScheduleAction error:', err);
+    return { success: false, error: err.message || '育苗記録の保存に失敗しました。' };
+  }
+}
+
+// 3) 自社農園の作目基準（crop_standards）の取得・保存
+export async function getTenantCropStandardsAction(tenantId: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, data: [] };
+
+    const { data: cropsData } = await supabase
+      .from('crops')
+      .select('id')
+      .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`);
+    const cropIds = (cropsData || []).map((c: any) => c.id).filter(Boolean);
+    if (cropIds.length === 0) return { success: true, data: [] };
+
+    const { data, error } = await supabase.from('crop_standards').select('*').in('crop_id', cropIds);
+    if (error) throw error;
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    console.error('getTenantCropStandardsAction error:', err);
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function saveTenantCropStandardAction(tenantId: string, cropId: string, payload: Record<string, any>) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    // 対象の作目がこの農園のものか検証
+    const { data: cropRow } = await supabase
+      .from('crops')
+      .select('id')
+      .eq('id', cropId)
+      .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`)
+      .maybeSingle();
+    if (!cropRow) return { success: false, error: 'この農園の作目ではありません。' };
+
+    const { data: existing } = await supabase
+      .from('crop_standards')
+      .select('id')
+      .eq('crop_id', cropId)
+      .is('variety', null)
+      .maybeSingle();
+
+    const runSave = (dataObj: Record<string, any>) =>
+      existing
+        ? supabase.from('crop_standards').update(dataObj).eq('id', existing.id)
+        : supabase.from('crop_standards').insert([{ crop_id: cropId, variety: null, ...dataObj }]);
+
+    let { error } = await runSave(payload);
+    let seasonalColumnsMissing = false;
+    let nurseryColumnsMissing = false;
+
+    if (error) {
+      const msg = `${error.message || ''} ${(error as any).details || ''}`;
+      if (/nursery_days_(spring|summer|autumn|winter)/i.test(msg)) {
+        const withoutSeasonal = { ...payload };
+        delete withoutSeasonal.nursery_days_spring;
+        delete withoutSeasonal.nursery_days_summer;
+        delete withoutSeasonal.nursery_days_autumn;
+        delete withoutSeasonal.nursery_days_winter;
+        const retry1 = await runSave(withoutSeasonal);
+        if (!retry1.error) {
+          seasonalColumnsMissing = true;
+          error = null;
+        } else {
+          error = retry1.error;
+        }
+      }
+      if (error && /column|schema cache|nursery_days|germination|tray_cells|seeds_per_cell|potting_days/i.test(`${error.message || ''} ${(error as any).details || ''}`)) {
+        const baseOnly: Record<string, any> = {};
+        if ('seedlings_per_10a' in payload) baseOnly.seedlings_per_10a = payload.seedlings_per_10a;
+        if ('materials_per_10a' in payload) baseOnly.materials_per_10a = payload.materials_per_10a;
+        const retry2 = await runSave(baseOnly);
+        if (!retry2.error) {
+          nurseryColumnsMissing = true;
+          error = null;
+        } else {
+          error = retry2.error;
+        }
+      }
+    }
+    if (error) throw error;
+    return { success: true, seasonalColumnsMissing, nurseryColumnsMissing };
+  } catch (err: any) {
+    console.error('saveTenantCropStandardAction error:', err);
+    return { success: false, error: err.message || '作目基準の保存に失敗しました。' };
+  }
+}
+
+// 4) 自社農園の作付けこよみ（cultivation_plans_v2）の取得・保存・削除
+export async function getTenantCultivationPlansAction(tenantId: string, year?: number) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, data: [] };
+
+    let q = supabase
+      .from('cultivation_plans_v2')
+      .select('*, fields(*), crops(*)')
+      .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`);
+    if (year !== undefined) {
+      q = q.eq('year', year);
+    } else {
+      q = q.order('created_at', { ascending: false });
+    }
+    const { data, error } = await q;
+    if (error) throw error;
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    console.error('getTenantCultivationPlansAction error:', err);
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function saveTenantCultivationPlanAction(tenantId: string, planId: string | null, payload: Record<string, any>) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    if (planId) {
+      const { data, error } = await supabase
+        .from('cultivation_plans_v2')
+        .update(payload)
+        .eq('id', planId)
+        .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`)
+        .select()
+        .single();
+      if (error) throw error;
+      return { success: true, data };
+    } else {
+      const { data, error } = await supabase
+        .from('cultivation_plans_v2')
+        .insert([{ ...payload, user_id: ownerId }])
+        .select()
+        .single();
+      if (error) throw error;
+      return { success: true, data };
+    }
+  } catch (err: any) {
+    console.error('saveTenantCultivationPlanAction error:', err);
+    return { success: false, error: err.message || '作付け計画の保存に失敗しました。' };
+  }
+}
+
+export async function deleteTenantCultivationPlanAction(tenantId: string, planId: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const { error } = await supabase
+      .from('cultivation_plans_v2')
+      .delete()
+      .eq('id', planId)
+      .or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`);
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('deleteTenantCultivationPlanAction error:', err);
+    return { success: false, error: err.message || '作付け計画の削除に失敗しました。' };
+  }
+}
+

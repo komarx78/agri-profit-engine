@@ -20,6 +20,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { getJSTDate } from '@/lib/dateUtils';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { getNurseryPageData, saveNurseryScheduleAction, saveTenantCropStandardAction } from '@/app/actions/farm';
 import {
   Sprout,
   Loader2,
@@ -248,37 +249,16 @@ export default function NurserySchedulePage() {
       }
       setFarmId(tenantId);
 
-      // 自社のこの年度の作付け（作付けこよみで登録したもの）
-      const { data: plansData, error: plansErr } = await supabase
-        .from('cultivation_plans_v2')
-        .select('*, fields(*), crops(name)')
-        .eq('user_id', tenantId)
-        .eq('year', year);
-      if (plansErr) throw plansErr;
-      const fetchedPlans = plansData || [];
+      // 同じ農園の人（オーナー・家族・PINログインスタッフ）なら全員見られて、他社からは完全遮断するサーバー窓口で一括取得
+      const res = await getNurseryPageData(tenantId, year);
+      if (!res.success) throw new Error(res.error || '取得エラー');
 
-      // 作目ごとの基準（自社の作目に限定）
-      const cropIds = Array.from(new Set(fetchedPlans.map((p: any) => p.crop_id).filter(Boolean)));
-      let fetchedStandards: any[] = [];
-      if (cropIds.length > 0) {
-        const { data: stdData, error: stdErr } = await supabase.from('crop_standards').select('*').in('crop_id', cropIds);
-        if (stdErr) console.error('crop_standards fetch error:', stdErr);
-        fetchedStandards = stdData || [];
-      }
+      const fetchedPlans = res.plans || [];
+      const fetchedStandards = res.standards || [];
+      const fetchedSchedules = res.schedules || [];
+
       // 育苗基準の列があるか（SQL実行済みか）を、取得できた行の項目で判定
-      setStandardColumnsReady(fetchedStandards.length === 0 || fetchedStandards.some(s => 'nursery_days' in s));
-
-      // 育苗の記録
-      let fetchedSchedules: any[] = [];
-      if (fetchedPlans.length > 0) {
-        const { data: schData, error: schErr } = await supabase
-          .from('nursery_schedules_v2')
-          .select('*')
-          .eq('user_id', tenantId)
-          .in('plan_id', fetchedPlans.map((p: any) => p.id));
-        if (schErr) throw schErr;
-        fetchedSchedules = schData || [];
-      }
+      setStandardColumnsReady(fetchedStandards.length === 0 || fetchedStandards.some((s: any) => 'nursery_days' in s));
 
       setPlans(fetchedPlans);
       setStandards(fetchedStandards);
@@ -530,26 +510,15 @@ export default function NurserySchedulePage() {
 
     setIsSaving(true);
     try {
-      const runSave = async (data: Record<string, any>) => {
-        if (info.std?.id) {
-          return supabase.from('crop_standards').update(data).eq('id', info.std.id);
-        }
-        return supabase.from('crop_standards').insert([{ crop_id: info.cropId, variety: null, seedlings_per_10a: 0, materials_per_10a: [], ...data }]);
-      };
-      let { error } = await runSave(payload);
-      if (error && /nursery_days_(spring|summer|autumn|winter)/i.test(`${error.message || ''} ${(error as any).details || ''}`)) {
-        const fallback = { ...payload };
-        delete fallback.nursery_days_spring;
-        delete fallback.nursery_days_summer;
-        delete fallback.nursery_days_autumn;
-        delete fallback.nursery_days_winter;
-        const retry = await runSave(fallback);
-        error = retry.error;
-        if (!error) {
-          alert('発芽率・発芽日数・基本の育苗日数をマスタに反映しました。\n※季節ごとの育苗日数も保存するには「18_育苗基準カラム追加.sql」をSupabaseで一度実行してください。');
-        }
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error('農園の情報が確認できませんでした。');
+      const res = await saveTenantCropStandardAction(tenantId, info.cropId, payload);
+      if (!res.success) throw new Error(res.error);
+      if (res.seasonalColumnsMissing) {
+        alert('発芽率・発芽日数・基本の育苗日数をマスタに反映しました。\n※季節ごとの育苗日数も保存するには「18_育苗基準カラム追加.sql」をSupabaseで一度実行してください。');
+      } else if (res.nurseryColumnsMissing) {
+        alert('育苗の基準を保存するには「18_育苗基準カラム追加.sql」をSupabaseで一度実行してください。');
       }
-      if (error) throw error;
       setToast(`「${info.cropName}」の実績をマスタの基準に反映しました`);
       await fetchData();
     } catch (err: any) {
@@ -645,24 +614,17 @@ export default function NurserySchedulePage() {
       else if (patch.sowDate) base._sow_date = patch.sowDate;
       const sownQuantity = records.filter(r => r.type === 'sowing').reduce((a, r) => a + (r.qty || 0), 0);
 
+      const res = await saveNurseryScheduleAction(tenantId, {
+        scheduleId: row.schedule?.id || null,
+        planId: row.plan.id,
+        scheduleData: base,
+        sownQuantity
+      });
+      if (!res.success || !res.data) throw new Error(res.error || '保存失敗');
       if (row.schedule?.id) {
-        const { data, error } = await supabase
-          .from('nursery_schedules_v2')
-          .update({ schedule_data: base, sown_quantity: sownQuantity })
-          .eq('id', row.schedule.id)
-          .eq('user_id', tenantId)
-          .select()
-          .single();
-        if (error) throw error;
-        setSchedules(prev => prev.map(s => (s.id === row.schedule.id ? data : s)));
+        setSchedules(prev => prev.map(s => (s.id === row.schedule.id ? res.data : s)));
       } else {
-        const { data, error } = await supabase
-          .from('nursery_schedules_v2')
-          .insert({ user_id: tenantId, plan_id: row.plan.id, schedule_data: base, sown_quantity: sownQuantity })
-          .select()
-          .single();
-        if (error) throw error;
-        setSchedules(prev => [...prev, data]);
+        setSchedules(prev => [...prev, res.data]);
       }
       return true;
     } catch (err: any) {

@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getTenantCultivationPlansAction } from '@/app/actions/farm';
 import { MapPin, ArrowLeft, Loader2, Calendar, Edit, History, Sprout, Leaf, FlaskConical, Plus, Trash2, Edit2, CheckCircle2, AlertTriangle, X, FileText, Activity, Layers, Sparkles, Camera, Upload, Check } from 'lucide-react';
 import Link from 'next/link';
 import { GoogleMap, useJsApiLoader, Polygon } from '@react-google-maps/api';
@@ -98,24 +99,15 @@ export default function FieldDetailPage() {
 
       setField({ ...data, path });
 
-      // 自社テナントの最新の作付計画を取得
-      let planQuery = supabase
-        .from('cultivation_plans_v2')
-        .select(`*, crops(name)`)
-        .eq('field_id', fieldId);
-
-      if (tenantId) {
-        planQuery = planQuery.eq('user_id', tenantId);
-      }
-
-      const { data: plansData } = await planQuery
-        .order('year', { ascending: false })
-        .order('start_month', { ascending: false })
-        .limit(1);
+      // 自社テナントの最新の作付計画を取得（同じ農園の全員が見られるサーバー窓口経由）
+      const plansRes = await getTenantCultivationPlansAction(tenantId);
+      const fieldPlans = (plansRes.data || [])
+        .filter((p: any) => p.field_id === fieldId)
+        .sort((a: any, b: any) => (Number(b.year) - Number(a.year)) || (Number(b.start_month) - Number(a.start_month)));
 
       let latestPlan = null;
-      if (plansData && plansData.length > 0) {
-        latestPlan = plansData[0];
+      if (fieldPlans.length > 0) {
+        latestPlan = fieldPlans[0];
         setCurrentPlan(latestPlan);
       }
 
