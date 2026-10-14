@@ -63,6 +63,7 @@ interface PesticideDisplayItem {
   maxCount: number;
   usageCountLabel: string;
   usedCount: number;
+  usedLogs?: any[];
   dilution: string;
   usageTime: string;
   method: string;
@@ -105,6 +106,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   const [sprayCatalogMode, setSprayCatalogMode] = useState<'farm' | 'famic'>('farm');
   const [searchSprayQuery, setSearchSprayQuery] = useState('');
   const [selectedPesticideIds, setSelectedPesticideIds] = useState<string[]>([]);
+  const [highlightedSprayPestName, setHighlightedSprayPestName] = useState<string>('');
   const [isSprayModalOpen, setIsSprayModalOpen] = useState(false);
   const [sprayDate, setSprayDate] = useState<string>(() => getJSTDate());
   const [sprayWaterVolume, setSprayWaterVolume] = useState<string>('100');
@@ -416,32 +418,46 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     nameStr?: string,
     pestsStr?: string
   ): '殺虫剤' | '殺菌剤' | '除草剤' | 'その他' => {
+    const cleanPurpose = formatCleanJapanese(purposeStr || '');
     const combined = formatCleanJapanese(`${purposeStr || ''} ${typeStr || ''} ${nameStr || ''}`);
     const pests = formatCleanJapanese(pestsStr || '');
 
-    if (combined.includes('除草') || pests.includes('雑草') || pests.includes('スギナ')) {
+    // 1. 土壌くん蒸剤（クロルピクリン等）は殺菌・殺虫・雑草すべてに効くが、実務上は土壌消毒（殺菌剤）として扱う
+    if (combined.includes('クロルピクリン') || combined.includes('クロールピクリン') || combined.includes('ドロクロール') || combined.includes('くん蒸')) {
+      return '殺菌剤';
+    }
+
+    // 2. 用途（purpose）に明確に「除草」とある場合（かつ殺虫・殺菌を含まない場合）は除草剤
+    if (cleanPurpose.includes('除草') && !cleanPurpose.includes('殺虫') && !cleanPurpose.includes('殺菌')) {
       return '除草剤';
     }
+
+    // 3. 殺虫・殺ダニ・殺線虫の判定
     if (
       combined.includes('殺虫') ||
       combined.includes('殺ダニ') ||
       combined.includes('殺線虫') ||
       /アオムシ|コナガ|ヨトウムシ|アブラムシ|アザミウマ|スリップス|ハモグリバエ|カメムシ|メイガ|ダニ|センチュウ|ネキリムシ|コガネムシ/.test(pests)
     ) {
-      // もし用途が「殺菌剤」単独なら殺菌剤、それ以外（殺虫剤・殺虫殺菌剤等）は殺虫剤
-      if (purposeStr?.includes('殺菌') && !purposeStr?.includes('殺虫') && !/ムシ|ガ|アブラムシ|ダニ/.test(pests)) {
+      if (cleanPurpose.includes('殺菌') && !cleanPurpose.includes('殺虫') && !/ムシ|ガ|アブラムシ|ダニ/.test(pests)) {
         return '殺菌剤';
       }
       return '殺虫剤';
     }
+
+    // 4. 殺菌の判定
     if (
       combined.includes('殺菌') ||
-      combined.includes('くん蒸') ||
-      combined.includes('クロルピクリン') ||
       /病|菌|べと|うどんこ|サビ|腐|立枯|炭疽|斑点|萎黄/.test(pests)
     ) {
       return '殺菌剤';
     }
+
+    // 5. 雑草・除草の判定
+    if (combined.includes('除草') || pests.includes('雑草') || pests.includes('スギナ')) {
+      return '除草剤';
+    }
+
     return 'その他';
   };
 
@@ -673,20 +689,23 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
 
     return pesticides.map(p => {
       const normName = normalizeForMatch(p.name);
-      const usedCount = workLogs.filter(l => {
-        if (l.status === 'planned') return false;
-        if (selectedSprayCropId && l.crop_id && l.crop_id !== selectedSprayCropId) return false;
-        if (selectedSprayTargetFieldId !== 'all' && l.field_id !== selectedSprayTargetFieldId) return false;
-        const isSpray = l.work_type?.includes('農薬') || l.work_type?.includes('防除') || l.work_type?.includes('散布') || l.memo?.includes('[散布管理]') || l.memo?.includes('品名:');
-        if (!isSpray) return false;
-        const memoStr = l.memo || '';
-        const normMemo = normalizeForMatch(memoStr);
-        return memoStr.includes(p.rawName) || memoStr.includes(p.name) || (normName.length >= 3 && normMemo.includes(normName));
-      }).length;
+      const usedLogs = workLogs
+        .filter(l => {
+          if (l.status === 'planned') return false;
+          if (selectedSprayCropId && l.crop_id && l.crop_id !== selectedSprayCropId) return false;
+          if (selectedSprayTargetFieldId !== 'all' && l.field_id !== selectedSprayTargetFieldId) return false;
+          const isSpray = l.work_type?.includes('農薬') || l.work_type?.includes('防除') || l.work_type?.includes('散布') || l.memo?.includes('[散布管理]') || l.memo?.includes('品名:');
+          if (!isSpray) return false;
+          const memoStr = l.memo || '';
+          const normMemo = normalizeForMatch(memoStr);
+          return memoStr.includes(p.rawName) || memoStr.includes(p.name) || (normName.length >= 3 && normMemo.includes(normName));
+        })
+        .sort((a, b) => String(b.work_date || '').localeCompare(String(a.work_date || '')));
 
       return {
         ...p,
-        usedCount
+        usedCount: usedLogs.length,
+        usedLogs
       };
     });
   }, [pesticides, workLogs, selectedSprayCropId, selectedSprayTargetFieldId]);
@@ -746,15 +765,23 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
 
   // 散布管理：現在選択中の作目・圃場の農薬散布履歴一覧
   const currentCropSprayLogs = useMemo(() => {
+    const normalizeForMatch = (s: string) =>
+      (s || '').normalize('NFKC').toLowerCase().replace(/[\s　・･()（）\[\]【】「」『』\-ー]/g, '');
+    const normHighlight = normalizeForMatch(highlightedSprayPestName);
+
     return workLogs.filter(l => {
       if (l.status === 'planned') return false;
       const isSpray = l.work_type?.includes('農薬') || l.work_type?.includes('防除') || l.work_type?.includes('散布') || l.memo?.includes('[散布管理]') || l.memo?.includes('品名:');
       if (!isSpray) return false;
       if (selectedSprayCropId && l.crop_id && l.crop_id !== selectedSprayCropId) return false;
       if (selectedSprayTargetFieldId !== 'all' && l.field_id !== selectedSprayTargetFieldId) return false;
+      if (normHighlight) {
+        const normMemo = normalizeForMatch(l.memo || '');
+        if (!normMemo.includes(normHighlight)) return false;
+      }
       return true;
     });
-  }, [workLogs, selectedSprayCropId, selectedSprayTargetFieldId]);
+  }, [workLogs, selectedSprayCropId, selectedSprayTargetFieldId, highlightedSprayPestName]);
 
   // --- 散布管理フィルタリング ---
   const filteredPesticides = useMemo(() => {
@@ -2555,6 +2582,79 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
                               )}
                             </div>
                           </div>
+
+                          {/* 📅 新設: いつ・どの畑で使ったか（使用実績一覧 ＆ ワンクリック履歴移動） */}
+                          {pest.usedLogs && pest.usedLogs.length > 0 ? (
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              className="p-2.5 rounded-2xl bg-amber-50/80 border border-amber-200/90 space-y-2 cursor-default"
+                            >
+                              <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                                <span className="text-[11px] font-black text-amber-900 flex items-center gap-1">
+                                  <History className="w-3.5 h-3.5 text-amber-700" />
+                                  いつ・どの畑で使ったか ({pest.usedLogs.length}回):
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setHighlightedSprayPestName(pest.name);
+                                      const el = document.getElementById('spray-history-section');
+                                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                    }}
+                                    className="px-2 py-0.5 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-[10px] font-black transition-colors cursor-pointer"
+                                    title="この画面の下にある散布履歴へスクロールして絞り込みます"
+                                  >
+                                    📋 下の履歴で見る
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setHistoryTypeFilter('sprayOnly');
+                                      setHistoryCropFilter(selectedSprayCropId || 'all');
+                                      setHistoryFieldFilter(selectedSprayTargetFieldId || 'all');
+                                      setHistorySearchQuery(pest.name);
+                                      setActiveMainTab('history');
+                                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
+                                    className="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-black transition-colors cursor-pointer"
+                                    title="作業・散布履歴タブへ移動し、この農薬の記録だけを表示します"
+                                  >
+                                    🕒 履歴タブへ移動 ➔
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {pest.usedLogs.map((uLog: any, uIdx: number) => (
+                                  <button
+                                    key={uLog.id || uIdx}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenEditModal(uLog);
+                                    }}
+                                    className="px-2.5 py-1 bg-white hover:bg-rose-50 text-slate-800 hover:text-rose-700 border border-amber-300 hover:border-rose-300 rounded-xl text-[11px] font-black flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                                    title="クリックしてこの日の散布記録を確認・訂正する"
+                                  >
+                                    <span className="font-mono text-rose-700">📅 {formatDateWithDay(uLog.work_date)}</span>
+                                    <span className="text-slate-300">|</span>
+                                    <span className="text-slate-800">📍 {uLog.fields?.name || '圃場未指定'}</span>
+                                    <span className="text-[10px] text-blue-600 underline ml-0.5">確認・訂正</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-bold">
+                              <span>✨ 今期まだ使用していません（未使用）</span>
+                              <span>
+                                {selectedSprayTargetFieldId === 'all' ? '全圃場' : fields.find(f => f.id === selectedSprayTargetFieldId)?.name}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         {/* カードフッター: この農薬1つですぐ散布記録をつけるボタン */}
@@ -2699,25 +2799,47 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
               )}
 
               {/* 📋 3. 【改革⑤】この作目・圃場の過去の農薬散布履歴（RACローテーション・散布根拠の即時確認） */}
-              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3.5">
+              <div id="spray-history-section" className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3.5 scroll-mt-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
                   <div className="flex items-center gap-2 flex-wrap">
                     <History className="w-4 h-4 text-rose-600" />
                     <h4 className="text-sm font-black text-slate-800">
                       この作目・圃場の農薬散布履歴 ({currentCropSprayLogs.length}件)
                     </h4>
-                    <span className="text-[11px] font-bold text-slate-400">
-                      ※上の「残〇回」のカウント根拠となる実際の散布記録です
-                    </span>
+                    {highlightedSprayPestName ? (
+                      <button
+                        type="button"
+                        onClick={() => setHighlightedSprayPestName('')}
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-full text-xs font-black transition-colors cursor-pointer"
+                      >
+                        <span>🔍 「{highlightedSprayPestName}」で絞り込み中</span>
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    ) : (
+                      <span className="text-[11px] font-bold text-slate-400">
+                        ※上の「残〇回」のカウント根拠となる実際の散布記録です
+                      </span>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsReportModalOpen(true)}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>公的防除日誌（台帳）を印刷</span>
-                  </button>
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                    {highlightedSprayPestName && (
+                      <button
+                        type="button"
+                        onClick={() => setHighlightedSprayPestName('')}
+                        className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-black transition-colors cursor-pointer"
+                      >
+                        すべての農薬履歴を表示
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsReportModalOpen(true)}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>公的防除日誌（台帳）を印刷</span>
+                    </button>
+                  </div>
                 </div>
 
                 {currentCropSprayLogs.length === 0 ? (
