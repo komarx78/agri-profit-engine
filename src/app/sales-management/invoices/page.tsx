@@ -49,22 +49,26 @@ export default function InvoicesPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
-      <div>
-        <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
-          <FileText className="w-6 h-6 text-amber-500" />
-          請求書管理
-        </h1>
-        <p className="text-sm font-bold text-slate-500 mt-1">納品済みのデータから請求書を自動生成し、入金状況を管理します。</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
+            <FileText className="w-6 h-6 text-amber-500" />
+            <span>請求書の一括作成・入金確認</span>
+          </h1>
+          <p className="text-sm font-bold text-slate-500 mt-1">
+            「納品済」にした注文データを月ごとに自動集計して請求書を作成し、入金状況（未入金・入金済）を管理します。
+          </p>
+        </div>
       </div>
 
       {/* 自動生成パネル */}
       <div className="bg-gradient-to-br from-amber-50 to-orange-50 p-6 rounded-2xl border border-amber-200 shadow-sm">
         <h2 className="text-lg font-black text-amber-900 mb-4 flex items-center gap-2">
-          <Play className="w-5 h-5 text-amber-600" /> 請求書の自動一括生成
+          <Play className="w-5 h-5 text-amber-600" /> 月まとめ請求書の自動作成
         </h2>
         <div className="flex flex-col sm:flex-row gap-4 items-end">
           <div>
-            <label className="block text-sm font-bold text-amber-800 mb-2">対象月</label>
+            <label className="block text-sm font-bold text-amber-800 mb-2">集計する月</label>
             <input 
               type="month"
               value={targetMonth}
@@ -75,27 +79,27 @@ export default function InvoicesPage() {
           <button 
             onClick={handleGenerate}
             disabled={isGenerating}
-            className="bg-amber-500 hover:bg-amber-600 text-white font-black py-3 px-6 rounded-xl transition-colors shadow-lg shadow-amber-500/30 flex items-center gap-2 disabled:opacity-50"
+            className="bg-amber-500 hover:bg-amber-600 text-white font-black py-3 px-6 rounded-xl transition-colors shadow-lg shadow-amber-500/30 flex items-center gap-2 disabled:opacity-50 cursor-pointer"
           >
-            {isGenerating ? '生成中...' : '未請求分から生成する'}
+            {isGenerating ? '作成中...' : '納品済データから請求書を作成する'}
           </button>
         </div>
-        <p className="text-xs font-bold text-amber-700/70 mt-3">※ 対象月の「納品済」ステータスの注文を顧客ごとに集計し、顧客マスタのルールに従って支払期限を自動設定します。</p>
+        <p className="text-xs font-bold text-amber-700/80 mt-3">※ 選んだ月の「✓ 納品済」の注文をお店ごとに自動で合算し、得意先設定の締め日・支払日に合わせて支払期限を自動計算します。</p>
       </div>
 
       {/* 請求書一覧 */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-4 bg-slate-50 border-b border-slate-200">
-          <h2 className="font-black text-slate-700">発行済み請求書一覧</h2>
+          <h2 className="font-black text-slate-700">作成済みの請求書一覧</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-white border-b border-slate-200 text-sm">
-                <th className="p-4 font-black text-slate-500">対象月・顧客名</th>
-                <th className="p-4 font-black text-slate-500">請求額 (円)</th>
-                <th className="p-4 font-bold text-slate-500 w-1/4">支払期限</th>
-                <th className="p-4 font-bold text-slate-500 w-32 text-center">ステータス</th>
+                <th className="p-4 font-black text-slate-500">対象月・得意先名</th>
+                <th className="p-4 font-black text-slate-500 text-right">請求金額 (税込)</th>
+                <th className="p-4 font-bold text-slate-500 w-1/4">お支払期限</th>
+                <th className="p-4 font-bold text-slate-500 w-32 text-center">入金状態</th>
                 <th className="p-4 font-bold text-slate-500 w-28 text-center">操作</th>
               </tr>
             </thead>
@@ -103,7 +107,7 @@ export default function InvoicesPage() {
               {loading ? (
                 <tr><td colSpan={5} className="p-8 text-center text-slate-500 font-bold">読み込み中...</td></tr>
               ) : invoices.length === 0 ? (
-                <tr><td colSpan={5} className="p-8 text-center text-slate-500 font-bold">請求書データがありません。</td></tr>
+                <tr><td colSpan={5} className="p-8 text-center text-slate-500 font-bold">まだ作成された請求書がありません。上のボタンから作成できます。</td></tr>
               ) : invoices.map((inv) => (
                 <tr key={inv.id} className="hover:bg-slate-50 transition-colors">
                   <td className="p-4">
@@ -130,7 +134,7 @@ export default function InvoicesPage() {
                   <td className="p-4 text-center">
                     <Link href={`/sales-management/invoices/${inv.id}`} className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 rounded-lg text-xs font-bold transition-colors">
                       <FileText className="w-3.5 h-3.5" />
-                      詳細・PDF
+                      請求書を印刷
                     </Link>
                   </td>
                 </tr>

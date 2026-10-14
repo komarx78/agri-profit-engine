@@ -93,18 +93,39 @@ export default function SalesManagementDashboard() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
             <ShoppingCart className="w-8 h-8 text-indigo-600" />
-            販売管理ダッシュボード
+            <span>出荷・注文・売上の全体状況（販売トップ）</span>
           </h1>
           <p className="text-sm font-bold text-slate-500 mt-1">
-            B2B定期受注とJA・市場・直売所への都度出荷を統合管理・可視化します。
+            得意先（飲食店・スーパー等）からの注文・配達予定と、JA・直売所・市場への出荷売上をまとめて確認できます。
           </p>
         </div>
-        <div className="text-xs font-bold px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-100 self-start sm:self-auto">
-          集計対象月: {currentMonthStr.replace('-', '年')}月
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={tenantId ? `/sales-management/orders/new?farm=${tenantId}` : '/sales-management/orders/new'}
+            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition-colors"
+          >
+            <ShoppingCart className="w-4 h-4" />
+            <span>＋ 得意先の注文を入れる</span>
+          </Link>
+          <Link
+            href={tenantId ? `/sales-management/sales-history?farm=${tenantId}` : '/sales-management/sales-history'}
+            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-xs transition-colors"
+          >
+            <Truck className="w-4 h-4" />
+            <span>＋ JA・直売所の出荷を記録</span>
+          </Link>
+          <Link
+            href={tenantId ? `/sales-management/customers?farm=${tenantId}` : '/sales-management/customers'}
+            className="px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs transition-colors"
+          >
+            <Store className="w-4 h-4 text-blue-600" />
+            <span>得意先・卸単価の設定</span>
+          </Link>
         </div>
       </div>
 
