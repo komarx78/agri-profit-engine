@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getAdminCropAnalysisDataAction } from '@/app/actions/farm';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as BarTooltip } from 'recharts';
 import { Sprout, Loader2, User, Clock, BarChart2, TrendingUp, HelpCircle } from 'lucide-react';
 import { HelpTooltip } from '@/components/HelpTooltip';
@@ -15,6 +16,7 @@ export default function CropAnalysisPage() {
   const [crops, setCrops] = useState<any[]>([]);
   const [allWorkLogs, setAllWorkLogs] = useState<any[]>([]);
   const [allSalesLogs, setAllSalesLogs] = useState<any[]>([]);
+  const [allB2bOrders, setAllB2bOrders] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCropId, setSelectedCropId] = useState<string>('all');
   const [year, setYear] = useState(new Date().getFullYear());
@@ -32,14 +34,22 @@ export default function CropAnalysisPage() {
         return;
       }
 
-      const [cRes, wRes, sRes] = await Promise.all([
-        supabase.from('crops').select('*').eq('user_id', tenantId).order('name'),
-        supabase.from('work_logs').select('*, workers(name), materials(default_price)').eq('user_id', tenantId).gte('work_date', `${year}-01-01`).lte('work_date', `${year}-12-31`),
-        supabase.from('sales_logs').select('*').eq('user_id', tenantId).gte('sales_date', `${year}-01-01`).lte('sales_date', `${year}-12-31`)
-      ]);
-      setCrops(cRes.data || []);
-      setAllWorkLogs(wRes.data || []);
-      setAllSalesLogs(sRes.data || []);
+      const srvRes = await getAdminCropAnalysisDataAction(tenantId, year);
+      if (srvRes?.success) {
+        setCrops(srvRes.crops || []);
+        setAllWorkLogs(srvRes.workLogs || []);
+        setAllSalesLogs(srvRes.salesLogs || []);
+        setAllB2bOrders(srvRes.b2bOrders || []);
+      } else {
+        const [cRes, wRes, sRes] = await Promise.all([
+          supabase.from('crops').select('*').eq('user_id', tenantId).order('name'),
+          supabase.from('work_logs').select('*, workers(name, hourly_wage), materials(default_price)').eq('user_id', tenantId).gte('work_date', `${year}-01-01`).lte('work_date', `${year}-12-31`),
+          supabase.from('sales_logs').select('*').eq('user_id', tenantId).gte('sales_date', `${year}-01-01`).lte('sales_date', `${year}-12-31`)
+        ]);
+        setCrops(cRes.data || []);
+        setAllWorkLogs(wRes.data || []);
+        setAllSalesLogs(sRes.data || []);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -50,7 +60,9 @@ export default function CropAnalysisPage() {
   // 全作目サマリー（予実）の計算
   const cropStats = useMemo(() => {
     const stats: Record<string, any> = {};
+    const nameToIdMap: Record<string, string> = {};
     crops.forEach(c => {
+      nameToIdMap[c.name] = c.id;
       stats[c.id] = {
         id: c.id,
         name: c.name,
@@ -58,6 +70,8 @@ export default function CropAnalysisPage() {
         actualSales: 0,
         plannedWorkHours: 0,
         actualWorkHours: 0,
+        plannedLaborCost: 0,
+        actualLaborCost: 0,
         plannedMaterialCost: 0,
         actualMaterialCost: 0,
       };
@@ -65,37 +79,54 @@ export default function CropAnalysisPage() {
     
     allSalesLogs.forEach(s => {
       if (s.crop_id && stats[s.crop_id]) {
-        if (s.status === 'planned') stats[s.crop_id].plannedSales += (s.total_sales || 0);
-        else if (s.status === 'completed') stats[s.crop_id].actualSales += (s.total_sales || 0);
+        if (s.status === 'planned') stats[s.crop_id].plannedSales += (Number(s.total_sales) || 0);
+        else if (s.status === 'completed' || !s.status) stats[s.crop_id].actualSales += (Number(s.total_sales) || 0);
       }
+    });
+
+    allB2bOrders.forEach(ord => {
+      if (ord.status === 'cancelled') return;
+      const isActual = ord.status === 'delivered' || ord.status === 'invoiced' || ord.status === 'paid';
+      const items = Array.isArray(ord.items) ? ord.items : [];
+      items.forEach((item: any) => {
+        const cid = nameToIdMap[item.crop_name];
+        if (cid && stats[cid]) {
+          const amt = Number(item.amount) || (Number(item.quantity || 0) * Number(item.unit_price || 0)) || 0;
+          if (isActual) stats[cid].actualSales += amt;
+          else stats[cid].plannedSales += amt;
+        }
+      });
     });
     
     allWorkLogs.forEach(w => {
       if (w.crop_id && stats[w.crop_id]) {
-        const hours = (w.duration_minutes || 0) / 60;
-        const matCost = (w.material_quantity || 0) * (w.materials?.default_price || 0);
+        const hours = (Number(w.duration_minutes) || 0) / 60;
+        const wage = Number(w.workers?.hourly_wage) || 1000;
+        const laborCost = hours * wage;
+        const matCost = (Number(w.material_quantity) || 0) * (Number(w.materials?.default_price) || 0);
         
         if (w.status === 'planned') {
           stats[w.crop_id].plannedWorkHours += hours;
+          stats[w.crop_id].plannedLaborCost += laborCost;
           stats[w.crop_id].plannedMaterialCost += matCost;
         } else if (w.status === 'completed') {
           stats[w.crop_id].actualWorkHours += hours;
+          stats[w.crop_id].actualLaborCost += laborCost;
           stats[w.crop_id].actualMaterialCost += matCost;
         }
       }
     });
 
-    const baseHourlyWage = 1000;
     const estimateCostRate = 20;
 
     return Object.values(stats).map(stat => {
       const plannedMatCost = stat.plannedMaterialCost || Math.round(stat.plannedSales * (estimateCostRate / 100));
-      const plannedLaborCost = stat.plannedWorkHours * baseHourlyWage;
+      const plannedLaborCost = Math.round(stat.plannedLaborCost);
       const plannedCost = plannedLaborCost + plannedMatCost;
       const plannedProfit = stat.plannedSales - plannedCost;
 
       const actualMatCost = stat.actualMaterialCost || Math.round(stat.actualSales * (estimateCostRate / 100));
-      const actualLaborCost = stat.actualWorkHours * baseHourlyWage;
+      const actualLaborCost = Math.round(stat.actualLaborCost);
       const actualCost = actualLaborCost + actualMatCost;
       const actualProfit = stat.actualSales - actualCost;
 
@@ -107,7 +138,7 @@ export default function CropAnalysisPage() {
       };
     }).filter(s => s.plannedSales > 0 || s.actualSales > 0 || s.plannedWorkHours > 0 || s.actualWorkHours > 0)
       .sort((a, b) => b.actualProfit - a.actualProfit); // 利益順
-  }, [crops, allSalesLogs, allWorkLogs]);
+  }, [crops, allSalesLogs, allB2bOrders, allWorkLogs]);
 
   // 選択された作目（または全作目）の円グラフ用データ集計
   const targetWorkLogs = useMemo(() => {

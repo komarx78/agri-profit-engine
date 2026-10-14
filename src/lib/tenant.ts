@@ -7,7 +7,7 @@ const KNOWN_FARM_CODE_MAP: Record<string, string> = {
   'sahara-789': '62163024-2c8e-4057-a872-2455dbc58d32',
 };
 
-function normalizeTenantId(raw: string | null | undefined): string | null {
+export function normalizeTenantId(raw: string | null | undefined): string | null {
   if (!raw || raw === 'null' || raw === 'undefined') return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;
@@ -61,6 +61,21 @@ export async function getCurrentTenantId(): Promise<string | null> {
       if (ownerId) {
         return ownerId;
       }
+
+      // テナント別の作業員キー（agri_worker_*）からの解決
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('agri_worker_')) {
+            const val = localStorage.getItem(key);
+            if (val) {
+              const parsed = JSON.parse(val);
+              const uid = normalizeTenantId(parsed?.user_id || key.replace('agri_worker_', ''));
+              if (uid) return uid;
+            }
+          }
+        }
+      } catch (e) {}
 
       const savedTenant = normalizeTenantId(localStorage.getItem('current_tenant_id') || localStorage.getItem('tenant_id'));
       if (savedTenant) {

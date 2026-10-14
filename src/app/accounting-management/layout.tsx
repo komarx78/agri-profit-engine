@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 import { useCompany } from '@/hooks/useCompany';
+import { normalizeTenantId } from '@/lib/tenant';
 
 export default function AccountingManagementLayout({
   children,
@@ -27,7 +28,7 @@ export default function AccountingManagementLayout({
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
       const p = new URLSearchParams(window.location.search);
-      const f = p.get('farm') || p.get('tenant') || localStorage.getItem('agri_owner_id') || '';
+      const f = normalizeTenantId(p.get('farm') || p.get('tenant') || localStorage.getItem('agri_owner_id')) || '';
       if (f) setCurrentFarmId(f);
     }
   }, []);

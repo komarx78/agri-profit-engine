@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, Polygon, InfoWindow } from '@react-google-maps/api';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
-import { getTenantCultivationPlansAction } from '@/app/actions/farm';
+import { getTenantCultivationPlansAction, getAdminMapDataAction } from '@/app/actions/farm';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { MapPin, Plus, Loader2, Save, X, Info, Search, Check, Trash2, Edit2, Palette, ArrowRight, FlaskConical } from 'lucide-react';
 import Link from 'next/link';
@@ -143,25 +143,34 @@ export default function MapPage() {
         return;
       }
 
-      // 自社テナントの圃場データを取得
-      const { data: fieldsData, error } = await supabase
-        .from('fields')
-        .select(`
-          id,
-          name,
-          area_size,
-          polygon_coordinates,
-          color
-        `)
-        .eq('user_id', tenantId)
-        .order('name');
-        
-      if (error) throw error;
+      let fieldsData: any[] = [];
+      let plansData: any[] = [];
 
-      // TODO: work_logsなどを取得して、各圃場に紐づけて「現在の状況」を算出する
-      // 今回はダミーのステータス（色）を付与
-      const mappedFields = (fieldsData || []).map(f => {
-        // polygon_coordinates は JSONB で保存されている想定 [{lat, lng}, ...]
+      const srvRes = await getAdminMapDataAction(tenantId);
+      if (srvRes?.success) {
+        fieldsData = srvRes.fields || [];
+        plansData = srvRes.plans || [];
+      } else {
+        const { data, error } = await supabase
+          .from('fields')
+          .select(`
+            id,
+            name,
+            area_size,
+            polygon_coordinates,
+            color
+          `)
+          .eq('user_id', tenantId)
+          .order('name');
+        if (error) throw error;
+        fieldsData = data || [];
+      }
+
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
+
+      const mappedFields = (fieldsData || []).map((f, idx) => {
         let path = [];
         if (typeof f.polygon_coordinates === 'string') {
           try { path = JSON.parse(f.polygon_coordinates); } catch(e) {}
@@ -169,12 +178,42 @@ export default function MapPage() {
           path = f.polygon_coordinates;
         }
 
+        // 実際の作付計画（cultivation_plans_v2）から現在の状況を算出
+        const fieldPlans = plansData.filter((p: any) => p.field_id === f.id);
+        const activePlan = fieldPlans.find((p: any) => {
+          const y = Number(p.year) || currentYear;
+          const sm = Number(p.start_month) || 1;
+          const em = Number(p.end_month) || 12;
+          if (y !== currentYear) return false;
+          return sm <= em
+            ? (currentMonth >= sm && currentMonth <= em)
+            : (currentMonth >= sm || currentMonth <= em);
+        }) || fieldPlans[0];
+
+        let statusText = '作付予定なし（休閑・準備中）';
+        let defaultColor = '#10b981';
+
+        if (activePlan) {
+          const cropName = activePlan.crops?.name || '作目設定済';
+          if (activePlan.status === 'harvesting') {
+            statusText = `収穫期（${cropName}）`;
+            defaultColor = '#f59e0b';
+          } else if (activePlan.status === 'completed') {
+            statusText = `収穫完了（${cropName}）`;
+            defaultColor = '#64748b';
+          } else {
+            statusText = `栽培中（${cropName}）`;
+            defaultColor = '#10b981';
+          }
+        } else {
+          defaultColor = idx % 2 === 0 ? '#10b981' : '#3b82f6';
+        }
+
         return {
           ...f,
           path,
-          // 色が保存されていればそれを、無ければIDで適当に割り当て
-          statusColor: f.color || (f.id % 2 === 0 ? '#10b981' : '#f59e0b'),
-          statusText: f.id % 2 === 0 ? '生育中（キャベツ）' : '収穫待ち'
+          statusColor: f.color || defaultColor,
+          statusText
         };
       });
 

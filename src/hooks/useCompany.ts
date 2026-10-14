@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { getCurrentTenantId } from '@/lib/tenant';
+import { getCurrentTenantId, normalizeTenantId } from '@/lib/tenant';
+import { getCompanySettings } from '@/app/actions/farm';
 
 export interface CompanyInfo {
   companyName: string;
@@ -25,16 +26,16 @@ export function useCompany(explicitTenantId?: string | null): CompanyInfo {
   const [invoiceNumber, setInvoiceNumber] = useState<string>('');
   const [bankInfo, setBankInfo] = useState<string>('');
   const [farmCode, setFarmCode] = useState<string>('');
-  const [tenantId, setTenantId] = useState<string | null>(explicitTenantId || null);
+  const [tenantId, setTenantId] = useState<string | null>(normalizeTenantId(explicitTenantId));
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const fetchCompany = useCallback(async () => {
     try {
       // 1. テナントIDの決定（引数指定およびURLクエリを最優先）
-      let currentTenant = explicitTenantId || null;
+      let currentTenant = normalizeTenantId(explicitTenantId);
       if (!currentTenant && typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search);
-        currentTenant = urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId');
+        currentTenant = normalizeTenantId(urlParams.get('farm') || urlParams.get('tenant') || urlParams.get('ownerId') || urlParams.get('farmId'));
       }
 
       if (!currentTenant) {
@@ -47,11 +48,11 @@ export function useCompany(explicitTenantId?: string | null): CompanyInfo {
         if (savedWorker) {
           try {
             const w = JSON.parse(savedWorker);
-            if (w && w.user_id) currentTenant = w.user_id;
+            if (w && w.user_id) currentTenant = normalizeTenantId(w.user_id);
           } catch (e) {}
         }
         if (!currentTenant) {
-          currentTenant = localStorage.getItem('agri_owner_id');
+          currentTenant = normalizeTenantId(localStorage.getItem('agri_owner_id'));
         }
       }
 
@@ -72,14 +73,24 @@ export function useCompany(explicitTenantId?: string | null): CompanyInfo {
         }
       }
 
-      // 2. company_settings テーブルから当該テナントIDのレコードを厳格に取得（user_id または id に一致）
-      const { data, error } = await supabase
+      // 2. company_settings テーブルから当該テナントIDのレコードを厳格に取得（クライアントRLSで弾かれた場合はサーバーアクションで補完）
+      let data: any = null;
+      const { data: clientData } = await supabase
         .from('company_settings')
         .select('*')
         .or(`user_id.eq.${currentTenant},id.eq.${currentTenant}`)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
+
+      if (clientData) {
+        data = clientData;
+      } else {
+        const srvRes = await getCompanySettings(currentTenant);
+        if (srvRes?.success && srvRes.data) {
+          data = srvRes.data;
+        }
+      }
 
       if (data) {
         let name = data.company_name || '';

@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getAdminApprovalsDataAction, updateWorkLogApprovalAction } from '@/app/actions/farm';
 
 export default function ApprovalsPage() {
   const [logs, setLogs] = useState<any[]>([]);
@@ -79,33 +80,42 @@ export default function ApprovalsPage() {
       }
       setTenantId(userTenantId);
 
-      // 完了報告（status: completed）の全詳細項目とマスタを並列取得
-      const [logsRes, fieldsRes, cropsRes, workersRes] = await Promise.all([
-        supabase
-          .from('work_logs')
-          .select(`
-            *,
-            crops(id, name),
-            fields(id, name, area_size),
-            workers(id, name, hourly_wage),
-            departments(id, name),
-            materials(id, name, unit, default_price, category)
-          `)
-          .eq('user_id', userTenantId)
-          .eq('status', 'completed')
-          .order('work_date', { ascending: false })
-          .order('created_at', { ascending: false })
-          .limit(300),
-        supabase.from('fields').select('id, name, area_size').eq('user_id', userTenantId).order('name'),
-        supabase.from('crops').select('id, name').eq('user_id', userTenantId).order('name'),
-        supabase.from('workers').select('id, name, hourly_wage').eq('user_id', userTenantId).order('name')
-      ]);
+      const srvRes = await getAdminApprovalsDataAction(userTenantId);
+      if (srvRes?.success) {
+        if (srvRes.ownerId) setTenantId(srvRes.ownerId);
+        setLogs(srvRes.logs || []);
+        setFields(srvRes.fields || []);
+        setCrops(srvRes.crops || []);
+        setWorkers(srvRes.workers || []);
+      } else {
+        // 完了報告（status: completed）の全詳細項目とマスタを並列取得
+        const [logsRes, fieldsRes, cropsRes, workersRes] = await Promise.all([
+          supabase
+            .from('work_logs')
+            .select(`
+              *,
+              crops(id, name),
+              fields(id, name, area_size),
+              workers(id, name, hourly_wage),
+              departments(id, name),
+              materials(id, name, unit, default_price, category)
+            `)
+            .eq('user_id', userTenantId)
+            .eq('status', 'completed')
+            .order('work_date', { ascending: false })
+            .order('created_at', { ascending: false })
+            .limit(300),
+          supabase.from('fields').select('id, name, area_size').eq('user_id', userTenantId).order('name'),
+          supabase.from('crops').select('id, name').eq('user_id', userTenantId).order('name'),
+          supabase.from('workers').select('id, name, hourly_wage').eq('user_id', userTenantId).order('name')
+        ]);
 
-      if (logsRes.error) throw logsRes.error;
-      setLogs(logsRes.data || []);
-      setFields(fieldsRes.data || []);
-      setCrops(cropsRes.data || []);
-      setWorkers(workersRes.data || []);
+        if (logsRes.error) throw logsRes.error;
+        setLogs(logsRes.data || []);
+        setFields(fieldsRes.data || []);
+        setCrops(cropsRes.data || []);
+        setWorkers(workersRes.data || []);
+      }
     } catch (err) {
       console.error('Approvals fetchData error:', err);
     } finally {
@@ -259,19 +269,22 @@ export default function ApprovalsPage() {
   const handleQuickUpdateStatus = async (id: string, newStatus: 'approved' | 'rejected' | 'pending') => {
     try {
       const activeTenantId = tenantId || (await getCurrentTenantId());
-      let query = supabase
-        .from('work_logs')
-        .update({
-          approval_status: newStatus
-        })
-        .eq('id', id);
+      const srvRes = await updateWorkLogApprovalAction(activeTenantId || '', [id], { approval_status: newStatus });
+      if (!srvRes?.success) {
+        let query = supabase
+          .from('work_logs')
+          .update({
+            approval_status: newStatus
+          })
+          .eq('id', id);
 
-      if (activeTenantId) {
-        query = query.eq('user_id', activeTenantId);
+        if (activeTenantId) {
+          query = query.eq('user_id', activeTenantId);
+        }
+
+        const { error } = await query;
+        if (error) throw error;
       }
-
-      const { error } = await query;
-      if (error) throw error;
 
       setLogs(prev => prev.map(l => (l.id === id ? { ...l, approval_status: newStatus } : l)));
       setSelectedIds(prev => prev.filter(item => item !== id));
@@ -295,19 +308,22 @@ export default function ApprovalsPage() {
 
     try {
       const activeTenantId = tenantId || (await getCurrentTenantId());
-      let query = supabase
-        .from('work_logs')
-        .update({
-          approval_status: 'approved'
-        })
-        .in('id', targetIds);
+      const srvRes = await updateWorkLogApprovalAction(activeTenantId || '', targetIds, { approval_status: 'approved' });
+      if (!srvRes?.success) {
+        let query = supabase
+          .from('work_logs')
+          .update({
+            approval_status: 'approved'
+          })
+          .in('id', targetIds);
 
-      if (activeTenantId) {
-        query = query.eq('user_id', activeTenantId);
+        if (activeTenantId) {
+          query = query.eq('user_id', activeTenantId);
+        }
+
+        const { error } = await query;
+        if (error) throw error;
       }
-
-      const { error } = await query;
-      if (error) throw error;
 
       setLogs(prev => prev.map(l => (targetIds.includes(l.id) ? { ...l, approval_status: 'approved' } : l)));
       setSelectedIds([]);
@@ -348,13 +364,16 @@ export default function ApprovalsPage() {
         approval_status: targetStatus
       };
 
-      let query = supabase.from('work_logs').update(updatePayload).eq('id', inspectingLog.id);
-      if (activeTenantId) {
-        query = query.eq('user_id', activeTenantId);
-      }
+      const srvRes = await updateWorkLogApprovalAction(activeTenantId || '', [inspectingLog.id], updatePayload);
+      if (!srvRes?.success) {
+        let query = supabase.from('work_logs').update(updatePayload).eq('id', inspectingLog.id);
+        if (activeTenantId) {
+          query = query.eq('user_id', activeTenantId);
+        }
 
-      const { error } = await query;
-      if (error) throw error;
+        const { error } = await query;
+        if (error) throw error;
+      }
 
       showToast(
         targetStatus === 'approved'

@@ -39,6 +39,7 @@ import {
   Printer
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { normalizeTenantId } from '@/lib/tenant';
 import { useCompany } from '@/hooks/useCompany';
 import { AiAssistant } from '@/components/AiAssistant';
 import { FarmPosterModal } from '@/components/FarmPosterModal';
@@ -49,7 +50,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [tenantId, setTenantId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      return params.get('farm') || params.get('tenant') || params.get('farmId') || '';
+      return normalizeTenantId(params.get('farm') || params.get('tenant') || params.get('farmId')) || '';
     }
     return '';
   });
@@ -75,7 +76,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       let urlFarm: string | null = null;
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
-        urlFarm = params.get('farm') || params.get('tenant') || params.get('farmId');
+        urlFarm = normalizeTenantId(params.get('farm') || params.get('tenant') || params.get('farmId'));
       }
 
       // 2. Supabase Auth による正規管理者セッションのチェック
@@ -90,21 +91,38 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       }
 
       // 3. 現場スタッフ（PIN認証）の場合、明示的に管理者ロール (role === 'admin') を持つ場合のみ許可
-      const savedWorker = localStorage.getItem('agri_current_worker');
-      if (savedWorker) {
-        try {
-          const workerData = JSON.parse(savedWorker);
-          if (workerData.role === 'admin' && workerData.user_id) {
-            const resolvedId = urlFarm || workerData.user_id;
-            setTenantId(resolvedId);
-            if (typeof window !== 'undefined') {
-              try { localStorage.setItem('agri_owner_id', resolvedId); } catch (e) {}
-            }
-            return;
-          }
-        } catch (e) {
-          console.error(e);
+      if (typeof window !== 'undefined') {
+        const candidateKeys = ['agri_current_worker', 'current_worker'];
+        if (urlFarm) candidateKeys.unshift(`agri_worker_${urlFarm}`);
+        const savedOwner = normalizeTenantId(localStorage.getItem('agri_owner_id'));
+        if (savedOwner && !candidateKeys.includes(`agri_worker_${savedOwner}`)) {
+          candidateKeys.push(`agri_worker_${savedOwner}`);
         }
+        for (const key of candidateKeys) {
+          const savedWorker = localStorage.getItem(key);
+          if (savedWorker) {
+            try {
+              const workerData = JSON.parse(savedWorker);
+              if (workerData && workerData.role === 'admin') {
+                const resolvedId = urlFarm || normalizeTenantId(workerData.user_id) || savedOwner || '';
+                if (resolvedId) {
+                  setTenantId(resolvedId);
+                  try { localStorage.setItem('agri_owner_id', resolvedId); } catch (e) {}
+                }
+                return;
+              }
+            } catch (e) {
+              console.error(e);
+            }
+          }
+        }
+      }
+
+      // 4. URLで特定農園が指定されている場合は即時リダイレクトせず表示を継続（AdminOnlyGuard側で詳細制御）
+      if (urlFarm) {
+        setTenantId(urlFarm);
+        try { localStorage.setItem('agri_owner_id', urlFarm); } catch (e) {}
+        return;
       }
 
       // 未認証、または一般作業員アカウントの場合はログインへ誘導

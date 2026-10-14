@@ -2076,6 +2076,438 @@ export async function getCultivationSchedulePageDataAction(tenantId: string, yea
   }
 }
 
+// =====================================================================
+// 管理画面全般（ダッシュボード・作業指示・承認・作目分析・マスタ・圃場地図・経理）の
+// スマホ / PINログイン完全対応 Server Actions（RLS安全バイパス＆テナント厳格拘束）
+// =====================================================================
+
+function buildTenantUserFilter(ownerId: string, tenantId: string) {
+  const isTenantUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((tenantId || '').trim());
+  return isTenantUuid && tenantId !== ownerId
+    ? `user_id.eq.${ownerId},user_id.eq.${tenantId}`
+    : `user_id.eq.${ownerId}`;
+}
+
+export async function getAdminDashboardDataAction(tenantId: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+    const userFilter = buildTenantUserFilter(ownerId, tenantId);
+
+    const [workRes, salesRes, b2bRes] = await Promise.all([
+      supabase
+        .from('work_logs')
+        .select(`
+          work_date,
+          duration_minutes,
+          material_quantity,
+          status,
+          approval_status,
+          crops(name),
+          workers(name, hourly_wage),
+          materials(name, default_price),
+          fields(name)
+        `)
+        .or(userFilter),
+      supabase
+        .from('sales_logs')
+        .select(`
+          sales_date,
+          total_sales,
+          status,
+          crops(name),
+          sales_channels(name)
+        `)
+        .or(userFilter),
+      supabase
+        .from('b2b_orders')
+        .select(`
+          id,
+          delivery_date,
+          total_amount,
+          status,
+          items:b2b_order_items(crop_name, quantity, unit_price, amount)
+        `)
+        .or(userFilter)
+    ]);
+
+    return {
+      success: true,
+      ownerId,
+      workLogs: workRes.data || [],
+      salesLogs: salesRes.data || [],
+      b2bOrders: b2bRes.error ? [] : b2bRes.data || []
+    };
+  } catch (err: any) {
+    console.error('getAdminDashboardDataAction error:', err);
+    return { success: false, error: err.message || 'ダッシュボードデータの取得に失敗しました。' };
+  }
+}
+
+export async function getAdminTasksPageDataAction(tenantId: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+    const userFilter = buildTenantUserFilter(ownerId, tenantId);
+    const isTenantUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((tenantId || '').trim());
+    const deptFilter = isTenantUuid && tenantId !== ownerId
+      ? `tenant_id.eq.${ownerId},tenant_id.eq.${tenantId}`
+      : `tenant_id.eq.${ownerId}`;
+
+    const [tasksRes, cropsRes, fieldsRes, workersRes, deptsRes] = await Promise.all([
+      supabase
+        .from('work_logs')
+        .select('id, work_date, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, memo, step_order, time_slot, crops(name), fields(name), workers(name), departments(name)')
+        .or(userFilter)
+        .eq('status', 'planned')
+        .order('work_date', { ascending: true })
+        .order('step_order', { ascending: true, nullsFirst: false }),
+      supabase.from('crops').select('*').or(userFilter).order('name'),
+      supabase.from('fields').select('*').or(userFilter).order('name'),
+      supabase.from('workers').select('*').or(userFilter).order('name'),
+      supabase.from('departments').select('*').or(deptFilter).order('name')
+    ]);
+
+    return {
+      success: true,
+      ownerId,
+      tasks: tasksRes.data || [],
+      crops: cropsRes.data || [],
+      fields: fieldsRes.data || [],
+      workers: workersRes.data || [],
+      departments: deptsRes.data || []
+    };
+  } catch (err: any) {
+    console.error('getAdminTasksPageDataAction error:', err);
+    return { success: false, error: err.message || 'タスクデータの取得に失敗しました。' };
+  }
+}
+
+export async function getAdminApprovalsDataAction(tenantId: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+    const userFilter = buildTenantUserFilter(ownerId, tenantId);
+
+    const [logsRes, fieldsRes, cropsRes, workersRes] = await Promise.all([
+      supabase
+        .from('work_logs')
+        .select(`
+          *,
+          fields(id, name, area_size),
+          crops(id, name),
+          workers(id, name, hourly_wage),
+          departments(id, name),
+          materials(id, name, unit, default_price, category)
+        `)
+        .or(userFilter)
+        .eq('status', 'completed')
+        .order('work_date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(300),
+      supabase.from('fields').select('id, name, area_size').or(userFilter).order('name'),
+      supabase.from('crops').select('id, name').or(userFilter).order('name'),
+      supabase.from('workers').select('id, name, hourly_wage').or(userFilter).order('name')
+    ]);
+
+    return {
+      success: true,
+      ownerId,
+      logs: logsRes.data || [],
+      fields: fieldsRes.data || [],
+      crops: cropsRes.data || [],
+      workers: workersRes.data || []
+    };
+  } catch (err: any) {
+    console.error('getAdminApprovalsDataAction error:', err);
+    return { success: false, error: err.message || '承認一覧データの取得に失敗しました。' };
+  }
+}
+
+export async function updateWorkLogApprovalAction(
+  tenantId: string,
+  ids: string[],
+  payload: Record<string, any>
+) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+    const userFilter = buildTenantUserFilter(ownerId, tenantId);
+
+    const { error } = await supabase
+      .from('work_logs')
+      .update(payload)
+      .in('id', ids)
+      .or(userFilter);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('updateWorkLogApprovalAction error:', err);
+    return { success: false, error: err.message || '承認状態の更新に失敗しました。' };
+  }
+}
+
+export async function getAdminCropAnalysisDataAction(tenantId: string, year: number) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+    const userFilter = buildTenantUserFilter(ownerId, tenantId);
+
+    const [cRes, wRes, sRes, b2bRes] = await Promise.all([
+      supabase.from('crops').select('*').or(userFilter).order('name'),
+      supabase
+        .from('work_logs')
+        .select('*, workers(name, hourly_wage), materials(default_price)')
+        .or(userFilter)
+        .gte('work_date', `${year}-01-01`)
+        .lte('work_date', `${year}-12-31`),
+      supabase
+        .from('sales_logs')
+        .select('*')
+        .or(userFilter)
+        .gte('sales_date', `${year}-01-01`)
+        .lte('sales_date', `${year}-12-31`),
+      supabase
+        .from('b2b_orders')
+        .select('id, delivery_date, status, total_amount, items:b2b_order_items(crop_name, quantity, unit_price, amount)')
+        .or(userFilter)
+        .gte('delivery_date', `${year}-01-01`)
+        .lte('delivery_date', `${year}-12-31`)
+    ]);
+
+    return {
+      success: true,
+      ownerId,
+      crops: cRes.data || [],
+      workLogs: wRes.data || [],
+      salesLogs: sRes.data || [],
+      b2bOrders: b2bRes.error ? [] : b2bRes.data || []
+    };
+  } catch (err: any) {
+    console.error('getAdminCropAnalysisDataAction error:', err);
+    return { success: false, error: err.message || '作目別データの取得に失敗しました。' };
+  }
+}
+
+export async function getAdminMapDataAction(tenantId: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+    const userFilter = buildTenantUserFilter(ownerId, tenantId);
+
+    const [fRes, pRes] = await Promise.all([
+      supabase
+        .from('fields')
+        .select('id, name, area_size, polygon_coordinates, color')
+        .or(userFilter)
+        .order('name'),
+      supabase
+        .from('cultivation_plans_v2')
+        .select('id, field_id, crop_id, year, start_month, end_month, status, crops(name)')
+        .or(userFilter)
+        .order('year', { ascending: false })
+        .order('start_month', { ascending: false })
+    ]);
+
+    return {
+      success: true,
+      ownerId,
+      fields: fRes.data || [],
+      plans: pRes.error ? [] : pRes.data || []
+    };
+  } catch (err: any) {
+    console.error('getAdminMapDataAction error:', err);
+    return { success: false, error: err.message || '地図用圃場データの取得に失敗しました。' };
+  }
+}
+
+export async function getAdminMastersDataAction(tenantId: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+    const userFilter = buildTenantUserFilter(ownerId, tenantId);
+    const isTenantUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((tenantId || '').trim());
+    const deptFilter = isTenantUuid && tenantId !== ownerId
+      ? `tenant_id.eq.${ownerId},tenant_id.eq.${tenantId}`
+      : `tenant_id.eq.${ownerId}`;
+
+    const [cRes, fRes, wRes, mRes, spRes, csRes, chRes, dRes] = await Promise.all([
+      supabase.from('crops').select('*').or(userFilter).order('name'),
+      supabase.from('fields').select('*').or(userFilter).order('name'),
+      supabase.from('workers').select('*').or(userFilter).order('name'),
+      supabase.from('materials').select('*').or(userFilter).order('name'),
+      supabase.from('sales_prices').select('*').or(userFilter).order('crop_name'),
+      supabase.from('crop_standards').select('*').or(userFilter),
+      supabase.from('sales_channels').select('*').or(userFilter).order('name'),
+      supabase.from('departments').select('*').or(deptFilter).order('name')
+    ]);
+
+    return {
+      success: true,
+      ownerId,
+      crops: cRes.data || [],
+      fields: fRes.data || [],
+      workers: wRes.data || [],
+      materials: mRes.data || [],
+      salesPrices: spRes.data || [],
+      cropStandards: csRes.data || [],
+      channels: chRes.data || [],
+      departments: dRes.data || []
+    };
+  } catch (err: any) {
+    console.error('getAdminMastersDataAction error:', err);
+    return { success: false, error: err.message || 'マスタデータの取得に失敗しました。' };
+  }
+}
+
+export async function saveMasterRecordAction(
+  tenantId: string,
+  table: string,
+  dataToSave: Record<string, any>,
+  editingId?: string | null
+) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const payload = { ...dataToSave };
+    if (table === 'departments') {
+      payload.tenant_id = ownerId;
+      delete payload.user_id;
+    } else {
+      payload.user_id = ownerId;
+    }
+
+    const stripMultilang = (obj: Record<string, any>) => {
+      const copy = { ...obj };
+      delete copy.name_en;
+      delete copy.name_vi;
+      delete copy.name_id;
+      delete copy.name_zh;
+      delete copy.name_si;
+      delete copy.name_km;
+      return copy;
+    };
+
+    if (editingId) {
+      const { data, error } = await supabase.from(table).update(payload).eq('id', editingId).select();
+      if (error) {
+        const fallback = stripMultilang(payload);
+        const { data: retryData, error: retryErr } = await supabase.from(table).update(fallback).eq('id', editingId).select();
+        if (retryErr) throw retryErr;
+        return { success: true, data: retryData };
+      }
+      return { success: true, data };
+    } else {
+      const { id, created_at, ...insertPayload } = payload;
+      const { data, error } = await supabase.from(table).insert([insertPayload]).select();
+      if (error) {
+        const fallback = stripMultilang(insertPayload);
+        const { data: retryData, error: retryErr } = await supabase.from(table).insert([fallback]).select();
+        if (retryErr) throw retryErr;
+        return { success: true, data: retryData };
+      }
+      return { success: true, data };
+    }
+  } catch (err: any) {
+    console.error('saveMasterRecordAction error:', err);
+    return { success: false, error: err.message || 'マスタの保存に失敗しました。' };
+  }
+}
+
+export async function deleteMasterRecordAction(
+  tenantId: string,
+  table: string,
+  id: string
+) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const { error } = await supabase.from(table).delete().eq('id', id);
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('deleteMasterRecordAction error:', err);
+    return { success: false, error: err.message || '削除に失敗しました。' };
+  }
+}
+
+export async function getAccountingPurchasesDataAction(tenantId: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+    const userFilter = buildTenantUserFilter(ownerId, tenantId);
+
+    const [mRes, pRes] = await Promise.all([
+      supabase.from('materials').select('*').or(userFilter).order('name'),
+      supabase.from('material_purchases').select('*, materials(name, unit)').or(userFilter).order('purchase_date', { ascending: false })
+    ]);
+
+    return {
+      success: true,
+      ownerId,
+      materials: mRes.data || [],
+      purchases: pRes.error ? [] : pRes.data || []
+    };
+  } catch (err: any) {
+    console.error('getAccountingPurchasesDataAction error:', err);
+    return { success: false, error: err.message || '資材購入データの取得に失敗しました。' };
+  }
+}
+
+export async function saveMaterialPurchaseAction(tenantId: string, payload: Record<string, any>) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const { error } = await supabase.from('material_purchases').insert([{
+      user_id: ownerId,
+      purchase_date: payload.purchase_date,
+      material_id: payload.material_id || null,
+      supplier: payload.supplier || '',
+      unit_price: Number(payload.unit_price) || 0,
+      quantity: Number(payload.quantity) || 1,
+      total_price: Number(payload.total_price) || 0,
+      notes: payload.notes || '',
+      receipt_image_url: payload.receipt_image_url || ''
+    }]);
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('saveMaterialPurchaseAction error:', err);
+    return { success: false, error: err.message || '購入データの保存に失敗しました。' };
+  }
+}
+
+export async function deleteMaterialPurchaseAction(tenantId: string, id: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const { error } = await supabase.from('material_purchases').delete().eq('id', id);
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    console.error('deleteMaterialPurchaseAction error:', err);
+    return { success: false, error: err.message || '購入データの削除に失敗しました。' };
+  }
+}
+
+
 
 
 

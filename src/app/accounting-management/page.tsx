@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getAccountingPurchasesDataAction, saveMaterialPurchaseAction, deleteMaterialPurchaseAction } from '@/app/actions/farm';
 import { getJSTDate } from '@/lib/dateUtils';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { Receipt, Search, Image as ImageIcon, Camera, DollarSign, Store, Plus, AlertCircle, Check, History, Loader2 } from 'lucide-react';
@@ -59,6 +60,13 @@ export default function AccountingPurchasesPage() {
         return;
       }
 
+      const srvRes = await getAccountingPurchasesDataAction(tenantId);
+      if (srvRes?.success) {
+        setMaterials(srvRes.materials || []);
+        setPurchases(srvRes.purchases || []);
+        return;
+      }
+
       // 1. 自社テナントの資材マスタ取得
       const { data: matData } = await supabase
         .from('materials')
@@ -95,19 +103,22 @@ export default function AccountingPurchasesPage() {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) throw new Error('テナントIDが特定できません');
 
-      const { error } = await supabase.from('material_purchases').insert([{
-        user_id: tenantId,
-        purchase_date: formData.purchase_date,
-        material_id: formData.material_id || null,
-        supplier: formData.supplier,
-        unit_price: formData.unit_price,
-        quantity: formData.quantity,
-        total_price: formData.total_price,
-        notes: formData.notes,
-        receipt_image_url: formData.receipt_image_url
-      }]);
+      const srvRes = await saveMaterialPurchaseAction(tenantId, formData);
+      if (!srvRes?.success) {
+        const { error } = await supabase.from('material_purchases').insert([{
+          user_id: tenantId,
+          purchase_date: formData.purchase_date,
+          material_id: formData.material_id || null,
+          supplier: formData.supplier,
+          unit_price: formData.unit_price,
+          quantity: formData.quantity,
+          total_price: formData.total_price,
+          notes: formData.notes,
+          receipt_image_url: formData.receipt_image_url
+        }]);
 
-      if (error) throw error;
+        if (error) throw error;
+      }
 
       setSubmitSuccess(true);
       setTimeout(() => setSubmitSuccess(false), 3000);
@@ -138,13 +149,16 @@ export default function AccountingPurchasesPage() {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) return;
 
-      const { error } = await supabase
-        .from('material_purchases')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', tenantId);
+      const srvRes = await deleteMaterialPurchaseAction(tenantId, id);
+      if (!srvRes?.success) {
+        const { error } = await supabase
+          .from('material_purchases')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', tenantId);
 
-      if (error) throw error;
+        if (error) throw error;
+      }
       fetchData();
     } catch (error) {
       console.error(error);
@@ -207,10 +221,11 @@ export default function AccountingPurchasesPage() {
       const data = await aiResponse.json();
       if (!aiResponse.ok) throw new Error(data.error || '解析に失敗しました');
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('認証情報が取得できません。');
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error('農園ID（認証情報）が取得できません。');
 
-      const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+      let uploadedPath = '';
+      const fileName = `${tenantId}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
       const { error: uploadError } = await supabase.storage
         .from('receipts')
         .upload(fileName, fileBlob, {
@@ -218,7 +233,9 @@ export default function AccountingPurchasesPage() {
           upsert: false
         });
 
-      if (uploadError) throw new Error('画像の保存に失敗しました。');
+      if (!uploadError) {
+        uploadedPath = fileName;
+      }
 
       setFormData(prev => ({
         ...prev,
@@ -226,10 +243,10 @@ export default function AccountingPurchasesPage() {
         supplier: data.supplier || prev.supplier,
         unit_price: data.total_amount ? Number(data.total_amount) : prev.unit_price,
         quantity: 1,
-        receipt_image_url: fileName
+        receipt_image_url: uploadedPath || prev.receipt_image_url
       }));
       
-      alert('レシートの読み取りとクラウド保存に成功しました！');
+      alert('レシートの読み取りが完了しました！');
     } catch (error: any) {
       console.error(error);
       setOcrError(error.message || 'レシートの解析・保存に失敗しました');
