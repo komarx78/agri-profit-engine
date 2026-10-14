@@ -51,7 +51,19 @@ export async function getCurrentTenantId(): Promise<string | null> {
       }
     }
 
-    // 2. Supabase Auth のセッションから取得（1.5秒タイムアウト保護付き）
+    // 2. Supabase Auth のローカルセッションから即時取得（通信不要・数ms）
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const sessionUserId = sessionData?.session?.user?.id;
+      if (sessionUserId) {
+        if (typeof window !== 'undefined') {
+          try { localStorage.setItem('agri_owner_id', sessionUserId); } catch (e) {}
+        }
+        return sessionUserId;
+      }
+    } catch (e) {}
+
+    // 3. フォールバック: Supabase Auth サーバーから取得（1.5秒タイムアウト保護付き）
     const userPromise = supabase.auth.getUser();
     const timeoutPromise = new Promise<{ data: { user: null } }>((resolve) =>
       setTimeout(() => resolve({ data: { user: null } }), 1500)
@@ -59,6 +71,9 @@ export async function getCurrentTenantId(): Promise<string | null> {
     const res: any = await Promise.race([userPromise, timeoutPromise]);
     const user = res?.data?.user;
     if (user && user.id) {
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('agri_owner_id', user.id); } catch (e) {}
+      }
       return user.id;
     }
 

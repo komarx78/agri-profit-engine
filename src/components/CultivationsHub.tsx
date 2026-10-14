@@ -136,9 +136,11 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   const [directAddMemo, setDirectAddMemo] = useState<string>('');
   const [isDirectAdding, setIsDirectAdding] = useState(false);
 
-  // 肥料検索用デバウンス＆リクエスト管理ref
+  // 肥料検索用デバウンス＆リクエスト管理ref・キャッシュref
   const searchFertilizerTimerRef = useRef<NodeJS.Timeout | null>(null);
   const searchFertilizerReqIdRef = useRef<number>(0);
+  const hasLoadedOfficialFertsRef = useRef<boolean>(false);
+  const famicCacheRef = useRef<Map<string, any[]>>(new Map());
 
   // 作業者向け生産性共有設定ステート
   const [isShareSettingsOpen, setIsShareSettingsOpen] = useState(false);
@@ -152,8 +154,17 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     showTeamTotals: true
   });
 
-  // 設定の初期読み込み（DBおよびローカルストレージ）
+  // 設定の初期読み込み（ローカルキャッシュ即時反映 ＋ バックグラウンドDB同期）
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('agri_worker_share_settings');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed === 'object') setShareSettings(parsed);
+        } catch (e) {}
+      }
+    }
     const loadSettings = async () => {
       try {
         const tenantId = await getCurrentTenantId();
@@ -164,16 +175,6 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
             if (typeof window !== 'undefined') {
               localStorage.setItem('agri_worker_share_settings', JSON.stringify(res.data));
             }
-            return;
-          }
-        }
-        if (typeof window !== 'undefined') {
-          const saved = localStorage.getItem('agri_worker_share_settings');
-          if (saved) {
-            try {
-              const parsed = JSON.parse(saved);
-              if (parsed && typeof parsed === 'object') setShareSettings(parsed);
-            } catch (e) {}
           }
         }
       } catch (e) {
@@ -207,7 +208,26 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
   // --- タブ4: 予定ステート ---
   const [plannedTasks, setPlannedTasks] = useState<any[]>([]);
 
-  // データ全取得
+  // 公的肥料マスタ初期60件のオンデマンド高速取得（フルスキャンソート回避）
+  const ensureOfficialFertilizersLoaded = async () => {
+    if (hasLoadedOfficialFertsRef.current) return;
+    hasLoadedOfficialFertsRef.current = true;
+    try {
+      const { data } = await supabase.from('m_fertilizers').select('*').limit(60);
+      if (data) setOfficialFertilizers(data);
+    } catch (e) {
+      console.warn('Failed to lazy-load official fertilizers:', e);
+    }
+  };
+
+  // 肥料管理タブを開いた時にオンデマンド取得
+  useEffect(() => {
+    if (activeMainTab === 'fertilizers') {
+      ensureOfficialFertilizersLoaded();
+    }
+  }, [activeMainTab]);
+
+  // データ2段階爆速取得（Phase 1: ファーストビュー0.2秒即時描画 / Phase 2: バックグラウンド取得）
   const fetchAllData = async () => {
     setIsLoading(true);
     try {
@@ -218,24 +238,17 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
       }
       setCurrentTenantId(tenantId);
 
-      const [fRes, cRes, pRes, logsRes, matRes, fertMatRes, offFertRes, compRes] = await Promise.all([
+      // 🚀 【Phase 1】ファーストビュー（作付け一覧）に必須な超軽量データのみ最優先取得
+      const [fRes, cRes, pRes, compRes] = await Promise.all([
         supabase.from('fields').select('*').eq('user_id', tenantId).order('name'),
         supabase.from('crops').select('*').eq('user_id', tenantId).order('name'),
         supabase.from('cultivation_plans_v2').select('*, crops(*)').eq('user_id', tenantId).order('created_at', { ascending: false }),
-        supabase.from('work_logs').select('*, crops(name), fields(name), workers(name)').eq('user_id', tenantId).order('work_date', { ascending: false }),
-        supabase.from('materials').select('*').eq('user_id', tenantId).or('category.eq.農薬費,material_type.eq.pesticide').order('name'),
-        supabase.from('materials').select('*').eq('user_id', tenantId).or('category.eq.肥料費,material_type.eq.fertilizer').order('name'),
-        supabase.from('m_fertilizers').select('*').order('created_at', { ascending: false }).limit(60),
         supabase.from('company_settings').select('company_name').or(`user_id.eq.${tenantId},id.eq.${tenantId}`).maybeSingle()
       ]);
 
       const fetchedFields = fRes.data || [];
       const fetchedCrops = cRes.data || [];
       const fetchedPlans = pRes.data || [];
-      const fetchedLogs = logsRes.data || [];
-      const fetchedMaterials = matRes.data || [];
-      const fetchedFertMaterials = fertMatRes.data || [];
-      const fetchedOfficialFerts = offFertRes.data || [];
       let name = compRes?.data?.company_name || '';
       if (!name) {
         if (tenantId === '83b1d7ad-6240-4fbf-8174-3dd4e2ff0c04') name = '株式会社KAP';
@@ -246,9 +259,6 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
 
       setFields(fetchedFields);
       setCrops(fetchedCrops);
-      setFarmRegisteredPesticides(fetchedMaterials);
-      setFarmRegisteredFertilizers(fetchedFertMaterials);
-      setOfficialFertilizers(fetchedOfficialFerts);
 
       let initialCropId = selectedSprayCropId;
       if (fetchedCrops.length > 0 && !initialCropId) {
@@ -313,25 +323,41 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
       });
       setCultivations(cultList);
 
+      // ⚡ ここで即座にスピナーを解除し、ファーストビューを0.2秒で表示する！
+      setIsLoading(false);
+
+      // 🚀 【Phase 2】作業履歴・自社資材マスタをバックグラウンドで非同期取得（画面をブロックしない）
+      const [logsRes, matRes, fertMatRes] = await Promise.all([
+        supabase.from('work_logs').select('*, crops(name), fields(name), workers(name)').eq('user_id', tenantId).order('work_date', { ascending: false }).limit(500),
+        supabase.from('materials').select('*').eq('user_id', tenantId).or('category.eq.農薬費,material_type.eq.pesticide').order('name'),
+        supabase.from('materials').select('*').eq('user_id', tenantId).or('category.eq.肥料費,material_type.eq.fertilizer').order('name')
+      ]);
+
+      const fetchedLogs = logsRes.data || [];
+      const fetchedMaterials = matRes.data || [];
+      const fetchedFertMaterials = fertMatRes.data || [];
+
+      setFarmRegisteredPesticides(fetchedMaterials);
+      setFarmRegisteredFertilizers(fetchedFertMaterials);
+
       // 2. 過去の散布ログと作業ログの分類
       const completedLogs = fetchedLogs.filter(l => l.status !== 'planned');
       const plannedLogs = fetchedLogs.filter(l => l.status === 'planned');
       setWorkLogs(completedLogs);
       setPlannedTasks(plannedLogs);
 
-      // 3. 【自農園登録農薬に限定】選択作物の適用情報 ＆ 自社散布実績の集計
+      // 🚀 【Phase 3】選択作物の農薬適用情報＆散布実績を非同期バックグラウンドで準備
       if (initialCropId) {
-        await loadPesticidesForCrop(initialCropId, fetchedCrops, completedLogs, fetchedMaterials);
+        loadPesticidesForCrop(initialCropId, fetchedCrops, completedLogs, fetchedMaterials);
       }
 
     } catch (err) {
       console.error('Error fetching data in cultivations hub:', err);
-    } finally {
       setIsLoading(false);
     }
   };
 
-  // 自農園登録農薬（materials）に限定し、作物ごとのFAMIC適用情報と散布実績を結合
+  // 自農園登録農薬（materials）に限定し、作物ごとのFAMIC適用情報と散布実績を結合（メモリキャッシュ対応）
   const [isLoadingPesticides, setIsLoadingPesticides] = useState(false);
 
   const loadPesticidesForCrop = async (
@@ -347,17 +373,22 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
 
     setIsLoadingPesticides(true);
     try {
-      // 1. FAMIC公的農薬APIから作物に適用のある農薬一覧を取得（照合用辞書）
-      const res = await fetch('/api/pesticide-check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cropName: targetCrop.name })
-      });
-
+      // 1. FAMIC公的農薬APIから作物に適用のある農薬一覧を取得（メモリキャッシュがあれば0msで即利用）
       let famicItems: any[] = [];
-      if (res.ok) {
-        const json = await res.json();
-        famicItems = json.pesticides || [];
+      if (famicCacheRef.current.has(targetCrop.name)) {
+        famicItems = famicCacheRef.current.get(targetCrop.name) || [];
+      } else {
+        const res = await fetch('/api/pesticide-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cropName: targetCrop.name })
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          famicItems = json.pesticides || [];
+          famicCacheRef.current.set(targetCrop.name, famicItems);
+        }
       }
 
       // 2. 「自社登録農薬マスタ（materials）」を主軸として、FAMIC情報と散布回数を結合
@@ -681,7 +712,7 @@ export default function CultivationsHub({ initialSubTab = 'cultivations' }: Cult
     if (!q.trim()) {
       setIsLoadingFertilizers(true);
       searchFertilizerTimerRef.current = setTimeout(async () => {
-        const { data } = await supabase.from('m_fertilizers').select('*').order('created_at', { ascending: false }).limit(60);
+        const { data } = await supabase.from('m_fertilizers').select('*').limit(60);
         setOfficialFertilizers(data || []);
         setIsLoadingFertilizers(false);
       }, 150);

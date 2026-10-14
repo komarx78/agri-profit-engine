@@ -192,13 +192,20 @@ export async function POST(request: Request) {
 
     let allUsages: any[] = [];
 
-    // パターンA: 作物名が指定されている場合
+    // パターンA: 作物名が指定されている場合（全同義語・表記揺れを重複排除して一撃クエリ化）
     if (cleanCropName) {
       const searchCrops = getNormalizedCrops(cleanCropName);
+      const allCropVariants = new Set<string>();
       for (const c of searchCrops) {
         if (!c) continue;
-        const cVariants = generateSearchVariants(c);
-        const orCrops = cVariants.map(v => `crop_name.eq.${v},crop_name.ilike.%${v}%`).join(',');
+        for (const v of generateSearchVariants(c)) {
+          if (v) allCropVariants.add(v);
+        }
+      }
+
+      const uniqueVariants = Array.from(allCropVariants);
+      if (uniqueVariants.length > 0) {
+        const orCrops = uniqueVariants.map(v => `crop_name.ilike.%${v}%`).join(',');
 
         let q = supabase
           .from('m_pesticide_usages')
@@ -211,10 +218,10 @@ export async function POST(request: Request) {
           q = q.or(orPests);
         }
 
-        const { data } = await q.limit(1000);
+        const { data } = await q.limit(2000);
         if (data) {
           // 「ねぎ」で「たまねぎ」が混ざったり、逆に「たまねぎ」で「ねぎ」が混ざるのを厳密にフィルタ
-          const filtered = data.filter((row: any) => {
+          allUsages = data.filter((row: any) => {
             const rowCrop = (row.crop_name || '').toLowerCase();
             if (cleanCropName.includes('たまねぎ') || cleanCropName.includes('玉ねぎ') || cleanCropName.includes('タマネギ')) {
               return rowCrop.includes('たまねぎ') || rowCrop.includes('タマネギ') || rowCrop.includes('ﾀﾏﾈｷﾞ');
@@ -224,7 +231,6 @@ export async function POST(request: Request) {
             }
             return true;
           });
-          allUsages = allUsages.concat(filtered);
         }
       }
     } 
@@ -282,22 +288,30 @@ export async function POST(request: Request) {
       });
     }
 
-    // 2. 登録番号の一覧を抽出して m_pesticides から基本情報を一括取得
+    // 2. 登録番号の一覧を抽出して m_pesticides から基本情報を並列一括取得
     const regNos = Array.from(new Set(allUsages.map((u: any) => u.registration_no)));
     const pestMap = new Map();
 
     const chunkSize = 500;
+    const chunks: string[][] = [];
     for (let i = 0; i < regNos.length; i += chunkSize) {
-      const chunk = regNos.slice(i, i + chunkSize);
-      const { data: pestData } = await supabase
-        .from('m_pesticides')
-        .select('registration_no, pesticide_name, pesticide_type, applicant_name, purpose')
-        .in('registration_no', chunk);
+      chunks.push(regNos.slice(i, i + chunkSize));
+    }
 
+    const chunkResults = await Promise.all(
+      chunks.map(chunk =>
+        supabase
+          .from('m_pesticides')
+          .select('registration_no, pesticide_name, pesticide_type, applicant_name, purpose')
+          .in('registration_no', chunk)
+      )
+    );
+
+    chunkResults.forEach(({ data: pestData }) => {
       if (pestData) {
         pestData.forEach(p => pestMap.set(p.registration_no, p));
       }
-    }
+    });
 
     // 3. 【最重要】まず登録番号（メーカー商品）ごとに適用データを整理
     const productVariantMap = new Map<string, any>();
