@@ -1627,11 +1627,63 @@ export async function quickCreateMaterialAction(
 // ==========================================
 // 6) 👥 スタッフ・出退勤・給料・有給管理（統合HR画面用サーバーアクション群）
 // ==========================================
+export async function getUnclosedAttendanceAlertsAction(tenantId: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, records: [] };
+    const isTenantUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((tenantId || '').trim());
+    const userFilter = isTenantUuid && tenantId !== ownerId
+      ? `user_id.eq.${ownerId},user_id.eq.${tenantId}`
+      : `user_id.eq.${ownerId}`;
+
+    const [unclosedRes, workersRes] = await Promise.all([
+      supabase
+        .from('attendance_logs')
+        .select('*')
+        .or(userFilter)
+        .not('clock_in', 'is', null)
+        .is('clock_out', null)
+        .order('date', { ascending: false }),
+      supabase
+        .from('workers')
+        .select('id, name, hourly_wage, standard_end_time')
+        .or(userFilter)
+    ]);
+
+    const workerMap = new Map((workersRes.data || []).map((w: any) => [w.id, w]));
+    const records = (unclosedRes.data || []).map((att: any) => {
+      const w: any = workerMap.get(att.worker_id);
+      return {
+        ...att,
+        worker_name: w?.name || 'スタッフ',
+        standard_end_time: w?.standard_end_time ? String(w.standard_end_time).substring(0, 5) : '17:00'
+      };
+    });
+
+    return { success: true, ownerId, records };
+  } catch (err: any) {
+    console.error('getUnclosedAttendanceAlertsAction error:', err);
+    return { success: false, records: [] };
+  }
+}
+
 export async function getHrManagementDataAction(tenantId: string, targetMonth?: string, targetDate?: string) {
   try {
     const supabase = createAdminClient();
     const ownerId = await resolveOwnerId(supabase, tenantId);
     if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const isTenantUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((tenantId || '').trim());
+    const userFilter = isTenantUuid && tenantId !== ownerId
+      ? `user_id.eq.${ownerId},user_id.eq.${tenantId}`
+      : `user_id.eq.${ownerId}`;
+    const deptFilter = isTenantUuid && tenantId !== ownerId
+      ? `tenant_id.eq.${ownerId},tenant_id.eq.${tenantId}`
+      : `tenant_id.eq.${ownerId}`;
+    const compFilter = isTenantUuid && tenantId !== ownerId
+      ? `user_id.eq.${ownerId},id.eq.${ownerId},user_id.eq.${tenantId},id.eq.${tenantId}`
+      : `user_id.eq.${ownerId},id.eq.${ownerId}`;
 
     const nowJst = new Date(Date.now() + 9 * 3600 * 1000);
     const todayStr = targetDate || nowJst.toISOString().substring(0, 10);
@@ -1642,12 +1694,14 @@ export async function getHrManagementDataAction(tenantId: string, targetMonth?: 
     const rangeStart = new Date(Date.UTC(y, m - 2, 1)).toISOString().substring(0, 10);
     const rangeEnd = new Date(Date.UTC(y, m, 10)).toISOString().substring(0, 10);
 
-    const [workersRes, deptsRes, compRes, attRes, workRes] = await Promise.all([
-      supabase.from('workers').select('*').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).order('name'),
-      supabase.from('departments').select('*').or(`tenant_id.eq.${ownerId},tenant_id.eq.${tenantId}`).order('name'),
-      supabase.from('company_settings').select('*').or(`user_id.eq.${ownerId},id.eq.${ownerId},user_id.eq.${tenantId},id.eq.${tenantId}`).limit(1).maybeSingle(),
-      supabase.from('attendance_logs').select('*').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).gte('date', rangeStart).lte('date', rangeEnd).order('date', { ascending: false }).order('clock_in', { ascending: false }),
-      supabase.from('work_logs').select('id, worker_id, work_date, work_type, task_title, duration_minutes, harvest_amount, status, crops(name), fields(name)').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).gte('work_date', rangeStart).lte('work_date', rangeEnd)
+    // 🚨 どの月を開いていても「退勤未打刻（clock_out IS NULL）」のデータは全期間から100%取得して見逃し・迷子をゼロにする！
+    const [workersRes, deptsRes, compRes, attRes, workRes, unclosedAttRes] = await Promise.all([
+      supabase.from('workers').select('*').or(userFilter).order('name'),
+      supabase.from('departments').select('*').or(deptFilter).order('name'),
+      supabase.from('company_settings').select('*').or(compFilter).limit(1).maybeSingle(),
+      supabase.from('attendance_logs').select('*').or(userFilter).gte('date', rangeStart).lte('date', rangeEnd).order('date', { ascending: false }).order('clock_in', { ascending: false }),
+      supabase.from('work_logs').select('id, worker_id, work_date, work_type, task_title, duration_minutes, harvest_amount, status, crops(name), fields(name)').or(userFilter).gte('work_date', rangeStart).lte('work_date', rangeEnd),
+      supabase.from('attendance_logs').select('*').or(userFilter).not('clock_in', 'is', null).is('clock_out', null).order('date', { ascending: false })
     ]);
 
     const workersList = workersRes.data || [];
@@ -1658,11 +1712,22 @@ export async function getHrManagementDataAction(tenantId: string, targetMonth?: 
     let workLogs = workRes.data || [];
     if (todayStr < rangeStart || todayStr > rangeEnd) {
       const [dayAtt, dayWork] = await Promise.all([
-        supabase.from('attendance_logs').select('*').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).eq('date', todayStr),
-        supabase.from('work_logs').select('id, worker_id, work_date, work_type, task_title, duration_minutes, harvest_amount, status, crops(name), fields(name)').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).eq('work_date', todayStr)
+        supabase.from('attendance_logs').select('*').or(userFilter).eq('date', todayStr),
+        supabase.from('work_logs').select('id, worker_id, work_date, work_type, task_title, duration_minutes, harvest_amount, status, crops(name), fields(name)').or(userFilter).eq('work_date', todayStr)
       ]);
       if (dayAtt.data) attendanceLogs = [...dayAtt.data, ...attendanceLogs];
       if (dayWork.data) workLogs = [...dayWork.data, ...workLogs];
+    }
+
+    // 全期間の未退勤ログ（8月分など別月の押し忘れデータ）を重複なしでマージ
+    if (unclosedAttRes.data && unclosedAttRes.data.length > 0) {
+      const existingIds = new Set(attendanceLogs.map((a: any) => a.id));
+      for (const u of unclosedAttRes.data) {
+        if (!existingIds.has(u.id)) {
+          attendanceLogs.push(u);
+          existingIds.add(u.id);
+        }
+      }
     }
 
     // 有給・休暇申請と残業申請を取得

@@ -20,7 +20,7 @@ import dynamic from 'next/dynamic';
 import VideoPlayerWithSubtitles, { Narration, TrimRange } from '@/components/VideoPlayerWithSubtitles';
 import { t, getTranslatedName, getTranslatedWorkType, getWeekdayName, LANGUAGES, LanguageCode } from '@/lib/i18n';
 import { WorkerGate } from '@/components/WorkerGate';
-import { getPortalTasks, completePortalTask, reopenPortalTask, submitAttendance, submitLeaveRequest, getWorkerLeaveRequests } from '@/app/actions/farm';
+import { getPortalTasks, completePortalTask, reopenPortalTask, submitAttendance, submitLeaveRequest, getWorkerLeaveRequests, getUnclosedAttendanceAlertsAction, saveAttendanceRecordAction, deleteAttendanceRecordAction } from '@/app/actions/farm';
 import { executeAttendanceWithRetry } from '@/lib/attendanceClient';
 import { reportSystemError } from '@/lib/errorReporter';
 import { translateSingleText } from '@/app/actions/translate';
@@ -2794,6 +2794,28 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
   const hasClockedIn = attendance && attendance.clock_in;
   const hasClockedOut = attendance && attendance.clock_out;
 
+  // 🚨 過去日の退勤ボタン押し忘れ（未退勤）アラート一覧（LINEのポータルURLから開いた時も迷わず1秒で直せるようにする）
+  const [unclosedAlerts, setUnclosedAlerts] = useState<any[]>([]);
+  const [isFixingUnclosed, setIsFixingUnclosed] = useState<boolean>(false);
+
+  const loadUnclosedAlerts = async (farmId: string) => {
+    if (!farmId) return;
+    try {
+      const res = await getUnclosedAttendanceAlertsAction(farmId);
+      if (res.success && Array.isArray(res.records)) {
+        const otherDayRecords = res.records.filter((r: any) => r.date && r.date !== todayStr);
+        setUnclosedAlerts(otherDayRecords);
+      }
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    const farmId = activeFarmId || workerProfile?.user_id || currentUser?.user_id || '';
+    if (farmId && currentUser) {
+      loadUnclosedAlerts(farmId);
+    }
+  }, [activeFarmId, currentUser, workerProfile, todayStr]);
+
   // ⚡ ログイン中ユーザーがいない場合は、白画面スピナーで待たせず直ちに現場ログイン画面を表示！
   if (showWorkerGate || !currentUser) {
     return (
@@ -2904,6 +2926,125 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
 
       <main className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8 pb-24 lg:pb-8 space-y-5">
         
+        {/* 🚨 LINEの「過去の未退勤リマインド」から開いた農家さんが迷わずその場で1秒で直せる特設ボックス */}
+        {(() => {
+          const visibleAlerts = role === 'admin'
+            ? unclosedAlerts
+            : unclosedAlerts.filter((r: any) => r.worker_id === myWorkerId);
+          if (visibleAlerts.length === 0) return null;
+          const targetFarmId = activeFarmId || workerProfile?.user_id || currentUser?.user_id || '';
+          return (
+            <div className="bg-amber-50 border-2 border-red-400 rounded-3xl p-4 sm:p-5 shadow-md space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-amber-200">
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-6 h-6 text-red-600 shrink-0 mt-0.5" />
+                  <div>
+                    <h2 className="text-sm sm:text-base font-black text-slate-900">
+                      ⚠️ 過去の「退勤ボタン押し忘れ（未退勤）」が <span className="text-red-600 underline text-base sm:text-lg">{visibleAlerts.length}件</span> あります
+                    </h2>
+                    <p className="text-xs font-bold text-amber-900 mt-0.5">
+                      LINEでお知らせが届いている未退勤データです。下のボタンを1回押すだけで退勤確定（または間違い打刻の削除）ができ、毎朝のLINE通知が止まります。
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={targetFarmId ? `/hr?farm=${targetFarmId}` : '/hr'}
+                  className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black shadow-xs"
+                >
+                  <Users className="w-4 h-4" />
+                  <span>出退勤・給料管理画面で時間を細かく直す</span>
+                </Link>
+              </div>
+
+              <div className="space-y-2">
+                {visibleAlerts.map((item: any) => {
+                  const inHm = formatDisplayTime(item.clock_in) || '08:00';
+                  const defaultOutHm = item.standard_end_time || '17:00';
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-white rounded-2xl px-3.5 py-3 border border-amber-300 shadow-2xs"
+                    >
+                      <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+                        <span className="px-2 py-0.5 rounded-lg bg-red-600 text-white font-black text-xs">
+                          退勤未打刻
+                        </span>
+                        <span className="font-black text-slate-900">{item.worker_name} さん</span>
+                        <span className="font-black text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                          📅 {item.date}
+                        </span>
+                        <span className="font-bold text-slate-600">
+                          （出勤 {inHm} 〜 <span className="text-red-600 font-black">退勤未入力</span>）
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          disabled={isFixingUnclosed}
+                          onClick={async () => {
+                            setIsFixingUnclosed(true);
+                            try {
+                              const res = await saveAttendanceRecordAction(targetFarmId, {
+                                id: item.id,
+                                worker_id: item.worker_id,
+                                date: item.date,
+                                clock_in_time: inHm,
+                                clock_out_time: defaultOutHm,
+                                total_break_minutes: Number(item.total_break_minutes ?? 60),
+                              });
+                              if (res.success) {
+                                setUnclosedAlerts(prev => prev.filter(a => a.id !== item.id));
+                              } else {
+                                alert('保存に失敗しました: ' + (res.error || ''));
+                              }
+                            } finally {
+                              setIsFixingUnclosed(false);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-xs cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>{defaultOutHm}で退勤にする</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isFixingUnclosed}
+                          onClick={async () => {
+                            if (!window.confirm(`${item.worker_name}さん（${item.date} 出勤 ${inHm}）の打刻データを間違いとして削除しますか？`)) return;
+                            setIsFixingUnclosed(true);
+                            try {
+                              const res = await deleteAttendanceRecordAction(targetFarmId, item.id);
+                              if (res.success) {
+                                setUnclosedAlerts(prev => prev.filter(a => a.id !== item.id));
+                              } else {
+                                alert('削除に失敗しました: ' + (res.error || ''));
+                              }
+                            } finally {
+                              setIsFixingUnclosed(false);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-300 text-xs font-bold cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>間違い打刻を消す</span>
+                        </button>
+                        <Link
+                          href={targetFarmId ? `/hr?farm=${targetFarmId}` : '/hr'}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-bold"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>時間を指定して直す</span>
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* 📱 スマホ専用：迷子ゼロ「4大画面」完全分離スイッチャー（出退勤と作業記録をバッサリ分離） */}
         <div className="lg:hidden bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-4 gap-1 sticky top-14 z-40">
           <button

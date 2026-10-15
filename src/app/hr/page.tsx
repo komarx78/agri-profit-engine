@@ -295,14 +295,14 @@ export default function HrManagementPage() {
     return pendingLeaves + pendingOvertimes;
   }, [leaveRequests, overtimeRequests]);
 
-  // 退勤忘れリスト（今日より前の未退勤レコード詳細）
+  // 退勤忘れリスト（今日以外のすべての未退勤レコード詳細：別月やテスト日付も含め100%表示して迷子ゼロ化）
   const forgottenClockOutRecords = useMemo(() => {
     const todayStr = toJstDateStr(new Date());
     return attendances
       .filter((a) => {
         if (a.clock_out) return false;
         const dStr = getAttDateStr(a);
-        return dStr < todayStr;
+        return Boolean(dStr) && dStr !== todayStr;
       })
       .map((a) => {
         const w = workerMap.get(a.worker_id);
@@ -321,7 +321,7 @@ export default function HrManagementPage() {
             notes: '',
           },
           dateStr: dStr,
-          clockInHm: toJstTimeHm(a.clock_in) || '--:--',
+          clockInHm: toJstTimeHm(a.clock_in) || '08:00',
         };
       })
       .sort((a, b) => b.dateStr.localeCompare(a.dateStr));
@@ -913,54 +913,124 @@ export default function HrManagementPage() {
         {(forgottenClockOutCount > 0 || pendingApprovalCount > 0) && (
           <div className="mt-4 space-y-3">
             {forgottenClockOutCount > 0 && (
-              <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 text-amber-950 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-amber-200/80">
-                  <div className="flex items-center gap-2.5">
-                    <AlertCircle className="text-amber-600 shrink-0" size={22} />
+              <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-4 sm:p-5 text-amber-950 shadow-md">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-200/80">
+                  <div className="flex items-start sm:items-center gap-2.5">
+                    <AlertCircle className="text-red-600 shrink-0 mt-0.5 sm:mt-0" size={24} />
                     <div>
-                      <div className="text-sm md:text-base font-black">
-                        過去の退勤ボタン押し忘れが <span className="text-red-600 underline">{forgottenClockOutCount}件</span> あります
+                      <div className="text-sm md:text-base font-black text-stone-900">
+                        ⚠️ 退勤ボタンの押し忘れ（未退勤）が <span className="text-red-600 underline text-lg">{forgottenClockOutCount}件</span> あります（LINE通知の対象）
                       </div>
-                      <p className="text-xs text-amber-800 font-medium mt-0.5">
-                        下のボタンから「その場で退勤時刻を入れる」か、「その日の画面へ飛ぶ」ことができます。
+                      <p className="text-xs text-amber-900 font-bold mt-0.5">
+                        ここで「17:00で退勤にする」「時間を指定して修正」「間違い打刻を消す」のどれかを押すと、毎朝のLINEリマインド通知が止まります。
                       </p>
                     </div>
                   </div>
+                  {forgottenClockOutCount > 1 && (
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={async () => {
+                        if (!window.confirm(`未退勤の ${forgottenClockOutCount}件 すべてを「17:00退勤（休憩60分）」として一括確定しますか？`)) return;
+                        setIsSaving(true);
+                        try {
+                          for (const item of forgottenClockOutRecords) {
+                            await saveAttendanceRecordAction(tenantId, {
+                              id: item.attendance.id,
+                              worker_id: item.worker.id,
+                              date: item.dateStr,
+                              clock_in_time: item.clockInHm === '--:--' ? '08:00' : item.clockInHm,
+                              clock_out_time: '17:00',
+                              total_break_minutes: Number(item.attendance.total_break_minutes ?? 60),
+                            });
+                          }
+                          showToast(`未退勤 ${forgottenClockOutCount}件 をすべて退勤確定しました！`);
+                          await loadData(tenantId, selectedMonth, selectedDate);
+                        } finally {
+                          setIsSaving(false);
+                        }
+                      }}
+                      className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-sm transition-colors"
+                    >
+                      <CheckCircle2 size={14} />
+                      <span>全{forgottenClockOutCount}件をまとめて17:00退勤にする</span>
+                    </button>
+                  )}
                 </div>
 
-                <div className="mt-3 grid grid-cols-1 gap-2">
+                <div className="mt-3 grid grid-cols-1 gap-2.5">
                   {forgottenClockOutRecords.map((item) => (
                     <div
                       key={item.attendance.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/95 rounded-xl px-3.5 py-2.5 border border-amber-200"
+                      className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white rounded-xl px-4 py-3 border border-amber-300 shadow-xs"
                     >
                       <div className="flex flex-wrap items-center gap-2 text-xs md:text-sm">
-                        <span className="px-2 py-0.5 rounded-lg bg-red-100 text-red-700 font-black text-xs">
-                          未退勤
+                        <span className="px-2.5 py-1 rounded-lg bg-red-600 text-white font-black text-xs">
+                          退勤未打刻
                         </span>
-                        <span className="font-black text-stone-900 text-sm">{item.worker.name} さん</span>
-                        <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                        <span className="font-black text-stone-900 text-sm md:text-base">{item.worker.name} さん</span>
+                        <span className="font-black text-emerald-900 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
                           📅 {item.dateStr}
                         </span>
-                        <span className="text-stone-600 font-bold">
-                          （出勤 {item.clockInHm} 〜 退勤未入力）
+                        <span className="text-stone-700 font-bold">
+                          （出勤 {item.clockInHm} 〜 <span className="text-red-600 font-black">退勤が押されていません</span>）
                         </span>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2 shrink-0">
                         <button
-                          onClick={() => openEditAttendanceModal(item.worker, item.dateStr, item.attendance)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-sm transition-colors"
+                          type="button"
+                          disabled={isSaving}
+                          onClick={async () => {
+                            setIsSaving(true);
+                            try {
+                              const res = await saveAttendanceRecordAction(tenantId, {
+                                id: item.attendance.id,
+                                worker_id: item.worker.id,
+                                date: item.dateStr,
+                                clock_in_time: item.clockInHm === '--:--' ? '08:00' : item.clockInHm,
+                                clock_out_time: '17:00',
+                                total_break_minutes: Number(item.attendance.total_break_minutes ?? 60),
+                              });
+                              if (res.success) {
+                                showToast(`${item.worker.name}さん（${item.dateStr}）を17:00退勤で確定しました！`);
+                                await loadData(tenantId, selectedMonth, selectedDate);
+                              } else {
+                                showToast(res.error || '保存に失敗しました', 'error');
+                              }
+                            } finally {
+                              setIsSaving(false);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-sm transition-colors"
                         >
-                          <Edit3 size={13} />
-                          <span>今すぐ退勤時刻を入れる</span>
+                          <Check size={14} />
+                          <span>17:00で退勤にする</span>
                         </button>
                         <button
+                          type="button"
+                          onClick={() => openEditAttendanceModal(item.worker, item.dateStr, item.attendance)}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow-sm transition-colors"
+                        >
+                          <Edit3 size={13} />
+                          <span>時間を指定して修正</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() => handleDeleteAttendance(item.attendance.id, `${item.worker.name}（${item.dateStr}）`)}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-stone-100 hover:bg-red-50 text-stone-700 hover:text-red-700 border border-stone-300 text-xs font-bold transition-colors"
+                        >
+                          <Trash2 size={13} />
+                          <span>間違い打刻を消す</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => jumpToDailyDate(item.dateStr)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-bold transition-colors"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-bold transition-colors"
                         >
                           <Calendar size={13} />
-                          <span>その日の画面へ飛ぶ</span>
+                          <span>その日の画面へ</span>
                         </button>
                       </div>
                     </div>
