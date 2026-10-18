@@ -1,8 +1,8 @@
 import React from 'react';
 
 export const metadata = {
-  title: 'プライバシーポリシー | アグリ現場 - 農業収益エンジン',
-  description: 'アグリ現場（農業収益エンジン）における個人情報保護方針・プライバシーポリシー',
+  title: 'プライバシーポリシー | agri-profit',
+  description: 'agri-profit（農業経営・作業管理システム）における個人情報保護方針・プライバシーポリシー',
 };
 
 export default function PrivacyPolicyPage() {
@@ -17,7 +17,7 @@ export default function PrivacyPolicyPage() {
             プライバシーポリシー（個人情報保護方針）
           </h1>
           <p className="mt-3 text-slate-600 text-sm sm:text-base">
-            アプリケーション「アグリ現場（農業収益エンジン）」（以下「本アプリ・本サービス」といいます）は、契約農園およびその従業員・スタッフ等の利用者（以下「ユーザー」といいます）の個人情報および農業経営・作業データの保護を最重要責務と認識し、個人情報の保護に関する法律（個人情報保護法）ならびにGoogle Playデベロッパープログラムポリシーを遵守し、以下の通りプライバシーポリシーを定めます。
+            アプリケーション「agri-profit」（以下「本アプリ・本サービス」といいます）は、契約農園およびその従業員・スタッフ等の利用者（以下「ユーザー」といいます）の個人情報および農業経営・作業データの保護を最重要責務と認識し、個人情報の保護に関する法律（個人情報保護法）ならびにGoogle Playデベロッパープログラムポリシーを遵守し、以下の通りプライバシーポリシーを定めます。
           </p>
         </div>
 
@@ -64,10 +64,10 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
               <span className="w-1.5 h-5 bg-emerald-600 rounded-full inline-block"></span>
-              3. 第三者提供の禁止および外部サービスの利用
+              3. 第三者提供の禁止および共同管理・外部サービスの利用
             </h2>
             <p className="mb-2">
-              当運営者は、法令に基づく場合または人の生命・財産の保護のために緊急の必要がある場合を除き、ユーザーの同意なく個人情報を第三者に提供・売却・貸与することはありません。なお、本サービスの機能提供に必要な範囲で、以下の高セキュリティな外部クラウド基盤を利用しています。
+              当運営者は、法令に基づく場合または人の生命・財産の保護のために緊急の必要がある場合を除き、ユーザーの同意なく個人情報を第三者に提供・売却・貸与することはありません。なお、本アプリの提供・保守および契約サポートのため、開発・システム運営元である株式会社KAPおよび販売・導入支援元である株式会社G.Gの間において、厳格な機密保持契約のもとでサポートに必要な範囲に限り情報を連携する場合があります。また、システム基盤として以下の高セキュリティな外部クラウドサービスを利用しています。
             </p>
             <ul className="list-disc pl-6 space-y-1 text-sm text-slate-600">
               <li><strong>Supabase / Vercel</strong>：データベース保管およびアプリケーション配信基盤（暗号化通信・アクセス制御適用）</li>
@@ -103,15 +103,16 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
               <span className="w-1.5 h-5 bg-emerald-600 rounded-full inline-block"></span>
-              6. 改定およびお問い合わせ窓口
+              6. 改定および運営・お問い合わせ窓口
             </h2>
             <p className="mb-3">
               法令の改正やサービス機能の追加に伴い、本ポリシーを改定する場合があります。重要な変更がある場合は本ページおよびアプリ内にて通知いたします。本ポリシーに関するご質問、データの開示・削除請求は以下までご連絡ください。
             </p>
-            <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 text-sm space-y-1">
-              <p><strong>サービス名称</strong>：アグリ現場（農業収益エンジン）</p>
-              <p><strong>運営主体</strong>：株式会社cocotte（アグリ現場 運営事務局）</p>
-              <p><strong>お問い合わせ</strong>：システム管理画面内のお問い合わせ窓口、または各契約農園のシステム管理者までご連絡ください。</p>
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 text-sm space-y-1.5">
+              <p><strong>サービス名称</strong>：agri-profit</p>
+              <p><strong>システム開発・運営主体（アプリ提供元）</strong>：株式会社KAP</p>
+              <p><strong>販売・導入サポート元</strong>：株式会社G.G</p>
+              <p><strong>お問い合わせ窓口</strong>：システム管理画面内のお問い合わせ窓口、または株式会社G.G ／ 株式会社KAP（agri-profit 運営事務局）までご連絡ください。</p>
             </div>
           </section>
 
