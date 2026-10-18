@@ -29,14 +29,16 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
 
-  // ⚡ 現場ポータル・作業画面等は外部認証チェックを完全バイパス（0ms即座に応答し、現場通信ハングを100%遮断）
+  // ⚡ 現場ポータル・作業画面・プライバシーポリシー等は外部認証チェックを完全バイパス（0ms即座に応答）
   if (
     pathname.startsWith('/portal') ||
     pathname.startsWith('/work') ||
     pathname.startsWith('/share') ||
     pathname.startsWith('/farm') ||
     pathname.startsWith('/api') ||
-    pathname.startsWith('/manuals')
+    pathname.startsWith('/manuals') ||
+    pathname.startsWith('/privacy') ||
+    pathname.startsWith('/.well-known')
   ) {
     return supabaseResponse
   }
