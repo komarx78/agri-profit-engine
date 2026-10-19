@@ -439,6 +439,127 @@ export async function getPortalTasks(tenantId: string) {
   }
 }
 
+// ============================================================================
+// テナント拡張設定（期間・キャンペーン・共有設定・資材在庫・HRプロフィール）の安全な永続化ヘルパー
+// ※本番Supabaseの company_settings テーブルには settings カラムが存在しないため、
+//   RLS開放済みの system_notification_settings (id = 'tenant_ext_<id>') と attendance_rules を併用する
+// ============================================================================
+function extractExtFromAttendanceRules(attendanceRules: any): Record<string, any> {
+  if (Array.isArray(attendanceRules)) {
+    const found = attendanceRules.find((r: any) => r && typeof r === 'object' && r.__ext_settings === true);
+    if (found) {
+      const { __ext_settings, ...rest } = found;
+      return rest;
+    }
+  } else if (attendanceRules && typeof attendanceRules === 'object' && attendanceRules.__ext_settings === true) {
+    const { __ext_settings, ...rest } = attendanceRules;
+    return rest;
+  }
+  return {};
+}
+
+async function loadTenantExtSettings(
+  supabase: any,
+  tenantKey: string,
+  compRow?: any
+): Promise<Record<string, any>> {
+  const baseFromRules = extractExtFromAttendanceRules(compRow?.attendance_rules);
+  const rawKeys = Array.from(
+    new Set(
+      [compRow?.user_id, compRow?.id, tenantKey]
+        .filter((k) => k && k !== 'null' && k !== 'undefined')
+        .map((k) => `tenant_ext_${String(k).trim()}`)
+    )
+  );
+  if (rawKeys.length === 0) return baseFromRules;
+
+  try {
+    const { data: rows } = await supabase
+      .from('system_notification_settings')
+      .select('id, webhook_url, updated_at')
+      .in('id', rawKeys);
+
+    let merged: Record<string, any> = { ...baseFromRules };
+    if (Array.isArray(rows) && rows.length > 0) {
+      const sorted = [...rows].sort((a, b) =>
+        String(a.updated_at || '').localeCompare(String(b.updated_at || ''))
+      );
+      for (const r of sorted) {
+        if (r?.webhook_url) {
+          try {
+            const parsed = JSON.parse(r.webhook_url);
+            if (parsed && typeof parsed === 'object') {
+              merged = { ...merged, ...parsed };
+            }
+          } catch (e) {}
+        }
+      }
+    }
+    return merged;
+  } catch (e) {
+    return baseFromRules;
+  }
+}
+
+async function saveTenantExtSettings(
+  supabase: any,
+  tenantKey: string,
+  patch: Record<string, any>,
+  compRow?: any
+): Promise<Record<string, any>> {
+  const current = await loadTenantExtSettings(supabase, tenantKey, compRow);
+  const next: Record<string, any> = {
+    ...current,
+    ...patch,
+    updated_at: new Date().toISOString(),
+  };
+
+  const rawIds = Array.from(
+    new Set(
+      [compRow?.user_id, compRow?.id, tenantKey]
+        .filter((k) => k && k !== 'null' && k !== 'undefined')
+        .map((k) => String(k).trim())
+    )
+  );
+
+  if (rawIds.length > 0) {
+    const nowIso = new Date().toISOString();
+    const upsertRows = rawIds.map((rid) => ({
+      id: `tenant_ext_${rid}`,
+      alert_emails: 'tenant_ext_settings',
+      webhook_url: JSON.stringify(next),
+      is_email_enabled: false,
+      is_line_enabled: false,
+      updated_at: nowIso,
+    }));
+
+    const { error: snsErr } = await supabase
+      .from('system_notification_settings')
+      .upsert(upsertRows, { onConflict: 'id' });
+    if (snsErr) throw snsErr;
+  }
+
+  // company_settings 側にも attendance_rules / plan_type としてベストエフォート同期（settingsカラムは絶対に使わない）
+  if (compRow?.id) {
+    try {
+      const existingRules = Array.isArray(compRow.attendance_rules)
+        ? compRow.attendance_rules.filter((r: any) => !(r && typeof r === 'object' && r.__ext_settings))
+        : [];
+      const nextRules = [...existingRules, { __ext_settings: true, ...next }];
+      const updatePayload: Record<string, any> = {
+        attendance_rules: nextRules,
+        updated_at: new Date().toISOString(),
+      };
+      if (next.plan_type === 'trial' || next.plan_type === 'premium') {
+        updatePayload.plan_type = next.plan_type;
+      }
+      await supabase.from('company_settings').update(updatePayload).eq('id', compRow.id);
+    } catch (e) {}
+  }
+
+  return next;
+}
+
 // 4. 管理者専用: 作業者画面の生産性共有設定の保存
 export async function saveWorkerShareSettings(tenantId: string, settings: {
   showYieldPerHour: boolean;
@@ -449,21 +570,18 @@ export async function saveWorkerShareSettings(tenantId: string, settings: {
     const supabase = createAdminClient();
     if (!tenantId) return { success: false, error: 'テナントIDが不正です' };
 
-    // company_settings に設定JSONを保存
     const { data: comp } = await supabase
       .from('company_settings')
-      .select('id, settings')
+      .select('id, user_id, attendance_rules')
       .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
       .maybeSingle();
 
-    if (comp) {
-      const currentSettings = comp.settings || {};
-      const newSettings = { ...currentSettings, worker_share_settings: settings };
-      await supabase
-        .from('company_settings')
-        .update({ settings: newSettings })
-        .eq('id', comp.id);
-    }
+    await saveTenantExtSettings(
+      supabase,
+      comp?.user_id || tenantId,
+      { worker_share_settings: settings },
+      comp
+    );
 
     return { success: true };
   } catch (err: any) {
@@ -485,12 +603,13 @@ export async function getWorkerShareSettings(tenantId: string) {
 
     const { data: comp } = await supabase
       .from('company_settings')
-      .select('settings')
+      .select('id, user_id, attendance_rules')
       .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
       .maybeSingle();
 
-    if (comp?.settings?.worker_share_settings) {
-      return { success: true, data: comp.settings.worker_share_settings };
+    const ext = await loadTenantExtSettings(supabase, comp?.user_id || tenantId, comp);
+    if (ext?.worker_share_settings) {
+      return { success: true, data: ext.worker_share_settings };
     }
 
     return { 
@@ -563,7 +682,17 @@ export async function getCompanySettings(tenantId: string) {
       .maybeSingle();
 
     if (error && error.code !== 'PGRST116') throw error;
-    return { success: true, data };
+    if (!data) return { success: true, data: null };
+
+    const ext = await loadTenantExtSettings(supabase, data.user_id || tenantId, data);
+    return {
+      success: true,
+      data: {
+        ...data,
+        plan_type: ext.plan_type || data.plan_type || 'trial',
+        settings: ext,
+      },
+    };
   } catch (err: any) {
     console.error('getCompanySettings error:', err);
     return { success: false, error: err.message, data: null };
@@ -1462,7 +1591,7 @@ export async function getMaterialRequirementsPageData(tenantId: string) {
       supabase.from('crops').select('*').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).order('name'),
       supabase.from('fields').select('*').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`).order('name'),
       supabase.from('cultivation_plans_v2').select('*, fields(*), crops(*)').or(`user_id.eq.${ownerId},user_id.eq.${tenantId}`),
-      supabase.from('company_settings').select('id, settings').or(`user_id.eq.${ownerId},id.eq.${ownerId},user_id.eq.${tenantId},id.eq.${tenantId}`).maybeSingle()
+      supabase.from('company_settings').select('id, user_id, attendance_rules').or(`user_id.eq.${ownerId},id.eq.${ownerId},user_id.eq.${tenantId},id.eq.${tenantId}`).maybeSingle()
     ]);
 
     const crops = cRes.data || [];
@@ -1473,8 +1602,9 @@ export async function getMaterialRequirementsPageData(tenantId: string) {
       cropStandards = csData || [];
     }
 
-    const inventoryMap = compRes.data?.settings?.material_inventory || {};
-    const planMaterialMap = compRes.data?.settings?.plan_material_overrides || {};
+    const ext = await loadTenantExtSettings(supabase, ownerId, compRes.data);
+    const inventoryMap = ext?.material_inventory || {};
+    const planMaterialMap = ext?.plan_material_overrides || {};
 
     return {
       success: true,
@@ -1505,28 +1635,24 @@ export async function savePlanMaterialOverrideAction(
 
     const { data: comp } = await supabase
       .from('company_settings')
-      .select('id, settings')
+      .select('id, user_id, attendance_rules')
       .or(`user_id.eq.${ownerId},id.eq.${ownerId},user_id.eq.${tenantId},id.eq.${tenantId}`)
       .maybeSingle();
 
-    if (comp) {
-      const currentSettings = comp.settings || {};
-      const currentOverrides = { ...(currentSettings.plan_material_overrides || {}) };
-      if (materialsList === null) {
-        delete currentOverrides[planId];
-      } else {
-        currentOverrides[planId] = materialsList;
-      }
-      const nextSettings = {
-        ...currentSettings,
-        plan_material_overrides: currentOverrides
-      };
-      const { error } = await supabase
-        .from('company_settings')
-        .update({ settings: nextSettings })
-        .eq('id', comp.id);
-      if (error) throw error;
+    const currentSettings = await loadTenantExtSettings(supabase, ownerId, comp);
+    const currentOverrides = { ...(currentSettings.plan_material_overrides || {}) };
+    if (materialsList === null) {
+      delete currentOverrides[planId];
+    } else {
+      currentOverrides[planId] = materialsList;
     }
+
+    await saveTenantExtSettings(
+      supabase,
+      ownerId,
+      { plan_material_overrides: currentOverrides },
+      comp
+    );
 
     return { success: true };
   } catch (err: any) {
@@ -1559,29 +1685,30 @@ export async function saveMaterialInventoryAction(
     if (patch.stock !== undefined || patch.ordered !== undefined) {
       const { data: comp } = await supabase
         .from('company_settings')
-        .select('id, settings')
+        .select('id, user_id, attendance_rules')
         .or(`user_id.eq.${ownerId},id.eq.${ownerId},user_id.eq.${tenantId},id.eq.${tenantId}`)
         .maybeSingle();
 
-      if (comp) {
-        const currentSettings = comp.settings || {};
-        const currentInv = currentSettings.material_inventory || {};
-        const prevEntry = currentInv[materialId] || {};
-        const nextEntry = {
-          ...prevEntry,
-          ...(patch.stock !== undefined ? { stock: Math.max(0, Number(patch.stock) || 0) } : {}),
-          ...(patch.ordered !== undefined ? { ordered: Boolean(patch.ordered) } : {}),
-          updatedAt: new Date().toISOString()
-        };
-        const nextSettings = {
-          ...currentSettings,
+      const currentSettings = await loadTenantExtSettings(supabase, ownerId, comp);
+      const currentInv = currentSettings.material_inventory || {};
+      const prevEntry = currentInv[materialId] || {};
+      const nextEntry = {
+        ...prevEntry,
+        ...(patch.stock !== undefined ? { stock: Math.max(0, Number(patch.stock) || 0) } : {}),
+        ...(patch.ordered !== undefined ? { ordered: Boolean(patch.ordered) } : {}),
+        updatedAt: new Date().toISOString()
+      };
+      await saveTenantExtSettings(
+        supabase,
+        ownerId,
+        {
           material_inventory: {
             ...currentInv,
             [materialId]: nextEntry
           }
-        };
-        await supabase.from('company_settings').update({ settings: nextSettings }).eq('id', comp.id);
-      }
+        },
+        comp
+      );
     }
 
     return { success: true };
@@ -1742,7 +1869,8 @@ export async function getHrManagementDataAction(tenantId: string, targetMonth?: 
       overtimeRequests = overRes.data || [];
     }
 
-    const hrProfiles = compRes.data?.settings?.worker_hr_profiles || {};
+    const extSettings = await loadTenantExtSettings(supabase, ownerId, compRes.data);
+    const hrProfiles = extSettings?.worker_hr_profiles || {};
     const enrichedWorkers = workersList.map((w: any) => {
       const prof = hrProfiles[w.id] || {};
       return {
@@ -1991,38 +2119,33 @@ export async function saveWorkerFromHrAction(
         .eq('id', workerId);
     }
 
-    // 拡張プロフィール（雇用区分・電話番号・有給残日数・メモ）を company_settings.settings.worker_hr_profiles に確実に保存
+    // 拡張プロフィール（雇用区分・電話番号・有給残日数・メモ）を拡張設定ストア（worker_hr_profiles）に確実に保存
     if (workerId) {
       const { data: comp } = await supabase
         .from('company_settings')
-        .select('id, settings')
+        .select('id, user_id, attendance_rules')
         .or(`user_id.eq.${ownerId},id.eq.${ownerId},user_id.eq.${tenantId},id.eq.${tenantId}`)
         .limit(1)
         .maybeSingle();
 
-      if (comp) {
-        const currentSettings = comp.settings || {};
-        const currentProfiles = currentSettings.worker_hr_profiles || {};
-        currentProfiles[workerId] = {
-          ...(currentProfiles[workerId] || {}),
-          hourly_wage: Number(payload.hourly_wage) || 1000,
-          employment_type: payload.employment_type || 'パート・アルバイト',
-          phone: payload.phone || '',
-          paid_leave_balance: Number(payload.paid_leave_balance ?? 10),
-          paid_leave_carryover: Number(payload.paid_leave_carryover ?? 0),
-          notes: payload.notes || '',
-          updatedAt: new Date().toISOString()
-        };
-        await supabase
-          .from('company_settings')
-          .update({
-            settings: {
-              ...currentSettings,
-              worker_hr_profiles: currentProfiles
-            }
-          })
-          .eq('id', comp.id);
-      }
+      const currentSettings = await loadTenantExtSettings(supabase, ownerId, comp);
+      const currentProfiles = { ...(currentSettings.worker_hr_profiles || {}) };
+      currentProfiles[workerId] = {
+        ...(currentProfiles[workerId] || {}),
+        hourly_wage: Number(payload.hourly_wage) || 1000,
+        employment_type: payload.employment_type || 'パート・アルバイト',
+        phone: payload.phone || '',
+        paid_leave_balance: Number(payload.paid_leave_balance ?? 10),
+        paid_leave_carryover: Number(payload.paid_leave_carryover ?? 0),
+        notes: payload.notes || '',
+        updatedAt: new Date().toISOString()
+      };
+      await saveTenantExtSettings(
+        supabase,
+        ownerId,
+        { worker_hr_profiles: currentProfiles },
+        comp
+      );
     }
 
     return { success: true, workerId };
@@ -2076,7 +2199,7 @@ export async function getCultivationsHubDataAction(
         supabase.from('fields').select('*').or(userFilter).order('name'),
         supabase.from('crops').select('*').or(userFilter).order('name'),
         supabase.from('cultivation_plans_v2').select('*, fields(*), crops(*)').or(userFilter).order('start_month', { ascending: true }),
-        supabase.from('company_settings').select('company_name, settings').or(compFilter).limit(1).maybeSingle(),
+        supabase.from('company_settings').select('id, user_id, company_name, attendance_rules').or(compFilter).limit(1).maybeSingle(),
       ]);
 
       const fields = fRes.data || [];
@@ -2094,6 +2217,8 @@ export async function getCultivationsHubDataAction(
         cropStandards = stdData || [];
       }
 
+      const ext = await loadTenantExtSettings(supabase, ownerId, compRes?.data);
+
       return {
         success: true,
         ownerId,
@@ -2101,7 +2226,7 @@ export async function getCultivationsHubDataAction(
         crops,
         plans,
         companyName: compRes?.data?.company_name || '',
-        shareSettings: compRes?.data?.settings?.worker_share_settings || null,
+        shareSettings: ext?.worker_share_settings || null,
         cropStandards,
         workLogs: [],
         pesticideMaterials: [],
@@ -2113,7 +2238,7 @@ export async function getCultivationsHubDataAction(
       supabase.from('fields').select('*').or(userFilter).order('name'),
       supabase.from('crops').select('*').or(userFilter).order('name'),
       supabase.from('cultivation_plans_v2').select('*, fields(*), crops(*)').or(userFilter).order('start_month', { ascending: true }),
-      supabase.from('company_settings').select('company_name, settings').or(compFilter).limit(1).maybeSingle(),
+      supabase.from('company_settings').select('id, user_id, company_name, attendance_rules').or(compFilter).limit(1).maybeSingle(),
       supabase.from('work_logs').select('*, crops(name), fields(name), workers(name)').or(userFilter).order('work_date', { ascending: false }).limit(500),
       supabase.from('materials').select('*').or(userFilter).or('category.eq.農薬費,material_type.eq.pesticide').order('name'),
       supabase.from('materials').select('*').or(userFilter).or('category.eq.肥料費,material_type.eq.fertilizer').order('name')
@@ -2134,6 +2259,8 @@ export async function getCultivationsHubDataAction(
       cropStandards = stdData || [];
     }
 
+    const ext = await loadTenantExtSettings(supabase, ownerId, compRes?.data);
+
     return {
       success: true,
       ownerId,
@@ -2141,7 +2268,7 @@ export async function getCultivationsHubDataAction(
       crops,
       plans,
       companyName: compRes?.data?.company_name || '',
-      shareSettings: compRes?.data?.settings?.worker_share_settings || null,
+      shareSettings: ext?.worker_share_settings || null,
       cropStandards,
       workLogs: logsRes.data || [],
       pesticideMaterials: matRes.data || [],
@@ -3234,11 +3361,28 @@ export async function saveAdminPlansBatchAction(
 export async function getSuperAdminTenantsAction() {
   try {
     const supabase = createAdminClient();
-    const [{ data: companies, error: compErr }, { data: workers }] = await Promise.all([
+    const [
+      { data: companies, error: compErr },
+      { data: workers },
+      { data: extRows }
+    ] = await Promise.all([
       supabase.from('company_settings').select('*').order('created_at', { ascending: false }),
-      supabase.from('workers').select('id, user_id')
+      supabase.from('workers').select('id, user_id'),
+      supabase.from('system_notification_settings').select('id, webhook_url, updated_at').like('id', 'tenant_ext_%')
     ]);
     if (compErr) throw compErr;
+
+    const extMap = new Map<string, Record<string, any>>();
+    (extRows || []).forEach((r: any) => {
+      if (r?.id && r?.webhook_url) {
+        try {
+          const parsed = JSON.parse(r.webhook_url);
+          if (parsed && typeof parsed === 'object') {
+            extMap.set(String(r.id), parsed);
+          }
+        } catch (e) {}
+      }
+    });
 
     const counts: Record<string, number> = {};
     (workers || []).forEach((w: any) => {
@@ -3247,9 +3391,25 @@ export async function getSuperAdminTenantsAction() {
       }
     });
 
+    const enrichedTenants = (companies || []).map((c: any) => {
+      const fromRules = extractExtFromAttendanceRules(c.attendance_rules);
+      const fromId = c.id ? extMap.get(`tenant_ext_${c.id}`) || {} : {};
+      const fromUserId = c.user_id ? extMap.get(`tenant_ext_${c.user_id}`) || {} : {};
+      const mergedSettings = {
+        ...fromRules,
+        ...fromId,
+        ...fromUserId,
+      };
+      return {
+        ...c,
+        plan_type: mergedSettings.plan_type || c.plan_type || 'trial',
+        settings: mergedSettings,
+      };
+    });
+
     return {
       success: true,
-      tenants: companies || [],
+      tenants: enrichedTenants,
       workerCounts: counts
     };
   } catch (err: any) {
@@ -3273,16 +3433,16 @@ export async function updateTenantPlanAndPeriodAction(payload: {
     const { data: existing, error: fetchErr } = await supabase
       .from('company_settings')
       .select('*')
-      .eq('id', payload.companyId)
+      .or(`id.eq.${payload.companyId},user_id.eq.${payload.companyId}`)
+      .limit(1)
       .maybeSingle();
 
     if (fetchErr || !existing) {
       return { success: false, error: '対象の農園データが見つかりません。' };
     }
 
-    const currentSettings = existing.settings || {};
-    const nextSettings = {
-      ...currentSettings,
+    const patch: Record<string, any> = {
+      plan_type: payload.planType,
       ...(payload.trialDays !== undefined ? { trial_days: Number(payload.trialDays) } : {}),
       ...(payload.trialEndsAt !== undefined ? { trial_ends_at: payload.trialEndsAt } : {}),
       ...(payload.campaignName !== undefined ? { campaign_name: payload.campaignName } : {}),
@@ -3292,20 +3452,22 @@ export async function updateTenantPlanAndPeriodAction(payload: {
       plan_updated_at: new Date().toISOString()
     };
 
-    const { data: updated, error: updateErr } = await supabase
-      .from('company_settings')
-      .update({
+    const nextSettings = await saveTenantExtSettings(
+      supabase,
+      existing.user_id || existing.id,
+      patch,
+      existing
+    );
+
+    return {
+      success: true,
+      tenant: {
+        ...existing,
         plan_type: payload.planType,
         settings: nextSettings,
         updated_at: new Date().toISOString()
-      })
-      .eq('id', payload.companyId)
-      .select('*')
-      .single();
-
-    if (updateErr) throw updateErr;
-
-    return { success: true, tenant: updated };
+      }
+    };
   } catch (err: any) {
     console.error('updateTenantPlanAndPeriodAction error:', err);
     return { success: false, error: err.message || '期間・契約ステータスの更新に失敗しました。' };

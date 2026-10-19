@@ -172,22 +172,21 @@ export function useCompany(explicitTenantId?: string | null): CompanyInfo {
         } catch (e) {}
       }
 
-      // 2. company_settings テーブルから当該テナントIDの最新レコードを取得
+      // 2. サーバーアクション経由で company_settings ＋ 拡張設定（無料期間・キャンペーン・プラン）を一括取得
       let data: any = null;
-      const { data: clientData } = await supabase
-        .from('company_settings')
-        .select('*')
-        .or(`user_id.eq.${currentTenant},id.eq.${currentTenant}`)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (clientData) {
-        data = clientData;
+      const srvRes = await getCompanySettings(currentTenant);
+      if (srvRes?.success && srvRes.data) {
+        data = srvRes.data;
       } else {
-        const srvRes = await getCompanySettings(currentTenant);
-        if (srvRes?.success && srvRes.data) {
-          data = srvRes.data;
+        const { data: clientData } = await supabase
+          .from('company_settings')
+          .select('*')
+          .or(`user_id.eq.${currentTenant},id.eq.${currentTenant}`)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (clientData) {
+          data = clientData;
         }
       }
 

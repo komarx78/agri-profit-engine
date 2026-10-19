@@ -142,8 +142,17 @@ export async function POST(request: Request) {
       newUserId = signUpData?.user?.id || crypto.randomUUID();
     }
 
-    // 3. company_settings に農園マスタ（無料トライアル期間・キャンペーン情報を settings に格納）を作成
-    const { error: compErr } = await clientAnon
+    // 3. company_settings に農園マスタを作成（本番DBの company_settings には settings カラムが存在しないため、attendance_rules および system_notification_settings に格納）
+    const extSettingsPayload = {
+      plan_type: 'trial',
+      trial_days: validDays,
+      trial_ends_at: trialEndsAt,
+      campaign_name: resolvedCampaignName,
+      campaign_code: (campaignCode || '').trim().toUpperCase(),
+      plan_updated_at: new Date().toISOString(),
+    };
+
+    const { data: compInserted, error: compErr } = await clientAnon
       .from('company_settings')
       .insert({
         user_id: newUserId,
@@ -162,12 +171,7 @@ export async function POST(request: Request) {
         attendance_closing_day: 0,
         payment_day_rule: '翌月25日払い',
         farm_code: finalFarmCode,
-        settings: {
-          trial_days: validDays,
-          trial_ends_at: trialEndsAt,
-          campaign_name: resolvedCampaignName,
-          campaign_code: (campaignCode || '').trim().toUpperCase(),
-        },
+        attendance_rules: [{ __ext_settings: true, ...extSettingsPayload }],
       })
       .select('*')
       .maybeSingle();
@@ -177,6 +181,25 @@ export async function POST(request: Request) {
         { error: `農園設定の保存に失敗しました: ${compErr.message}` },
         { status: 500 }
       );
+    }
+
+    // 3b. system_notification_settings にもテナント拡張設定を保存（スーパー管理画面・残り日数バッジと100%連動）
+    try {
+      const targetIds = Array.from(new Set([newUserId, compInserted?.id].filter(Boolean)));
+      const nowIso = new Date().toISOString();
+      await clientAnon.from('system_notification_settings').upsert(
+        targetIds.map((tid) => ({
+          id: `tenant_ext_${tid}`,
+          alert_emails: 'tenant_ext_settings',
+          webhook_url: JSON.stringify(extSettingsPayload),
+          is_email_enabled: false,
+          is_line_enabled: false,
+          updated_at: nowIso,
+        })),
+        { onConflict: 'id' }
+      );
+    } catch (extErr) {
+      console.warn('tenant_ext save warning:', extErr);
     }
 
     // 4. 代表者自身を最初のスタッフ（管理者権限・PIN 0000）として workers テーブルに自動登録
