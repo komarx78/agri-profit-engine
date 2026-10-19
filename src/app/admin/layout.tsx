@@ -39,6 +39,7 @@ import {
   Printer
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { normalizeTenantId } from '@/lib/tenant';
 import { useCompany } from '@/hooks/useCompany';
 import { AiAssistant } from '@/components/AiAssistant';
 import { FarmPosterModal } from '@/components/FarmPosterModal';
@@ -49,11 +50,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [tenantId, setTenantId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      return params.get('farm') || params.get('tenant') || params.get('farmId') || '';
+      return normalizeTenantId(params.get('farm') || params.get('tenant') || params.get('farmId')) || '';
     }
     return '';
   });
-  const { companyName, farmCode } = useCompany(tenantId);
+  const {
+    companyName,
+    farmCode,
+    planType,
+    trialEndsAt,
+    trialDaysLeft,
+    campaignName,
+  } = useCompany(tenantId);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
@@ -75,7 +83,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       let urlFarm: string | null = null;
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
-        urlFarm = params.get('farm') || params.get('tenant') || params.get('farmId');
+        urlFarm = normalizeTenantId(params.get('farm') || params.get('tenant') || params.get('farmId'));
       }
 
       // 2. Supabase Auth による正規管理者セッションのチェック
@@ -90,21 +98,38 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       }
 
       // 3. 現場スタッフ（PIN認証）の場合、明示的に管理者ロール (role === 'admin') を持つ場合のみ許可
-      const savedWorker = localStorage.getItem('agri_current_worker');
-      if (savedWorker) {
-        try {
-          const workerData = JSON.parse(savedWorker);
-          if (workerData.role === 'admin' && workerData.user_id) {
-            const resolvedId = urlFarm || workerData.user_id;
-            setTenantId(resolvedId);
-            if (typeof window !== 'undefined') {
-              try { localStorage.setItem('agri_owner_id', resolvedId); } catch (e) {}
-            }
-            return;
-          }
-        } catch (e) {
-          console.error(e);
+      if (typeof window !== 'undefined') {
+        const candidateKeys = ['agri_current_worker', 'current_worker'];
+        if (urlFarm) candidateKeys.unshift(`agri_worker_${urlFarm}`);
+        const savedOwner = normalizeTenantId(localStorage.getItem('agri_owner_id'));
+        if (savedOwner && !candidateKeys.includes(`agri_worker_${savedOwner}`)) {
+          candidateKeys.push(`agri_worker_${savedOwner}`);
         }
+        for (const key of candidateKeys) {
+          const savedWorker = localStorage.getItem(key);
+          if (savedWorker) {
+            try {
+              const workerData = JSON.parse(savedWorker);
+              if (workerData && workerData.role === 'admin') {
+                const resolvedId = urlFarm || normalizeTenantId(workerData.user_id) || savedOwner || '';
+                if (resolvedId) {
+                  setTenantId(resolvedId);
+                  try { localStorage.setItem('agri_owner_id', resolvedId); } catch (e) {}
+                }
+                return;
+              }
+            } catch (e) {
+              console.error(e);
+            }
+          }
+        }
+      }
+
+      // 4. URLで特定農園が指定されている場合は即時リダイレクトせず表示を継続（AdminOnlyGuard側で詳細制御）
+      if (urlFarm) {
+        setTenantId(urlFarm);
+        try { localStorage.setItem('agri_owner_id', urlFarm); } catch (e) {}
+        return;
       }
 
       // 未認証、または一般作業員アカウントの場合はログインへ誘導
@@ -248,7 +273,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </header>
 
       {isMobileMenuOpen && (
-        <div className="md:hidden bg-white border-b border-slate-200 p-4 space-y-2 shadow-lg absolute top-16 left-0 right-0 w-full z-40 print:hidden">
+        <div className="md:hidden bg-white border-b border-slate-200 p-4 space-y-2 shadow-lg fixed top-16 left-0 right-0 max-h-[calc(100vh-4rem)] overflow-y-auto w-full z-40 print:hidden">
           {/* モバイル用 農園コードバナー */}
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-3">
             <div className="flex items-center justify-between gap-1 text-xs font-bold text-emerald-900 mb-1.5">
@@ -275,6 +300,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <span>{copiedCode ? 'コピー済' : 'コピー'}</span>
               </button>
             </div>
+            {planType === 'trial' && (
+              <div className="mt-2 pt-2 border-t border-emerald-200/70 flex items-center justify-between text-[11px] font-bold text-amber-800">
+                <span>{campaignName || '🎁 無料お試し中'}</span>
+                <span>
+                  {trialDaysLeft && trialDaysLeft > 0
+                    ? `残り${trialDaysLeft}日（${(trialEndsAt || '').replace(/-/g, '/')}迄）`
+                    : 'お試し期間終了'}
+                </span>
+              </div>
+            )}
           </div>
 
           <NavLinks />
@@ -355,6 +390,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <span>{copiedCode ? 'コピー済' : 'コピー'}</span>
               </button>
             </div>
+            {planType === 'trial' && (
+              <div className="mt-2 pt-2 border-t border-emerald-100 text-[11px] font-bold text-amber-800 bg-amber-50/80 px-2 py-1.5 rounded-lg border border-amber-200/70">
+                <div className="truncate">{campaignName || '🎁 無料お試し期間中'}</div>
+                <div className="text-[10px] text-amber-700 mt-0.5">
+                  {trialDaysLeft && trialDaysLeft > 0
+                    ? `${(trialEndsAt || '').replace(/-/g, '/')} まで無料（残り${trialDaysLeft}日）`
+                    : '無料お試し期間が終了しました'}
+                </div>
+              </div>
+            )}
           </div>
         </div>
         
@@ -391,8 +436,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col w-full md:h-screen md:overflow-auto relative">
-        <div className="flex-1 p-4 md:p-8">
+      <main className="flex-1 flex flex-col w-full min-w-0 md:h-screen md:overflow-auto relative overflow-x-hidden">
+        <div className="flex-1 p-3.5 sm:p-4 md:p-8 min-w-0">
           {children}
         </div>
       </main>
