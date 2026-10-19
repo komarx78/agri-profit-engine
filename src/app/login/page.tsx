@@ -144,14 +144,29 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 pt-6 border-t border-slate-800 text-center">
-          <Link
-            href="/portal"
-            className="text-xs text-emerald-400 hover:text-emerald-300 hover:underline font-bold inline-flex items-center gap-1.5 transition-colors"
-          >
-            <ArrowRight className="w-3.5 h-3.5 rotate-180" />
-            <span>現場スタッフ用（PINコード）ログインに戻る</span>
-          </Link>
+        <div className="mt-6 pt-6 border-t border-slate-800 text-center space-y-4">
+          <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-emerald-500/30 space-y-2">
+            <p className="text-xs font-bold text-slate-300">
+              🌱 はじめてご利用の農園主様へ
+            </p>
+            <Link
+              href="/register"
+              className="w-full py-2.5 px-4 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-black rounded-xl inline-flex items-center justify-center gap-1.5 text-xs transition-all"
+            >
+              <span>🎁 1ヶ月無料でお試し登録する（農園コード即時発行）</span>
+              <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+            </Link>
+          </div>
+
+          <div>
+            <Link
+              href="/portal"
+              className="text-xs text-emerald-400 hover:text-emerald-300 hover:underline font-bold inline-flex items-center gap-1.5 transition-colors"
+            >
+              <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+              <span>現場スタッフ用（PINコード）ログインに戻る</span>
+            </Link>
+          </div>
         </div>
       </div>
     </main>

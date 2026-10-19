@@ -927,7 +927,21 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
         )}
 
         {/* 共通フッターリンク */}
-        <div className="mt-6 pt-5 border-t border-slate-800 text-center space-y-3">
+        <div className="mt-5 pt-4 border-t border-slate-800 text-center space-y-3">
+          {/* 🎁 新規農園・1ヶ月無料お試し登録導線 */}
+          <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-950/90 via-slate-900 to-slate-900 border border-emerald-500/40 shadow-md">
+            <p className="text-[11px] font-black text-emerald-300 mb-2">
+              🌱 はじめてアプリをご利用の農園主様へ
+            </p>
+            <a
+              href="/register"
+              className="w-full py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs inline-flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95 whitespace-nowrap"
+            >
+              <span>🎁 1ヶ月無料でお試し登録（農園コード発行）</span>
+              <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+            </a>
+          </div>
+
           <div>
             <a
               href="/login"

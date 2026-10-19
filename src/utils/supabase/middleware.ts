@@ -29,7 +29,7 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
 
-  // ⚡ 現場ポータル・作業画面・プライバシーポリシー等は外部認証チェックを完全バイパス（0ms即座に応答）
+  // ⚡ 現場ポータル・作業画面・新規登録・プライバシーポリシー等は外部認証チェックを完全バイパス（0ms即座に応答）
   if (
     pathname.startsWith('/portal') ||
     pathname.startsWith('/work') ||
@@ -38,6 +38,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/api') ||
     pathname.startsWith('/manuals') ||
     pathname.startsWith('/privacy') ||
+    pathname.startsWith('/register') ||
     pathname.startsWith('/.well-known')
   ) {
     return supabaseResponse
@@ -50,6 +51,8 @@ export async function updateSession(request: NextRequest) {
   // 公開ルート（現場作業員・PIN管理者・未認証アクセス許可ルート・PWAマニフェスト）の判定
   const isPublicRoute =
     pathname.startsWith('/login') ||
+    pathname.startsWith('/register') ||
+    pathname.startsWith('/privacy') ||
     pathname.startsWith('/admin') ||
     pathname.startsWith('/sales-management') ||
     pathname.startsWith('/accounting-management') ||
