@@ -8,7 +8,8 @@ export default function SalesAccountingRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/accounting-management/accounting');
+    const search = typeof window !== 'undefined' ? window.location.search : '';
+    router.replace(search ? `/accounting-management/accounting${search}` : '/accounting-management/accounting');
   }, [router]);
 
   return (

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getAdminCompanySettingsAction, saveAdminCompanySettingsAction } from '@/app/actions/farm';
 import { Settings, Save, CheckCircle2, Building, MapPin, Phone, FileText, Landmark, Calendar, ArrowRight, QrCode, Copy, Smartphone, Printer } from 'lucide-react';
 import Link from 'next/link';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
@@ -52,11 +53,18 @@ export default function SettingsPage() {
           }
         }
 
-        const { data, error } = await supabase
-          .from('company_settings')
-          .select('*')
-          .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
-          .maybeSingle();
+        let data: any = null;
+        const srv = await getAdminCompanySettingsAction(tenantId);
+        if (srv.success && srv.data) {
+          data = srv.data;
+        } else {
+          const res = await supabase
+            .from('company_settings')
+            .select('*')
+            .or(`user_id.eq.${tenantId},id.eq.${tenantId}`)
+            .maybeSingle();
+          data = res.data;
+        }
 
         if (data) {
           setSettingsId(data.id);
@@ -109,21 +117,6 @@ export default function SettingsPage() {
       if (!tenantId) throw new Error('テナントIDが特定できません');
 
       const cleanFarmCode = (formData.farm_code || '').trim().toLowerCase().replace(/\s+/g, '');
-
-      // 🛡️ 司馬懿防壁：全国重複チェック（他社との農園コード衝突を物理遮断）
-      if (cleanFarmCode) {
-        const { data: duplicate } = await supabase
-          .from('company_settings')
-          .select('id, user_id, company_name')
-          .ilike('farm_code', cleanFarmCode)
-          .neq('user_id', tenantId)
-          .maybeSingle();
-
-        if (duplicate) {
-          throw new Error(`農園コード「${cleanFarmCode.toUpperCase()}」は既に別の農園様（${duplicate.company_name || '他社'}）で使用されています。\n末尾の番号を変更（例: ${cleanFarmCode}-2 または数字を変更）して再度お試しください。`);
-        }
-      }
-
       const dataToSave: any = {
         company_name: formData.company_name || '',
         postal_code: formData.postal_code || '',
@@ -132,29 +125,59 @@ export default function SettingsPage() {
         invoice_number: formData.invoice_number || '',
         bank_info: formData.bank_info || '',
         farm_code: cleanFarmCode || null,
+        attendance_closing_day: closingDay,
+        payment_day_rule: paymentDayRule,
         user_id: tenantId,
         updated_at: new Date().toISOString()
       };
 
-      if (settingsId) {
-        const { error } = await supabase
-          .from('company_settings')
-          .update(dataToSave)
-          .eq('id', settingsId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase
-          .from('company_settings')
-          .insert([dataToSave])
-          .select()
-          .single();
-        if (error) throw error;
-        if (data) setSettingsId(data.id);
+      const srv = await saveAdminCompanySettingsAction(tenantId, dataToSave, settingsId);
+      if (!srv.success) {
+        if (srv.error && srv.error.includes('農園コード')) {
+          throw new Error(srv.error);
+        }
+        // クライアントフォールバック
+        if (cleanFarmCode) {
+          const { data: duplicate } = await supabase
+            .from('company_settings')
+            .select('id, user_id, company_name')
+            .ilike('farm_code', cleanFarmCode)
+            .neq('user_id', tenantId)
+            .maybeSingle();
+
+          if (duplicate) {
+            throw new Error(`農園コード「${cleanFarmCode.toUpperCase()}」は既に別の農園様（${duplicate.company_name || '他社'}）で使用されています。\n末尾の番号を変更（例: ${cleanFarmCode}-2 または数字を変更）して再度お試しください。`);
+          }
+        }
+
+        if (settingsId) {
+          const { error } = await supabase
+            .from('company_settings')
+            .update(dataToSave)
+            .eq('id', settingsId);
+          if (error) throw error;
+        } else {
+          const { data, error } = await supabase
+            .from('company_settings')
+            .insert([dataToSave])
+            .select()
+            .single();
+          if (error) throw error;
+          if (data) setSettingsId(data.id);
+        }
+      } else if (srv.data?.id) {
+        setSettingsId(srv.data.id);
       }
 
-      if (typeof window !== 'undefined' && formData.company_name) {
-        localStorage.setItem(`agri_company_${tenantId}`, formData.company_name);
-        localStorage.removeItem('agri_cached_company_name');
+      if (typeof window !== 'undefined') {
+        if (formData.company_name) {
+          localStorage.setItem(`agri_company_${tenantId}`, formData.company_name);
+          localStorage.removeItem('agri_cached_company_name');
+        }
+        localStorage.setItem(`agri_attendance_closing_day_${tenantId}`, String(closingDay));
+        localStorage.setItem('agri_attendance_closing_day', String(closingDay));
+        localStorage.setItem(`agri_payment_day_rule_${tenantId}`, paymentDayRule);
+        localStorage.setItem('agri_payment_day_rule', paymentDayRule);
       }
 
       setSaveSuccess(true);
@@ -180,7 +203,7 @@ export default function SettingsPage() {
       {isLoading ? (
         <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div></div>
       ) : (
-        <div className="max-w-3xl mx-auto space-y-8 pb-12">
+        <div className="max-w-5xl mx-auto space-y-8 pb-12">
       <div>
         <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
           <Settings className="w-8 h-8 text-slate-600" />
@@ -245,7 +268,7 @@ export default function SettingsPage() {
             </span>
           </div>
           <p className="text-xs text-slate-300 mb-6 leading-relaxed">
-            貴社の現場スタッフが他社と混ざらず安全に打刻できるよう、2つの案内方法（Web/QR掲示、またはLINE連携）をご用意しております。現場の運用形態に合わせてお選びいただけます。
+            貴社の現場スタッフが他社と混ざらず安全に打刻できるよう、3つの案内方法（現場QR掲示・公式LINE連携・専用アプリ）をご用意しております。現場の運用形態に合わせてお選びいただけます。
           </p>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -253,23 +276,26 @@ export default function SettingsPage() {
             <div className="bg-slate-800/90 p-5 rounded-2xl border border-slate-700 flex flex-col justify-between shadow-sm">
               <div>
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/20 text-emerald-300 rounded-lg text-xs font-black mb-3">
-                  <span>方式①：現場掲示用QRコード（LINE不要）</span>
+                  <QrCode className="w-3.5 h-3.5 shrink-0" />
+                  <span>方式①：現場掲示用QR（LINE不要）</span>
                 </div>
                 <h3 className="text-sm font-bold text-white mb-1.5">タイムカード置き場・現場の壁に掲示</h3>
                 <p className="text-xs text-slate-300 mb-4 leading-relaxed">
                   スタッフはスマホのカメラでQRコードを読み取るだけで、貴社専用の打刻画面へ直行します。他社の名前や変更ボタンは一切出ません。
                 </p>
-                <div className="bg-white p-3 rounded-2xl inline-block mb-3 shadow-md text-center">
-                  <img 
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`https://agri-profit-engine.vercel.app/portal/${currentTenant}?openExternalBrowser=1`)}`}
-                    alt="専用ポータルQRコード"
-                    className="w-32 h-32 mx-auto"
-                  />
-                  <span className="text-[10px] font-black text-slate-600 block mt-1">印刷して現場に掲示</span>
+                <div className="flex justify-center mb-3">
+                  <div className="bg-white p-3 rounded-2xl shadow-md text-center">
+                    <img 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`https://agri-profit-engine.vercel.app/portal/${currentTenant}?openExternalBrowser=1`)}`}
+                      alt="専用ポータルQRコード"
+                      className="w-32 h-32 mx-auto"
+                    />
+                    <span className="text-[10px] font-black text-slate-600 block mt-1.5 whitespace-nowrap">印刷して現場に掲示</span>
+                  </div>
                 </div>
               </div>
-              <div className="space-y-2 pt-2 border-t border-slate-700/60">
-                <div className="text-[11px] text-slate-400 font-mono truncate bg-slate-950/60 p-2 rounded-lg">
+              <div className="space-y-2 pt-3 border-t border-slate-700/60">
+                <div className="text-[11px] text-slate-400 font-mono truncate bg-slate-950/60 px-3 py-2 rounded-lg">
                   {`https://agri-profit-engine.vercel.app/portal/${currentTenant}`}
                 </div>
                 <button
@@ -278,49 +304,57 @@ export default function SettingsPage() {
                     navigator.clipboard.writeText(`https://agri-profit-engine.vercel.app/portal/${currentTenant}?openExternalBrowser=1`);
                     alert('貴社専用ポータルのURLをコピーしました！');
                   }}
-                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 shadow-sm"
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 shadow-sm whitespace-nowrap"
                 >
-                  <Copy className="w-3.5 h-3.5" />
+                  <Copy className="w-3.5 h-3.5 shrink-0" />
                   <span>専用URLをコピー</span>
                 </button>
               </div>
             </div>
 
-            {/* 方式②: LINE公式アカウント連携 (LINEで使いたい人向け) */}
+            {/* 方式②: LINE公式アカウント連携 (退勤忘れ通知・個人連携) */}
             <div className="bg-slate-800/90 p-5 rounded-2xl border border-slate-700 flex flex-col justify-between shadow-sm">
               <div>
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/20 text-blue-300 rounded-lg text-xs font-black mb-3">
-                  <span>方式②：公式LINE連携（LINEで打刻）</span>
+                  <Smartphone className="w-3.5 h-3.5 shrink-0" />
+                  <span>方式②：公式LINE連携（通知・打刻）</span>
                 </div>
-                <h3 className="text-sm font-bold text-white mb-1.5">スタッフ個人のLINEで毎朝打刻</h3>
+                <h3 className="text-sm font-bold text-white mb-1.5">スタッフ個人のLINEと連携</h3>
                 <p className="text-xs text-slate-300 mb-4 leading-relaxed">
-                  スタッフがこのQRコードを読み取って送信すると、LINEの下部メニューが貴社専用の打刻ボタンに自動で切り替わります。
+                  公式LINEを友だち追加し、スタッフ名簿で発行される【4桁の連携コード】を送信すると、退勤忘れ通知や業務連絡がLINEに届きます。
                 </p>
-                <div className="bg-white p-3 rounded-2xl inline-block mb-3 shadow-md text-center">
-                  <img 
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`https://line.me/R/oaMessage/@566kmiby/?${resolveSafeFarmCode(formData.farm_code)}`)}`}
-                    alt="LINE登録用QRコード"
-                    className="w-32 h-32 mx-auto"
-                  />
-                  <span className="text-[10px] font-black text-slate-600 block mt-1">LINEで送信して登録</span>
+                <div className="flex justify-center mb-3">
+                  <div className="bg-white p-3 rounded-2xl shadow-md text-center">
+                    <img 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent('https://lin.ee/RD1vp8c')}`}
+                      alt="公式LINE友だち追加QRコード"
+                      className="w-32 h-32 mx-auto"
+                    />
+                    <span className="text-[10px] font-black text-slate-600 block mt-1.5 whitespace-nowrap">公式LINEを友だち追加</span>
+                  </div>
                 </div>
               </div>
-              <div className="space-y-2 pt-2 border-t border-slate-700/60">
-                <div className="text-[11px] text-slate-400 font-mono truncate bg-slate-950/60 p-2 rounded-lg">
-                  {`参加コード: ${resolveSafeFarmCode(formData.farm_code)}`}
+              <div className="space-y-2 pt-3 border-t border-slate-700/60">
+                <div className="text-[11px] text-slate-400 font-mono bg-slate-950/60 px-3 py-2 rounded-lg flex items-center justify-between gap-2">
+                  <span className="truncate">公式ID: @543tdbfc</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText('https://lin.ee/RD1vp8c');
+                      alert('公式LINE（@543tdbfc）の友だち追加URLをコピーしました！');
+                    }}
+                    className="text-blue-400 hover:text-blue-300 font-sans font-bold text-[10px] underline cursor-pointer shrink-0"
+                  >
+                    URLコピー
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const code = resolveSafeFarmCode(formData.farm_code);
-                    navigator.clipboard.writeText(`https://line.me/R/oaMessage/@566kmiby/?${code}`);
-                    alert('LINE連携用URLをコピーしました！');
-                  }}
-                  className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 shadow-sm"
+                <Link
+                  href="/hr"
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 shadow-sm whitespace-nowrap"
                 >
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>LINE招待リンクをコピー</span>
-                </button>
+                  <span>スタッフ別の連携コード確認</span>
+                  <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+                </Link>
               </div>
             </div>
 
@@ -328,24 +362,22 @@ export default function SettingsPage() {
             <div className="bg-slate-800/90 p-5 rounded-2xl border border-slate-700 flex flex-col justify-between shadow-sm">
               <div>
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/20 text-amber-300 rounded-lg text-xs font-black mb-3">
-                  <Smartphone className="w-3.5 h-3.5" />
-                  <span>方式③：現場専用アプリ（Android / iOS）</span>
+                  <Smartphone className="w-3.5 h-3.5 shrink-0" />
+                  <span>方式③：現場専用アプリ（iOS/Android）</span>
                 </div>
                 <h3 className="text-sm font-bold text-white mb-1.5">スマホアプリの初回起動時に入力</h3>
                 <p className="text-xs text-slate-300 mb-4 leading-relaxed">
                   スタッフがアプリを初めて起動した際、下記の【農園コード】を入力すると、一瞬で貴社専用の打刻画面に接続・永続保存されます。
                 </p>
-                <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-2 mb-4">
-                  <span className="text-[10px] text-slate-400 font-bold block">貴社の農園コード</span>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xl font-mono font-black text-amber-300 tracking-wider uppercase">
-                      {resolveSafeFarmCode(formData.farm_code)}
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-medium">※大文字・小文字どちらでも可</span>
+                <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-1.5 mb-3 text-center">
+                  <span className="text-[11px] text-slate-400 font-bold block">貴社の農園コード</span>
+                  <div className="text-3xl font-mono font-black text-amber-300 tracking-widest uppercase py-1">
+                    {resolveSafeFarmCode(formData.farm_code)}
                   </div>
+                  <span className="text-[10px] text-slate-500 font-medium block">※大文字・小文字どちらでも可</span>
                 </div>
               </div>
-              <div className="space-y-2 pt-2 border-t border-slate-700/60">
+              <div className="space-y-2 pt-3 border-t border-slate-700/60">
                 <button
                   type="button"
                   onClick={() => {
@@ -353,17 +385,17 @@ export default function SettingsPage() {
                     navigator.clipboard.writeText(code);
                     alert(`農園コード「${code}」をコピーしました！現場スタッフにご案内ください。`);
                   }}
-                  className="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 shadow-sm"
+                  className="w-full py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 shadow-sm whitespace-nowrap"
                 >
-                  <Copy className="w-3.5 h-3.5" />
+                  <Copy className="w-3.5 h-3.5 shrink-0" />
                   <span>農園コードをコピー</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsPosterModalOpen(true)}
-                  className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-amber-200 border border-amber-400/30 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 shadow-sm"
+                  className="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-amber-200 border border-amber-400/30 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-98 shadow-sm whitespace-nowrap"
                 >
-                  <Printer className="w-3.5 h-3.5 text-amber-300" />
+                  <Printer className="w-3.5 h-3.5 text-amber-300 shrink-0" />
                   <span>A4現場掲示用ポスター印刷</span>
                 </button>
               </div>
@@ -373,8 +405,8 @@ export default function SettingsPage() {
       )}
 
       {/* 全社勤怠締日 ＆ 給与支払日 連動カード */}
-      <div className="bg-gradient-to-r from-indigo-50/80 via-blue-50/50 to-slate-50 p-5 rounded-2xl border border-indigo-100 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1">
+      <div className="bg-gradient-to-r from-indigo-50/80 via-blue-50/50 to-slate-50 p-5 rounded-2xl border border-indigo-100 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="space-y-2">
           <div className="flex items-center gap-2">
             <span className="p-1.5 bg-indigo-600 text-white rounded-lg">
               <Calendar className="w-4 h-4" />
@@ -384,12 +416,23 @@ export default function SettingsPage() {
             </h2>
           </div>
           <p className="text-xs text-slate-500 font-bold pl-8">
-            月次タイムカード・作業台帳・給与計算の全社集計サイクル
+            月次タイムカード・作業台帳・パート代計算の全社集計サイクル（変更後は画面下の「設定を保存する」を押してください）
           </p>
-          <div className="flex flex-wrap items-center gap-2 pl-8 pt-1">
-            <span className="px-2.5 py-0.5 bg-indigo-100 text-indigo-800 rounded-md font-black text-xs">
-              {closingDay === 0 ? '末日締め' : `${closingDay}日締め`}
-            </span>
+          <div className="flex flex-wrap items-center gap-3 pl-8 pt-1">
+            <div className="flex items-center gap-1.5">
+              <label className="text-xs font-bold text-slate-600">締日：</label>
+              <select
+                value={closingDay}
+                onChange={(e) => setClosingDay(Number(e.target.value))}
+                className="px-2.5 py-1 bg-white border border-indigo-200 text-indigo-900 rounded-lg font-black text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value={0}>末日締め</option>
+                <option value={25}>毎月25日締め</option>
+                <option value={20}>毎月20日締め</option>
+                <option value={15}>毎月15日締め</option>
+                <option value={10}>毎月10日締め</option>
+              </select>
+            </div>
             <span className="text-xs font-bold text-slate-500">
               ({(() => {
                 const now = new Date();
@@ -398,17 +441,28 @@ export default function SettingsPage() {
               })()})
             </span>
             <span className="text-slate-300">|</span>
-            <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-md font-black text-xs">
-              {paymentDayRule}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <label className="text-xs font-bold text-slate-600">支払日：</label>
+              <select
+                value={paymentDayRule}
+                onChange={(e) => setPaymentDayRule(e.target.value)}
+                className="px-2.5 py-1 bg-white border border-emerald-200 text-emerald-900 rounded-lg font-black text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="翌月25日払い">翌月25日払い</option>
+                <option value="翌月末払い">翌月末払い</option>
+                <option value="翌月15日払い">翌月15日払い</option>
+                <option value="翌月10日払い">翌月10日払い</option>
+                <option value="当月末払い">当月末払い</option>
+              </select>
+            </div>
           </div>
         </div>
 
         <Link
-          href="/hr/settings"
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-xl font-black text-xs shadow-2xs hover:shadow-xs transition-all shrink-0 self-start sm:self-center"
+          href="/hr"
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-xl font-black text-xs shadow-2xs hover:shadow-xs transition-all shrink-0 self-start lg:self-center"
         >
-          <span>締日・労務設定を変更</span>
+          <span>出勤簿・パート代画面へ</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>

@@ -8,7 +8,8 @@ export default function SalesEntryHubPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/work');
+    const search = typeof window !== 'undefined' ? window.location.search : '';
+    router.replace(search ? `/work${search}` : '/work');
   }, [router]);
 
   return (

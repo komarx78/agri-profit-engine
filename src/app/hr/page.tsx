@@ -200,6 +200,17 @@ export default function HrManagementPage() {
 
   // 個人別月間タイムカード（印刷・詳細）モーダル
   const [timecardWorkerId, setTimecardWorkerId] = useState<string | null>(null);
+  // 全員分の月間タイムカード一括印刷モーダル
+  const [isBatchPrintOpen, setIsBatchPrintOpen] = useState<boolean>(false);
+  const [batchPrintOnlyActive, setBatchPrintOnlyActive] = useState<boolean>(true);
+
+  // 未出勤スタッフへの一括定時登録モーダル
+  const [bulkAttendanceModal, setBulkAttendanceModal] = useState<{
+    clockInTime: string;
+    clockOutTime: string;
+    breakMinutes: number;
+    selectedWorkerIds: string[];
+  } | null>(null);
 
   // スタッフ登録・編集モーダル
   const [editingWorker, setEditingWorker] = useState<{
@@ -284,15 +295,48 @@ export default function HrManagementPage() {
     return pendingLeaves + pendingOvertimes;
   }, [leaveRequests, overtimeRequests]);
 
-  // 退勤忘れ件数（今日より前の未退勤）
-  const forgottenClockOutCount = useMemo(() => {
+  // 退勤忘れリスト（今日以外のすべての未退勤レコード詳細：別月やテスト日付も含め100%表示して迷子ゼロ化）
+  const forgottenClockOutRecords = useMemo(() => {
     const todayStr = toJstDateStr(new Date());
-    return attendances.filter((a) => {
-      if (a.clock_out) return false;
-      const dStr = getAttDateStr(a);
-      return dStr < todayStr;
-    }).length;
-  }, [attendances]);
+    return attendances
+      .filter((a) => {
+        if (a.clock_out) return false;
+        const dStr = getAttDateStr(a);
+        return Boolean(dStr) && dStr !== todayStr;
+      })
+      .map((a) => {
+        const w = workerMap.get(a.worker_id);
+        const dStr = getAttDateStr(a);
+        return {
+          attendance: a,
+          worker: w || {
+            id: a.worker_id,
+            name: 'スタッフ',
+            hourly_wage: 0,
+            pin_code: '',
+            employment_type: 'パート・アルバイト',
+            phone: '',
+            paid_leave_balance: 0,
+            paid_leave_carryover: 0,
+            notes: '',
+          },
+          dateStr: dStr,
+          clockInHm: toJstTimeHm(a.clock_in) || '08:00',
+        };
+      })
+      .sort((a, b) => b.dateStr.localeCompare(a.dateStr));
+  }, [attendances, workerMap]);
+
+  const forgottenClockOutCount = forgottenClockOutRecords.length;
+
+  // 指定した日付の日別画面へ一発ジャンプ
+  const jumpToDailyDate = (dateStr: string) => {
+    setSelectedDate(dateStr);
+    if (dateStr.substring(0, 7) !== selectedMonth) {
+      setSelectedMonth(dateStr.substring(0, 7));
+    }
+    setActiveTab('daily');
+  };
 
   // 日付変更ヘルパー
   const shiftDate = (days: number) => {
@@ -360,7 +404,7 @@ export default function HrManagementPage() {
   }, [workers, attendances, workLogs, leaveRequests, selectedDate]);
 
   // ==========================================
-  // ② 月別の出勤簿・パート代集計（締め日対応）
+  // ② 月別の出勤簿・パート代集計（締め日・有給加算対応）
   // ==========================================
   const monthlyPeriod = useMemo(() => {
     const [y, m] = selectedMonth.split('-').map(Number);
@@ -411,11 +455,27 @@ export default function HrManagementPage() {
         return dStr >= startStr && dStr <= endStr;
       });
 
+      let paidLeaveDays = 0;
+      let paidLeaveHours = 0;
+      for (const lv of approvedLeaves) {
+        const lType = lv.type || lv.leave_type || '有給休暇';
+        if (lType.includes('無給') || lType.includes('欠勤') || lType.includes('私用')) {
+          continue;
+        } else if (lType.includes('半休') || lType.includes('半日')) {
+          paidLeaveDays += 0.5;
+          paidLeaveHours += 4;
+        } else {
+          paidLeaveDays += 1;
+          paidLeaveHours += 8;
+        }
+      }
+
       const hourlyWage = Number(worker.hourly_wage) || 0;
       const regularMinutes = Math.max(0, totalNetMinutes - totalOvertimeMinutes);
       const basePay = Math.round((regularMinutes / 60) * hourlyWage);
       const overtimePay = Math.round((totalOvertimeMinutes / 60) * hourlyWage * 1.25);
-      const totalEstimatedPay = basePay + overtimePay;
+      const paidLeavePay = Math.round(paidLeaveHours * hourlyWage);
+      const totalEstimatedPay = basePay + overtimePay + paidLeavePay;
 
       return {
         worker,
@@ -424,7 +484,8 @@ export default function HrManagementPage() {
         totalBreakMinutes,
         totalOvertimeMinutes,
         unclosedCount,
-        paidLeaveDays: approvedLeaves.length,
+        paidLeaveDays,
+        paidLeavePay,
         basePay,
         overtimePay,
         totalEstimatedPay,
@@ -446,66 +507,91 @@ export default function HrManagementPage() {
     );
   }, [monthlySummaries]);
 
+  // スタッフ別の月間タイムカード日別リスト生成ヘルパー
+  const buildWorkerTimecard = useCallback(
+    (summary: (typeof monthlySummaries)[number]) => {
+      const days: Array<{
+        dateStr: string;
+        dayOfWeek: string;
+        attendance: AttendanceRecord | null;
+        calc: ReturnType<typeof calcNetWorkMinutes>;
+        logs: WorkLogRecord[];
+        leave: LeaveRequestRecord | null;
+        dailyPay: number;
+      }> = [];
+
+      const cur = new Date(`${monthlyPeriod.startStr}T00:00:00+09:00`);
+      const end = new Date(`${monthlyPeriod.endStr}T00:00:00+09:00`);
+      const weekNames = ['日', '月', '火', '水', '木', '金', '土'];
+
+      while (cur <= end) {
+        const dStr = toJstDateStr(cur);
+        const dow = weekNames[cur.getDay()];
+        const att = summary.records.find((a) => getAttDateStr(a) === dStr) || null;
+        const calc = att
+          ? calcNetWorkMinutes(att)
+          : { grossMinutes: 0, breakMinutes: 0, netMinutes: 0, overtimeMinutes: 0 };
+        const logs = workLogs.filter(
+          (l) => l.worker_id === summary.worker.id && l.work_date === dStr && l.status !== 'planned'
+        );
+        const leave =
+          leaveRequests.find(
+            (l) =>
+              l.worker_id === summary.worker.id &&
+              (l.leave_date === dStr || l.start_date === dStr) &&
+              l.status !== '却下'
+          ) || null;
+
+        const regularM = Math.max(0, calc.netMinutes - calc.overtimeMinutes);
+        const wage = Number(summary.worker.hourly_wage) || 0;
+        let dailyPay = Math.round((regularM / 60) * wage + (calc.overtimeMinutes / 60) * wage * 1.25);
+
+        if (!att && leave && (leave.status === '承認' || leave.status === 'approved')) {
+          const lType = leave.type || leave.leave_type || '有給休暇';
+          if (!lType.includes('無給') && !lType.includes('欠勤') && !lType.includes('私用')) {
+            const lvHours = lType.includes('半休') || lType.includes('半日') ? 4 : 8;
+            dailyPay = Math.round(lvHours * wage);
+          }
+        }
+
+        days.push({
+          dateStr: dStr,
+          dayOfWeek: dow,
+          attendance: att,
+          calc,
+          logs,
+          leave,
+          dailyPay,
+        });
+
+        cur.setDate(cur.getDate() + 1);
+      }
+
+      return {
+        summary,
+        days,
+      };
+    },
+    [monthlyPeriod, workLogs, leaveRequests]
+  );
+
   // 個人タイムカード用の日別リスト生成
   const selectedWorkerTimecard = useMemo(() => {
     if (!timecardWorkerId) return null;
     const summary = monthlySummaries.find((s) => s.worker.id === timecardWorkerId);
     if (!summary) return null;
+    return buildWorkerTimecard(summary);
+  }, [timecardWorkerId, monthlySummaries, buildWorkerTimecard]);
 
-    const days: Array<{
-      dateStr: string;
-      dayOfWeek: string;
-      attendance: AttendanceRecord | null;
-      calc: ReturnType<typeof calcNetWorkMinutes>;
-      logs: WorkLogRecord[];
-      leave: LeaveRequestRecord | null;
-      dailyPay: number;
-    }> = [];
-
-    const cur = new Date(`${monthlyPeriod.startStr}T00:00:00+09:00`);
-    const end = new Date(`${monthlyPeriod.endStr}T00:00:00+09:00`);
-    const weekNames = ['日', '月', '火', '水', '木', '金', '土'];
-
-    while (cur <= end) {
-      const dStr = toJstDateStr(cur);
-      const dow = weekNames[cur.getDay()];
-      const att = summary.records.find((a) => getAttDateStr(a) === dStr) || null;
-      const calc = att
-        ? calcNetWorkMinutes(att)
-        : { grossMinutes: 0, breakMinutes: 0, netMinutes: 0, overtimeMinutes: 0 };
-      const logs = workLogs.filter(
-        (l) => l.worker_id === timecardWorkerId && l.work_date === dStr && l.status !== 'planned'
-      );
-      const leave =
-        leaveRequests.find(
-          (l) =>
-            l.worker_id === timecardWorkerId &&
-            (l.leave_date === dStr || l.start_date === dStr) &&
-            l.status !== '却下'
-        ) || null;
-
-      const regularM = Math.max(0, calc.netMinutes - calc.overtimeMinutes);
-      const wage = Number(summary.worker.hourly_wage) || 0;
-      const dailyPay = Math.round((regularM / 60) * wage + (calc.overtimeMinutes / 60) * wage * 1.25);
-
-      days.push({
-        dateStr: dStr,
-        dayOfWeek: dow,
-        attendance: att,
-        calc,
-        logs,
-        leave,
-        dailyPay,
-      });
-
-      cur.setDate(cur.getDate() + 1);
-    }
-
-    return {
-      summary,
-      days,
-    };
-  }, [timecardWorkerId, monthlySummaries, monthlyPeriod, workLogs, leaveRequests]);
+  // 全員一括印刷用のタイムカードリスト生成
+  const batchWorkerTimecards = useMemo(() => {
+    if (!isBatchPrintOpen) return [];
+    const targetSummaries = batchPrintOnlyActive
+      ? monthlySummaries.filter((s) => s.workDays > 0 || s.paidLeaveDays > 0)
+      : monthlySummaries;
+    const list = targetSummaries.length > 0 ? targetSummaries : monthlySummaries;
+    return list.map((s) => buildWorkerTimecard(s));
+  }, [isBatchPrintOpen, batchPrintOnlyActive, monthlySummaries, buildWorkerTimecard]);
 
   // ==========================================
   // ハンドラー群
@@ -664,6 +750,52 @@ export default function HrManagementPage() {
     }
   };
 
+  // 未出勤スタッフへの一括定時登録モーダルを開く
+  const openBulkAttendanceModal = () => {
+    const unclockedIds = dailyRows
+      .filter((r) => !r.attendance && !r.leave)
+      .map((r) => r.worker.id);
+    setBulkAttendanceModal({
+      clockInTime: '08:00',
+      clockOutTime: '17:00',
+      breakMinutes: 60,
+      selectedWorkerIds: unclockedIds.length > 0 ? unclockedIds : workers.map((w) => w.id),
+    });
+  };
+
+  // 一括定時出退勤をDBへ保存
+  const handleBulkSaveAttendance = async () => {
+    if (!bulkAttendanceModal || bulkAttendanceModal.selectedWorkerIds.length === 0) {
+      showToast('一括登録するスタッフを1名以上選択してください', 'error');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      let successCount = 0;
+      for (const workerId of bulkAttendanceModal.selectedWorkerIds) {
+        const existingRow = dailyRows.find((r) => r.worker.id === workerId);
+        const res = await saveAttendanceRecordAction(tenantId, {
+          id: existingRow?.attendance?.id,
+          worker_id: workerId,
+          date: selectedDate,
+          clock_in_time: bulkAttendanceModal.clockInTime,
+          clock_out_time: bulkAttendanceModal.clockOutTime,
+          total_break_minutes: bulkAttendanceModal.breakMinutes,
+        });
+        if (res.success) successCount += 1;
+      }
+      if (successCount > 0) {
+        showToast(`${selectedDate} の出退勤を ${successCount}名分まとめて登録しました`);
+        setBulkAttendanceModal(null);
+        await loadData(tenantId, selectedMonth, selectedDate);
+      } else {
+        showToast('一括登録に失敗しました', 'error');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // 全員分の月次出勤簿CSVダウンロード
   const handleDownloadMonthlyCsv = () => {
     const headers = [
@@ -678,6 +810,7 @@ export default function HrManagementPage() {
       '休憩合計(分)',
       '基本給概算(円)',
       '残業手当概算(円)',
+      '有給手当概算(円)',
       '支給総額概算(円)',
     ];
 
@@ -694,6 +827,7 @@ export default function HrManagementPage() {
       s.totalBreakMinutes,
       s.basePay,
       s.overtimePay,
+      s.paidLeavePay,
       s.totalEstimatedPay,
     ]);
 
@@ -709,6 +843,8 @@ export default function HrManagementPage() {
     URL.revokeObjectURL(url);
     showToast('月次出勤簿CSVをダウンロードしました');
   };
+
+  const unclockedWorkerCount = dailyRows.filter((r) => !r.attendance && !r.leave).length;
 
   return (
     <div className="max-w-6xl mx-auto pb-16">
@@ -773,23 +909,133 @@ export default function HrManagementPage() {
           </div>
         </div>
 
-        {/* 退勤忘れ・未承認アラートバナー */}
+        {/* 退勤忘れ・未承認アラートバナー（直行＆その場で1クリック解決対応） */}
         {(forgottenClockOutCount > 0 || pendingApprovalCount > 0) && (
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="mt-4 space-y-3">
             {forgottenClockOutCount > 0 && (
-              <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-300 rounded-2xl px-4 py-3 text-amber-900">
-                <div className="flex items-center gap-3">
-                  <AlertCircle className="text-amber-600 shrink-0" size={20} />
-                  <div className="text-xs md:text-sm font-bold">
-                    過去の退勤ボタン押し忘れが <span className="text-base font-black underline">{forgottenClockOutCount}件</span> あります
+              <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-4 sm:p-5 text-amber-950 shadow-md">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-200/80">
+                  <div className="flex items-start sm:items-center gap-2.5">
+                    <AlertCircle className="text-red-600 shrink-0 mt-0.5 sm:mt-0" size={24} />
+                    <div>
+                      <div className="text-sm md:text-base font-black text-stone-900">
+                        ⚠️ 退勤ボタンの押し忘れ（未退勤）が <span className="text-red-600 underline text-lg">{forgottenClockOutCount}件</span> あります（LINE通知の対象）
+                      </div>
+                      <p className="text-xs text-amber-900 font-bold mt-0.5">
+                        ここで「17:00で退勤にする」「時間を指定して修正」「間違い打刻を消す」のどれかを押すと、毎朝のLINEリマインド通知が止まります。
+                      </p>
+                    </div>
                   </div>
+                  {forgottenClockOutCount > 1 && (
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={async () => {
+                        if (!window.confirm(`未退勤の ${forgottenClockOutCount}件 すべてを「17:00退勤（休憩60分）」として一括確定しますか？`)) return;
+                        setIsSaving(true);
+                        try {
+                          for (const item of forgottenClockOutRecords) {
+                            await saveAttendanceRecordAction(tenantId, {
+                              id: item.attendance.id,
+                              worker_id: item.worker.id,
+                              date: item.dateStr,
+                              clock_in_time: item.clockInHm === '--:--' ? '08:00' : item.clockInHm,
+                              clock_out_time: '17:00',
+                              total_break_minutes: Number(item.attendance.total_break_minutes ?? 60),
+                            });
+                          }
+                          showToast(`未退勤 ${forgottenClockOutCount}件 をすべて退勤確定しました！`);
+                          await loadData(tenantId, selectedMonth, selectedDate);
+                        } finally {
+                          setIsSaving(false);
+                        }
+                      }}
+                      className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-sm transition-colors"
+                    >
+                      <CheckCircle2 size={14} />
+                      <span>全{forgottenClockOutCount}件をまとめて17:00退勤にする</span>
+                    </button>
+                  )}
                 </div>
-                <button
-                  onClick={() => setActiveTab('monthly')}
-                  className="shrink-0 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold"
-                >
-                  月別出勤簿で確認
-                </button>
+
+                <div className="mt-3 grid grid-cols-1 gap-2.5">
+                  {forgottenClockOutRecords.map((item) => (
+                    <div
+                      key={item.attendance.id}
+                      className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white rounded-xl px-4 py-3 border border-amber-300 shadow-xs"
+                    >
+                      <div className="flex flex-wrap items-center gap-2 text-xs md:text-sm">
+                        <span className="px-2.5 py-1 rounded-lg bg-red-600 text-white font-black text-xs">
+                          退勤未打刻
+                        </span>
+                        <span className="font-black text-stone-900 text-sm md:text-base">{item.worker.name} さん</span>
+                        <span className="font-black text-emerald-900 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                          📅 {item.dateStr}
+                        </span>
+                        <span className="text-stone-700 font-bold">
+                          （出勤 {item.clockInHm} 〜 <span className="text-red-600 font-black">退勤が押されていません</span>）
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={async () => {
+                            setIsSaving(true);
+                            try {
+                              const res = await saveAttendanceRecordAction(tenantId, {
+                                id: item.attendance.id,
+                                worker_id: item.worker.id,
+                                date: item.dateStr,
+                                clock_in_time: item.clockInHm === '--:--' ? '08:00' : item.clockInHm,
+                                clock_out_time: '17:00',
+                                total_break_minutes: Number(item.attendance.total_break_minutes ?? 60),
+                              });
+                              if (res.success) {
+                                showToast(`${item.worker.name}さん（${item.dateStr}）を17:00退勤で確定しました！`);
+                                await loadData(tenantId, selectedMonth, selectedDate);
+                              } else {
+                                showToast(res.error || '保存に失敗しました', 'error');
+                              }
+                            } finally {
+                              setIsSaving(false);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-sm transition-colors"
+                        >
+                          <Check size={14} />
+                          <span>17:00で退勤にする</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openEditAttendanceModal(item.worker, item.dateStr, item.attendance)}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow-sm transition-colors"
+                        >
+                          <Edit3 size={13} />
+                          <span>時間を指定して修正</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() => handleDeleteAttendance(item.attendance.id, `${item.worker.name}（${item.dateStr}）`)}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-stone-100 hover:bg-red-50 text-stone-700 hover:text-red-700 border border-stone-300 text-xs font-bold transition-colors"
+                        >
+                          <Trash2 size={13} />
+                          <span>間違い打刻を消す</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => jumpToDailyDate(item.dateStr)}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-bold transition-colors"
+                        >
+                          <Calendar size={13} />
+                          <span>その日の画面へ</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -874,9 +1120,9 @@ export default function HrManagementPage() {
       ========================================================= */}
       {activeTab === 'daily' && (
         <div className="space-y-5 print:hidden">
-          {/* 日付切り替えバー */}
-          <div className="bg-white p-4 md:p-5 rounded-3xl border border-stone-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
+          {/* 日付切り替えバー ＆ 一括定時登録ボタン */}
+          <div className="bg-white p-4 md:p-5 rounded-3xl border border-stone-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => shiftDate(-1)}
                 className="p-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold"
@@ -915,7 +1161,7 @@ export default function HrManagementPage() {
               </button>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 text-xs font-bold text-stone-600">
+            <div className="flex flex-wrap items-center gap-2.5 text-xs font-bold text-stone-600">
               <span className="px-3 py-1.5 rounded-xl bg-stone-100">
                 出勤人数:{' '}
                 <strong className="text-emerald-700 text-sm">
@@ -929,6 +1175,18 @@ export default function HrManagementPage() {
                   ¥{dailyRows.reduce((s, r) => s + r.estimatedDailyWage, 0).toLocaleString()}
                 </strong>
               </span>
+              {workers.length > 0 && (
+                <button
+                  onClick={openBulkAttendanceModal}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-colors"
+                >
+                  <CheckCircle2 size={15} />
+                  <span>
+                    ⚡ まとめて定時出退勤をつける
+                    {unclockedWorkerCount > 0 ? `（未打刻${unclockedWorkerCount}名）` : ''}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -949,7 +1207,7 @@ export default function HrManagementPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3">
-              {dailyRows.map(({ worker, attendance, calc, logs, leave, statusLabel, estimatedDailyWage }) => {
+              {dailyRows.map(({ worker, attendance, calc, logs, logTotalMinutes, leave, statusLabel, estimatedDailyWage }) => {
                 const badgeStyle =
                   statusLabel === '出勤中'
                     ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
@@ -1032,28 +1290,6 @@ export default function HrManagementPage() {
                       )}
                     </div>
 
-                    {/* 中央：その日に記録された農作業内容（あれば表示） */}
-                    {logs.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {logs.map((log) => {
-                          const cName = getCropLabel(log);
-                          const tName = getTaskLabel(log);
-                          return (
-                            <span
-                              key={log.id}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold"
-                            >
-                              <Sprout size={12} />
-                              <span>
-                                {cName ? `${cName}：` : ''}
-                                {tName}（{log.duration_minutes}分）
-                              </span>
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
-
                     {/* 右：ワンクリック修正・手動入力ボタン */}
                     <div className="flex items-center gap-2 shrink-0">
                       <button
@@ -1089,8 +1325,8 @@ export default function HrManagementPage() {
       ========================================================= */}
       {activeTab === 'monthly' && (
         <div className="space-y-5 print:hidden">
-          {/* 対象月選択 ＆ CSV出力バー */}
-          <div className="bg-white p-5 rounded-3xl border border-stone-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* 対象月選択 ＆ 全員分一括印刷 ＆ CSV出力バー */}
+          <div className="bg-white p-5 rounded-3xl border border-stone-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-3">
               <label className="text-sm font-black text-stone-700">集計する月：</label>
               <input
@@ -1107,13 +1343,22 @@ export default function HrManagementPage() {
               </span>
             </div>
 
-            <button
-              onClick={handleDownloadMonthlyCsv}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm font-bold shadow-sm transition-colors"
-            >
-              <Download size={16} />
-              <span>📥 全員分の月次出勤簿CSV出力（Excel・税理士用）</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setIsBatchPrintOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-900 text-white text-xs md:text-sm font-bold shadow-sm transition-colors"
+              >
+                <Printer size={16} />
+                <span>🖨️ 全員分の出勤簿・明細を一括印刷（A4）</span>
+              </button>
+              <button
+                onClick={handleDownloadMonthlyCsv}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm font-bold shadow-sm transition-colors"
+              >
+                <Download size={16} />
+                <span>📥 月次CSV出力（Excel・税理士用）</span>
+              </button>
+            </div>
           </div>
 
           {/* 月間サマリーカード */}
@@ -1160,53 +1405,76 @@ export default function HrManagementPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100 text-sm">
-                  {monthlySummaries.map((s) => (
-                    <tr key={s.worker.id} className="hover:bg-stone-50/80 transition-colors">
-                      <td className="py-3.5 px-4">
-                        <div className="font-black text-stone-800">{s.worker.name}</div>
-                        <div className="text-xs text-stone-400">
-                          {s.worker.employment_type || 'パート・アルバイト'}
-                        </div>
-                        {s.unclosedCount > 0 && (
-                          <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[11px] font-bold">
-                            ⚠️ 未退勤 {s.unclosedCount}件あり
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-3 font-bold text-stone-700">
-                        ¥{(s.worker.hourly_wage || 0).toLocaleString()}
-                      </td>
-                      <td className="py-3.5 px-3 font-bold text-stone-800">{s.workDays}日</td>
-                      <td className="py-3.5 px-3 font-black text-emerald-700">
-                        {formatMinutesToHoursText(s.totalNetMinutes)}
-                      </td>
-                      <td className="py-3.5 px-3 font-bold text-stone-600">
-                        {formatMinutesToHoursText(s.totalOvertimeMinutes)}
-                      </td>
-                      <td className="py-3.5 px-3 font-bold text-purple-700">
-                        {s.paidLeaveDays > 0 ? `${s.paidLeaveDays}日` : '-'}
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="text-base font-black text-stone-900">
-                          ¥{s.totalEstimatedPay.toLocaleString()}
-                        </div>
-                        {s.overtimePay > 0 && (
-                          <div className="text-[11px] text-stone-400">
-                            （残業割増 ¥{s.overtimePay.toLocaleString()} 含）
+                  {monthlySummaries.map((s) => {
+                    const firstUnclosedAtt = s.records.find((r) => !r.clock_out) || null;
+                    return (
+                      <tr key={s.worker.id} className="hover:bg-stone-50/80 transition-colors">
+                        <td className="py-3.5 px-4">
+                          <div className="font-black text-stone-800">{s.worker.name}</div>
+                          <div className="text-xs text-stone-400">
+                            {s.worker.employment_type || 'パート・アルバイト'}
                           </div>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <button
-                          onClick={() => setTimecardWorkerId(s.worker.id)}
-                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition-colors"
-                        >
-                          <FileText size={14} />
-                          <span>日別明細・印刷</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                          {s.unclosedCount > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (firstUnclosedAtt) {
+                                  openEditAttendanceModal(
+                                    s.worker,
+                                    getAttDateStr(firstUnclosedAtt),
+                                    firstUnclosedAtt
+                                  );
+                                } else {
+                                  setTimecardWorkerId(s.worker.id);
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 mt-1 px-2.5 py-0.5 rounded-full bg-red-100 hover:bg-red-200 text-red-700 text-[11px] font-bold border border-red-200 transition-colors"
+                              title="クリックして未退勤の時刻をすぐに入力できます"
+                            >
+                              <span>⚠️ 未退勤 {s.unclosedCount}件を直す</span>
+                            </button>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-3 font-bold text-stone-700">
+                          ¥{(s.worker.hourly_wage || 0).toLocaleString()}
+                        </td>
+                        <td className="py-3.5 px-3 font-bold text-stone-800">{s.workDays}日</td>
+                        <td className="py-3.5 px-3 font-black text-emerald-700">
+                          {formatMinutesToHoursText(s.totalNetMinutes)}
+                        </td>
+                        <td className="py-3.5 px-3 font-bold text-stone-600">
+                          {formatMinutesToHoursText(s.totalOvertimeMinutes)}
+                        </td>
+                        <td className="py-3.5 px-3 font-bold text-purple-700">
+                          {s.paidLeaveDays > 0 ? `${s.paidLeaveDays}日` : '-'}
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="text-base font-black text-stone-900">
+                            ¥{s.totalEstimatedPay.toLocaleString()}
+                          </div>
+                          {s.overtimePay > 0 && (
+                            <div className="text-[11px] text-stone-400">
+                              （残業割増 ¥{s.overtimePay.toLocaleString()} 含）
+                            </div>
+                          )}
+                          {s.paidLeavePay > 0 && (
+                            <div className="text-[11px] text-purple-600 font-bold">
+                              （有給支給 ¥{s.paidLeavePay.toLocaleString()} 含）
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <button
+                            onClick={() => setTimecardWorkerId(s.worker.id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition-colors"
+                          >
+                            <FileText size={14} />
+                            <span>日別明細・印刷</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1535,7 +1803,7 @@ export default function HrManagementPage() {
       )}
 
       {/* =========================================================
-          モーダル①：出退勤時刻・休憩の手動修正モーダル
+          モーダル①：出退勤時刻・休憩の手動修正モーダル（ワンタップ定時プリセット付）
       ========================================================= */}
       {editingAttendance && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 print:hidden">
@@ -1555,6 +1823,52 @@ export default function HrManagementPage() {
             <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200 text-xs font-bold text-stone-700">
               <div>スタッフ：<span className="text-sm font-black text-stone-900">{editingAttendance.workerName}</span></div>
               <div className="mt-1">対象日：<span className="text-sm font-black text-emerald-700">{editingAttendance.workDate}</span></div>
+            </div>
+
+            {/* 農業パート定番ワンタップ時刻プリセット */}
+            <div>
+              <label className="block text-xs font-bold text-stone-600 mb-1.5">
+                ⚡ よくある勤務パターン（押すだけで時刻と休憩が入ります）
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { label: '☀️ フル 8:00〜17:00', inTime: '08:00', outTime: '17:00', brk: 60 },
+                  { label: '🌅 早朝 6:00〜15:00', inTime: '06:00', outTime: '15:00', brk: 60 },
+                  { label: '🕒 短時間 8:00〜15:00', inTime: '08:00', outTime: '15:00', brk: 60 },
+                  { label: '⛅ 午前のみ 8:00〜12:00', inTime: '08:00', outTime: '12:00', brk: 0 },
+                  { label: '🌧️ 午後のみ 13:00〜17:00', inTime: '13:00', outTime: '17:00', brk: 0 },
+                ].map((preset) => {
+                  const isSelected =
+                    editingAttendance.clockInTime === preset.inTime &&
+                    editingAttendance.clockOutTime === preset.outTime &&
+                    editingAttendance.breakMinutes === preset.brk;
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() =>
+                        setEditingAttendance({
+                          ...editingAttendance,
+                          clockInTime: preset.inTime,
+                          clockOutTime: preset.outTime,
+                          breakMinutes: preset.brk,
+                          isStillWorking: false,
+                        })
+                      }
+                      className={`px-2.5 py-2 rounded-xl text-left text-xs font-bold border transition-all ${
+                        isSelected
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                          : 'bg-stone-50 hover:bg-emerald-50 text-stone-700 border-stone-200'
+                      }`}
+                    >
+                      <div>{preset.label}</div>
+                      <div className={`text-[10px] ${isSelected ? 'text-emerald-100' : 'text-stone-400'}`}>
+                        休憩{preset.brk}分
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -1664,6 +1978,208 @@ export default function HrManagementPage() {
       )}
 
       {/* =========================================================
+          モーダル①-B：未打刻スタッフへの一括定時出退勤登録モーダル
+      ========================================================= */}
+      {bulkAttendanceModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 print:hidden">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black text-stone-800">
+                ⚡ まとめて定時出退勤をつける（{selectedDate}）
+              </h3>
+              <button
+                onClick={() => setBulkAttendanceModal(null)}
+                className="p-1.5 rounded-full hover:bg-stone-100 text-stone-500"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="text-xs text-stone-500">
+              スマホを持たないパートさんや、同じ時間帯で働いたスタッフ全員分の出退勤を1クリックでまとめて登録できます。
+            </p>
+
+            {/* ワンタップ時刻プリセット */}
+            <div>
+              <label className="block text-xs font-bold text-stone-600 mb-1.5">
+                ① 勤務パターンを選ぶ（または時刻を直接指定）
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                {[
+                  { label: '☀️ 8:00〜17:00', inTime: '08:00', outTime: '17:00', brk: 60 },
+                  { label: '🌅 6:00〜15:00', inTime: '06:00', outTime: '15:00', brk: 60 },
+                  { label: '🕒 8:00〜15:00', inTime: '08:00', outTime: '15:00', brk: 60 },
+                  { label: '⛅ 8:00〜12:00', inTime: '08:00', outTime: '12:00', brk: 0 },
+                  { label: '🌧️ 13:00〜17:00', inTime: '13:00', outTime: '17:00', brk: 0 },
+                ].map((preset) => {
+                  const isSelected =
+                    bulkAttendanceModal.clockInTime === preset.inTime &&
+                    bulkAttendanceModal.clockOutTime === preset.outTime &&
+                    bulkAttendanceModal.breakMinutes === preset.brk;
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() =>
+                        setBulkAttendanceModal({
+                          ...bulkAttendanceModal,
+                          clockInTime: preset.inTime,
+                          clockOutTime: preset.outTime,
+                          breakMinutes: preset.brk,
+                        })
+                      }
+                      className={`px-2.5 py-2 rounded-xl text-left text-xs font-bold border transition-all ${
+                        isSelected
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                          : 'bg-stone-50 hover:bg-emerald-50 text-stone-700 border-stone-200'
+                      }`}
+                    >
+                      <div>{preset.label}</div>
+                      <div className={`text-[10px] ${isSelected ? 'text-emerald-100' : 'text-stone-400'}`}>
+                        休憩{preset.brk}分
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5">
+              <div>
+                <label className="block text-xs font-bold text-stone-600 mb-1">出勤時刻</label>
+                <input
+                  type="time"
+                  value={bulkAttendanceModal.clockInTime}
+                  onChange={(e) =>
+                    setBulkAttendanceModal({ ...bulkAttendanceModal, clockInTime: e.target.value })
+                  }
+                  className="w-full px-2.5 py-2 rounded-xl border border-stone-300 font-black text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-stone-600 mb-1">退勤時刻</label>
+                <input
+                  type="time"
+                  value={bulkAttendanceModal.clockOutTime}
+                  onChange={(e) =>
+                    setBulkAttendanceModal({ ...bulkAttendanceModal, clockOutTime: e.target.value })
+                  }
+                  className="w-full px-2.5 py-2 rounded-xl border border-stone-300 font-black text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-stone-600 mb-1">休憩（分）</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={15}
+                  value={bulkAttendanceModal.breakMinutes}
+                  onChange={(e) =>
+                    setBulkAttendanceModal({
+                      ...bulkAttendanceModal,
+                      breakMinutes: Math.max(0, Number(e.target.value) || 0),
+                    })
+                  }
+                  className="w-full px-2.5 py-2 rounded-xl border border-stone-300 font-black text-sm"
+                />
+              </div>
+            </div>
+
+            {/* 対象スタッフ選択 */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-bold text-stone-600">
+                  ② 登録するスタッフを選ぶ（{bulkAttendanceModal.selectedWorkerIds.length}名選択中）
+                </label>
+                <div className="flex gap-2 text-[11px] font-bold">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setBulkAttendanceModal({
+                        ...bulkAttendanceModal,
+                        selectedWorkerIds: dailyRows
+                          .filter((r) => !r.attendance && !r.leave)
+                          .map((r) => r.worker.id),
+                      })
+                    }
+                    className="text-emerald-700 hover:underline"
+                  >
+                    未打刻のみ選択
+                  </button>
+                  <span className="text-stone-300">|</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setBulkAttendanceModal({
+                        ...bulkAttendanceModal,
+                        selectedWorkerIds: workers.map((w) => w.id),
+                      })
+                    }
+                    className="text-stone-600 hover:underline"
+                  >
+                    全員選択
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-48 overflow-y-auto divide-y divide-stone-100 border border-stone-200 rounded-2xl bg-stone-50/50">
+                {dailyRows.map(({ worker, statusLabel }) => {
+                  const checked = bulkAttendanceModal.selectedWorkerIds.includes(worker.id);
+                  return (
+                    <label
+                      key={worker.id}
+                      className="flex items-center justify-between px-3.5 py-2.5 cursor-pointer hover:bg-emerald-50/50 text-xs font-bold"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...bulkAttendanceModal.selectedWorkerIds, worker.id]
+                              : bulkAttendanceModal.selectedWorkerIds.filter((id) => id !== worker.id);
+                            setBulkAttendanceModal({
+                              ...bulkAttendanceModal,
+                              selectedWorkerIds: next,
+                            });
+                          }}
+                          className="w-4 h-4 accent-emerald-600 rounded"
+                        />
+                        <span className="text-stone-800 text-sm font-black">{worker.name}</span>
+                      </div>
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-stone-200 text-stone-600">
+                        現在：{statusLabel}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setBulkAttendanceModal(null)}
+                className="px-4 py-2.5 rounded-xl bg-stone-100 text-stone-600 text-xs font-bold"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                disabled={isSaving || bulkAttendanceModal.selectedWorkerIds.length === 0}
+                onClick={handleBulkSaveAttendance}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs font-bold shadow-sm"
+              >
+                {isSaving
+                  ? '一括登録中...'
+                  : `${bulkAttendanceModal.selectedWorkerIds.length}名分をまとめて登録する`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
           モーダル②：個人別の月間タイムカード（A4印刷対応）
       ========================================================= */}
       {selectedWorkerTimecard && (
@@ -1711,6 +2227,11 @@ export default function HrManagementPage() {
                   <div className="text-2xl font-black text-emerald-800">
                     ¥{selectedWorkerTimecard.summary.totalEstimatedPay.toLocaleString()}
                   </div>
+                  {selectedWorkerTimecard.summary.paidLeavePay > 0 && (
+                    <div className="text-[11px] font-bold text-purple-700">
+                      （うち有給支給 ¥{selectedWorkerTimecard.summary.paidLeavePay.toLocaleString()} 含）
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1752,7 +2273,7 @@ export default function HrManagementPage() {
                       <th className="py-2 px-2.5">退勤</th>
                       <th className="py-2 px-2.5">休憩</th>
                       <th className="py-2 px-2.5">実労働</th>
-                      <th className="py-2 px-2.5">主な作業・備考</th>
+                      <th className="py-2 px-2.5">備考（休暇等）</th>
                       <th className="py-2 px-2.5 text-right">日額目安</th>
                       <th className="py-2 px-2 text-center print:hidden">修正</th>
                     </tr>
@@ -1795,14 +2316,6 @@ export default function HrManagementPage() {
                               <span className="text-purple-700 font-bold">
                                 🏖️ {d.leave.type || d.leave.leave_type || '有給休暇'}（{d.leave.status}）
                               </span>
-                            ) : d.logs.length > 0 ? (
-                              d.logs
-                                .map((l) => {
-                                  const c = getCropLabel(l);
-                                  const t = getTaskLabel(l);
-                                  return `${c ? c + ' ' : ''}${t}`;
-                                })
-                                .join('、')
                             ) : (
                               ''
                             )}
@@ -1831,6 +2344,169 @@ export default function HrManagementPage() {
                 </table>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          モーダル②-B：全員分の月間出勤簿・給与明細 A4一括印刷モーダル
+      ========================================================= */}
+      {isBatchPrintOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 overflow-y-auto p-4 md:p-8 print:static print:bg-white print:p-0">
+          <div className="max-w-4xl mx-auto space-y-6 print:space-y-0">
+            {/* 上部操作バー（印刷時は非表示） */}
+            <div className="bg-white rounded-3xl p-5 shadow-xl border border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={() => setIsBatchPrintOpen(false)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold"
+                >
+                  <ChevronLeft size={16} />
+                  <span>月別一覧へ戻る</span>
+                </button>
+                <label className="inline-flex items-center gap-2 text-xs font-bold text-stone-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={batchPrintOnlyActive}
+                    onChange={(e) => setBatchPrintOnlyActive(e.target.checked)}
+                    className="w-4 h-4 accent-emerald-600 rounded"
+                  />
+                  <span>当月に出勤・有給があるスタッフのみ印刷（{batchWorkerTimecards.length}名）</span>
+                </label>
+              </div>
+
+              <button
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm font-bold shadow-sm"
+              >
+                <Printer size={16} />
+                <span>🖨️ 全員分（{batchWorkerTimecards.length}枚）をまとめてA4印刷する</span>
+              </button>
+            </div>
+
+            {/* スタッフ全員分のA4タイムカード（印刷時は1人1ページで改ページ） */}
+            {batchWorkerTimecards.map((tc, idx) => (
+              <div
+                key={tc.summary.worker.id}
+                className={`bg-white rounded-3xl p-6 md:p-8 shadow-xl border border-stone-200 print:shadow-none print:border-none print:rounded-none print:p-0 ${
+                  idx < batchWorkerTimecards.length - 1 ? 'print:break-after-page' : ''
+                }`}
+              >
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-end justify-between border-b-2 border-stone-800 pb-3">
+                    <div>
+                      <div className="text-xs font-bold text-stone-500">
+                        月間出勤簿・パート代明細書（対象期間：{monthlyPeriod.startStr} 〜 {monthlyPeriod.endStr}）
+                      </div>
+                      <h2 className="text-2xl font-black text-stone-900 mt-0.5">
+                        {tc.summary.worker.name} 様
+                        <span className="text-xs font-bold text-stone-500 ml-3">
+                          （{tc.summary.worker.employment_type || 'パート・アルバイト'} ／ 時給 ¥
+                          {(tc.summary.worker.hourly_wage || 0).toLocaleString()}）
+                        </span>
+                      </h2>
+                    </div>
+
+                    <div className="mt-2 sm:mt-0 text-right">
+                      <div className="text-xs font-bold text-stone-500">当月支給見込額（税込概算）</div>
+                      <div className="text-2xl font-black text-emerald-800">
+                        ¥{tc.summary.totalEstimatedPay.toLocaleString()}
+                      </div>
+                      {tc.summary.paidLeavePay > 0 && (
+                        <div className="text-[11px] font-bold text-purple-700">
+                          （うち有給支給 ¥{tc.summary.paidLeavePay.toLocaleString()} 含）
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-2 bg-stone-50 p-3 rounded-2xl border border-stone-200 text-xs">
+                    <div>
+                      <span className="text-stone-500 font-bold">出勤日数：</span>
+                      <strong className="text-stone-900 font-black ml-1">{tc.summary.workDays}日</strong>
+                    </div>
+                    <div>
+                      <span className="text-stone-500 font-bold">実労働合計：</span>
+                      <strong className="text-stone-900 font-black ml-1">
+                        {formatMinutesToHoursText(tc.summary.totalNetMinutes)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-stone-500 font-bold">うち残業：</span>
+                      <strong className="text-stone-900 font-black ml-1">
+                        {formatMinutesToHoursText(tc.summary.totalOvertimeMinutes)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-stone-500 font-bold">有給取得：</span>
+                      <strong className="text-stone-900 font-black ml-1">{tc.summary.paidLeaveDays}日</strong>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-stone-300 bg-stone-100 text-stone-600 font-black">
+                          <th className="py-1.5 px-2.5">日付</th>
+                          <th className="py-1.5 px-2.5">出勤</th>
+                          <th className="py-1.5 px-2.5">退勤</th>
+                          <th className="py-1.5 px-2.5">休憩</th>
+                          <th className="py-1.5 px-2.5">実労働</th>
+                          <th className="py-1.5 px-2.5">備考（休暇等）</th>
+                          <th className="py-1.5 px-2.5 text-right">日額目安</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stone-200">
+                        {tc.days.map((d) => {
+                          const isWeekend = d.dayOfWeek === '日' || d.dayOfWeek === '土';
+                          return (
+                            <tr key={d.dateStr} className={isWeekend ? 'bg-stone-50/60' : ''}>
+                              <td className="py-1 px-2.5 font-bold text-stone-800 whitespace-nowrap">
+                                {d.dateStr.substring(5)}（{d.dayOfWeek}）
+                              </td>
+                              <td className="py-1 px-2.5 font-bold text-stone-800">
+                                {d.attendance ? toJstTimeHm(d.attendance.clock_in) : '-'}
+                              </td>
+                              <td className="py-1 px-2.5 font-bold text-stone-800">
+                                {d.attendance ? (
+                                  d.attendance.clock_out ? (
+                                    toJstTimeHm(d.attendance.clock_out)
+                                  ) : (
+                                    <span className="text-red-600 font-black">未退勤</span>
+                                  )
+                                ) : (
+                                  '-'
+                                )}
+                              </td>
+                              <td className="py-1 px-2.5 text-stone-600">
+                                {d.attendance ? `${d.calc.breakMinutes}分` : '-'}
+                              </td>
+                              <td className="py-1 px-2.5 font-bold text-emerald-800">
+                                {d.attendance && d.attendance.clock_out
+                                  ? formatMinutesToHoursText(d.calc.netMinutes)
+                                  : '-'}
+                              </td>
+                              <td className="py-1 px-2.5 text-stone-600">
+                                {d.leave ? (
+                                  <span className="text-purple-700 font-bold">
+                                    🏖️ {d.leave.type || d.leave.leave_type || '有給休暇'}（{d.leave.status}）
+                                  </span>
+                                ) : (
+                                  ''
+                                )}
+                              </td>
+                              <td className="py-1 px-2.5 text-right font-bold text-stone-800">
+                                {d.dailyPay > 0 ? `¥${d.dailyPay.toLocaleString()}` : '-'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

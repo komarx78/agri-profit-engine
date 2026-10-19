@@ -8,7 +8,8 @@ export default function AdminPurchasesRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/accounting-management');
+    const qs = typeof window !== 'undefined' ? window.location.search : '';
+    router.replace(`/accounting-management${qs}`);
   }, [router]);
 
   return (

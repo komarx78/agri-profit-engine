@@ -8,7 +8,8 @@ export default function AdminMonthlyExpensesRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/accounting-management/monthly-expenses');
+    const qs = typeof window !== 'undefined' ? window.location.search : '';
+    router.replace(`/accounting-management/monthly-expenses${qs}`);
   }, [router]);
 
   return (

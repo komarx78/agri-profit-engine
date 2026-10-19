@@ -3,7 +3,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
-import { createAdHocSalesLogAction } from '@/app/actions/b2b';
+import {
+  createAdHocSalesLogAction,
+  getSalesLogsAndMastersAction,
+  updateAdHocSalesLogPriceAction,
+  deleteAdHocSalesLogAction
+} from '@/app/actions/b2b';
 import { getJSTDate } from '@/lib/dateUtils';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import {
@@ -71,6 +76,21 @@ export default function SalesHistoryPage() {
         return;
       }
       setTenantId(tid);
+
+      const srvRes = await getSalesLogsAndMastersAction(tid);
+      if (srvRes?.success) {
+        const chList = srvRes.channels || [];
+        const crList = srvRes.crops || [];
+        setChannels(chList);
+        setCrops(crList);
+        const mappedLogs = (srvRes.salesLogs || []).map((log: any) => ({
+          ...log,
+          crops: { name: crList.find((c: any) => c.id === log.crop_id)?.name || '不明' },
+          sales_channels: { name: chList.find((c: any) => c.id === log.channel_id)?.name || '出荷先未設定' }
+        }));
+        setSalesLogs(mappedLogs);
+        return;
+      }
 
       const [logsRes, channelsRes, cropsRes] = await Promise.all([
         supabase
@@ -195,15 +215,19 @@ export default function SalesHistoryPage() {
     setIsSavingPrice(true);
     try {
       const finalTotal = parseFloat(editTotalSales) || 0;
+      const currentTid = tenantId || (await getCurrentTenantId());
 
-      const { error } = await supabase
-        .from('sales_logs')
-        .update({
-          total_sales: finalTotal
-        })
-        .eq('id', editingLog.id);
+      const srvRes = await updateAdHocSalesLogPriceAction(editingLog.id, finalTotal, currentTid);
+      if (!srvRes?.success) {
+        const { error } = await supabase
+          .from('sales_logs')
+          .update({
+            total_sales: finalTotal
+          })
+          .eq('id', editingLog.id);
 
-      if (error) throw error;
+        if (error) throw error;
+      }
 
       setSalesLogs(prev =>
         prev.map(l => (l.id === editingLog.id ? { ...l, total_sales: finalTotal } : l))
@@ -224,9 +248,12 @@ export default function SalesHistoryPage() {
     if (!confirmDelete) return;
 
     try {
-      const { error } = await supabase.from('sales_logs').delete().eq('id', id);
-
-      if (error) throw error;
+      const currentTid = tenantId || (await getCurrentTenantId());
+      const srvRes = await deleteAdHocSalesLogAction(id, currentTid);
+      if (!srvRes?.success) {
+        const { error } = await supabase.from('sales_logs').delete().eq('id', id);
+        if (error) throw error;
+      }
       setSalesLogs(prev => prev.filter(log => log.id !== id));
       showToast('出荷記録を削除しました。');
     } catch (err) {

@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getAdminDashboardDataAction } from '@/app/actions/farm';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { 
   Activity, Clock, Sprout, TrendingUp, Banknote, UserCheck, 
@@ -70,32 +71,44 @@ export default function DashboardPage() {
 
         setTenantId(currentOwnerId);
 
-        // 自社テナントのログのみを厳格に取得
-        const [workRes, salesRes] = await Promise.all([
-          supabase.from('work_logs').select(`
-            work_date,
-            duration_minutes,
-            material_quantity,
-            status,
-            crops(name),
-            workers(name, hourly_wage),
-            materials(name, default_price),
-            fields(name)
-          `).eq('user_id', currentOwnerId),
-          supabase.from('sales_logs').select(`
-            sales_date,
-            total_sales,
-            status,
-            crops(name),
-            sales_channels(name)
-          `).eq('user_id', currentOwnerId)
-        ]);
+        // サーバーアクション経由でRLSに影響されず確実に取得（フォールバック付き）
+        let rawWorkLogs: any[] = [];
+        let rawSalesLogs: any[] = [];
+        let rawB2bOrders: any[] = [];
 
-        const rawWorkLogs = workRes.data || [];
-        const rawSalesLogs = salesRes.data || [];
+        const srvRes = await getAdminDashboardDataAction(currentOwnerId);
+        if (srvRes?.success) {
+          rawWorkLogs = srvRes.workLogs || [];
+          rawSalesLogs = srvRes.salesLogs || [];
+          rawB2bOrders = srvRes.b2bOrders || [];
+          if (srvRes.ownerId) setTenantId(srvRes.ownerId);
+        } else {
+          const [workRes, salesRes] = await Promise.all([
+            supabase.from('work_logs').select(`
+              work_date,
+              duration_minutes,
+              material_quantity,
+              status,
+              approval_status,
+              crops(name),
+              workers(name, hourly_wage),
+              materials(name, default_price),
+              fields(name)
+            `).eq('user_id', currentOwnerId),
+            supabase.from('sales_logs').select(`
+              sales_date,
+              total_sales,
+              status,
+              crops(name),
+              sales_channels(name)
+            `).eq('user_id', currentOwnerId)
+          ]);
+          rawWorkLogs = workRes.data || [];
+          rawSalesLogs = salesRes.data || [];
+        }
 
-        // --- 未承認日報件数 ＆ 本日作業件数の集計 ---
-        const pendingCount = rawWorkLogs.filter((log: any) => log.status === 'pending').length;
+        // --- 未承認日報件数（status==='completed' かつ approval_status==='pending'）＆ 本日作業件数の集計 ---
+        const pendingCount = rawWorkLogs.filter((log: any) => log.status === 'completed' && log.approval_status === 'pending').length;
         const todayStr = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
         const todayCount = rawWorkLogs.filter((log: any) => log.work_date === todayStr).length;
         setPendingApprovalsCount(pendingCount);
@@ -107,6 +120,11 @@ export default function DashboardPage() {
         );
         const salesLogs = rawSalesLogs.filter((log: any) => 
           dataViewMode === 'includePlanned' ? true : log.status === 'completed'
+        );
+        const b2bOrders = rawB2bOrders.filter((ord: any) =>
+          dataViewMode === 'includePlanned'
+            ? ord.status !== 'cancelled'
+            : (ord.status === 'delivered' || ord.status === 'invoiced' || ord.status === 'paid')
         );
 
         // --- 集計用マップの準備 ---
@@ -126,13 +144,13 @@ export default function DashboardPage() {
         const monthlyMap: Record<string, { 売上: number, 人件費: number, 詳細資材費: number }> = {};
         const cropToFieldHours: Record<string, Record<string, number>> = {}; 
 
-        // 1. 売上の基本集計
+        // 1. 売上の基本集計（sales_logs + b2b_orders）
         const cropSalesMap: Record<string, number> = {};
         let totalSales = 0;
 
         salesLogs.forEach((log: any) => {
           const cName = log.crops?.name || '未設定';
-          const sales = log.total_sales || 0;
+          const sales = Number(log.total_sales) || 0;
           const dateStr = log.sales_date;
 
           totalSales += sales;
@@ -142,6 +160,33 @@ export default function DashboardPage() {
             const monthStr = dateStr.substring(0, 7); 
             if (!monthlyMap[monthStr]) monthlyMap[monthStr] = { 売上: 0, 人件費: 0, 詳細資材費: 0 };
             monthlyMap[monthStr].売上 += sales;
+          }
+        });
+
+        b2bOrders.forEach((ord: any) => {
+          const dateStr = ord.delivery_date;
+          const items = Array.isArray(ord.items) ? ord.items : [];
+          if (items.length > 0) {
+            items.forEach((item: any) => {
+              const cName = item.crop_name || '未設定';
+              const sales = Number(item.amount) || (Number(item.quantity || 0) * Number(item.unit_price || 0)) || 0;
+              totalSales += sales;
+              cropSalesMap[cName] = (cropSalesMap[cName] || 0) + sales;
+              if (dateStr) {
+                const monthStr = dateStr.substring(0, 7);
+                if (!monthlyMap[monthStr]) monthlyMap[monthStr] = { 売上: 0, 人件費: 0, 詳細資材費: 0 };
+                monthlyMap[monthStr].売上 += sales;
+              }
+            });
+          } else if (ord.total_amount) {
+            const sales = Number(ord.total_amount) || 0;
+            totalSales += sales;
+            cropSalesMap['B2B注文'] = (cropSalesMap['B2B注文'] || 0) + sales;
+            if (dateStr) {
+              const monthStr = dateStr.substring(0, 7);
+              if (!monthlyMap[monthStr]) monthlyMap[monthStr] = { 売上: 0, 人件費: 0, 詳細資材費: 0 };
+              monthlyMap[monthStr].売上 += sales;
+            }
           }
         });
 

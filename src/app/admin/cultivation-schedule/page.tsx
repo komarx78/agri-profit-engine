@@ -21,7 +21,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { getJSTDate } from '@/lib/dateUtils';
 import { AdminOnlyGuard } from '@/components/AdminOnlyGuard';
-import { getTenantCultivationPlansAction, saveTenantCultivationPlanAction } from '@/app/actions/farm';
+import { getTenantCultivationPlansAction, saveTenantCultivationPlanAction, getCultivationSchedulePageDataAction } from '@/app/actions/farm';
 import {
   Calendar,
   Loader2,
@@ -179,37 +179,50 @@ export default function CultivationSchedulePage() {
       }
       setTenantId(tid);
 
-      // 年またぎ・育苗期間・収穫後出荷をカバーする取得範囲
-      const rangeStart = `${year - 1}-01-01`;
-      const rangeEnd = `${year + 1}-12-31`;
+      const pageRes = await getCultivationSchedulePageDataAction(tid, year);
+      if (pageRes.success) {
+        if (pageRes.ownerId && pageRes.ownerId !== tid) {
+          setTenantId(pageRes.ownerId);
+        }
+        setFields(pageRes.fields || []);
+        setCrops(pageRes.crops || []);
+        setPlans(pageRes.plans || []);
+        setWorkLogs(pageRes.workLogs || []);
+        setSalesLogs(pageRes.salesLogs || []);
+        setMaterialCosts(pageRes.materialCosts || []);
+        setMonthlyExpenses(pageRes.monthlyExpenses || []);
+      } else {
+        // フォールバック: クライアント直接取得
+        const rangeStart = `${year - 1}-01-01`;
+        const rangeEnd = `${year + 1}-12-31`;
 
-      const [fRes, cRes, pRes, wRes, sRes, mcRes, expRes] = await Promise.all([
-        supabase.from('fields').select('*').eq('user_id', tid).order('name'),
-        supabase.from('crops').select('*').eq('user_id', tid).order('name'),
-        getTenantCultivationPlansAction(tid, year),
-        supabase
-          .from('work_logs')
-          .select('*, workers(name, hourly_wage), materials(name, default_price, category, unit)')
-          .eq('user_id', tid)
-          .gte('work_date', rangeStart)
-          .lte('work_date', rangeEnd),
-        supabase.from('sales_logs').select('*').eq('user_id', tid).gte('sales_date', rangeStart).lte('sales_date', rangeEnd),
-        supabase.from('material_costs').select('*').eq('user_id', tid).gte('expense_date', rangeStart).lte('expense_date', rangeEnd),
-        supabase.from('monthly_expenses').select('*').eq('user_id', tid)
-      ]);
+        const [fRes, cRes, pRes, wRes, sRes, mcRes, expRes] = await Promise.all([
+          supabase.from('fields').select('*').eq('user_id', tid).order('name'),
+          supabase.from('crops').select('*').eq('user_id', tid).order('name'),
+          getTenantCultivationPlansAction(tid, year),
+          supabase
+            .from('work_logs')
+            .select('*, workers(name, hourly_wage), materials(name, default_price, category, unit)')
+            .eq('user_id', tid)
+            .gte('work_date', rangeStart)
+            .lte('work_date', rangeEnd),
+          supabase.from('sales_logs').select('*').eq('user_id', tid).gte('sales_date', rangeStart).lte('sales_date', rangeEnd),
+          supabase.from('material_costs').select('*').eq('user_id', tid).gte('expense_date', rangeStart).lte('expense_date', rangeEnd),
+          supabase.from('monthly_expenses').select('*').eq('user_id', tid)
+        ]);
 
-      if (!pRes.success) throw new Error(pRes.error || '計画取得エラー');
-      if (wRes.error) throw wRes.error;
-      if (sRes.error) throw sRes.error;
+        if (!pRes.success) throw new Error(pRes.error || '計画取得エラー');
+        if (wRes.error) throw wRes.error;
+        if (sRes.error) throw sRes.error;
 
-      setFields(fRes.data || []);
-      setCrops(cRes.data || []);
-      setPlans(pRes.data || []);
-      setWorkLogs(wRes.data || []);
-      setSalesLogs(sRes.data || []);
-      // 資材経費・月次経費テーブルは未使用の農園もあるため、取得失敗時は0件として扱う
-      setMaterialCosts(mcRes.error ? [] : mcRes.data || []);
-      setMonthlyExpenses(expRes.error ? [] : expRes.data || []);
+        setFields(fRes.data || []);
+        setCrops(cRes.data || []);
+        setPlans(pRes.data || []);
+        setWorkLogs(wRes.data || []);
+        setSalesLogs(sRes.data || []);
+        setMaterialCosts(mcRes.error ? [] : mcRes.data || []);
+        setMonthlyExpenses(expRes.error ? [] : expRes.data || []);
+      }
     } catch (err: any) {
       console.error(err);
       setLoadError('データの読み込みに失敗しました。通信環境をご確認のうえ「再読み込み」を押してください。');
@@ -593,10 +606,10 @@ export default function CultivationSchedulePage() {
             </p>
             <Link
               href={calendarHref}
-              className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm"
+              className="shrink-0 w-full sm:w-auto justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm"
             >
-              <Calendar className="w-4 h-4" />
-              作付けの日程を登録・変更する
+              <Calendar className="w-4 h-4 shrink-0" />
+              <span className="whitespace-nowrap">作付けの日程を登録・変更する</span>
             </Link>
           </div>
         </header>
@@ -720,7 +733,7 @@ export default function CultivationSchedulePage() {
             {/* 作付けごとの採算カード */}
             <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {visibleReports.map(r => (
-                <article key={r.plan.id} className="bg-white rounded-3xl border border-slate-200 shadow-2xs p-5 space-y-4">
+                <article key={r.plan.id} className="bg-white rounded-3xl border border-slate-200 shadow-2xs p-4 sm:p-5 space-y-4">
                   {/* 見出し */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -739,9 +752,9 @@ export default function CultivationSchedulePage() {
                         {r.harvestLabel && <span className="ml-1.5">🧺 収穫 {r.harvestLabel}</span>}
                       </p>
                     </div>
-                    <div className={`shrink-0 text-right px-3 py-2 rounded-2xl border ${r.profit >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
-                      <span className="text-[10px] font-bold text-slate-500 block">残ったお金（概算）</span>
-                      <span className={`text-base font-black ${r.profit >= 0 ? 'text-emerald-800' : 'text-rose-700'}`}>{yen(r.profit)}</span>
+                    <div className={`shrink-0 text-right px-2.5 sm:px-3 py-2 rounded-2xl border ${r.profit >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
+                      <span className="text-[10px] font-bold text-slate-500 block whitespace-nowrap">残ったお金（概算）</span>
+                      <span className={`text-sm sm:text-base font-black ${r.profit >= 0 ? 'text-emerald-800' : 'text-rose-700'}`}>{yen(r.profit)}</span>
                     </div>
                   </div>
 
@@ -770,34 +783,34 @@ export default function CultivationSchedulePage() {
                   {/* 費用内訳 */}
                   <div className="border border-slate-200 rounded-2xl overflow-hidden">
                     <div className="grid grid-cols-3 text-center divide-x divide-slate-200 bg-white">
-                      <div className="p-2.5">
-                        <span className="text-[10px] font-bold text-slate-400 block">👷 人件費</span>
-                        <span className="text-xs font-black text-slate-800">{yen(r.laborCost)}</span>
-                        <span className="text-[10px] font-bold text-slate-400 block">{hoursLabel(r.workHours)}</span>
+                      <div className="px-1.5 py-2 sm:p-2.5 min-w-0">
+                        <span className="text-[10px] font-bold text-slate-400 block truncate">👷 人件費</span>
+                        <span className="text-[11px] sm:text-xs font-black text-slate-800 block truncate">{yen(r.laborCost)}</span>
+                        <span className="text-[10px] font-bold text-slate-400 block truncate">{hoursLabel(r.workHours)}</span>
                       </div>
-                      <div className="p-2.5">
-                        <span className="text-[10px] font-bold text-slate-400 block">🧪 資材費</span>
-                        <span className="text-xs font-black text-slate-800">{yen(r.materialCost)}</span>
-                        <span className="text-[10px] font-bold text-slate-400 block">農薬・肥料など</span>
+                      <div className="px-1.5 py-2 sm:p-2.5 min-w-0">
+                        <span className="text-[10px] font-bold text-slate-400 block truncate">🧪 資材費</span>
+                        <span className="text-[11px] sm:text-xs font-black text-slate-800 block truncate">{yen(r.materialCost)}</span>
+                        <span className="text-[10px] font-bold text-slate-400 block truncate">農薬・肥料など</span>
                       </div>
-                      <div className="p-2.5">
-                        <span className="text-[10px] font-bold text-slate-400 block">⛽ 光熱・機械等</span>
-                        <span className="text-xs font-black text-slate-800">{yen(r.overheadCost)}</span>
-                        <span className="text-[10px] font-bold text-slate-400 block">面積で按分</span>
+                      <div className="px-1.5 py-2 sm:p-2.5 min-w-0">
+                        <span className="text-[10px] font-bold text-slate-400 block truncate">⛽ 光熱・機械等</span>
+                        <span className="text-[11px] sm:text-xs font-black text-slate-800 block truncate">{yen(r.overheadCost)}</span>
+                        <span className="text-[10px] font-bold text-slate-400 block truncate">面積で按分</span>
                       </div>
                     </div>
                     <div className="grid grid-cols-3 text-center divide-x divide-slate-200 bg-slate-50 border-t border-slate-200">
-                      <div className="p-2">
-                        <span className="text-[10px] font-bold text-slate-400 block">費用合計</span>
-                        <span className="text-xs font-black text-rose-700">{yen(r.totalCost)}</span>
+                      <div className="px-1.5 py-2 sm:p-2 min-w-0">
+                        <span className="text-[10px] font-bold text-slate-400 block truncate">費用合計</span>
+                        <span className="text-[11px] sm:text-xs font-black text-rose-700 block truncate">{yen(r.totalCost)}</span>
                       </div>
-                      <div className="p-2">
-                        <span className="text-[10px] font-bold text-slate-400 block">10aあたり所得</span>
-                        <span className="text-xs font-black text-slate-800">{r.profitPer10a !== null ? yen(r.profitPer10a) : '面積未設定'}</span>
+                      <div className="px-1.5 py-2 sm:p-2 min-w-0">
+                        <span className="text-[10px] font-bold text-slate-400 block truncate">10aあたり所得</span>
+                        <span className="text-[11px] sm:text-xs font-black text-slate-800 block truncate">{r.profitPer10a !== null ? yen(r.profitPer10a) : '面積未設定'}</span>
                       </div>
-                      <div className="p-2">
-                        <span className="text-[10px] font-bold text-slate-400 block">1時間あたり所得</span>
-                        <span className="text-xs font-black text-slate-800">{r.profitPerHour !== null ? yen(r.profitPerHour) : '作業記録なし'}</span>
+                      <div className="px-1.5 py-2 sm:p-2 min-w-0">
+                        <span className="text-[10px] font-bold text-slate-400 block truncate">1時間あたり所得</span>
+                        <span className="text-[11px] sm:text-xs font-black text-slate-800 block truncate">{r.profitPerHour !== null ? yen(r.profitPerHour) : '作業記録なし'}</span>
                       </div>
                     </div>
                   </div>

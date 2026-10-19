@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.vercel.agri_profit_engine.twa",
+      "sha256_cert_fingerprints": [
+        "27:41:1F:A6:3E:76:5E:DF:D2:E4:37:BD:0C:44:B5:C2:A9:54:49:53:34:18:61:85:DE:42:21:B3:74:11:6C:65",
+        "01:20:27:41:89:27:E7:CE:EC:6B:75:3D:51:68:33:E9:DA:37:54:D5:F3:FE:76:65:08:0A:EE:19:E4:B6:8C:12"
+      ]
+    }
+  }
+]

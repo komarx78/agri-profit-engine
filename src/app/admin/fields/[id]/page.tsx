@@ -4,7 +4,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
-import { getTenantCultivationPlansAction } from '@/app/actions/farm';
+import { getTenantCultivationPlansAction, getAdminFieldDetailPageDataAction, saveMasterRecordAction, deleteMasterRecordAction } from '@/app/actions/farm';
 import { MapPin, ArrowLeft, Loader2, Calendar, Edit, History, Sprout, Leaf, FlaskConical, Plus, Trash2, Edit2, CheckCircle2, AlertTriangle, X, FileText, Activity, Layers, Sparkles, Camera, Upload, Check } from 'lucide-react';
 import Link from 'next/link';
 import { GoogleMap, useJsApiLoader, Polygon } from '@react-google-maps/api';
@@ -74,6 +74,22 @@ export default function FieldDetailPage() {
       if (tenantId) setCurrentTenant(tenantId);
       if (!tenantId) {
         setIsLoading(false);
+        return;
+      }
+
+      const srv = await getAdminFieldDetailPageDataAction(tenantId, fieldId);
+      if (srv.success && srv.field) {
+        const data = srv.field;
+        let path = [];
+        if (typeof data.polygon_coordinates === 'string') {
+          try { path = JSON.parse(data.polygon_coordinates); } catch(e) {}
+        } else if (Array.isArray(data.polygon_coordinates)) {
+          path = data.polygon_coordinates;
+        }
+        setField({ ...data, path });
+        if (srv.latestPlan) setCurrentPlan(srv.latestPlan);
+        setRecentWorks(srv.recentWorks || []);
+        setSoilDiagnoses(srv.soilDiagnoses || []);
         return;
       }
 
@@ -218,21 +234,24 @@ export default function FieldDetailPage() {
         updated_at: new Date().toISOString()
       };
 
-      if (editingSoilItem && editingSoilItem.id) {
-        let updateQuery = supabase
-          .from('soil_diagnoses')
-          .update(payload)
-          .eq('id', editingSoilItem.id);
-        if (tenantId) {
-          updateQuery = updateQuery.eq('user_id', tenantId);
+      const srv = await saveMasterRecordAction(tenantId, 'soil_diagnoses', payload, editingSoilItem?.id ? String(editingSoilItem.id) : null);
+      if (!srv.success) {
+        if (editingSoilItem && editingSoilItem.id) {
+          let updateQuery = supabase
+            .from('soil_diagnoses')
+            .update(payload)
+            .eq('id', editingSoilItem.id);
+          if (tenantId) {
+            updateQuery = updateQuery.eq('user_id', tenantId);
+          }
+          const { error } = await updateQuery;
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('soil_diagnoses')
+            .insert([payload]);
+          if (error) throw error;
         }
-        const { error } = await updateQuery;
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('soil_diagnoses')
-          .insert([payload]);
-        if (error) throw error;
       }
 
       setIsSoilModalOpen(false);
@@ -250,12 +269,15 @@ export default function FieldDetailPage() {
     if (!confirm('この土壌診断記録を削除しますか？')) return;
     try {
       const tenantId = await getCurrentTenantId();
-      let deleteQuery = supabase.from('soil_diagnoses').delete().eq('id', id);
-      if (tenantId) {
-        deleteQuery = deleteQuery.eq('user_id', tenantId);
+      const srv = tenantId ? await deleteMasterRecordAction(tenantId, 'soil_diagnoses', String(id)) : { success: false };
+      if (!srv.success) {
+        let deleteQuery = supabase.from('soil_diagnoses').delete().eq('id', id);
+        if (tenantId) {
+          deleteQuery = deleteQuery.eq('user_id', tenantId);
+        }
+        const { error } = await deleteQuery;
+        if (error) throw error;
       }
-      const { error } = await deleteQuery;
-      if (error) throw error;
       fetchFieldDetails();
     } catch (e: any) {
       alert(`削除に失敗しました: ${e.message}`);

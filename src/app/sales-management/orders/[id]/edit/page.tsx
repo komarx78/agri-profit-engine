@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShoppingCart, ArrowLeft, Copy, Plus, Trash2, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
-import { getB2BCustomers, updateB2BOrderDetails, deleteB2BOrder } from '@/app/actions/b2b';
+import { getB2BCustomers, updateB2BOrderDetails, deleteB2BOrder, getB2BOrderDetailForEditAction } from '@/app/actions/b2b';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 
@@ -43,14 +43,33 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       if (activeTenantId) setTenantId(activeTenantId);
       if (!activeTenantId) return;
 
+      const [editRes, custRes] = await Promise.all([
+        getB2BOrderDetailForEditAction(orderId, activeTenantId),
+        getB2BCustomers(activeTenantId)
+      ]);
+      if (custRes.success) setCustomers(custRes.customers || []);
+
+      if (editRes.success && editRes.order) {
+        if (editRes.crops) setCrops(editRes.crops);
+        const orderData = editRes.order;
+        setSelectedCustomerId(orderData.customer_id);
+        setDeliveryDate(orderData.delivery_date);
+        if (orderData.items && orderData.items.length > 0) {
+          setItems(orderData.items.map((i: any) => ({
+            crop_id: i.crop_id,
+            quantity: i.quantity,
+            unit: i.unit || 'kg',
+            unit_price: i.unit_price || 0
+          })));
+        }
+        return;
+      }
+
       const { data: cropData } = await supabase.from('crops').select('*').eq('user_id', activeTenantId);
       if (cropData) setCrops(cropData);
-
-      const custRes = await getB2BCustomers(activeTenantId);
-      if (custRes.success) setCustomers(custRes.customers || []);
       
       // Load existing order (自社テナント限定)
-      const { data: orderData, error } = await supabase
+      const { data: orderData } = await supabase
         .from('b2b_orders')
         .select(`*, items:b2b_order_items(*)`)
         .eq('id', orderId)

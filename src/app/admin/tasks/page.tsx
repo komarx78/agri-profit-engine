@@ -13,7 +13,7 @@ import { autoTranslateMasterData } from '@/app/actions/translate';
 
 import { getCurrentTenantId } from '@/lib/tenant';
 import { getJSTDate, getJSTDateWithOffset } from '@/lib/dateUtils';
-import { savePlannedTask, deletePlannedTask, copyTasksFromDate, cloneWorkerTasks, shiftTasksDate } from '@/app/actions/farm';
+import { savePlannedTask, deletePlannedTask, copyTasksFromDate, cloneWorkerTasks, shiftTasksDate, getAdminTasksPageDataAction, swapTaskStepOrderAction } from '@/app/actions/farm';
 
 const QUICK_TEMPLATES = [
   { title: '朝の収穫作業', icon: '🧺', defaultSlot: '午前' },
@@ -87,6 +87,11 @@ export default function TasksPage() {
 
   const fetchTasksData = async (ownerId: string) => {
     try {
+      const srvRes = await getAdminTasksPageDataAction(ownerId);
+      if (srvRes?.success) {
+        setTasks(srvRes.tasks || []);
+        return;
+      }
       const { data, error } = await supabase
         .from('work_logs')
         .select('id, work_date, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, memo, step_order, time_slot, crops(name), fields(name), workers(name), departments(name)')
@@ -113,19 +118,29 @@ export default function TasksPage() {
         }
         setTenantId(ownerId);
 
-        const [tasksRes, cropsRes, fieldsRes, workersRes, deptsRes] = await Promise.all([
-          supabase.from('work_logs').select('id, work_date, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, memo, step_order, time_slot, crops(name), fields(name), workers(name), departments(name)').eq('user_id', ownerId).eq('status', 'planned').order('work_date', { ascending: true }).order('step_order', { ascending: true, nullsFirst: false }),
-          supabase.from('crops').select('*').eq('user_id', ownerId).order('name'),
-          supabase.from('fields').select('*').eq('user_id', ownerId).order('name'),
-          supabase.from('workers').select('*').eq('user_id', ownerId).order('name'),
-          supabase.from('departments').select('*').eq('tenant_id', ownerId).order('name')
-        ]);
+        const srvRes = await getAdminTasksPageDataAction(ownerId);
+        if (srvRes?.success) {
+          if (srvRes.ownerId) setTenantId(srvRes.ownerId);
+          setTasks(srvRes.tasks || []);
+          setCrops(srvRes.crops || []);
+          setFields(srvRes.fields || []);
+          setWorkers(srvRes.workers || []);
+          setDepartments(srvRes.departments || []);
+        } else {
+          const [tasksRes, cropsRes, fieldsRes, workersRes, deptsRes] = await Promise.all([
+            supabase.from('work_logs').select('id, work_date, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, memo, step_order, time_slot, crops(name), fields(name), workers(name), departments(name)').eq('user_id', ownerId).eq('status', 'planned').order('work_date', { ascending: true }).order('step_order', { ascending: true, nullsFirst: false }),
+            supabase.from('crops').select('*').eq('user_id', ownerId).order('name'),
+            supabase.from('fields').select('*').eq('user_id', ownerId).order('name'),
+            supabase.from('workers').select('*').eq('user_id', ownerId).order('name'),
+            supabase.from('departments').select('*').eq('tenant_id', ownerId).order('name')
+          ]);
 
-        if (tasksRes.data) setTasks(tasksRes.data);
-        if (cropsRes.data) setCrops(cropsRes.data);
-        if (fieldsRes.data) setFields(fieldsRes.data);
-        if (workersRes.data) setWorkers(workersRes.data);
-        if (deptsRes.data) setDepartments(deptsRes.data);
+          if (tasksRes.data) setTasks(tasksRes.data);
+          if (cropsRes.data) setCrops(cropsRes.data);
+          if (fieldsRes.data) setFields(fieldsRes.data);
+          if (workersRes.data) setWorkers(workersRes.data);
+          if (deptsRes.data) setDepartments(deptsRes.data);
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -308,9 +323,12 @@ export default function TasksPage() {
 
     try {
       const activeTenantId = tenantId || await getCurrentTenantId();
-      await supabase.from('work_logs').update({ step_order: newOrderForCurrent }).eq('id', task.id).eq('user_id', activeTenantId);
-      await supabase.from('work_logs').update({ step_order: newOrderForTarget }).eq('id', targetTask.id).eq('user_id', activeTenantId);
       if (activeTenantId) {
+        const srv = await swapTaskStepOrderAction(activeTenantId, task.id, newOrderForCurrent, targetTask.id, newOrderForTarget);
+        if (!srv.success) {
+          await supabase.from('work_logs').update({ step_order: newOrderForCurrent }).eq('id', task.id).eq('user_id', activeTenantId);
+          await supabase.from('work_logs').update({ step_order: newOrderForTarget }).eq('id', targetTask.id).eq('user_id', activeTenantId);
+        }
         await fetchTasksData(activeTenantId);
       }
     } catch (e) {

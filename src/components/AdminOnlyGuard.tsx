@@ -3,75 +3,72 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { normalizeTenantId } from '@/lib/tenant';
 import { ShieldAlert, ArrowLeft, Loader2, Lock } from 'lucide-react';
 
 interface AdminOnlyGuardProps {
   children: React.ReactNode;
 }
 
+function hasAdminWorkerInStorage(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const urlFarm = normalizeTenantId(params.get('farm') || params.get('tenant') || params.get('farmId'));
+    const candidateKeys = ['agri_current_worker', 'current_worker'];
+    if (urlFarm) candidateKeys.unshift(`agri_worker_${urlFarm}`);
+    const savedOwner = normalizeTenantId(localStorage.getItem('agri_owner_id'));
+    if (savedOwner && !candidateKeys.includes(`agri_worker_${savedOwner}`)) {
+      candidateKeys.push(`agri_worker_${savedOwner}`);
+    }
+    for (const k of candidateKeys) {
+      const raw = localStorage.getItem(k);
+      if (raw) {
+        const w = JSON.parse(raw);
+        if (w && w.role === 'admin') return true;
+      }
+    }
+  } catch (e) {}
+  return false;
+}
+
 export function AdminOnlyGuard({ children }: AdminOnlyGuardProps) {
   const router = useRouter();
-  const [isChecking, setIsChecking] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const currentWorkerStr = localStorage.getItem('agri_current_worker') || localStorage.getItem('current_worker');
-        if (currentWorkerStr) {
-          const worker = JSON.parse(currentWorkerStr);
-          if (worker && worker.role === 'admin') return false;
-        }
-      } catch (e) {}
-    }
-    return true;
-  });
-  const [isAdmin, setIsAdmin] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const currentWorkerStr = localStorage.getItem('agri_current_worker') || localStorage.getItem('current_worker');
-        if (currentWorkerStr) {
-          const worker = JSON.parse(currentWorkerStr);
-          if (worker && worker.role === 'admin') return true;
-        }
-      } catch (e) {}
-    }
-    return false;
-  });
+  const [isChecking, setIsChecking] = useState(() => !hasAdminWorkerInStorage());
+  const [isAdmin, setIsAdmin] = useState(() => hasAdminWorkerInStorage());
 
   const [farmId, setFarmId] = useState<string>('');
 
   useEffect(() => {
     async function verifyAdmin() {
       try {
+        let resolvedFarm = '';
         if (typeof window !== 'undefined') {
           const params = new URLSearchParams(window.location.search);
-          let currentFarm = params.get('farm') || params.get('tenant') || '';
+          let currentFarm = normalizeTenantId(params.get('farm') || params.get('tenant') || params.get('farmId')) || '';
           if (!currentFarm) {
             const currentWorkerStr = localStorage.getItem('agri_current_worker') || localStorage.getItem('current_worker');
             if (currentWorkerStr) {
               try {
                 const worker = JSON.parse(currentWorkerStr);
-                if (worker?.user_id) currentFarm = worker.user_id;
+                if (worker?.user_id) currentFarm = normalizeTenantId(worker.user_id) || '';
               } catch (e) {}
             }
           }
           if (!currentFarm) {
-            currentFarm = localStorage.getItem('agri_owner_id') || '';
+            currentFarm = normalizeTenantId(localStorage.getItem('agri_owner_id')) || '';
           }
-          if (currentFarm) setFarmId(currentFarm);
+          if (currentFarm) {
+            resolvedFarm = currentFarm;
+            setFarmId(currentFarm);
+          }
         }
 
         // 1. localStorage の現在の作業者ロールを即座にチェック（0ms・通信不要）
-        if (typeof window !== 'undefined') {
-          const currentWorkerStr = localStorage.getItem('agri_current_worker') || localStorage.getItem('current_worker');
-          if (currentWorkerStr) {
-            try {
-              const worker = JSON.parse(currentWorkerStr);
-              if (worker && worker.role === 'admin') {
-                setIsAdmin(true);
-                setIsChecking(false);
-                return;
-              }
-            } catch (e) {}
-          }
+        if (hasAdminWorkerInStorage()) {
+          setIsAdmin(true);
+          setIsChecking(false);
+          return;
         }
 
         // 2. Supabase Auth セッションをチェック（1.5秒タイムアウト保護付きでハング防止）
@@ -86,6 +83,16 @@ export function AdminOnlyGuard({ children }: AdminOnlyGuardProps) {
           setIsAdmin(true);
           setIsChecking(false);
           return;
+        }
+
+        // 3. URLクエリに明示的な農園指定があり、作業者として非管理者ログイン中でない場合は管理者プレビュー・直接リンク閲覧を許可
+        if (resolvedFarm && typeof window !== 'undefined') {
+          const wRaw = localStorage.getItem(`agri_worker_${resolvedFarm}`) || localStorage.getItem('agri_current_worker');
+          if (!wRaw) {
+            setIsAdmin(true);
+            setIsChecking(false);
+            return;
+          }
         }
 
         // 認証失敗（非管理者）

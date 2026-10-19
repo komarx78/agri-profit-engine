@@ -157,7 +157,7 @@ const FARM_RICH_MENUS: Record<string, { farmUserId: string; companyName: string;
 
     // 4. 【4〜6桁のLINE連携専用コードでのワーカー連携】
     // 全角英数字を半角に変換し、前後の日本語（「連携コード:」等）を除去して正規化
-    const halfText = text.replace(/[！-～]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xfee0));
+    const halfText = text.replace(/[！-～]/g, (s: string) => String.fromCharCode(s.charCodeAt(0) - 0xfee0));
     const extractedCode = halfText.replace(/^.*?(コード|CODE|PIN)[:：\s]*/i, '').trim();
 
     if (!matchedWorker && /^[A-Za-z0-9]{4,6}$/.test(extractedCode)) {

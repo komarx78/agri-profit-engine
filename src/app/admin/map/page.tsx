@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, Polygon, InfoWindow } from '@react-google-maps/api';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
-import { getTenantCultivationPlansAction } from '@/app/actions/farm';
+import { getTenantCultivationPlansAction, getAdminMapDataAction, saveMasterRecordAction, deleteMasterRecordAction, getFieldPolygonDetailAction } from '@/app/actions/farm';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { MapPin, Plus, Loader2, Save, X, Info, Search, Check, Trash2, Edit2, Palette, ArrowRight, FlaskConical } from 'lucide-react';
 import Link from 'next/link';
@@ -143,25 +143,34 @@ export default function MapPage() {
         return;
       }
 
-      // 自社テナントの圃場データを取得
-      const { data: fieldsData, error } = await supabase
-        .from('fields')
-        .select(`
-          id,
-          name,
-          area_size,
-          polygon_coordinates,
-          color
-        `)
-        .eq('user_id', tenantId)
-        .order('name');
-        
-      if (error) throw error;
+      let fieldsData: any[] = [];
+      let plansData: any[] = [];
 
-      // TODO: work_logsなどを取得して、各圃場に紐づけて「現在の状況」を算出する
-      // 今回はダミーのステータス（色）を付与
-      const mappedFields = (fieldsData || []).map(f => {
-        // polygon_coordinates は JSONB で保存されている想定 [{lat, lng}, ...]
+      const srvRes = await getAdminMapDataAction(tenantId);
+      if (srvRes?.success) {
+        fieldsData = srvRes.fields || [];
+        plansData = srvRes.plans || [];
+      } else {
+        const { data, error } = await supabase
+          .from('fields')
+          .select(`
+            id,
+            name,
+            area_size,
+            polygon_coordinates,
+            color
+          `)
+          .eq('user_id', tenantId)
+          .order('name');
+        if (error) throw error;
+        fieldsData = data || [];
+      }
+
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
+
+      const mappedFields = (fieldsData || []).map((f, idx) => {
         let path = [];
         if (typeof f.polygon_coordinates === 'string') {
           try { path = JSON.parse(f.polygon_coordinates); } catch(e) {}
@@ -169,12 +178,42 @@ export default function MapPage() {
           path = f.polygon_coordinates;
         }
 
+        // 実際の作付計画（cultivation_plans_v2）から現在の状況を算出
+        const fieldPlans = plansData.filter((p: any) => p.field_id === f.id);
+        const activePlan = fieldPlans.find((p: any) => {
+          const y = Number(p.year) || currentYear;
+          const sm = Number(p.start_month) || 1;
+          const em = Number(p.end_month) || 12;
+          if (y !== currentYear) return false;
+          return sm <= em
+            ? (currentMonth >= sm && currentMonth <= em)
+            : (currentMonth >= sm || currentMonth <= em);
+        }) || fieldPlans[0];
+
+        let statusText = '作付予定なし（休閑・準備中）';
+        let defaultColor = '#10b981';
+
+        if (activePlan) {
+          const cropName = activePlan.crops?.name || '作目設定済';
+          if (activePlan.status === 'harvesting') {
+            statusText = `収穫期（${cropName}）`;
+            defaultColor = '#f59e0b';
+          } else if (activePlan.status === 'completed') {
+            statusText = `収穫完了（${cropName}）`;
+            defaultColor = '#64748b';
+          } else {
+            statusText = `栽培中（${cropName}）`;
+            defaultColor = '#10b981';
+          }
+        } else {
+          defaultColor = idx % 2 === 0 ? '#10b981' : '#3b82f6';
+        }
+
         return {
           ...f,
           path,
-          // 色が保存されていればそれを、無ければIDで適当に割り当て
-          statusColor: f.color || (f.id % 2 === 0 ? '#10b981' : '#f59e0b'),
-          statusText: f.id % 2 === 0 ? '生育中（キャベツ）' : '収穫待ち'
+          statusColor: f.color || defaultColor,
+          statusText
         };
       });
 
@@ -291,45 +330,45 @@ export default function MapPage() {
     
     try {
       setIsSaving(true);
-      
-      let error;
+      const tenantId = await getCurrentTenantId();
       
       if (selectedUnmappedFieldId) {
         // 既存マスタへの紐付け（Update）
-        const res = await supabase
-          .from('fields')
-          .update({ 
-            area_size: newArea,
-            polygon_coordinates: newPolygonPath,
-            color: newFieldColor
-          })
-          .eq('id', selectedUnmappedFieldId);
-        error = res.error;
+        const payload = {
+          area_size: newArea,
+          polygon_coordinates: newPolygonPath,
+          color: newFieldColor
+        };
+        const srv = tenantId ? await saveMasterRecordAction(tenantId, 'fields', payload, String(selectedUnmappedFieldId)) : { success: false };
+        if (!srv.success) {
+          const res = await supabase
+            .from('fields')
+            .update(payload)
+            .eq('id', selectedUnmappedFieldId);
+          if (res.error) throw res.error;
+        }
       } else {
         // 新規作成（Insert）
-        const tenantId = await getCurrentTenantId();
         const tNames = await autoTranslate(newFieldName);
-        const res = await supabase
-          .from('fields')
-          .insert([
-            { 
-              user_id: tenantId,
-              name: newFieldName,
-              name_vi: tNames.vi,
-              name_id: tNames.id,
-              name_zh: tNames.zh,
-              name_en: tNames.en,
-              name_si: tNames.si,
-              name_km: tNames.km,
-              area_size: newArea,
-              polygon_coordinates: newPolygonPath,
-              color: newFieldColor
-            }
-          ]);
-        error = res.error;
+        const payload = { 
+          user_id: tenantId,
+          name: newFieldName,
+          name_vi: tNames.vi,
+          name_id: tNames.id,
+          name_zh: tNames.zh,
+          name_en: tNames.en,
+          name_si: tNames.si,
+          name_km: tNames.km,
+          area_size: newArea,
+          polygon_coordinates: newPolygonPath,
+          color: newFieldColor
+        };
+        const srv = tenantId ? await saveMasterRecordAction(tenantId, 'fields', payload, null) : { success: false };
+        if (!srv.success) {
+          const res = await supabase.from('fields').insert([payload]);
+          if (res.error) throw res.error;
+        }
       }
-        
-      if (error) throw error;
       
       setIsSaveModalOpen(false);
       setNewFieldName('');
@@ -352,12 +391,15 @@ export default function MapPage() {
     if (!confirm(`本当に「${fieldName}」を削除してもよろしいですか？\nこの操作は取り消せません。`)) return;
     
     try {
-      const { error } = await supabase
-        .from('fields')
-        .delete()
-        .eq('id', fieldId);
-        
-      if (error) throw error;
+      const tenantId = await getCurrentTenantId();
+      const srv = tenantId ? await deleteMasterRecordAction(tenantId, 'fields', String(fieldId)) : { success: false };
+      if (!srv.success) {
+        const { error } = await supabase
+          .from('fields')
+          .delete()
+          .eq('id', fieldId);
+        if (error) throw error;
+      }
       
       alert('削除しました。');
       setSelectedField(null);
@@ -373,21 +415,25 @@ export default function MapPage() {
   const handleSaveFieldName = async () => {
     if (!selectedField || !editName.trim()) return;
     try {
+      const tenantId = await getCurrentTenantId();
       const tNames = await autoTranslate(editName.trim());
-      const { error } = await supabase
-        .from('fields')
-        .update({ 
-          name: editName.trim(),
-          name_vi: tNames.vi,
-          name_id: tNames.id,
-          name_zh: tNames.zh,
-          name_en: tNames.en,
-          name_si: tNames.si,
-          name_km: tNames.km
-        })
-        .eq('id', selectedField.id);
-        
-      if (error) throw error;
+      const payload = { 
+        name: editName.trim(),
+        name_vi: tNames.vi,
+        name_id: tNames.id,
+        name_zh: tNames.zh,
+        name_en: tNames.en,
+        name_si: tNames.si,
+        name_km: tNames.km
+      };
+      const srv = tenantId ? await saveMasterRecordAction(tenantId, 'fields', payload, String(selectedField.id)) : { success: false };
+      if (!srv.success) {
+        const { error } = await supabase
+          .from('fields')
+          .update(payload)
+          .eq('id', selectedField.id);
+        if (error) throw error;
+      }
       
       // ローカルのステートも更新
       setSelectedField({ ...selectedField, name: editName.trim() });
@@ -409,6 +455,7 @@ export default function MapPage() {
     }
     
     try {
+      const tenantId = await getCurrentTenantId();
       const pathArray = polygon.getPath().getArray();
       const newPath = pathArray.map(p => ({ lat: p.lat(), lng: p.lng() }));
       
@@ -419,15 +466,17 @@ export default function MapPage() {
         newAreaSize = Number((areaSqMeters / 100).toFixed(1));
       }
 
-      const { error } = await supabase
-        .from('fields')
-        .update({ 
-          polygon_coordinates: newPath,
-          area_size: newAreaSize || undefined // 計算失敗時は更新しない
-        })
-        .eq('id', editingFieldId);
+      const payload: Record<string, any> = { polygon_coordinates: newPath };
+      if (newAreaSize) payload.area_size = newAreaSize;
 
-      if (error) throw error;
+      const srv = tenantId ? await saveMasterRecordAction(tenantId, 'fields', payload, String(editingFieldId)) : { success: false };
+      if (!srv.success) {
+        const { error } = await supabase
+          .from('fields')
+          .update(payload)
+          .eq('id', editingFieldId);
+        if (error) throw error;
+      }
 
       alert('形を修正しました！面積も自動再計算されています。');
       setEditingFieldId(null);
@@ -443,11 +492,15 @@ export default function MapPage() {
   // 色を変更する
   const handleChangeColor = async (fieldId: number, color: string) => {
     try {
-      const { error } = await supabase
-        .from('fields')
-        .update({ color })
-        .eq('id', fieldId);
-      if (error) throw error;
+      const tenantId = await getCurrentTenantId();
+      const srv = tenantId ? await saveMasterRecordAction(tenantId, 'fields', { color }, String(fieldId)) : { success: false };
+      if (!srv.success) {
+        const { error } = await supabase
+          .from('fields')
+          .update({ color })
+          .eq('id', fieldId);
+        if (error) throw error;
+      }
       
       // 再取得
       fetchFieldsData();
@@ -474,6 +527,18 @@ export default function MapPage() {
     // 実際のデータを取得（最新の作付計画、作業履歴、土壌診断）
     try {
       const tenantId = await getCurrentTenantId();
+      if (tenantId) {
+        const detailRes = await getFieldPolygonDetailAction(tenantId, field.id);
+        if (detailRes.success) {
+          const fieldPlans = (detailRes.plans || [])
+            .filter((p: any) => p.field_id === field.id)
+            .sort((a: any, b: any) => (Number(b.year) - Number(a.year)) || (Number(b.start_month) - Number(a.start_month)));
+          const latestPlan = fieldPlans.length > 0 ? fieldPlans[0] : null;
+          setSelectedFieldDetails({ plan: latestPlan, works: detailRes.works || [], soil: detailRes.soil } as any);
+          return;
+        }
+      }
+
       const [plansRes, worksRes, soilRes] = await Promise.all([
         tenantId ? getTenantCultivationPlansAction(tenantId) : Promise.resolve({ success: true, data: [] }),
         supabase

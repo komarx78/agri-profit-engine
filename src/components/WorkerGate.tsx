@@ -64,7 +64,7 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
   const [workers, setWorkers] = useState<any[]>([]);
   const [currentFarmName, setCurrentFarmName] = useState<string>('');
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
-  const [step, setStep] = useState<'enter_farm_code' | 'select_worker' | 'enter_pin'>('select_worker');
+  const [step, setStep] = useState<'enter_farm_code' | 'select_worker' | 'enter_pin'>('enter_farm_code');
   const [pinCode, setPinCode] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -235,14 +235,20 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
 
     try {
       let workerList: any[] = [];
-      let resolvedOwnerId = targetOwnerId;
+      let resolvedOwnerId = targetOwnerId.trim();
+      const lowerTarget = resolvedOwnerId.toLowerCase();
+      const noHyphenTarget = lowerTarget.replace(/-/g, '');
+      if (SHORT_FARM_CODES[lowerTarget] || SHORT_FARM_CODES[noHyphenTarget]) {
+        resolvedOwnerId = SHORT_FARM_CODES[lowerTarget] || SHORT_FARM_CODES[noHyphenTarget];
+      }
 
       // 1. 指定農園のみをピンポイント照合（他社一覧の全件取得は完全遮断）
       try {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedOwnerId);
         const { data: farm } = await supabase
           .from('company_settings')
           .select('id, user_id, company_name')
-          .or(`user_id.eq.${targetOwnerId},id.eq.${targetOwnerId}`)
+          .or(isUuid ? `user_id.eq.${resolvedOwnerId},id.eq.${resolvedOwnerId}` : `farm_code.ilike.${lowerTarget},farm_code.ilike.${noHyphenTarget}`)
           .maybeSingle();
 
         if (farm) {
@@ -522,38 +528,38 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
           <div>
             <div className="text-center mb-6">
               <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-black mb-3">
-                <Building className="w-3.5 h-3.5" />
-                <span>現場ポータル 初期接続</span>
+                <Building className="w-3.5 h-3.5 shrink-0" />
+                <span className="whitespace-nowrap">現場ポータル 初期接続</span>
               </div>
-              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+              <h1 className="text-lg sm:text-2xl font-black text-white tracking-tight whitespace-nowrap">
                 {entryMode === 'choose' ? '接続方法を選択してください' : '農園コードを手入力'}
               </h1>
-              <p className="text-xs text-slate-300 mt-2 max-w-xs mx-auto leading-relaxed font-medium">
+              <p className="text-xs text-slate-300 mt-2 mx-auto leading-relaxed font-medium">
                 {entryMode === 'choose'
-                  ? '一度接続すれば、次回からは自動で当農園が開きます。'
-                  : '農園の管理者から案内された【農園コード】を入力してください。'}
+                  ? '一度接続すると、次回から自動で開きます'
+                  : '管理者から案内された【農園コード】を入力してください'}
               </p>
             </div>
 
             {/* 🌟 2択選択画面（chooseモード） */}
             {entryMode === 'choose' ? (
-              <div className="space-y-4 max-w-sm mx-auto mb-6">
+              <div className="space-y-4 max-w-sm mx-auto mb-2">
                 {/* 選択肢①：📷 ポスターのQRコードを読み取る（おすすめ） */}
                 <button
                   type="button"
                   onClick={() => setIsQrModalOpen(true)}
-                  className="w-full p-5 rounded-3xl bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white text-left shadow-xl shadow-emerald-950/40 border border-emerald-400/30 transition-all active:scale-98 cursor-pointer group relative overflow-hidden"
+                  className="w-full p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white text-left shadow-xl shadow-emerald-950/40 border border-emerald-400/30 transition-all active:scale-98 cursor-pointer group relative overflow-hidden"
                 >
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center shrink-0 shadow-inner group-hover:scale-105 transition-transform">
-                      <Camera className="w-6 h-6 text-white" />
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-11 h-11 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center shrink-0 shadow-inner group-hover:scale-105 transition-transform">
+                      <Camera className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-black text-base text-white tracking-wide">
+                      <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                        <span className="font-black text-sm sm:text-base text-white tracking-tight whitespace-nowrap">
                           QRコードを読み取る
                         </span>
-                        <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full shadow-xs">
+                        <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full shadow-xs shrink-0 whitespace-nowrap">
                           おすすめ
                         </span>
                       </div>
@@ -564,7 +570,7 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
                   </div>
                   <div className="mt-3 pt-2.5 border-t border-white/15 flex items-center justify-between text-xs text-emerald-200 font-bold">
                     <span>カメラを起動してスキャン</span>
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform shrink-0" />
                   </div>
                 </button>
 
@@ -579,25 +585,25 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
                       <span className="font-mono font-black text-sm">#</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-bold text-sm text-slate-200 group-hover:text-white">
+                      <div className="font-bold text-sm text-slate-200 group-hover:text-white whitespace-nowrap">
                         農園コードを手入力する
                       </div>
-                      <p className="text-[11px] text-slate-400">
-                        案内されたコード（例: SAHARA-789）を直接入力
+                      <p className="text-[11px] text-slate-400 mt-0.5 whitespace-nowrap">
+                        案内されたコード（例: FARM-123）を入力
                       </p>
                     </div>
-                    <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-white group-hover:translate-x-1 transition-all" />
+                    <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-white group-hover:translate-x-1 transition-all shrink-0" />
                   </div>
                 </button>
 
-                <div className="p-3.5 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-[11px] text-slate-400 space-y-1.5 leading-relaxed text-center">
+                <div className="p-3.5 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-[11px] text-slate-400 space-y-1 leading-relaxed text-center">
                   <p className="text-emerald-400 font-bold">💡 次回からの自動表示について</p>
-                  <p>一度接続すれば、次回以降はアプリを開くだけで自動的に当農園が開きます（再入力は一切不要です）。</p>
+                  <p>一度接続すれば、次回以降はアプリを開くだけで自動的に当農園が開きます（再入力不要）。</p>
                 </div>
               </div>
             ) : (
               /* ⌨️ 手入力フォーム（manualモード） */
-              <form onSubmit={handleVerifyFarmCode} className="space-y-4 max-w-sm mx-auto mb-6">
+              <form onSubmit={handleVerifyFarmCode} className="space-y-4 max-w-sm mx-auto mb-2">
                 <div className="flex items-center justify-between">
                   <button
                     type="button"
@@ -605,16 +611,16 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
                       setEntryMode('choose');
                       setErrorMsg('');
                     }}
-                    className="text-xs text-emerald-400 hover:text-emerald-300 font-bold inline-flex items-center gap-1 cursor-pointer py-1"
+                    className="text-xs text-emerald-400 hover:text-emerald-300 font-bold inline-flex items-center gap-1 cursor-pointer py-1 whitespace-nowrap"
                   >
                     <span>← 接続方法の選択に戻る</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsQrModalOpen(true)}
-                    className="text-xs text-slate-400 hover:text-emerald-300 font-bold inline-flex items-center gap-1 cursor-pointer py-1"
+                    className="text-xs text-slate-400 hover:text-emerald-300 font-bold inline-flex items-center gap-1 cursor-pointer py-1 whitespace-nowrap"
                   >
-                    <Camera className="w-3.5 h-3.5 text-emerald-400" />
+                    <Camera className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                     <span>QR読み取りにする</span>
                   </button>
                 </div>
@@ -627,7 +633,7 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
                     type="text"
                     value={inputFarmId}
                     onChange={(e) => setInputFarmId(e.target.value)}
-                    placeholder="例: SAHARA-789"
+                    placeholder="例: FARM-123"
                     className="w-full px-4 py-3.5 rounded-2xl bg-slate-800/90 border-2 border-slate-700 text-white placeholder-slate-500 font-bold text-base focus:border-emerald-500 focus:outline-none transition-all text-center tracking-wider uppercase"
                     autoFocus
                   />
@@ -667,16 +673,6 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
                 </div>
               </form>
             )}
-
-            <div className="text-center pt-2">
-              <a
-                href="/login"
-                className="text-xs text-slate-400 hover:text-emerald-400 transition-colors inline-flex items-center gap-1 font-bold"
-              >
-                <span>管理者の方はこちら（ログイン）</span>
-                <ArrowRight className="w-3 h-3" />
-              </a>
-            </div>
           </div>
         )}
 
@@ -691,23 +687,21 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
                   <Building className="w-3.5 h-3.5" />
                   <span>{currentFarmName || '所属農園'}</span>
                 </div>
-                {!farmId && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      safeStorage.clearWorkerCache();
-                      setWorkers([]);
-                      setCurrentFarmName('');
-                      setInputFarmId('');
-                      setErrorMsg('');
-                      setStep('enter_farm_code');
-                    }}
-                    className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
-                  >
-                    <RefreshCw className="w-3 h-3 text-emerald-400" />
-                    <span>農園を変更</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    safeStorage.clearWorkerCache();
+                    setWorkers([]);
+                    setCurrentFarmName('');
+                    setInputFarmId('');
+                    setErrorMsg('');
+                    setStep('enter_farm_code');
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+                >
+                  <RefreshCw className="w-3 h-3 text-emerald-400" />
+                  <span>農園を変更</span>
+                </button>
               </div>
               <div className="w-12 h-12 bg-emerald-500/20 rounded-2xl mx-auto flex items-center justify-center mb-2 border border-emerald-500/30">
                 <User className="w-6 h-6 text-emerald-400" />
@@ -761,11 +755,18 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
                   <p>{t('noWorkersFound', language)}</p>
                   <button
                     type="button"
-                    onClick={() => loadWorkersForOwner('62163024-2c8e-4057-a872-2455dbc58d32')}
+                    onClick={() => {
+                      safeStorage.clearWorkerCache();
+                      setWorkers([]);
+                      setCurrentFarmName('');
+                      setInputFarmId('');
+                      setErrorMsg('');
+                      setStep('enter_farm_code');
+                    }}
                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs inline-flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>佐原農園のスタッフを読み込む</span>
+                    <span>農園コードを入力して接続する</span>
                   </button>
                 </div>
               )}
@@ -926,7 +927,21 @@ export function WorkerGate({ onLogin, farmId }: WorkerGateProps) {
         )}
 
         {/* 共通フッターリンク */}
-        <div className="mt-6 pt-5 border-t border-slate-800 text-center space-y-3">
+        <div className="mt-5 pt-4 border-t border-slate-800 text-center space-y-3">
+          {/* 🎁 新規農園・1ヶ月無料お試し登録導線 */}
+          <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-950/90 via-slate-900 to-slate-900 border border-emerald-500/40 shadow-md">
+            <p className="text-[11px] font-black text-emerald-300 mb-2">
+              🌱 はじめてアプリをご利用の農園主様へ
+            </p>
+            <a
+              href="/register"
+              className="w-full py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs inline-flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95 whitespace-nowrap"
+            >
+              <span>🎁 1ヶ月無料でお試し登録（農園コード発行）</span>
+              <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+            </a>
+          </div>
+
           <div>
             <a
               href="/login"

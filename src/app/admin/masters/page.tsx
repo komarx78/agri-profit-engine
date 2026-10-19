@@ -3,10 +3,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { HelpTooltip } from '@/components/HelpTooltip';
-import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft, Coffee, Briefcase, FlaskConical, Wheat, Truck, Smartphone, MessageSquare, Search, Table, LayoutGrid } from 'lucide-react';
+import { Database, User, Sprout, MapPin, Package, Banknote, Upload, CheckCircle2, Download, Plus, Edit2, Trash2, X, Loader2, ListTree, AlignLeft, Coffee, Briefcase, FlaskConical, Wheat, Truck, Smartphone, MessageSquare, Search, Table, LayoutGrid, RefreshCw } from 'lucide-react';
 import Papa from 'papaparse';
 import { autoTranslateMasterData } from '@/app/actions/translate';
-import { getTenantCropStandardsAction, saveTenantCropStandardAction } from '@/app/actions/farm';
+import { getTenantCropStandardsAction, saveTenantCropStandardAction, getAdminMastersDataAction, saveMasterRecordAction, deleteMasterRecordAction } from '@/app/actions/farm';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { LineLinkModal } from '@/components/LineLinkModal';
 
@@ -92,10 +92,35 @@ export default function MastersPage() {
       const userId = await getCurrentTenantId();
       
       if (!userId) {
-        // セッションが切れている場合はログイン画面へ
         if (typeof window !== 'undefined') {
           window.location.href = '/login';
         }
+        return;
+      }
+
+      const srvRes = await getAdminMastersDataAction(userId);
+      if (srvRes?.success) {
+        setCrops(srvRes.crops || []);
+        setFields(srvRes.fields || []);
+
+        const rawWorkers = srvRes.workers || [];
+        const populatedWorkers = rawWorkers.map((w: any) => {
+          if (!w.line_user_id && (!w.line_link_pin || w.line_link_pin.trim() === '')) {
+            const generatedCode = generateLineLinkCode();
+            saveMasterRecordAction(userId, 'workers', {
+              line_link_pin: generatedCode,
+              line_link_pin_expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+            }, w.id).catch(() => {});
+            return { ...w, line_link_pin: generatedCode };
+          }
+          return w;
+        });
+        setWorkers(populatedWorkers);
+        setDepartments(srvRes.departments || []);
+        setMaterials(srvRes.materials || []);
+        setSalesPrices(srvRes.salesPrices || []);
+        setCropStandards(srvRes.cropStandards || []);
+        setChannels(srvRes.channels || []);
         return;
       }
 
@@ -125,8 +150,7 @@ export default function MastersPage() {
               line_link_pin_expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
             })
             .eq('id', w.id)
-            .then(() => {})
-            .catch(() => {});
+            .then(() => {}, () => {});
           return { ...w, line_link_pin: generatedCode };
         }
         return w;
@@ -285,19 +309,21 @@ export default function MastersPage() {
       if (table === 'sales_prices' && dataToSave.channel_name) {
         const existsInChannels = channels.some(ch => ch.name === dataToSave.channel_name);
         if (!existsInChannels) {
-          await supabase.from('sales_channels').insert([{ 
+          await saveMasterRecordAction(tenantId, 'sales_channels', {
             name: dataToSave.channel_name,
-            user_id: tenantId 
-          }]);
+            user_id: tenantId
+          });
         }
         delete dataToSave.isCustomChannel;
       }
 
-      let query;
       let insertedId = editingItem?.id;
       let savedData: any = null;
-      
-      if (editingItem) {
+
+      const srvSave = await saveMasterRecordAction(tenantId, table, dataToSave, editingItem?.id || null);
+      if (srvSave?.success) {
+        savedData = srvSave.data;
+      } else if (editingItem) {
         let updateQuery = supabase.from(table).update(dataToSave).eq('id', editingItem.id);
         if (tenantId) {
           updateQuery = (table === 'departments') ? updateQuery.eq('tenant_id', tenantId) : updateQuery.eq('user_id', tenantId);
@@ -305,7 +331,6 @@ export default function MastersPage() {
         const { data, error } = await updateQuery.select();
         if (error) {
           console.warn('Update failed with multilang, retrying with fallback:', error);
-          // 多言語カラムを除去してリトライ
           const fallbackData = { ...dataToSave };
           delete fallbackData.name_en;
           delete fallbackData.name_vi;
@@ -328,7 +353,6 @@ export default function MastersPage() {
         const { data, error } = await supabase.from(table).insert([insertData]).select();
         if (error) {
           console.warn('Insert failed with multilang, retrying with fallback:', error);
-          // 多言語カラムを除去してリトライ
           const fallbackInsert = { ...insertData };
           delete fallbackInsert.name_en;
           delete fallbackInsert.name_vi;
@@ -400,10 +424,13 @@ export default function MastersPage() {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) throw new Error('テナントIDが特定できません。ログイン状態を確認してください。');
       const table = (type === 'pesticides' || type === 'fertilizers') ? 'materials' : type;
-      const deleteQuery = supabase.from(table).delete().eq('id', id);
-      const scopedDelete = (table === 'departments') ? deleteQuery.eq('tenant_id', tenantId) : deleteQuery.eq('user_id', tenantId);
-      const { error } = await scopedDelete;
-      if (error) throw error;
+      const srvDel = await deleteMasterRecordAction(tenantId, table, id);
+      if (!srvDel?.success) {
+        const deleteQuery = supabase.from(table).delete().eq('id', id);
+        const scopedDelete = (table === 'departments') ? deleteQuery.eq('tenant_id', tenantId) : deleteQuery.eq('user_id', tenantId);
+        const { error } = await scopedDelete;
+        if (error) throw error;
+      }
       
       setUploadStatus({ type: 'success', message: '削除しました' });
       setTimeout(() => setUploadStatus(null), 3000);
@@ -501,7 +528,7 @@ export default function MastersPage() {
             const inserts: any[] = [];
             const updates: { id: string; data: any }[] = [];
 
-            for (const row of data) {
+            for (const row of data as Record<string, any>[]) {
               const rawName = (row['農薬名'] || row['資材名'] || row['肥料名'] || row.name || '').trim();
               if (!rawName) continue;
 

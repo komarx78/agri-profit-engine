@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Printer, FileText, Edit2, Save, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { updateInvoiceAmounts } from '@/app/actions/b2b';
+import { updateInvoiceAmounts, getB2BInvoicePrintDataAction, saveB2BInvoiceEditedPricesAction } from '@/app/actions/b2b';
 import { getCurrentTenantId } from '@/lib/tenant';
 
 export default function InvoicePrintPage({ params }: { params: Promise<{ id: string }> }) {
@@ -38,6 +38,14 @@ export default function InvoicePrintPage({ params }: { params: Promise<{ id: str
         }
         setTenantId(activeTenantId);
 
+        const srvRes = await getB2BInvoicePrintDataAction(invoiceId, activeTenantId);
+        if (srvRes?.success && srvRes.invoice) {
+          setInvoice(srvRes.invoice);
+          if (srvRes.company) setCompany(srvRes.company);
+          setOrders(srvRes.orders || []);
+          return;
+        }
+
         const { data: inv, error: invErr } = await supabase
           .from('b2b_invoices')
           .select('*, customer:b2b_customers(*)')
@@ -48,7 +56,7 @@ export default function InvoicePrintPage({ params }: { params: Promise<{ id: str
         if (invErr || !inv) throw new Error("請求書が見つかりません");
         setInvoice(inv);
 
-        const ownerId = inv.user_id;
+        const ownerId = inv.user_id || activeTenantId;
         const { data: comp } = await supabase
           .from('company_settings')
           .select('*')
@@ -65,7 +73,7 @@ export default function InvoicePrintPage({ params }: { params: Promise<{ id: str
         const { data: ords } = await supabase
           .from('b2b_orders')
           .select('*, items:b2b_order_items(*, crops(*))')
-          .eq('user_id', tenantId)
+          .eq('user_id', activeTenantId)
           .eq('customer_id', inv.customer_id)
           .gte('delivery_date', startDate)
           .lt('delivery_date', endDate)
@@ -104,6 +112,15 @@ export default function InvoicePrintPage({ params }: { params: Promise<{ id: str
   const handleSavePrices = async () => {
     setIsSaving(true);
     try {
+      const currentTid = tenantId || (await getCurrentTenantId());
+      const srvRes = await saveB2BInvoiceEditedPricesAction(invoiceId, orders, currentTid);
+      if (srvRes?.success) {
+        setInvoice((prev: any) => prev ? { ...prev, subtotal: srvRes.subtotal, tax: srvRes.tax, total_amount: srvRes.total } : prev);
+        alert("金額を保存しました。");
+        setIsEditing(false);
+        return;
+      }
+
       for (const order of orders) {
         if (order.items && Array.isArray(order.items)) {
           for (const item of order.items) {
@@ -122,8 +139,7 @@ export default function InvoicePrintPage({ params }: { params: Promise<{ id: str
       const subtotal = orders.reduce((sum, o) => sum + Number(o.total_amount), 0);
       const tax = Math.floor(subtotal * 0.08);
       const total = subtotal + tax;
-      const tenantId = await getCurrentTenantId();
-      const res = await updateInvoiceAmounts(invoiceId, subtotal, tax, total, tenantId);
+      const res = await updateInvoiceAmounts(invoiceId, subtotal, tax, total, currentTid);
 
       if (res.success) {
         setInvoice((prev: any) => prev ? { ...prev, subtotal, tax, total_amount: total } : prev);

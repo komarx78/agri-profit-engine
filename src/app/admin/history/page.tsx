@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
+import { getAdminHistoryLogsAction } from '@/app/actions/farm';
 import { HelpTooltip } from '@/components/HelpTooltip';
 import { History, Search, Download, CheckCircle2, Clock, Filter, User, MapPin, Sprout, Image as ImageIcon, FileText, X, Video, Play, Loader2 } from 'lucide-react';
 import Papa from 'papaparse';
@@ -30,6 +31,12 @@ function HistoryContent() {
         const tenantId = await getCurrentTenantId();
         if (!tenantId) {
           setIsLoading(false);
+          return;
+        }
+
+        const srv = await getAdminHistoryLogsAction(tenantId);
+        if (srv.success && srv.data) {
+          setWorkLogs(srv.data);
           return;
         }
 

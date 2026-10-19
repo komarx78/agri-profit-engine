@@ -6,10 +6,10 @@ import { getJSTDate, getJSTTime } from '@/lib/dateUtils';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// Supabase client (検証済みのキーを優先使用)
+// Supabase client (Service Role Key を最優先使用)
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
@@ -152,8 +152,9 @@ export async function GET(req: Request) {
         adminLineUserIds.push(compSetting.admin_line_user_id);
       }
 
-      // この農園専用の現場ポータルURL（他農園への誤遷移を物理遮断）
+      // この農園専用の現場ポータルURL・出退勤修正画面URL（他農園への誤遷移を物理遮断）
       const farmPortalUrl = `https://agri-profit-engine.vercel.app/portal/${tenantId}`;
+      const farmHrFixUrl = `https://agri-profit-engine.vercel.app/hr?farm=${tenantId}`;
 
       // =========================================================================
       // 🌿 A. 前日以前の未確定ログ（1日1回限定リマインド・未解決の間は毎日朝/日中に1回送信）
@@ -182,22 +183,21 @@ export async function GET(req: Request) {
             const clockInTime = l.clock_in 
               ? new Date(l.clock_in).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }) 
               : '--:--';
-            return `・${wName}：${l.date} 出勤 ${clockInTime}（退勤未打刻）`;
+            return `・${wName} さん：${l.date}（${clockInTime} に出勤したまま）`;
           });
 
           pastStaffCount = pastLogs.length;
-          const pastAlertTitle = `【${companyName}】過去の未退勤リマインド（計 ${pastLogs.length}件）🌱`;
+          const pastAlertTitle = `【${companyName}】退勤ボタンの押し忘れのお知らせ（${pastLogs.length}件）🌱`;
           const pastAlertBody = [
-            `お疲れ様です。農業収益エンジン（勤怠管理）です。`,
-            ``,
-            `${companyName} において、前日以前の「退勤打刻」が未確定のままとなっているログがございます。`,
+            `お疲れ様です！`,
+            `昨日より前の日に、「出勤」を押したあと「退勤」が押されていない記録があります。`,
             ``,
             pastStaffLines.slice(0, 10).join('\n'),
             pastStaffLines.length > 10 ? `...他 ${pastStaffLines.length - 10}件` : '',
             ``,
-            `現場ポータルよりご確認の上、代理打刻または退勤時刻の修正をお願いいたします。`,
-            `【${companyName}】現場ポータルURL:`,
-            farmPortalUrl
+            `▼ 下のURLを開くと、画面の一番上に「未退勤の修正ボタン」が出ます。`,
+            `「17:00で退勤にする」「時間を指定して修正」「間違い打刻を消す」のどれかを押すだけで完了します👇`,
+            farmHrFixUrl
           ].filter(Boolean).join('\n');
 
           // 農業管理者のLINEへプッシュ送信！
@@ -384,8 +384,8 @@ export async function GET(req: Request) {
         });
       }
 
-      const adminTitle = `【${companyName}】打刻忘れアラート: 未退勤スタッフ ${unclockedStaffList.length}名`;
-      const adminBody = `お疲れ様です。農業収益エンジン（勤怠監視）です。\n\n${companyName} において、以下のスタッフ（計 ${unclockedStaffList.length}名）の「退勤打刻」が完了しておりません。\n\n${summaryLines.join('\n')}\n\n現場ポータルまたは管理画面よりご確認の上、退勤打刻の案内または代理打刻をお願いいたします。\n【${companyName}】現場ポータルURL:\n${farmPortalUrl}`;
+      const adminTitle = `【${companyName}】退勤ボタンの押し忘れアラート（${unclockedStaffList.length}名）`;
+      const adminBody = `お疲れ様です！\n${companyName} において、以下のスタッフ（計 ${unclockedStaffList.length}名）の「退勤ボタン」がまだ押されていません。\n\n${summaryLines.join('\n')}\n\n▼ 下のURLを開くと、画面の一番上から1タップで退勤時間の入力・修正ができます👇\n${farmHrFixUrl}`;
 
       // 該当農園の農業管理者LINEへプッシュ送信！
       if (channelAccessToken && adminLineUserIds.length > 0) {

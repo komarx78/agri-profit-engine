@@ -675,7 +675,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
             activeTab === 'attendance' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70'
           }`}
         >
-          <Clock className="w-4 h-4" />出退勤
+          <Clock className="w-4 h-4" />{t('attendance', language)}
         </button>
         <button
           onClick={() => setActiveTab('work')}
@@ -683,13 +683,13 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
             activeTab === 'work' ? 'bg-emerald-500 text-emerald-950 shadow-sm' : 'text-emerald-300/70'
           }`}
         >
-          <History className="w-4 h-4" />作業記録
+          <History className="w-4 h-4" />{t('workRecord', language)}
         </button>
       </div>
       
       {/* GPS住所の表示 */}
       <div className="max-w-md w-full mx-auto flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-400 mb-2">
-        <MapPin className="w-3.5 h-3.5" /> {currentAddress}
+        <MapPin className="w-3.5 h-3.5" /> {currentAddress === '現場打刻モード' ? t('attendancePortal', language) : currentAddress}
       </div>
 
       <div className="max-w-md mx-auto px-4 pt-4">
@@ -697,21 +697,21 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
         {activeTab === 'attendance' && (
           <div className="space-y-6">
             <div className="bg-emerald-900/40 p-6 rounded-3xl border border-emerald-800/40 shadow-sm text-center">
-              <p className="text-sm text-emerald-400 font-bold mb-1">{new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}</p>
+              <p className="text-sm text-emerald-400 font-bold mb-1">{new Date().toLocaleDateString(language === 'ja' ? 'ja-JP' : 'en-US', { month: 'long', day: 'numeric', weekday: 'short' })}</p>
               <h2 className="text-3xl font-black text-white mb-4">
                 {new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
               </h2>
               {attendanceLog && (
                 <div className="flex justify-center items-center gap-6 text-sm font-medium text-emerald-300/80">
                   <div className="flex flex-col items-center">
-                    <span className="text-xs mb-1">出勤</span>
+                    <span className="text-xs mb-1">{t('live_clockInTime', language)}</span>
                     <span className="font-bold text-white text-base">
                       {attendanceLog.clock_in ? (formatDisplayTime(attendanceLog.clock_in) || '--:--') : '--:--'}
                     </span>
                   </div>
                   <div className="w-px h-8 bg-emerald-800/50"></div>
                   <div className="flex flex-col items-center">
-                    <span className="text-xs mb-1">退勤</span>
+                    <span className="text-xs mb-1">{t('live_clockOutTime', language)}</span>
                     <span className="font-bold text-white text-base">
                       {attendanceLog.clock_out ? (formatDisplayTime(attendanceLog.clock_out) || '--:--') : '--:--'}
                     </span>
@@ -727,7 +727,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                 className="py-8 bg-gradient-to-br from-blue-500 to-indigo-600 disabled:opacity-50 disabled:grayscale rounded-3xl shadow-lg flex flex-col items-center justify-center gap-2 text-white transition-all active:scale-95"
               >
                 <LogIn className="w-8 h-8" />
-                <span className="font-black">出勤</span>
+                <span className="font-black">{t('clockIn', language)}</span>
               </button>
 
               <button 
@@ -736,7 +736,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                 className="py-8 bg-gradient-to-br from-rose-500 to-red-600 disabled:opacity-50 disabled:grayscale rounded-3xl shadow-lg flex flex-col items-center justify-center gap-2 text-white transition-all active:scale-95"
               >
                 <LogOut className="w-8 h-8" />
-                <span className="font-black">退勤</span>
+                <span className="font-black">{t('clockOut', language)}</span>
               </button>
 
               <button 
@@ -745,7 +745,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                 className="col-span-2 py-6 bg-emerald-800 disabled:opacity-50 disabled:grayscale border-2 border-emerald-600 rounded-3xl shadow-lg flex items-center justify-center gap-3 text-white transition-all active:scale-95"
               >
                 <Coffee className="w-6 h-6" />
-                <span className="font-bold text-lg">休憩開始</span>
+                <span className="font-bold text-lg">{t('breakStart', language)}</span>
               </button>
 
               {(attendanceLog?.break_start_time && !attendanceLog?.break_end_time) && (
@@ -755,7 +755,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                   className="col-span-2 py-6 bg-amber-500 rounded-3xl shadow-lg flex items-center justify-center gap-3 text-amber-950 transition-all active:scale-95 animate-pulse"
                 >
                   <Coffee className="w-6 h-6" />
-                  <span className="font-black text-lg">休憩終了</span>
+                  <span className="font-black text-lg">{t('breakEnd', language)}</span>
                 </button>
               )}
             </div>
@@ -773,7 +773,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                     onClick={() => setShowLineModal(true)}
                     className="text-xs text-slate-400 hover:text-emerald-400 underline font-bold cursor-pointer"
                   >
-                    設定・QR確認
+                    {t('lineBtnSettings', language)}
                   </button>
                 )}
               </div>
@@ -805,7 +805,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                     <div>
                       <div className="text-emerald-400 font-bold text-sm flex items-center gap-1.5">
                         <span>{t('lineLinked', language)}</span>
-                        <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 rounded-md">正常</span>
+                        <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 rounded-md">{t('lineStatusLinked', language)}</span>
                       </div>
                       <div className="text-xs text-slate-400 mt-1">{t('lineNotifyDesc', language)}</div>
                     </div>
@@ -866,7 +866,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
               {inputMode === 'manual' && (
                 <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-2">
-                    <Clock className="w-4 h-4" />日付
+                    <Clock className="w-4 h-4" />{t('tc_date', language)}
                   </h2>
                   <input
                     type="date"
@@ -900,16 +900,16 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                       <option value="">-- {t('selectRequired', language)} --</option>
                       {/* 選択された圃場の進行中計画を優先表示 */}
                       {plans.filter(p => p.field_id === selectedField).length > 0 && (
-                        <optgroup label="進行中の栽培計画">
+                        <optgroup label={t('activePlansGroup', language)}>
                           {plans.filter(p => p.field_id === selectedField).map(p => (
                             <option key={`plan_${p.id}`} value={`plan_${p.id}`}>
-                              {p.crops?.name} {p.variety ? `(${p.variety})` : ''}
+                              {p.crops ? getTranslatedName(p.crops, language) : ''} {p.variety ? `(${p.variety})` : ''}
                             </option>
                           ))}
                         </optgroup>
                       )}
                       {/* 計画外の通常の作目 */}
-                      <optgroup label="計画外の作業">
+                      <optgroup label={t('otherCropsGroup', language)}>
                         {crops.map(c => <option key={`crop_${c.id}`} value={`crop_${c.id}`}>{getTranslatedName(c, language)}</option>)}
                       </optgroup>
                   </select>
@@ -952,21 +952,21 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                         type="button"
                         onClick={async (e) => {
                           e.stopPropagation();
-                          if (confirm(`独自作業「${getTranslatedWorkType(cw, language) || cw}」をリストから削除しますか？\n※この作業で保存された過去の記録は『片付け・その他』に名称統合されます。`)) {
+                          if (confirm(`${t('deleteConfirmPrefix', language)}${getTranslatedWorkType(cw, language) || cw}${t('deleteConfirmSuffix', language)}`)) {
                             setIsSubmitting(true);
                             try {
                               await supabase.from('work_logs').update({ work_type: '片付け・その他' }).eq('user_id', farmInfo?.id).eq('work_type', cw);
                               setCustomWorkTypes(customWorkTypes.filter(t => t !== cw));
                               if (workType === cw) setWorkType('');
                             } catch(err) {
-                              alert('削除に失敗しました');
+                              alert(t('deleteFailed', language));
                             } finally {
                               setIsSubmitting(false);
                             }
                           }
                         }}
                         className="absolute right-1 top-1/2 -translate-y-1/2 p-2 text-emerald-500 hover:text-red-400 hover:bg-red-500/10 rounded-full transition-colors opacity-70 hover:opacity-100"
-                        title="この独自作業を削除"
+                        title={t('deleteWorkTypeTitle', language)}
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -978,7 +978,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                     onClick={() => setIsAddingWorkType(!isAddingWorkType)}
                     className="py-2 px-2 rounded-xl font-bold text-xs transition-all border text-center border-dashed border-emerald-500/50 text-emerald-400 hover:bg-emerald-900/40 flex items-center justify-center gap-1"
                   >
-                    <Plus className="w-3 h-3" /> 新規追加
+                    <Plus className="w-3 h-3" /> {t('addNewWorkType', language)}
                   </button>
                 </div>
 
@@ -989,7 +989,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                         type="text"
                         value={newWorkType}
                         onChange={(e) => setNewWorkType(e.target.value)}
-                        placeholder="新しい作業内容を入力"
+                        placeholder={t('enterWorkTypePlaceholder', language)}
                         className="flex-1 bg-emerald-950/60 border border-emerald-800/60 text-white rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:border-emerald-500"
                       />
                       <button
@@ -1008,7 +1008,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                         }}
                         className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl px-4 py-2 text-sm transition-colors"
                       >
-                        決定
+                        {t('confirmWorkType', language)}
                       </button>
                     </div>
                   )}
@@ -1036,7 +1036,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
               {inputMode === 'manual' && (
                 <section className="bg-sky-900/30 p-4 rounded-2xl border border-sky-800/40 shadow-sm">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-sky-400 mb-2.5 flex items-center gap-2">
-                    <Clock className="w-4 h-4" />作業時間 (分)
+                    <Clock className="w-4 h-4" />{t('workingTime', language)}
                   </h2>
                   <input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="0" className="w-full py-4 px-4 text-3xl font-black text-center bg-emerald-950/80 rounded-xl border-2 border-sky-700/50 text-white" required />
                 </section>
@@ -1050,7 +1050,7 @@ export default function FarmWorkerPage({ params }: { params: Promise<{ tenant_id
                   {!photoPreview ? (
                     <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-700 border-dashed rounded-xl cursor-pointer bg-slate-800/50 hover:bg-slate-800 transition-colors">
                       <span className="text-3xl mb-2">📷</span>
-                      <span className="text-xs text-slate-400 font-bold">撮影 または ファイルを選択</span>
+                      <span className="text-xs text-slate-400 font-bold">{t('photoTakeOrSelect', language)}</span>
                       <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
                     </label>
                   ) : (
