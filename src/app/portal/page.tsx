@@ -443,33 +443,8 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
             setIsLoading(false);
             return;
           }
-        } else if (session) {
-          // 2. 現場作業者が未選択で、Supabase Auth セッションがある場合
-          // 🚨【マルチテナント物理防壁】もしURLで特定農園が指定されているのに、セッションのユーザーIDと一致しない場合（別農園のAdminセッションがブラウザに残っている場合）
-          // 管理者として自動ログインさせず、URLで指定された農園の WorkerGate を表示する！
-          if (urlRequestedFarmId && session.user.id !== urlRequestedFarmId) {
-            console.log('Session user is from another farm; showing WorkerGate for requested farm:', urlRequestedFarmId);
-            ownerId = urlRequestedFarmId;
-            setActiveFarmId(urlRequestedFarmId);
-            if (typeof window !== 'undefined') {
-              try { localStorage.setItem('agri_owner_id', urlRequestedFarmId); } catch (e) {}
-            }
-            setShowWorkerGate(true);
-            setIsLoading(false);
-            return;
-          }
-          ownerId = session.user.id;
-          setActiveFarmId(ownerId);
-          if (typeof window !== 'undefined') {
-            try { localStorage.setItem('agri_owner_id', ownerId); } catch (e) {}
-          }
-          currentRole = 'admin';
-          setRole('admin');
-          setCurrentUser({ name: '管理者', name_en: 'Admin', role: 'admin' });
-          setShowWorkerGate(false);
         } else {
-          // 3. 作業者もセッションもない場合は WorkerGate（選択画面）を表示
-          // ※もし init() の完了前に WorkerGate 側で onLogin されていたら上書きしない
+          // 2. 現場作業者が未選択の場合は、たとえブラウザに管理者Authセッションが残っていても勝手にポータル本体を開かず、必ずWorkerGate（農園コード・名前・PIN入力画面）を表示する！
           setShowWorkerGate(prev => {
             const hasWorker = typeof window !== 'undefined' && localStorage.getItem('agri_current_worker');
             return hasWorker ? false : true;
@@ -2634,6 +2609,9 @@ function PortalContent({ requestedFarmId }: { requestedFarmId?: string }) {
     setCurrentUser(null);
     setWorkerProfile(null);
     setRole('worker');
+    if (!requestedFarmId) {
+      setActiveFarmId('');
+    }
     setShowWorkerGate(true);
   };
 
