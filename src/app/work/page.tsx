@@ -25,7 +25,13 @@ import { translateSingleText } from '@/app/actions/translate';
 import { useCompany } from '@/hooks/useCompany';
 import imageCompression from 'browser-image-compression';
 import { getJSTDate, getJSTDateWithOffset, formatDisplayTime } from '@/lib/dateUtils';
-import { FIELD_WORK_PROCESS_GROUPS, classifyWorkProcess } from '@/lib/workProcessUtils';
+import {
+  FIELD_WORK_PROCESS_GROUPS,
+  classifyWorkProcess,
+  BOTTLENECK_CAUSE_PRESETS,
+  BottleneckStatus,
+  serializeWorkMemoWithBottleneck
+} from '@/lib/workProcessUtils';
 
 interface MasterItem {
   id: string;
@@ -273,6 +279,13 @@ export default function WorkEntryPage({
   const [duration, setDuration] = useState<string>('');
   const [prepMinutes, setPrepMinutes] = useState<number>(0);
   const [cleanupMinutes, setCleanupMinutes] = useState<number>(0);
+  const [bottleneckStatus, setBottleneckStatus] = useState<BottleneckStatus>('smooth');
+  const [bottleneckCause, setBottleneckCause] = useState<string>('');
+  const [bottleneckExtraMins, setBottleneckExtraMins] = useState<number>(0);
+  const [bottleneckDetail, setBottleneckDetail] = useState<string>('');
+  const [bottleneckNextAction, setBottleneckNextAction] = useState<string>('');
+  const [bottleneckDriveUrl, setBottleneckDriveUrl] = useState<string>('');
+  const [isVoiceListening, setIsVoiceListening] = useState<boolean>(false);
   const [manualDate, setManualDate] = useState<string>(() => getJSTDate());
   const [memo, setMemo] = useState<string>('');
   const [selectedMaterial, setSelectedMaterial] = useState<string>('');
@@ -811,6 +824,12 @@ export default function WorkEntryPage({
     setDuration('');
     setPrepMinutes(0);
     setCleanupMinutes(0);
+    setBottleneckStatus('smooth');
+    setBottleneckCause('');
+    setBottleneckExtraMins(0);
+    setBottleneckDetail('');
+    setBottleneckNextAction('');
+    setBottleneckDriveUrl('');
     setManualDate(getJSTDate());
     setMemo('');
     setSelectedMaterial('');
@@ -819,6 +838,45 @@ export default function WorkEntryPage({
     setIsAddingWorkType(false);
     setNewWorkType('');
     clearPhoto();
+  };
+
+  const buildFinalMemoText = () => {
+    const serialized = serializeWorkMemoWithBottleneck(memo, {
+      status: bottleneckStatus,
+      causeTag: bottleneckCause,
+      extraMinutes: bottleneckExtraMins,
+      detailNote: bottleneckDetail,
+      nextActionIdea: bottleneckNextAction,
+      driveUrl: bottleneckDriveUrl
+    });
+    return serialized || null;
+  };
+
+  const handleVoiceBottleneckInput = () => {
+    if (typeof window === 'undefined') return;
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRec) {
+      alert('お使いのブラウザは音声入力に対応していません。キーボードのマイクボタンをお使いください。');
+      return;
+    }
+    try {
+      const rec = new SpeechRec();
+      rec.lang = 'ja-JP';
+      rec.interimResults = false;
+      setIsVoiceListening(true);
+      rec.onresult = (ev: any) => {
+        const transcript = ev?.results?.[0]?.[0]?.transcript || '';
+        if (transcript) {
+          setBottleneckDetail(prev => (prev ? `${prev} ${transcript}` : transcript));
+        }
+        setIsVoiceListening(false);
+      };
+      rec.onerror = () => setIsVoiceListening(false);
+      rec.onend = () => setIsVoiceListening(false);
+      rec.start();
+    } catch (e) {
+      setIsVoiceListening(false);
+    }
   };
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1250,7 +1308,7 @@ export default function WorkEntryPage({
           duration_minutes: 0,
           material_id: matId || null,
           material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,
-          memo: memo || null,
+          memo: buildFinalMemoText(),
           photo_url: uploadedPhotoUrl,
           video_url: uploadedVideoUrl,
           weather: weatherText,
@@ -1283,10 +1341,12 @@ export default function WorkEntryPage({
       const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
       if (isOnline && isConnected && activeWorkLog.id) {
-        const updatePayload = {
+        const finalStopMemo = buildFinalMemoText() || activeWorkLog.memo || null;
+        const updatePayload: Record<string, any> = {
           end_time: endTime.toISOString(),
           duration_minutes: diffMins,
-          status: 'completed'
+          status: 'completed',
+          memo: finalStopMemo
         };
         const srv = await saveWorkerWorkLogAction(workerProfile?.user_id || workerTenantId, updatePayload, activeWorkLog.id);
         if (!srv.success) {
@@ -1391,7 +1451,7 @@ export default function WorkEntryPage({
           work_date: manualDate,
           material_id: matId || null,
           material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,
-          memo: memo || null,
+          memo: buildFinalMemoText(),
           approval_status: 'pending'
         });
         if (prepMinutes > 0) {
@@ -1471,7 +1531,7 @@ export default function WorkEntryPage({
         work_date: manualDate,
         material_id: matId || null,
         material_quantity: materialQuantity ? parseFloat(materialQuantity) : null,
-        memo: memo || null,
+        memo: buildFinalMemoText(),
         photo_url: uploadedPhotoUrl,
         video_url: uploadedVideoUrl,
         approval_status: 'pending'
@@ -2476,6 +2536,191 @@ export default function WorkEntryPage({
                   </div>
                 </section>
               )}
+
+              {/* 📢 畑・作業の気づき共有（手こずり・注意点＆補足記録：次回の工程見直しPDCAに直結） */}
+              <section className="bg-slate-900/80 p-4 rounded-2xl border border-emerald-700/50 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-xs font-black text-emerald-300 flex items-center gap-1.5">
+                      <span>📢 今回の作業はどうでしたか？（次回の工程見直し用）</span>
+                    </h2>
+                    <p className="text-[10px] text-slate-300 font-bold mt-0.5">
+                      土が硬い・片付けで手こずった・水回りの注意点などを残すと、来年の作付け計画に自動反映されます
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBottleneckStatus('smooth')}
+                    className={`py-2.5 px-2 rounded-xl text-xs font-black border transition-all cursor-pointer flex flex-col items-center gap-0.5 ${
+                      bottleneckStatus === 'smooth'
+                        ? 'bg-emerald-500 text-slate-950 border-white shadow-md'
+                        : 'bg-slate-950/70 text-slate-300 border-slate-700 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="text-lg">😊</span>
+                    <span>順調・予定通り</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBottleneckStatus('struggled');
+                      if (!bottleneckCause) {
+                        const preset = BOTTLENECK_CAUSE_PRESETS[0];
+                        setBottleneckCause(preset.label);
+                        setBottleneckNextAction(preset.suggestedNextAction);
+                      }
+                    }}
+                    className={`py-2.5 px-2 rounded-xl text-xs font-black border transition-all cursor-pointer flex flex-col items-center gap-0.5 ${
+                      bottleneckStatus === 'struggled'
+                        ? 'bg-rose-500 text-white border-white shadow-md scale-[1.02]'
+                        : 'bg-slate-950/70 text-rose-300 border-rose-800/60 hover:bg-rose-950/60'
+                    }`}
+                  >
+                    <span className="text-lg">💦</span>
+                    <span>手こずった</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBottleneckStatus('caution');
+                      if (!bottleneckCause) {
+                        const preset = BOTTLENECK_CAUSE_PRESETS[2];
+                        setBottleneckCause(preset.label);
+                        setBottleneckNextAction(preset.suggestedNextAction);
+                      }
+                    }}
+                    className={`py-2.5 px-2 rounded-xl text-xs font-black border transition-all cursor-pointer flex flex-col items-center gap-0.5 ${
+                      bottleneckStatus === 'caution'
+                        ? 'bg-amber-400 text-slate-950 border-white shadow-md scale-[1.02]'
+                        : 'bg-slate-950/70 text-amber-300 border-amber-800/60 hover:bg-amber-950/60'
+                    }`}
+                  >
+                    <span className="text-lg">⚠️</span>
+                    <span>畑・水の注意点</span>
+                  </button>
+                </div>
+
+                {bottleneckStatus !== 'smooth' && (
+                  <div className="bg-slate-950/90 p-3.5 rounded-2xl border border-rose-500/40 space-y-3 animate-in fade-in duration-200">
+                    {/* ステップ1: 何が原因？ */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-black text-rose-300 block">
+                        ① どの部分に手こずり・注意点がありましたか？（1タップ選択）
+                      </label>
+                      <div className="grid grid-cols-1 gap-1.5">
+                        {BOTTLENECK_CAUSE_PRESETS.map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              setBottleneckCause(p.label);
+                              if (!bottleneckNextAction || BOTTLENECK_CAUSE_PRESETS.some(x => x.suggestedNextAction === bottleneckNextAction)) {
+                                setBottleneckNextAction(p.suggestedNextAction);
+                              }
+                            }}
+                            className={`px-3 py-2 rounded-xl text-left text-xs font-black border transition-all cursor-pointer ${
+                              bottleneckCause === p.label
+                                ? 'bg-rose-500/25 text-white border-rose-400'
+                                : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
+                            }`}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ステップ2: 余計にかかったロス時間 */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] font-black">
+                        <span className="text-amber-300">② 普段（予定）よりどれくらい余計にかかりましたか？</span>
+                        <span className="text-white">{bottleneckExtraMins > 0 ? `+${bottleneckExtraMins}分` : '選択なし'}</span>
+                      </div>
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {[
+                          { min: 30, label: '+30分' },
+                          { min: 60, label: '+1時間' },
+                          { min: 120, label: '+2時間' },
+                          { min: 240, label: '+半日(4h)' },
+                          { min: 480, label: '+1日(8h)' }
+                        ].map(item => (
+                          <button
+                            key={item.min}
+                            type="button"
+                            onClick={() => setBottleneckExtraMins(bottleneckExtraMins === item.min ? 0 : item.min)}
+                            className={`py-1.5 rounded-xl text-[11px] font-black border transition-all cursor-pointer ${
+                              bottleneckExtraMins === item.min
+                                ? 'bg-amber-400 text-slate-950 border-white shadow-sm'
+                                : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                            }`}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ステップ3: 具体的な補足＆次回の改善（音声入力対応） */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="text-[11px] font-black text-emerald-300">
+                          ③ 具体的な状況の補足（何がどう大変だったか）
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleVoiceBottleneckInput}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-black flex items-center gap-1 cursor-pointer border ${
+                            isVoiceListening
+                              ? 'bg-rose-500 text-white border-white animate-pulse'
+                              : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
+                          }`}
+                        >
+                          <span>🎤</span>
+                          <span>{isVoiceListening ? '聞き取り中...' : '声でしゃべって入力'}</span>
+                        </button>
+                      </div>
+                      <textarea
+                        value={bottleneckDetail}
+                        onChange={e => setBottleneckDetail(e.target.value)}
+                        placeholder={
+                          BOTTLENECK_CAUSE_PRESETS.find(x => x.label === bottleneckCause)?.placeholder ||
+                          '例：土の15cm下に硬い層があって穴あけに倍の時間がかかった／ネットとツルが絡んで外れなかった'
+                        }
+                        className="w-full h-18 p-2.5 bg-slate-900 border border-slate-700 text-white rounded-xl text-xs font-bold focus:outline-none focus:border-emerald-400"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-black text-sky-300 block">
+                        ④ 次回（来年）こうすれば良くなる！（自動提案・編集可）
+                      </label>
+                      <input
+                        type="text"
+                        value={bottleneckNextAction}
+                        onChange={e => setBottleneckNextAction(e.target.value)}
+                        placeholder="例：定植前に深耕・反転を1工程入れる／臨時バイトを入れて2日で一気に片付ける"
+                        className="w-full px-3 py-2 bg-slate-900 border border-sky-700/60 text-white rounded-xl text-xs font-bold focus:outline-none focus:border-sky-400"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-black text-slate-400 block">
+                        📁 Googleドライブ共有リンク（写真・動画フォルダURLがあれば貼り付け・任意）
+                      </label>
+                      <input
+                        type="url"
+                        value={bottleneckDriveUrl}
+                        onChange={e => setBottleneckDriveUrl(e.target.value)}
+                        placeholder="https://drive.google.com/..."
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 text-white rounded-xl text-xs font-bold focus:outline-none focus:border-emerald-400"
+                      />
+                    </div>
+                  </div>
+                )}
+              </section>
 
               {/* 📷💬 写真・日報メモ・動画セクション（資材在庫入力を撤去し、現場日報・写真蓄積に特化） */}
               <div className="pt-1">

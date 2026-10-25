@@ -1016,7 +1016,30 @@ export default function ApprovalsPage() {
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-slate-500 block mb-1">作業報告メモ・詳細</label>
+                    <div className="flex flex-wrap items-center justify-between gap-1.5 mb-1.5">
+                      <label className="text-xs font-bold text-slate-500">作業報告メモ・詳細（工程見直しPDCA連動）</label>
+                      <div className="flex flex-wrap gap-1">
+                        {[
+                          { label: '+🧱土が硬い(深耕要)', tag: '【💦手こずり報告|原因:🧱 土が硬い・土壌問題|ロス:+60分|次期対策:事前に深耕・反転を1工程挟む】' },
+                          { label: '+🧹片付け難航(短期圧縮要)', tag: '【💦手こずり報告|原因:🧹 片付け・ツル絡み難航|ロス:+120分|次期対策:臨時雇用投入で2日集中圧縮】' },
+                          { label: '+🌊水田水平・水回り注意', tag: '【⚠️畑・水の注意点|原因:🌊 水田の水平・水回り不均一|次期対策:代かき前に水平レーザー確認を必須化】' },
+                        ].map(item => (
+                          <button
+                            key={item.label}
+                            type="button"
+                            onClick={() => {
+                              if (!editMemo.includes(item.tag)) {
+                                setEditMemo(prev => (prev ? `${item.tag}\n${prev}` : item.tag))
+                              }
+                            }}
+                            className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-md text-[10px] font-black transition-colors cursor-pointer"
+                            title="クリックするとTOP画面の6大工程信号機レーンに手こずり・注意点として自動反映されます"
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <textarea
                       value={editMemo}
                       onChange={e => setEditMemo(e.target.value)}

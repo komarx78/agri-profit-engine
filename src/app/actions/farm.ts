@@ -2373,11 +2373,16 @@ export async function getAdminDashboardDataAction(tenantId: string) {
     const ownerId = await resolveOwnerId(supabase, tenantId);
     if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
     const userFilter = buildTenantUserFilter(ownerId, tenantId);
+    const isTenantUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((tenantId || '').trim());
+    const compFilter = isTenantUuid && tenantId !== ownerId
+      ? `user_id.eq.${ownerId},id.eq.${ownerId},user_id.eq.${tenantId},id.eq.${tenantId}`
+      : `user_id.eq.${ownerId},id.eq.${ownerId}`;
 
-    const [workRes, salesRes, b2bRes] = await Promise.all([
+    const [workRes, salesRes, b2bRes, plansRes, fieldsRes, cropsRes, compRes] = await Promise.all([
       supabase
         .from('work_logs')
         .select(`
+          id,
           work_date,
           work_type,
           task_title,
@@ -2385,10 +2390,15 @@ export async function getAdminDashboardDataAction(tenantId: string) {
           material_quantity,
           status,
           approval_status,
-          crops(name),
-          workers(name, hourly_wage),
+          memo,
+          photo_url,
+          crop_id,
+          field_id,
+          worker_id,
+          crops(id, name),
+          workers(id, name, hourly_wage, role),
           materials(name, default_price),
-          fields(name)
+          fields(id, name, area_size)
         `)
         .or(userFilter),
       supabase
@@ -2397,7 +2407,8 @@ export async function getAdminDashboardDataAction(tenantId: string) {
           sales_date,
           total_sales,
           status,
-          crops(name),
+          crop_id,
+          crops(id, name),
           sales_channels(name)
         `)
         .or(userFilter),
@@ -2410,19 +2421,161 @@ export async function getAdminDashboardDataAction(tenantId: string) {
           status,
           items:b2b_order_items(crop_name, quantity, unit_price, amount)
         `)
+        .or(userFilter),
+      supabase
+        .from('cultivation_plans_v2')
+        .select('*, fields(*), crops(*)')
         .or(userFilter)
+        .order('start_month', { ascending: true }),
+      supabase.from('fields').select('*').or(userFilter).order('name'),
+      supabase.from('crops').select('*').or(userFilter).order('name'),
+      supabase.from('company_settings').select('id, user_id, attendance_rules').or(compFilter).limit(1).maybeSingle()
     ]);
+
+    const ext = await loadTenantExtSettings(supabase, ownerId, compRes?.data);
 
     return {
       success: true,
       ownerId,
       workLogs: workRes.data || [],
       salesLogs: salesRes.data || [],
-      b2bOrders: b2bRes.error ? [] : b2bRes.data || []
+      b2bOrders: b2bRes.error ? [] : b2bRes.data || [],
+      plans: plansRes.error ? [] : plansRes.data || [],
+      fields: fieldsRes.data || [],
+      crops: cropsRes.data || [],
+      processRecipes: Array.isArray(ext?.process_recipes) ? ext.process_recipes : [],
+      farmDriveUrl: ext?.farm_drive_url || ''
     };
   } catch (err: any) {
     console.error('getAdminDashboardDataAction error:', err);
     return { success: false, error: err.message || 'ダッシュボードデータの取得に失敗しました。' };
+  }
+}
+
+export async function saveProcessImprovementRecipeAction(
+  tenantId: string,
+  recipe: Record<string, any>,
+  alsoCreatePlannedTask?: {
+    workDate: string;
+    workType: string;
+    taskTitle: string;
+    cropId?: string | null;
+    fieldId?: string | null;
+    durationMinutes?: number;
+    memo?: string;
+  } | null
+) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const { data: comp } = await supabase
+      .from('company_settings')
+      .select('id, user_id, attendance_rules')
+      .or(`user_id.eq.${ownerId},id.eq.${ownerId}`)
+      .limit(1)
+      .maybeSingle();
+
+    const currentSettings = await loadTenantExtSettings(supabase, ownerId, comp);
+    const existingList: any[] = Array.isArray(currentSettings.process_recipes)
+      ? [...currentSettings.process_recipes]
+      : [];
+
+    const newRecipe: Record<string, any> = {
+      ...recipe,
+      id: recipe.id || `rcp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      createdAt: recipe.createdAt || new Date().toISOString()
+    };
+
+    const filtered = existingList.filter(r => r.id !== newRecipe.id);
+    const nextList = [newRecipe, ...filtered];
+
+    await saveTenantExtSettings(
+      supabase,
+      ownerId,
+      { process_recipes: nextList },
+      comp
+    );
+
+    if (alsoCreatePlannedTask && alsoCreatePlannedTask.workDate) {
+      await supabase.from('work_logs').insert([{
+        user_id: ownerId,
+        work_date: alsoCreatePlannedTask.workDate,
+        work_type: alsoCreatePlannedTask.workType || '耕起・深耕・土づくり',
+        task_title: alsoCreatePlannedTask.taskTitle || newRecipe.title,
+        crop_id: alsoCreatePlannedTask.cropId && alsoCreatePlannedTask.cropId !== 'all' ? alsoCreatePlannedTask.cropId : null,
+        field_id: alsoCreatePlannedTask.fieldId && alsoCreatePlannedTask.fieldId !== 'all' ? alsoCreatePlannedTask.fieldId : null,
+        duration_minutes: Number(alsoCreatePlannedTask.durationMinutes) || 180,
+        status: 'planned',
+        memo: alsoCreatePlannedTask.memo || `【工程見直しPDCA】${newRecipe.title}（理由：${newRecipe.reasonSummary || ''}）`
+      }]);
+    }
+
+    return { success: true, recipe: newRecipe, recipes: nextList };
+  } catch (err: any) {
+    console.error('saveProcessImprovementRecipeAction error:', err);
+    return { success: false, error: err.message || '工程見直しレシピの保存に失敗しました。' };
+  }
+}
+
+export async function deleteProcessImprovementRecipeAction(tenantId: string, recipeId: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const { data: comp } = await supabase
+      .from('company_settings')
+      .select('id, user_id, attendance_rules')
+      .or(`user_id.eq.${ownerId},id.eq.${ownerId}`)
+      .limit(1)
+      .maybeSingle();
+
+    const currentSettings = await loadTenantExtSettings(supabase, ownerId, comp);
+    const existingList: any[] = Array.isArray(currentSettings.process_recipes)
+      ? currentSettings.process_recipes
+      : [];
+    const nextList = existingList.filter(r => r.id !== recipeId);
+
+    await saveTenantExtSettings(
+      supabase,
+      ownerId,
+      { process_recipes: nextList },
+      comp
+    );
+
+    return { success: true, recipes: nextList };
+  } catch (err: any) {
+    console.error('deleteProcessImprovementRecipeAction error:', err);
+    return { success: false, error: err.message || '削除に失敗しました。' };
+  }
+}
+
+export async function saveFarmDriveUrlAction(tenantId: string, driveUrl: string) {
+  try {
+    const supabase = createAdminClient();
+    const ownerId = await resolveOwnerId(supabase, tenantId);
+    if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
+
+    const { data: comp } = await supabase
+      .from('company_settings')
+      .select('id, user_id, attendance_rules')
+      .or(`user_id.eq.${ownerId},id.eq.${ownerId}`)
+      .limit(1)
+      .maybeSingle();
+
+    await saveTenantExtSettings(
+      supabase,
+      ownerId,
+      { farm_drive_url: (driveUrl || '').trim() },
+      comp
+    );
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('saveFarmDriveUrlAction error:', err);
+    return { success: false, error: err.message || 'GoogleドライブURLの保存に失敗しました。' };
   }
 }
 
@@ -2436,11 +2589,14 @@ export async function getAdminTasksPageDataAction(tenantId: string) {
     const deptFilter = isTenantUuid && tenantId !== ownerId
       ? `tenant_id.eq.${ownerId},tenant_id.eq.${tenantId}`
       : `tenant_id.eq.${ownerId}`;
+    const compFilter = isTenantUuid && tenantId !== ownerId
+      ? `user_id.eq.${ownerId},id.eq.${ownerId},user_id.eq.${tenantId},id.eq.${tenantId}`
+      : `user_id.eq.${ownerId},id.eq.${ownerId}`;
 
-    const [tasksRes, cropsRes, fieldsRes, workersRes, deptsRes] = await Promise.all([
+    const [tasksRes, cropsRes, fieldsRes, workersRes, deptsRes, compRes] = await Promise.all([
       supabase
         .from('work_logs')
-        .select('id, work_date, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, memo, step_order, time_slot, crops(name), fields(name), workers(name), departments(name)')
+        .select('id, work_date, work_type, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, memo, step_order, time_slot, crops(name), fields(name), workers(name), departments(name)')
         .or(userFilter)
         .eq('status', 'planned')
         .order('work_date', { ascending: true })
@@ -2448,8 +2604,11 @@ export async function getAdminTasksPageDataAction(tenantId: string) {
       supabase.from('crops').select('*').or(userFilter).order('name'),
       supabase.from('fields').select('*').or(userFilter).order('name'),
       supabase.from('workers').select('*').or(userFilter).order('name'),
-      supabase.from('departments').select('*').or(deptFilter).order('name')
+      supabase.from('departments').select('*').or(deptFilter).order('name'),
+      supabase.from('company_settings').select('id, user_id, attendance_rules').or(compFilter).limit(1).maybeSingle()
     ]);
+
+    const ext = await loadTenantExtSettings(supabase, ownerId, compRes?.data);
 
     return {
       success: true,
@@ -2458,7 +2617,9 @@ export async function getAdminTasksPageDataAction(tenantId: string) {
       crops: cropsRes.data || [],
       fields: fieldsRes.data || [],
       workers: workersRes.data || [],
-      departments: deptsRes.data || []
+      departments: deptsRes.data || [],
+      processRecipes: Array.isArray(ext?.process_recipes) ? ext.process_recipes : [],
+      farmDriveUrl: ext?.farm_drive_url || ''
     };
   } catch (err: any) {
     console.error('getAdminTasksPageDataAction error:', err);

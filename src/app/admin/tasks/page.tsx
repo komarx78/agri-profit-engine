@@ -33,6 +33,7 @@ export default function TasksPage() {
   const [fields, setFields] = useState<any[]>([]);
   const [workers, setWorkers] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [processRecipes, setProcessRecipes] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [tenantId, setTenantId] = useState<string>('');
 
@@ -126,6 +127,7 @@ export default function TasksPage() {
           setFields(srvRes.fields || []);
           setWorkers(srvRes.workers || []);
           setDepartments(srvRes.departments || []);
+          setProcessRecipes(srvRes.processRecipes || []);
         } else {
           const [tasksRes, cropsRes, fieldsRes, workersRes, deptsRes] = await Promise.all([
             supabase.from('work_logs').select('id, work_date, task_title, task_title_en, task_title_vi, task_title_id, task_title_zh, status, approval_status, duration_minutes, crop_id, field_id, worker_id, department_id, memo, step_order, time_slot, crops(name), fields(name), workers(name), departments(name)').eq('user_id', ownerId).eq('status', 'planned').order('work_date', { ascending: true }).order('step_order', { ascending: true, nullsFirst: false }),
@@ -670,6 +672,72 @@ export default function TasksPage() {
           </button>
         </div>
       </header>
+
+      {/* 🔔 工程見直しPDCA（次回レシピ）からの自動リマインド＆ワンクリック予定作成 */}
+      {processRecipes.length > 0 && (
+        <div className="bg-gradient-to-r from-slate-900 to-emerald-950 text-white p-4 rounded-2xl border border-emerald-500/40 shadow-sm space-y-2.5">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 text-xs sm:text-sm font-black text-emerald-300">
+              <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>🔔 工程見直しPDCAで決定した「事前工程・短期圧縮レシピ」（クリックで作業指示を作成）</span>
+            </div>
+            <span className="text-[11px] font-bold text-slate-300">
+              過去の「手こずり・時間超過」から登録された改善工程です
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+            {processRecipes.slice(0, 6).map((rcp: any) => (
+              <button
+                key={rcp.id}
+                type="button"
+                onClick={() => {
+                  const matchedCropId = crops.find(c => String(c.id) === String(rcp.cropId) || c.name === rcp.cropName)?.id || '';
+                  const matchedFieldId = fields.find(f => String(f.id) === String(rcp.fieldId) || f.name === rcp.fieldName)?.id || '';
+                  setEditingTaskId(null);
+                  setFormData({
+                    work_date: getJSTDate(),
+                    task_title: rcp.title || '工程見直し作業',
+                    crop_id: matchedCropId,
+                    department_id: '',
+                    memo: `【PDCA改善レシピ】${rcp.reasonSummary || ''}${rcp.driveUrl ? ` / 📁資料: ${rcp.driveUrl}` : ''}`,
+                    field_assignments: [
+                      {
+                        field_id: matchedFieldId,
+                        worker_ids: [],
+                        step_order: 1,
+                        time_slot: '午前',
+                        field_memo: rcp.tempWorkersCount
+                          ? `👥臨時バイト${rcp.tempWorkersCount}名×${rcp.targetDays || 2}日間で短期集中完了（目安${rcp.targetHours || 4}h）`
+                          : `目安時間: ${rcp.targetHours || 4}h`,
+                        leader_worker_id: ''
+                      }
+                    ]
+                  });
+                  setIsModalOpen(true);
+                }}
+                className="p-3 rounded-xl bg-slate-800/90 hover:bg-emerald-900/80 border border-emerald-500/40 text-left transition-all cursor-pointer group"
+              >
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-black">
+                    {rcp.fieldName} × {rcp.cropName}
+                  </span>
+                  <span className="text-[10px] font-black text-amber-300 group-hover:translate-x-0.5 transition-transform">
+                    ＋予定に組む →
+                  </span>
+                </div>
+                <div className="text-xs font-black text-white line-clamp-1">
+                  {rcp.title}
+                </div>
+                {rcp.reasonSummary && (
+                  <div className="text-[10px] text-slate-300 font-bold line-clamp-1 mt-0.5">
+                    理由: {rcp.reasonSummary}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 🏷️ よくある定型タスク（作業スタンプ）パレット */}
       <div className="bg-emerald-950/5 border border-emerald-800/15 p-3 rounded-2xl flex items-center gap-2.5 overflow-x-auto">
