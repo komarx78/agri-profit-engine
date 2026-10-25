@@ -61,7 +61,7 @@ export default function LoginPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
+      <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-8 shadow-2xl overflow-hidden">
         {/* 現場スタッフ用（PIN）への誘導バナー */}
         <div className="mb-8 p-4 bg-gradient-to-r from-emerald-950/80 to-slate-900 border border-emerald-500/30 rounded-2xl space-y-2">
           <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
@@ -145,15 +145,18 @@ export default function LoginPage() {
         </form>
 
         <div className="mt-6 pt-6 border-t border-slate-800 text-center space-y-4">
-          <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-emerald-500/30 space-y-2">
+          <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-emerald-500/30 space-y-2 overflow-hidden">
             <p className="text-xs font-bold text-slate-300">
               🌱 はじめてご利用の農園主様へ
             </p>
+            <p className="text-[10px] text-slate-400">
+              1分で専用【農園コード】が即時発行されます
+            </p>
             <Link
               href="/register"
-              className="w-full py-2.5 px-4 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-black rounded-xl inline-flex items-center justify-center gap-1.5 text-xs transition-all"
+              className="w-full py-2.5 px-3 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-black rounded-xl inline-flex items-center justify-center gap-1.5 text-xs transition-all"
             >
-              <span>🎁 1ヶ月無料でお試し登録する（農園コード即時発行）</span>
+              <span>🎁 1ヶ月無料でお試し登録する</span>
               <ArrowRight className="w-3.5 h-3.5 shrink-0" />
             </Link>
           </div>

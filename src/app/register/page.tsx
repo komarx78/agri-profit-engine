@@ -191,7 +191,7 @@ export default function RegisterFarmPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 py-8">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl">
+      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-8 shadow-2xl overflow-hidden">
         {completedData ? (
           /* 🎉 登録完了＆農園コード発行画面 */
           <div className="space-y-6 text-center">
@@ -304,7 +304,7 @@ export default function RegisterFarmPage() {
                 ) : (
                   <Sprout className="w-3.5 h-3.5 shrink-0" />
                 )}
-                <span className="whitespace-nowrap">
+                <span>
                   {campaignInfo.isSpecial
                     ? `${campaignInfo.campaignName}適用中（${campaignInfo.monthsLabel}無料）`
                     : `最初の${campaignInfo.monthsLabel}完全無料`}
