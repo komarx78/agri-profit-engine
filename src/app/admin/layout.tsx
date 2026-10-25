@@ -175,12 +175,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
   const navGroups = [
     {
-      title: '毎日つかう',
+      title: '毎日つかう（現場・日報）',
       items: [
-        { name: 'ダッシュボード（今日のようす）', path: farmQ('/admin/dashboard'), icon: LayoutDashboard },
-        { name: '作業予定（タスク）', path: farmQ('/admin/tasks'), icon: Calendar },
-        { name: '日報の確認・承認', path: farmQ('/admin/approvals'), icon: Inbox },
-        { name: '作業日誌', path: farmQ('/admin/cultivations', 'tab=history'), icon: BookOpen, matchTab: 'diary' },
+        { name: 'ダッシュボード（稼働・直接作業率）', path: farmQ('/admin/dashboard'), icon: LayoutDashboard },
+        { name: '作業予定（タスク指示）', path: farmQ('/admin/tasks'), icon: Calendar },
+        { name: '日報・写真の確認・承認', path: farmQ('/admin/approvals'), icon: Inbox },
+        { name: '作業・栽培日誌（写真・履歴）', path: farmQ('/admin/cultivations', 'tab=history'), icon: BookOpen, matchTab: 'diary' },
       ]
     },
     {
@@ -189,23 +189,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { name: '畑の地図', path: farmQ('/admin/map'), icon: MapPin },
         { name: '作付けこよみ（計画）', path: farmQ('/admin/cultivations', 'tab=cultivations&focus=calendar'), icon: Sprout, matchTab: 'plan' },
         { name: '育苗スケジュール', path: farmQ('/admin/nursery-schedule'), icon: Table },
-        { name: '肥料・資材の必要量', path: farmQ('/admin/material-requirements'), icon: Calculator },
       ]
     },
     {
-      title: 'お金をふり返る',
+      title: '業務改善・収支PDCA（時間効率）',
       items: [
-        { name: '作付けごとの収支（予実）', path: farmQ('/admin/cultivation-schedule'), icon: Receipt },
-        { name: '作目ごとの比較', path: farmQ('/admin/crop-analysis'), icon: PieChart },
+        { name: '作付け別の収支・時間按分', path: farmQ('/admin/cultivation-schedule'), icon: Receipt },
+        { name: '品目・作業工程PDCA（前年比較）', path: farmQ('/admin/crop-analysis'), icon: PieChart },
       ]
     },
     {
-      title: 'ほかのシステム・設定',
+      title: 'スタッフ・マスタ設定',
       items: [
-        { name: '👥 スタッフ・出退勤・給料', path: farmQ('/hr'), icon: Users },
-        { name: '📦 販売管理システム', path: farmQ('/sales-management'), icon: ShoppingCart, external: true },
-        { name: '💳 経理・購買システム', path: farmQ('/accounting-management'), icon: Receipt, external: true },
-        { name: '⚙️ マスタ管理全般', path: farmQ('/admin/masters'), icon: Database },
+        { name: '👥 スタッフ・出退勤・時給', path: farmQ('/hr'), icon: Users },
+        { name: '⚙️ 畑・品目マスタ管理', path: farmQ('/admin/masters'), icon: Database },
         { name: '🏢 自社情報設定', path: farmQ('/admin/settings'), icon: Settings },
       ]
     }

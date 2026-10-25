@@ -2379,6 +2379,8 @@ export async function getAdminDashboardDataAction(tenantId: string) {
         .from('work_logs')
         .select(`
           work_date,
+          work_type,
+          task_title,
           duration_minutes,
           material_quantity,
           status,
@@ -2538,14 +2540,20 @@ export async function getAdminCropAnalysisDataAction(tenantId: string, year: num
     if (!ownerId) return { success: false, error: '農園IDが確認できませんでした。' };
     const userFilter = buildTenantUserFilter(ownerId, tenantId);
 
-    const [cRes, wRes, sRes, b2bRes] = await Promise.all([
+    const [cRes, wRes, prevWRes, sRes, b2bRes, fRes, pRes] = await Promise.all([
       supabase.from('crops').select('*').or(userFilter).order('name'),
       supabase
         .from('work_logs')
-        .select('*, workers(name, hourly_wage), materials(default_price)')
+        .select('*, workers(name, hourly_wage), materials(default_price), fields(id, name, area_size)')
         .or(userFilter)
         .gte('work_date', `${year}-01-01`)
         .lte('work_date', `${year}-12-31`),
+      supabase
+        .from('work_logs')
+        .select('*, workers(name, hourly_wage)')
+        .or(userFilter)
+        .gte('work_date', `${year - 1}-01-01`)
+        .lte('work_date', `${year - 1}-12-31`),
       supabase
         .from('sales_logs')
         .select('*')
@@ -2557,7 +2565,9 @@ export async function getAdminCropAnalysisDataAction(tenantId: string, year: num
         .select('id, delivery_date, status, total_amount, items:b2b_order_items(crop_name, quantity, unit_price, amount)')
         .or(userFilter)
         .gte('delivery_date', `${year}-01-01`)
-        .lte('delivery_date', `${year}-12-31`)
+        .lte('delivery_date', `${year}-12-31`),
+      supabase.from('fields').select('id, name, area_size').or(userFilter),
+      supabase.from('cultivation_plans_v2').select('id, crop_id, field_id, year, fields(area_size)').or(userFilter).eq('year', year)
     ]);
 
     return {
@@ -2565,8 +2575,11 @@ export async function getAdminCropAnalysisDataAction(tenantId: string, year: num
       ownerId,
       crops: cRes.data || [],
       workLogs: wRes.data || [],
+      prevWorkLogs: prevWRes.data || [],
       salesLogs: sRes.data || [],
-      b2bOrders: b2bRes.error ? [] : b2bRes.data || []
+      b2bOrders: b2bRes.error ? [] : b2bRes.data || [],
+      fields: fRes.data || [],
+      plans: pRes.data || []
     };
   } catch (err: any) {
     console.error('getAdminCropAnalysisDataAction error:', err);

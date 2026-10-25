@@ -25,6 +25,7 @@ import { translateSingleText } from '@/app/actions/translate';
 import { useCompany } from '@/hooks/useCompany';
 import imageCompression from 'browser-image-compression';
 import { getJSTDate, getJSTDateWithOffset, formatDisplayTime } from '@/lib/dateUtils';
+import { FIELD_WORK_PROCESS_GROUPS, classifyWorkProcess } from '@/lib/workProcessUtils';
 
 interface MasterItem {
   id: string;
@@ -105,7 +106,10 @@ function getWorkTypeEmoji(type: string): string {
   if (type.includes('定植') || type.includes('苗植え')) return '🌿';
   if (type.includes('水やり') || type.includes('潅水')) return '💧';
   if (type.includes('肥料') || type.includes('農薬') || type.includes('防除') || type.includes('消毒') || type.includes('追肥')) return '🧪';
-  if (type.includes('草刈り') || type.includes('除草') || type.includes('草引き')) return '✂️';
+  if (type.includes('草刈り') || type.includes('除草') || type.includes('草引き')) return '🌾';
+  if (type.includes('芽かき') || type.includes('誘引')) return '✂️';
+  if (type.includes('準備') || type.includes('段取り')) return '🛠️';
+  if (type.includes('移動') || type.includes('運搬')) return '🚚';
   if (type.includes('片付け') || type.includes('メンテ') || type.includes('掃除')) return '🧹';
   if (type.includes('出荷') || type.includes('選別') || type.includes('袋詰め')) return '📦';
   return '✨';
@@ -267,6 +271,8 @@ export default function WorkEntryPage({
   const [selectedField, setSelectedField] = useState<string>('');
   const [workType, setWorkType] = useState<string>('');
   const [duration, setDuration] = useState<string>('');
+  const [prepMinutes, setPrepMinutes] = useState<number>(0);
+  const [cleanupMinutes, setCleanupMinutes] = useState<number>(0);
   const [manualDate, setManualDate] = useState<string>(() => getJSTDate());
   const [memo, setMemo] = useState<string>('');
   const [selectedMaterial, setSelectedMaterial] = useState<string>('');
@@ -327,7 +333,11 @@ export default function WorkEntryPage({
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
 
-  const workTypes = ['収穫', '播種', '定植', '水やり', '肥料・農薬', '草刈り', '片付け・メンテ'];
+  const workTypes = [
+    '収穫', '播種', '定植', '出荷・袋詰め',
+    '水やり', '芽かき・誘引', '肥料・農薬', '畝立て・マルチ',
+    '準備・段取り', '片付け・メンテ', '草刈り', '移動・運搬'
+  ];
 
   // 初回マウント確認
   useEffect(() => {
@@ -799,6 +809,8 @@ export default function WorkEntryPage({
     setSelectedField('');
     setWorkType('');
     setDuration('');
+    setPrepMinutes(0);
+    setCleanupMinutes(0);
     setManualDate(getJSTDate());
     setMemo('');
     setSelectedMaterial('');
@@ -1189,8 +1201,8 @@ export default function WorkEntryPage({
 
     try {
       if (isConnected) {
-        const cropId = crops.find(c => c.name === selectedCrop)?.id;
-        const fieldId = fields.find(f => f.name === selectedField)?.id;
+        const cropId = selectedCrop && selectedCrop !== '__COMMON__' ? crops.find(c => c.name === selectedCrop)?.id : null;
+        const fieldId = selectedField && selectedField !== '__COMMON__' ? fields.find(f => f.name === selectedField)?.id : null;
         const matId = materials.find(m => m.name === selectedMaterial)?.id;
         const startTime = new Date().toISOString();
 
@@ -1287,6 +1299,41 @@ export default function WorkEntryPage({
             });
           }
         }
+
+        // 準備・片付けの同時記録があれば別レコードとして自動保存
+        const extraLogs: any[] = [];
+        const baseExtra = {
+          user_id: activeWorkLog.user_id || workerProfile?.user_id || workerTenantId || null,
+          farm_id: activeWorkLog.farm_id || workerProfile?.farm_id || null,
+          worker_id: currentUser?.id || activeWorkLog.worker_id || null,
+          crop_id: activeWorkLog.crop_id || null,
+          field_id: activeWorkLog.field_id || null,
+          status: 'completed',
+          work_date: activeWorkLog.work_date || getJSTDate(),
+          approval_status: 'pending'
+        };
+        if (prepMinutes > 0) {
+          extraLogs.push({
+            ...baseExtra,
+            work_type: '準備・段取り',
+            duration_minutes: prepMinutes,
+            memo: `【同時記録】${activeWorkLog.work_type || '作業'}の準備・段取り`
+          });
+        }
+        if (cleanupMinutes > 0) {
+          extraLogs.push({
+            ...baseExtra,
+            work_type: '片付け・メンテ',
+            duration_minutes: cleanupMinutes,
+            memo: `【同時記録】${activeWorkLog.work_type || '作業'}の片付け・清掃`
+          });
+        }
+        for (const ex of extraLogs) {
+          const exSrv = await saveWorkerWorkLogAction(ex.user_id, ex, null);
+          if (!exSrv.success) {
+            await supabase.from('work_logs').insert([ex]);
+          }
+        }
       } else {
         saveOfflineWorkLog({
           ...activeWorkLog,
@@ -1324,8 +1371,8 @@ export default function WorkEntryPage({
     e.preventDefault();
     if (!currentUser) return;
     setIsSubmitting(true);
-    const cropId = crops.find(c => c.name === selectedCrop)?.id;
-    const fieldId = fields.find(f => f.name === selectedField)?.id;
+    const cropId = selectedCrop && selectedCrop !== '__COMMON__' ? crops.find(c => c.name === selectedCrop)?.id : null;
+    const fieldId = selectedField && selectedField !== '__COMMON__' ? fields.find(f => f.name === selectedField)?.id : null;
     const matId = materials.find(m => m.name === selectedMaterial)?.id;
     const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
@@ -1347,6 +1394,36 @@ export default function WorkEntryPage({
           memo: memo || null,
           approval_status: 'pending'
         });
+        if (prepMinutes > 0) {
+          saveOfflineWorkLog({
+            user_id: workerProfile?.user_id || workerTenantId || null,
+            farm_id: workerProfile?.farm_id || null,
+            worker_id: currentUser.id,
+            crop_id: cropId || null,
+            field_id: fieldId || null,
+            work_type: '準備・段取り',
+            duration_minutes: prepMinutes,
+            status: 'completed',
+            work_date: manualDate,
+            memo: `【同時記録】${workType}の準備・段取り`,
+            approval_status: 'pending'
+          });
+        }
+        if (cleanupMinutes > 0) {
+          saveOfflineWorkLog({
+            user_id: workerProfile?.user_id || workerTenantId || null,
+            farm_id: workerProfile?.farm_id || null,
+            worker_id: currentUser.id,
+            crop_id: cropId || null,
+            field_id: fieldId || null,
+            work_type: '片付け・メンテ',
+            duration_minutes: cleanupMinutes,
+            status: 'completed',
+            work_date: manualDate,
+            memo: `【同時記録】${workType}の片付け・清掃`,
+            approval_status: 'pending'
+          });
+        }
         setIsSubmitting(false);
         setIsSuccess(true);
         setTimeout(() => { setIsSuccess(false); resetForm(); }, 2500);
@@ -1409,6 +1486,45 @@ export default function WorkEntryPage({
             ...payload,
             duration_minutes: parseInt(duration, 10) || 0
           });
+        }
+      }
+
+      // 準備・片付け時間の同時記録があれば自動保存
+      const extraLogs: any[] = [];
+      if (prepMinutes > 0) {
+        extraLogs.push({
+          user_id: payload.user_id,
+          farm_id: payload.farm_id,
+          worker_id: currentUser.id,
+          crop_id: cropId || null,
+          field_id: fieldId || null,
+          work_type: '準備・段取り',
+          duration_minutes: prepMinutes,
+          status: 'completed',
+          work_date: manualDate,
+          memo: `【同時記録】${workType}の準備・段取り`,
+          approval_status: 'pending'
+        });
+      }
+      if (cleanupMinutes > 0) {
+        extraLogs.push({
+          user_id: payload.user_id,
+          farm_id: payload.farm_id,
+          worker_id: currentUser.id,
+          crop_id: cropId || null,
+          field_id: fieldId || null,
+          work_type: '片付け・メンテ',
+          duration_minutes: cleanupMinutes,
+          status: 'completed',
+          work_date: manualDate,
+          memo: `【同時記録】${workType}の片付け・清掃`,
+          approval_status: 'pending'
+        });
+      }
+      for (const ex of extraLogs) {
+        const exSrv = await saveWorkerWorkLogAction(ex.user_id, ex, null);
+        if (!exSrv.success) {
+          await supabase.from('work_logs').insert([ex]);
         }
       }
 
@@ -1976,48 +2092,78 @@ export default function WorkEntryPage({
 
             <div className={`space-y-6 transition-all duration-300 ${activeWorkLog ? 'opacity-60 pointer-events-none grayscale-[30%]' : ''}`}>
               
-              <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm">
-                <div className="flex items-center justify-between gap-2 mb-2.5">
+              <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-teal-400 flex items-center gap-2 shrink-0">
                     <MapPin className="w-4 h-4" />{t('field', language)}
                   </h2>
-                  <span className="text-xs font-bold text-teal-300 bg-teal-950 px-2 py-1 rounded-lg truncate max-w-[65%]">{gpsStatus}</span>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedField(selectedField === '__COMMON__' ? '' : '__COMMON__')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition-all cursor-pointer shrink-0 border ${
+                        selectedField === '__COMMON__'
+                          ? 'bg-teal-400 text-slate-950 border-white shadow-sm'
+                          : 'bg-teal-950/90 text-teal-300 border-teal-700/60 hover:bg-teal-900'
+                      }`}
+                    >
+                      🌐 農園共通（自動按分）
+                    </button>
+                    {gpsStatus && (
+                      <span className="text-[10px] font-bold text-teal-300 bg-teal-950 px-2 py-1 rounded-lg truncate max-w-[130px]">{gpsStatus}</span>
+                    )}
+                  </div>
                 </div>
                 <select 
                   value={selectedField}
                   onChange={(e) => setSelectedField(e.target.value)}
-                  className="w-full bg-emerald-950/80 text-white px-4 py-3 border border-teal-800/60 rounded-xl focus:outline-none focus:border-teal-400 font-bold"
+                  className="w-full bg-emerald-950/80 text-white px-4 py-3 border border-teal-800/60 rounded-xl focus:outline-none focus:border-teal-400 font-bold text-sm"
                 >
                   <option value="">{t('selectField', language)}</option>
+                  <option value="__COMMON__">🌐 農園全体・共通作業（各作付けへ自動按分）</option>
                   {fields.map(f => <option key={f.id} value={f.name}>{getTranslatedName(f, language)}</option>)}
                 </select>
               </section>
 
               {/* 🌱 作目選択セクション (アグリハブ型 横3〜4列グリッド ＆ アイコン表示) */}
               <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm space-y-3">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
                     <Sprout className="w-4 h-4 text-emerald-400 shrink-0" />
                     <span>{t('crop', language)}</span>
                   </h2>
                   
-                  {/* 選択中の作目バッジ */}
-                  {selectedCrop && (
-                    <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-500/20 border border-emerald-500/40 rounded-full text-xs font-black text-emerald-300">
-                      <span>{getCropEmoji(selectedCrop)}</span>
-                      <span className="truncate max-w-[120px]">
-                        {getTranslatedName(crops.find(c => c.name === selectedCrop) || { name: selectedCrop }, language)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedCrop('')}
-                        className="text-emerald-400 hover:text-white ml-0.5 cursor-pointer"
-                        title="選択解除"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCrop(selectedCrop === '__COMMON__' ? '' : '__COMMON__')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition-all cursor-pointer border ${
+                        selectedCrop === '__COMMON__'
+                          ? 'bg-emerald-400 text-slate-950 border-white shadow-sm'
+                          : 'bg-emerald-950/90 text-emerald-300 border-emerald-700/60 hover:bg-emerald-900'
+                      }`}
+                    >
+                      🌐 全品目共通（自動按分）
+                    </button>
+
+                    {/* 選択中の作目バッジ */}
+                    {selectedCrop && selectedCrop !== '__COMMON__' && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-500/20 border border-emerald-500/40 rounded-full text-xs font-black text-emerald-300">
+                        <span>{getCropEmoji(selectedCrop)}</span>
+                        <span className="truncate max-w-[110px]">
+                          {getTranslatedName(crops.find(c => c.name === selectedCrop) || { name: selectedCrop }, language)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCrop('')}
+                          className="text-emerald-400 hover:text-white ml-0.5 cursor-pointer"
+                          title="選択解除"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* 作目が多数ある場合の検索フィルター */}
@@ -2075,12 +2221,12 @@ export default function WorkEntryPage({
                 </div>
               </section>
 
-              {/* ✨ 作業内容選択セクション (アグリハブ型 横3〜4列グリッド ＆ ピクトグラム表示) */}
-              <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm space-y-3">
+              {/* ✨ 作業工程選択セクション（3分類：🟢直接利益作業 ／ 🟡育成管理 ／ 🔴準備・片付け・非生産作業） */}
+              <section className="bg-emerald-900/40 p-4 rounded-2xl border border-emerald-800/40 shadow-sm space-y-4">
                 <div className="flex items-center justify-between gap-2">
                   <h2 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>{t('workType', language)}</span>
+                    <span>{t('workType', language)}（工程区分）</span>
                   </h2>
 
                   {/* 選択中の作業バッジ */}
@@ -2100,30 +2246,48 @@ export default function WorkEntryPage({
                   )}
                 </div>
 
-                {/* 横3〜4列の均等グリッド配置 */}
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                  {/* 標準作業 */}
-                  {workTypes.map(w => {
-                    const isSelected = workType === w;
-                    const emoji = getWorkTypeEmoji(w);
-                    return (
-                      <button
-                        key={`default-${w}`}
-                        type="button"
-                        onClick={() => setWorkType(isSelected ? '' : w)}
-                        className={`min-h-[46px] p-2 rounded-xl font-black text-xs transition-all flex flex-col items-center justify-center text-center gap-0.5 select-none active:scale-95 cursor-pointer ${
-                          isSelected
-                            ? 'bg-amber-500 text-amber-950 border-2 border-amber-300 shadow-md ring-2 ring-amber-400/40 scale-[1.02]'
-                            : 'bg-emerald-950/70 hover:bg-emerald-900/80 text-slate-200 border border-emerald-800/60 hover:border-emerald-600'
-                        }`}
-                      >
-                        <span className="text-base leading-none">{emoji}</span>
-                        <span className="truncate max-w-full leading-tight">{getTranslatedWorkType(w, language) || t(w, language)}</span>
-                      </button>
-                    );
-                  })}
+                {/* 3大工程カテゴリ別グリッド */}
+                <div className="space-y-3.5">
+                  {FIELD_WORK_PROCESS_GROUPS.map(group => (
+                    <div key={group.category} className="bg-emerald-950/50 p-3 rounded-2xl border border-emerald-800/60 space-y-2">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className={`text-[11px] font-black ${group.headerColor}`}>{group.title}</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {group.items.map(item => {
+                          const w = item.name;
+                          const isSelected = workType === w;
+                          return (
+                            <button
+                              key={`group-${w}`}
+                              type="button"
+                              onClick={() => {
+                                const next = isSelected ? '' : w;
+                                setWorkType(next);
+                                // 準備・片付け等の付帯作業で畑・品目が未選択なら自動的に「共通（自動按分）」をセットしてすぐ送信可能にする
+                                if (next && group.category === 'prep_cleanup') {
+                                  if (!selectedField) setSelectedField('__COMMON__');
+                                  if (!selectedCrop) setSelectedCrop('__COMMON__');
+                                }
+                              }}
+                              className={`min-h-[46px] p-2 rounded-xl font-black text-xs transition-all flex items-center justify-center text-center gap-1.5 select-none active:scale-95 cursor-pointer ${
+                                isSelected
+                                  ? group.activeBtnClass
+                                  : 'bg-emerald-950/90 hover:bg-emerald-900 text-slate-200 border border-emerald-800/70'
+                              }`}
+                            >
+                              <span className="text-base leading-none shrink-0">{item.emoji}</span>
+                              <span className="truncate leading-tight">{getTranslatedWorkType(w, language) || t(w, language) || w}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-                  {/* 独自作業 */}
+                {/* 独自追加されたカスタム作業 ＆ 新規追加ボタン */}
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-1">
                   {customWorkTypes.map(cw => {
                     const isSelected = workType === cw;
                     return (
@@ -2131,9 +2295,9 @@ export default function WorkEntryPage({
                         <button
                           type="button"
                           onClick={() => setWorkType(isSelected ? '' : cw)}
-                          className={`w-full min-h-[46px] p-2 rounded-xl font-black text-xs transition-all flex flex-col items-center justify-center text-center gap-0.5 select-none active:scale-95 cursor-pointer ${
+                          className={`w-full min-h-[44px] p-2 rounded-xl font-black text-xs transition-all flex flex-col items-center justify-center text-center gap-0.5 select-none active:scale-95 cursor-pointer ${
                             isSelected
-                              ? 'bg-amber-500 text-amber-950 border-2 border-amber-300 shadow-md ring-2 ring-amber-400/40 scale-[1.02]'
+                              ? 'bg-amber-500 text-amber-950 border-2 border-amber-300 shadow-md scale-[1.02]'
                               : 'bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-200 border border-emerald-700/60'
                           }`}
                         >
@@ -2173,10 +2337,10 @@ export default function WorkEntryPage({
                     key="add-new-btn"
                     type="button"
                     onClick={() => setIsAddingWorkType(!isAddingWorkType)}
-                    className="min-h-[46px] p-2 rounded-xl font-black text-xs border-2 border-dashed border-emerald-500/50 text-emerald-300 bg-emerald-950/40 hover:bg-emerald-900/40 flex flex-col items-center justify-center text-center gap-0.5 transition-all cursor-pointer active:scale-95"
+                    className="min-h-[44px] p-2 rounded-xl font-black text-xs border-2 border-dashed border-emerald-500/50 text-emerald-300 bg-emerald-950/40 hover:bg-emerald-900/40 flex items-center justify-center text-center gap-1 transition-all cursor-pointer active:scale-95 col-span-2 sm:col-span-2"
                   >
-                    <Plus className="w-4 h-4 text-emerald-400" />
-                    <span className="truncate max-w-full leading-tight">{t('addNewWorkType', language)}</span>
+                    <Plus className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="truncate leading-tight">{t('addNewWorkType', language)}</span>
                   </button>
                 </div>
 
@@ -2216,7 +2380,7 @@ export default function WorkEntryPage({
                   <div className="flex items-center justify-between">
                     <h2 className="text-xs font-bold text-sky-400 flex items-center gap-1.5">
                       <Clock className="w-4 h-4" />
-                      {t('workingTime', language)}
+                      {t('workingTime', language)}（本作業の時間）
                     </h2>
                     <span className="text-[11px] font-bold text-sky-300/80">
                       {duration ? `${(Number(duration) / 60).toFixed(1).replace(/\.0$/, '')} ${t('tc_hours', language)} (${duration}${t('tc_minutes', language)})` : ''}
@@ -2248,55 +2412,102 @@ export default function WorkEntryPage({
                 </section>
               )}
 
-              {/* 任意項目（資材・写真・メモ・動画）の折りたたみボタン */}
+              {/* 🛠️🧹 準備・片付け時間のワンタップ同時記録パネル（直接利益作業と非生産作業の分離PDCA用） */}
+              {classifyWorkProcess(workType) !== 'prep_cleanup' && (
+                <section className="bg-rose-950/30 p-4 rounded-2xl border border-rose-800/40 space-y-3">
+                  <div>
+                    <h2 className="text-xs font-black text-rose-300 flex items-center justify-between gap-2">
+                      <span>⏱️ 準備・片付け時間の同時記録（任意）</span>
+                      {(prepMinutes > 0 || cleanupMinutes > 0) && (
+                        <span className="px-2 py-0.5 bg-rose-500 text-white text-[10px] rounded-full">
+                          計 +{prepMinutes + cleanupMinutes}分
+                        </span>
+                      )}
+                    </h2>
+                    <p className="text-[10px] text-rose-200/70 font-bold mt-0.5">
+                      この作業の前後にかかった「準備」や「片付け」をタップすると、別工程として同時に記録されます。
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-200">
+                      <span>🛠️ 準備・段取り時間</span>
+                      <span className="text-rose-300 font-black">{prepMinutes > 0 ? `+${prepMinutes}分` : 'なし (0分)'}</span>
+                    </div>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {[0, 10, 15, 30, 60].map(m => (
+                        <button
+                          key={`prep-${m}`}
+                          type="button"
+                          onClick={() => setPrepMinutes(m)}
+                          className={`py-1.5 rounded-xl text-[11px] font-black border transition-all cursor-pointer ${
+                            prepMinutes === m
+                              ? 'bg-rose-500 text-white border-rose-300 shadow-sm'
+                              : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:bg-slate-800'
+                          }`}
+                        >
+                          {m === 0 ? 'なし' : `+${m}分`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-200">
+                      <span>🧹 片付け・掃除時間</span>
+                      <span className="text-rose-300 font-black">{cleanupMinutes > 0 ? `+${cleanupMinutes}分` : 'なし (0分)'}</span>
+                    </div>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {[0, 10, 15, 30, 60].map(m => (
+                        <button
+                          key={`clean-${m}`}
+                          type="button"
+                          onClick={() => setCleanupMinutes(m)}
+                          className={`py-1.5 rounded-xl text-[11px] font-black border transition-all cursor-pointer ${
+                            cleanupMinutes === m
+                              ? 'bg-rose-500 text-white border-rose-300 shadow-sm'
+                              : 'bg-slate-900/80 text-slate-300 border-slate-700 hover:bg-slate-800'
+                          }`}
+                        >
+                          {m === 0 ? 'なし' : `+${m}分`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* 📷💬 写真・日報メモ・動画セクション（資材在庫入力を撤去し、現場日報・写真蓄積に特化） */}
               <div className="pt-1">
                 <button
                   type="button"
                   onClick={() => setShowOptionalDetails(prev => !prev)}
                   className={`w-full py-3 px-4 rounded-2xl border font-black text-xs flex items-center justify-between transition-all cursor-pointer ${
-                    showOptionalDetails || selectedMaterial || photoPreview || memo || videoFile
+                    showOptionalDetails || photoPreview || memo || videoFile
                       ? 'bg-slate-800/90 border-emerald-500/40 text-emerald-300'
                       : 'bg-slate-900/60 border-slate-700/70 text-slate-300 hover:bg-slate-800/60'
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <span>📦📷💬</span>
-                    <span>{t('optionalDetailsToggle', language)}</span>
-                    {(selectedMaterial || photoPreview || memo || videoFile) && (
+                    <span>📷💬</span>
+                    <span>写真・日報メモを記録する（生育状況・気づき共有）</span>
+                    {(photoPreview || memo || videoFile) && (
                       <span className="bg-emerald-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full">
                         {t('optionalDetailsFilled', language)}
                       </span>
                     )}
                   </span>
-                  <span className="text-sm font-black">
+                  <span className="text-sm font-black shrink-0">
                     {showOptionalDetails ? `▲ ${t('close', language)}` : `▼ ${t('openBtn', language)}`}
                   </span>
                 </button>
               </div>
 
-              {(showOptionalDetails || Boolean(selectedMaterial || photoPreview || memo || videoFile)) && (
+              {(showOptionalDetails || Boolean(photoPreview || memo || videoFile)) && (
                 <section className="bg-slate-900/40 p-4 rounded-2xl border border-slate-700/50 shadow-sm space-y-4 animate-in fade-in duration-200">
                   <div>
                     <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
-                      <Package className="w-4 h-4" />{t('material', language)}
-                    </h2>
-                    <div className="space-y-3">
-                      <select value={selectedMaterial} onChange={(e) => setSelectedMaterial(e.target.value)} className="w-full bg-slate-950 p-3 rounded-xl border border-slate-700 text-sm font-bold">
-                          <option value="">--</option>
-                          {materials.map(m => <option key={m.id} value={m.name}>{getTranslatedName(m, language)}</option>)}
-                      </select>
-                      {selectedMaterial && (
-                        <div className="flex items-center gap-3">
-                          <input type="number" value={materialQuantity} onChange={(e) => setMaterialQuantity(e.target.value)} placeholder={t('usageAmount', language)} className="flex-1 px-3 py-3 bg-slate-950 border border-slate-700 text-white rounded-xl font-bold" />
-                          <div className="text-sm font-bold text-slate-400">{materials.find(m => m.name === selectedMaterial)?.unit}</div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-2">
-                      <ImageIcon className="w-4 h-4" />{t('photo', language)}
+                      <ImageIcon className="w-4 h-4" />{t('photo', language)}（圃場・生育・作業前後の写真）
                     </h2>
                     {!photoPreview ? (
                       <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-700 border-dashed rounded-xl cursor-pointer bg-slate-800/50 hover:bg-slate-800 transition-colors">
@@ -2322,7 +2533,7 @@ export default function WorkEntryPage({
                       </span>
                     </div>
 
-                    {/* 🎨 提案③: 多言語ピクトグラムスタンプパレット（現場直感・文字切れゼロ設計） */}
+                    {/* 🎨 多言語ピクトグラムスタンプパレット */}
                     <div className="mb-3 bg-slate-900/90 p-3.5 rounded-2xl border border-slate-700/80 space-y-2.5">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5 text-xs font-black text-slate-200">
@@ -2406,18 +2617,20 @@ export default function WorkEntryPage({
             </div>
 
             {activeWorkLog ? (
-              <div className="mt-8 p-6 bg-emerald-900/40 border-2 border-emerald-500 rounded-3xl text-center shadow-[0_0_30px_rgba(16,185,129,0.2)]">
-                <div className="text-emerald-400 font-bold mb-2">{t('working', language)}</div>
-                <div className="text-6xl font-black text-white mb-4">{elapsedMinutes}<span className="text-2xl text-emerald-400 ml-1">{t('minutes', language)}</span></div>
-                <button type="button" onClick={handleStopWork} disabled={isSubmitting} className="w-full py-5 rounded-2xl font-black text-xl flex items-center justify-center gap-3 bg-rose-500 text-white">
+              <div className="mt-8 p-6 bg-emerald-900/40 border-2 border-emerald-500 rounded-3xl text-center shadow-[0_0_30px_rgba(16,185,129,0.2)] space-y-4">
+                <div>
+                  <div className="text-emerald-400 font-bold mb-1">{t('working', language)}</div>
+                  <div className="text-6xl font-black text-white">{elapsedMinutes}<span className="text-2xl text-emerald-400 ml-1">{t('minutes', language)}</span></div>
+                </div>
+                <button type="button" onClick={handleStopWork} disabled={isSubmitting} className="w-full py-5 rounded-2xl font-black text-xl flex items-center justify-center gap-3 bg-rose-500 text-white cursor-pointer">
                   {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : <><Square className="w-6 h-6 fill-white" />{t('stopWork', language)}</>}
                 </button>
               </div>
             ) : (
               <button 
                 type="submit" 
-                disabled={!selectedCrop || !selectedField || !workType || (inputMode === 'manual' && !duration) || isSubmitting} 
-                className="w-full py-5 rounded-2xl font-black text-xl bg-emerald-500 text-emerald-950 disabled:bg-slate-800 disabled:text-slate-500 mt-8 flex justify-center items-center gap-2 shadow-lg active:scale-98 transition-transform"
+                disabled={(!selectedCrop && classifyWorkProcess(workType) !== 'prep_cleanup') || (!selectedField && classifyWorkProcess(workType) !== 'prep_cleanup') || !workType || (inputMode === 'manual' && !duration) || isSubmitting} 
+                className="w-full py-5 rounded-2xl font-black text-xl bg-emerald-500 text-emerald-950 disabled:bg-slate-800 disabled:text-slate-500 mt-8 flex justify-center items-center gap-2 shadow-lg active:scale-98 transition-transform cursor-pointer"
               >
                 {isSubmitting ? (
                   <Loader2 className="w-6 h-6 animate-spin" />

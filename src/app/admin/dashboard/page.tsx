@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { getCurrentTenantId } from '@/lib/tenant';
 import { getAdminDashboardDataAction } from '@/app/actions/farm';
 import { HelpTooltip } from '@/components/HelpTooltip';
+import { classifyWorkProcess } from '@/lib/workProcessUtils';
 import { 
   Activity, Clock, Sprout, TrendingUp, Banknote, UserCheck, 
   CalendarDays, MapPin, Calculator, Settings2, AlertCircle, 
@@ -40,16 +41,23 @@ const formatYAxisTenThousand = (val: number) => {
 export default function DashboardPage() {
   // 表示モード (実績のみ or 予定込み)
   const [dataViewMode, setDataViewMode] = useState<'actualOnly' | 'includePlanned'>('actualOnly');
-  // 概算資材費の割合(%) - ダッシュボードでは全体のシミュレーションとして概算をベースとする
-  const [estimateRate, setEstimateRate] = useState<number>(20);
 
   const [cropData, setCropData] = useState<any[]>([]);
-  const [workerData, setWorkerData] = useState<any[]>([]);
   const [profitabilityData, setProfitabilityData] = useState<any[]>([]);
   const [fieldData, setFieldData] = useState<any[]>([]);
   const [workerProductivityData, setWorkerProductivityData] = useState<any[]>([]);
   const [monthlyTrendData, setMonthlyTrendData] = useState<any[]>([]);
-  const [summary, setSummary] = useState({ sales: 0, laborCost: 0, materialCost: 0, profit: 0, margin: 0 });
+  const [summary, setSummary] = useState({
+    sales: 0,
+    laborCost: 0,
+    profit: 0,
+    margin: 0,
+    totalMinutes: 0,
+    directMinutes: 0,
+    careMinutes: 0,
+    prepMinutes: 0,
+    hourlyProfit: 0
+  });
   const [tenantId, setTenantId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -86,13 +94,13 @@ export default function DashboardPage() {
           const [workRes, salesRes] = await Promise.all([
             supabase.from('work_logs').select(`
               work_date,
+              work_type,
+              task_title,
               duration_minutes,
-              material_quantity,
               status,
               approval_status,
               crops(name),
               workers(name, hourly_wage),
-              materials(name, default_price),
               fields(name)
             `).eq('user_id', currentOwnerId),
             supabase.from('sales_logs').select(`
@@ -134,14 +142,12 @@ export default function DashboardPage() {
         
         const cropWageMap: Record<string, number> = {}; 
         const fieldWageMap: Record<string, number> = {};
-        const cropDetailedMaterialMap: Record<string, number> = {}; 
-        const fieldDetailedMaterialMap: Record<string, number> = {};
         
         const workerCropHours: Record<string, Record<string, number>> = {}; 
         const workerWages: Record<string, number> = {}; 
         const workerTotalCost: Record<string, number> = {}; 
 
-        const monthlyMap: Record<string, { 売上: number, 人件費: number, 詳細資材費: number }> = {};
+        const monthlyMap: Record<string, { 売上: number, 人件費: number }> = {};
         const cropToFieldHours: Record<string, Record<string, number>> = {}; 
 
         // 1. 売上の基本集計（sales_logs + b2b_orders）
@@ -158,7 +164,7 @@ export default function DashboardPage() {
 
           if (dateStr) {
             const monthStr = dateStr.substring(0, 7); 
-            if (!monthlyMap[monthStr]) monthlyMap[monthStr] = { 売上: 0, 人件費: 0, 詳細資材費: 0 };
+            if (!monthlyMap[monthStr]) monthlyMap[monthStr] = { 売上: 0, 人件費: 0 };
             monthlyMap[monthStr].売上 += sales;
           }
         });
@@ -174,7 +180,7 @@ export default function DashboardPage() {
               cropSalesMap[cName] = (cropSalesMap[cName] || 0) + sales;
               if (dateStr) {
                 const monthStr = dateStr.substring(0, 7);
-                if (!monthlyMap[monthStr]) monthlyMap[monthStr] = { 売上: 0, 人件費: 0, 詳細資材費: 0 };
+                if (!monthlyMap[monthStr]) monthlyMap[monthStr] = { 売上: 0, 人件費: 0 };
                 monthlyMap[monthStr].売上 += sales;
               }
             });
@@ -184,39 +190,41 @@ export default function DashboardPage() {
             cropSalesMap['B2B注文'] = (cropSalesMap['B2B注文'] || 0) + sales;
             if (dateStr) {
               const monthStr = dateStr.substring(0, 7);
-              if (!monthlyMap[monthStr]) monthlyMap[monthStr] = { 売上: 0, 人件費: 0, 詳細資材費: 0 };
+              if (!monthlyMap[monthStr]) monthlyMap[monthStr] = { 売上: 0, 人件費: 0 };
               monthlyMap[monthStr].売上 += sales;
             }
           }
         });
 
-        // 2. 作業・コストの基本集計
+        // 2. 作業時間（3分類）＆ 人件費の基本集計
         let totalLaborCost = 0;
-        let totalDetailedMaterialCost = 0;
+        let totalMinutes = 0;
+        let directMinutes = 0;
+        let careMinutes = 0;
+        let prepMinutes = 0;
 
         workLogs.forEach((log: any) => {
-          const cName = log.crops?.name || '未設定';
+          const cName = log.crops?.name || '共通・未指定';
           const wName = log.workers?.name || '不明';
-          const fName = log.fields?.name || '未設定';
-          const dur = log.duration_minutes || 0;
-          const wage = log.workers?.hourly_wage || 1000;
-          const matQty = log.material_quantity || 0;
-          const matPrice = log.materials?.default_price || 0;
+          const fName = log.fields?.name || '共通・未指定';
+          const dur = Number(log.duration_minutes) || 0;
+          const wage = Number(log.workers?.hourly_wage) || 1000;
           const dateStr = log.work_date;
 
           const laborCost = (dur / 60) * wage;
-          const matCost = matQty * matPrice;
-
           totalLaborCost += laborCost;
-          totalDetailedMaterialCost += matCost;
+          totalMinutes += dur;
+
+          const cat = classifyWorkProcess(log.work_type || log.task_title || '');
+          if (cat === 'direct') directMinutes += dur;
+          else if (cat === 'prep_cleanup') prepMinutes += dur;
+          else careMinutes += dur;
 
           cropHours[cName] = (cropHours[cName] || 0) + dur;
           cropWageMap[cName] = (cropWageMap[cName] || 0) + laborCost;
-          cropDetailedMaterialMap[cName] = (cropDetailedMaterialMap[cName] || 0) + matCost;
 
           fieldHours[fName] = (fieldHours[fName] || 0) + dur;
           fieldWageMap[fName] = (fieldWageMap[fName] || 0) + laborCost;
-          fieldDetailedMaterialMap[fName] = (fieldDetailedMaterialMap[fName] || 0) + matCost;
 
           if (!cropToFieldHours[cName]) cropToFieldHours[cName] = {};
           cropToFieldHours[cName][fName] = (cropToFieldHours[cName][fName] || 0) + dur;
@@ -229,13 +237,12 @@ export default function DashboardPage() {
 
           if (dateStr) {
             const monthStr = dateStr.substring(0, 7); 
-            if (!monthlyMap[monthStr]) monthlyMap[monthStr] = { 売上: 0, 人件費: 0, 詳細資材費: 0 };
+            if (!monthlyMap[monthStr]) monthlyMap[monthStr] = { 売上: 0, 人件費: 0 };
             monthlyMap[monthStr].人件費 += laborCost;
-            monthlyMap[monthStr].詳細資材費 += matCost;
           }
         });
 
-        // 3. 圃場への売上按分
+        // 3. 圃場への売上按分（作業時間比）
         const fieldSalesMap: Record<string, number> = {};
         Object.keys(cropSalesMap).forEach(cName => {
           const cSales = cropSalesMap[cName];
@@ -249,59 +256,55 @@ export default function DashboardPage() {
           }
         });
 
-        // 4. 資材費の計算適用（ダッシュボードでは全体の経費率として概算を適用）
-        const calcMaterialCost = (salesAmt: number) => {
-          return salesAmt * (estimateRate / 100);
-        };
-
-        const finalTotalMaterialCost = calcMaterialCost(totalSales);
-
-        // サマリー設定（端数を完全に四捨五入して整数化）
+        // サマリー設定（売上 − 投入人件費 ＝ 現場労働粗利）
         const roundedSales = Math.round(totalSales);
         const roundedLabor = Math.round(totalLaborCost);
-        const roundedMaterial = Math.round(finalTotalMaterialCost);
-        const totalProfit = roundedSales - (roundedLabor + roundedMaterial);
+        const totalProfit = roundedSales - roundedLabor;
         const profitMargin = roundedSales > 0 ? (totalProfit / roundedSales) * 100 : 0;
+        const totalHours = totalMinutes / 60;
+        const hourlyProfit = totalHours > 0 ? Math.round(totalProfit / totalHours) : 0;
+
         setSummary({ 
           sales: roundedSales, 
           laborCost: roundedLabor, 
-          materialCost: roundedMaterial, 
           profit: totalProfit, 
-          margin: profitMargin 
+          margin: profitMargin,
+          totalMinutes,
+          directMinutes,
+          careMinutes,
+          prepMinutes,
+          hourlyProfit
         });
 
-        // --- 作目別 採算性 ---
+        // --- 品目別 労働粗利 ---
         const cropNetProfits: Record<string, number> = {}; 
-        const pData = Object.keys(cropHours).map(k => {
-          const hours = cropHours[k] / 60;
+        const allCropsSet = new Set([...Object.keys(cropHours), ...Object.keys(cropSalesMap)]);
+        const pData = Array.from(allCropsSet).filter(k => k !== '共通・未指定' || (cropSalesMap[k] || 0) > 0).map(k => {
+          const hours = (cropHours[k] || 0) / 60;
           const sales = cropSalesMap[k] || 0;
           const laborCost = cropWageMap[k] || 0;
-          const matCost = calcMaterialCost(sales);
-          const totalCost = laborCost + matCost;
-          const netProfit = sales - totalCost;
+          const netProfit = sales - laborCost;
           cropNetProfits[k] = netProfit; 
           
           return {
             name: k,
             時給換算: hours > 0 ? Math.round(netProfit / hours) : 0,
             売上: sales,
-            コスト: Math.round(totalCost),
+            コスト: Math.round(laborCost),
             利益: Math.round(netProfit),
             利益率: sales > 0 ? Math.round((netProfit / sales) * 100) : 0
           };
         }).sort((a, b) => b.利益 - a.利益);
 
-        // --- 圃場別 採算性 ---
+        // --- 圃場別 労働粗利 ---
         const fData = Object.keys(fieldHours).map(k => {
           const sales = fieldSalesMap[k] || 0;
           const laborCost = fieldWageMap[k] || 0;
-          const matCost = calcMaterialCost(sales);
-          const totalCost = laborCost + matCost;
-          const netProfit = sales - totalCost;
+          const netProfit = sales - laborCost;
           return {
             name: k,
             売上: Math.round(sales),
-            コスト: Math.round(totalCost),
+            コスト: Math.round(laborCost),
             利益: Math.round(netProfit),
             利益率: sales > 0 ? Math.round((netProfit / sales) * 100) : 0
           };
@@ -314,9 +317,9 @@ export default function DashboardPage() {
           
           Object.keys(wCrops).forEach(cName => {
             const myHours = wCrops[cName];
-            const totalHours = cropHours[cName];
-            if (totalHours > 0) {
-              const myContributionRatio = myHours / totalHours;
+            const totalCropHrs = cropHours[cName];
+            if (totalCropHrs > 0) {
+              const myContributionRatio = myHours / totalCropHrs;
               createdValue += (cropNetProfits[cName] || 0) * myContributionRatio;
             }
           });
@@ -337,21 +340,18 @@ export default function DashboardPage() {
         const mTrendData = Object.keys(monthlyMap).sort().map(monthStr => {
           const sales = monthlyMap[monthStr].売上;
           const labor = monthlyMap[monthStr].人件費;
-          const mat = calcMaterialCost(sales);
-          const cost = labor + mat;
-          const profit = sales - cost;
+          const profit = sales - labor;
           
           cumulativeProfit += profit;
           return {
             month: monthStr, 
             売上: sales,
-            コスト: Math.round(cost),
+            コスト: Math.round(labor),
             単月利益: Math.round(profit),
             累計利益: Math.round(cumulativeProfit)
           };
         });
 
-        // 作業時間パイチャート用
         const cData = Object.keys(cropHours).map(k => ({ name: k, value: cropHours[k] }));
         
         setCropData(cData);
@@ -367,7 +367,7 @@ export default function DashboardPage() {
       }
     }
     fetchData();
-  }, [dataViewMode, estimateRate]); // 設定が変わったら再フェッチ・再計算
+  }, [dataViewMode]);
 
   const CustomProfitTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -376,13 +376,13 @@ export default function DashboardPage() {
         <div className="bg-slate-900/95 backdrop-blur-md text-slate-100 p-4 rounded-xl shadow-2xl border border-slate-700 font-bold text-sm min-w-[200px]">
           <p className="text-base text-emerald-400 mb-2 border-b border-slate-700 pb-1">{label}</p>
           <div className="space-y-1">
-            <div className="flex justify-between"><span className="text-slate-400">売上:</span><span className="text-white">¥{Math.round(data.売上 || 0).toLocaleString()}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">コスト:</span><span className="text-rose-400">¥{Math.round(data.コスト || 0).toLocaleString()}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">出荷売上:</span><span className="text-white">¥{Math.round(data.売上 || 0).toLocaleString()}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">投入人件費:</span><span className="text-rose-400">¥{Math.round(data.コスト || 0).toLocaleString()}</span></div>
             <div className="border-t border-slate-700 my-1.5"></div>
-            <div className="flex justify-between items-center"><span className="text-slate-400">純利益:</span><span className={`text-lg font-black ${data.利益 >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatCurrency(data.利益)}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">利益率:</span><span className="text-blue-300">{Math.round(data.利益率 || 0)}%</span></div>
+            <div className="flex justify-between items-center"><span className="text-slate-400">現場労働粗利:</span><span className={`text-lg font-black ${data.利益 >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatCurrency(data.利益)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">粗利率:</span><span className="text-blue-300">{Math.round(data.利益率 || 0)}%</span></div>
             {data.時給換算 !== undefined && (
-              <div className="flex justify-between mt-2 pt-2 border-t border-slate-700/50"><span className="text-slate-400">時給換算:</span><span className="text-emerald-300">¥{Math.round(data.時給換算 || 0).toLocaleString()}/h</span></div>
+              <div className="flex justify-between mt-2 pt-2 border-t border-slate-700/50"><span className="text-slate-400">1時間あたり利益:</span><span className="text-emerald-300">¥{Math.round(data.時給換算 || 0).toLocaleString()}/h</span></div>
             )}
           </div>
         </div>
@@ -390,6 +390,10 @@ export default function DashboardPage() {
     }
     return null;
   };
+
+  const directRate = summary.totalMinutes > 0 ? Math.round((summary.directMinutes / summary.totalMinutes) * 100) : 0;
+  const careRate = summary.totalMinutes > 0 ? Math.round((summary.careMinutes / summary.totalMinutes) * 100) : 0;
+  const prepRate = summary.totalMinutes > 0 ? Math.max(0, 100 - directRate - careRate) : 0;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-6 pb-16 pt-3 sm:pt-6">
@@ -400,17 +404,17 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800">
-                農業経営司令塔
+                業務管理・作業工程PDCA
               </span>
-              <span className="text-xs text-slate-400 font-bold">P&L 損益・採算リアルタイム分析</span>
+              <span className="text-xs text-slate-400 font-bold">直接利益作業の最大化 ＆ 時間按分ダッシュボード</span>
             </div>
             <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
-              経営ダッシュボード
+              業務管理・生産効率ダッシュボード
             </h1>
           </div>
           
-          {/* 右上アクションエリア：現場URLクイック配布 ＆ 経費率設定 */}
-          <div className="flex flex-wrap items-center gap-2.5">
+          {/* 右上アクションエリア：現場URLクイック配布 ＆ 分析画面ショートカット */}
+          <div className="flex flex-wrap items-center gap-2">
             {tenantId && (
               <button
                 onClick={async () => {
@@ -440,19 +444,20 @@ export default function DashboardPage() {
               </button>
             )}
 
-            <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl shadow-2xs border border-slate-200">
-              <span className="text-xs font-bold text-slate-500">概算経費率:</span>
-              <div className="flex items-center gap-1">
-                <span className="text-slate-400 text-xs">売上の</span>
-                <input 
-                  type="number" 
-                  value={estimateRate}
-                  onChange={(e) => setEstimateRate(Number(e.target.value) || 0)}
-                  className="bg-slate-100 rounded-lg w-12 px-1.5 py-0.5 text-center font-black text-xs text-amber-600 outline-none focus:ring-2 focus:ring-amber-400"
-                />
-                <span className="text-slate-500 text-xs font-bold">%</span>
-              </div>
-            </div>
+            <Link
+              href={tenantId ? `/admin/cultivation-schedule?farm=${tenantId}` : '/admin/cultivation-schedule'}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black shadow-2xs transition-all"
+            >
+              <Calculator className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>作付け別の時間按分・収支</span>
+            </Link>
+            <Link
+              href={tenantId ? `/admin/crop-analysis?farm=${tenantId}` : '/admin/crop-analysis'}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-xl text-xs font-black shadow-2xs transition-all"
+            >
+              <Activity className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>工程別PDCA・前年比較</span>
+            </Link>
           </div>
         </div>
 
@@ -519,48 +524,91 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          {/* --- 洗練されたエグゼクティブKPIサマリー (P&L) --- */}
+          {/* --- 作業工程3分類バランスバー（直接利益を生む作業の最大化PDCA） --- */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
+              <div>
+                <h2 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
+                  <span>⏱️ 全作業時間の工程バランス（総投入: {(summary.totalMinutes / 60).toFixed(1)}時間）</span>
+                </h2>
+                <p className="text-xs text-slate-500 font-bold">
+                  🔴 準備・片付け・移動などの非収穫作業を短縮し、🟢 直接利益を生む作業（播種・定植・収穫・出荷）の割合を最大化しましょう
+                </p>
+              </div>
+              <div className="flex items-center gap-3 text-xs font-black">
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  🟢 直接利益作業率: {directRate}%
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200">
+                  🔴 準備・片付け等: {prepRate}%
+                </span>
+              </div>
+            </div>
+
+            <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden flex border border-slate-200">
+              <div style={{ width: `${directRate}%` }} className="bg-emerald-500 h-full transition-all" title={`直接利益作業: ${directRate}%`} />
+              <div style={{ width: `${careRate}%` }} className="bg-amber-400 h-full transition-all" title={`育成・維持管理: ${careRate}%`} />
+              <div style={{ width: `${prepRate}%` }} className="bg-rose-500 h-full transition-all" title={`準備・片付け・共通: ${prepRate}%`} />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mt-3 text-xs font-bold">
+              <div className="flex items-center justify-between bg-emerald-50/70 border border-emerald-200 rounded-xl px-3 py-2 text-emerald-900">
+                <span>🟢 直接利益作業（収穫・播種・出荷）</span>
+                <span className="font-black">{(summary.directMinutes / 60).toFixed(1)}h ({directRate}%)</span>
+              </div>
+              <div className="flex items-center justify-between bg-amber-50/70 border border-amber-200 rounded-xl px-3 py-2 text-amber-900">
+                <span>🟡 育成・維持管理（防除・追肥・管理）</span>
+                <span className="font-black">{(summary.careMinutes / 60).toFixed(1)}h ({careRate}%)</span>
+              </div>
+              <div className="flex items-center justify-between bg-rose-50/70 border border-rose-200 rounded-xl px-3 py-2 text-rose-900">
+                <span>🔴 準備・片付け・草刈り・移動</span>
+                <span className="font-black">{(summary.prepMinutes / 60).toFixed(1)}h ({prepRate}%)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* --- エグゼクティブKPIサマリー（出荷売上 vs 投入人件費 ＝ 現場労働粗利） --- */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             
-            {/* 1. 総売上 */}
+            {/* 1. 出荷売上高 */}
             <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs hover:shadow-xs transition-shadow relative overflow-hidden">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-black text-slate-500 flex items-center gap-1.5">
-                  <Banknote className="w-4 h-4 text-blue-600 shrink-0" /> 総売上
+                  <Banknote className="w-4 h-4 text-blue-600 shrink-0" /> 出荷・販売売上
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100">
-                  確定販売額
+                  出荷実績ベース
                 </span>
               </div>
               <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
                 ¥{summary.sales.toLocaleString()}
               </div>
               <p className="text-[11px] text-slate-400 font-medium mt-1">
-                販売管理システム連携データ
+                現場の収穫・出荷記録からの集計額
               </p>
             </div>
             
-            {/* 2. 総コスト */}
+            {/* 2. 投入人件費（労働コスト） */}
             <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs hover:shadow-xs transition-shadow relative overflow-hidden">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-black text-slate-500 flex items-center gap-1.5">
-                  <Activity className="w-4 h-4 text-rose-500 shrink-0" /> 総コスト
+                  <Activity className="w-4 h-4 text-rose-500 shrink-0" /> 投入人件費（労働コスト）
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
-                  人件費＋概算資材
+                  作業時間 × 時給
                 </span>
               </div>
               <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                ¥{(summary.laborCost + summary.materialCost).toLocaleString()}
+                ¥{summary.laborCost.toLocaleString()}
               </div>
               <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium mt-1">
-                <span>人件費: ¥{summary.laborCost.toLocaleString()}</span>
+                <span>総作業: {(summary.totalMinutes / 60).toFixed(1)}時間</span>
                 <span className="text-slate-300">|</span>
-                <span>資材等: ¥{summary.materialCost.toLocaleString()}</span>
+                <span>※資材・経理経費は除外</span>
               </div>
             </div>
             
-            {/* 3 & 4. 営業利益 (純利益) */}
+            {/* 3 & 4. 現場労働粗利（売上 − 投入人件費）＆ 時間あたり利益 */}
             <div className={`rounded-2xl p-5 border shadow-2xs hover:shadow-xs transition-shadow relative overflow-hidden lg:col-span-2 ${
               summary.profit >= 0 
                 ? 'bg-gradient-to-br from-emerald-50/60 to-teal-50/30 border-emerald-200' 
@@ -568,14 +616,19 @@ export default function DashboardPage() {
             }`}>
               <div className="flex items-center justify-between mb-2">
                 <span className={`text-xs font-black flex items-center gap-1.5 ${summary.profit >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
-                  <TrendingUp className="w-4 h-4 shrink-0" /> 営業利益 (純利益)
+                  <TrendingUp className="w-4 h-4 shrink-0" /> 現場労働粗利（売上 − 投入人件費）
                 </span>
-                <div className={`text-xs font-black px-2.5 py-0.5 rounded-full border shadow-2xs ${
-                  summary.profit >= 0 
-                    ? 'bg-emerald-600 text-white border-emerald-700' 
-                    : 'bg-rose-600 text-white border-rose-700'
-                }`}>
-                  {summary.profit >= 0 ? '黒字' : '赤字'} 利益率 {summary.margin.toFixed(1)}%
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-white/90 text-slate-800 border border-slate-200">
+                    1時間あたり利益: {formatCurrency(summary.hourlyProfit)}/h
+                  </span>
+                  <div className={`text-xs font-black px-2.5 py-0.5 rounded-full border shadow-2xs ${
+                    summary.profit >= 0 
+                      ? 'bg-emerald-600 text-white border-emerald-700' 
+                      : 'bg-rose-600 text-white border-rose-700'
+                  }`}>
+                    {summary.profit >= 0 ? '黒字' : '赤字'} 粗利率 {summary.margin.toFixed(1)}%
+                  </div>
                 </div>
               </div>
               <div className="flex items-baseline gap-3">
@@ -584,9 +637,7 @@ export default function DashboardPage() {
                 </div>
               </div>
               <p className={`text-[11px] font-medium mt-1 ${summary.profit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-                {summary.profit >= 0 
-                  ? '※総売上から人件費および資材経費を差し引いた差引純利益です。' 
-                  : '※現在は先行投資またはコスト先行状態です（▲表記は赤字を表します）。'}
+                ※出荷売上から現場スタッフの投入人件費（直接作業＋準備・片付け等）を差し引いた現場生産粗利です。
               </p>
             </div>
           </div>
